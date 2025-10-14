@@ -1,0 +1,46 @@
+name: Scrape parking availability (YUC)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 5분마다 자동 실행 (UTC 기준)
+  workflow_dispatch: {}      # 수동 실행 버튼
+  push:
+    paths:
+      - "yuc/**"
+      - ".github/workflows/yuc_scrape.yml"
+
+permissions:
+  contents: write  # CSV 커밋하려면 필수
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: yuc-scrape
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright (Chromium)
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run scraper
+        run: |
+          python yuc/scripts/scrape.py
+
+      - name: Commit & Push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add yuc/parking_log.csv
+          git commit -m "update yuc/parking_log.csv [skip ci]" || echo "no changes"
+          git push
