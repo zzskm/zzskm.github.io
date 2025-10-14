@@ -1,8 +1,8 @@
 name: cron-check
 on:
   schedule:
-    - cron: "*/5 * * * *"   # 5분마다 (UTC)
-  workflow_dispatch: {}
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   tick:
@@ -11,4 +11,3 @@ jobs:
       - run: |
           echo "event: $GITHUB_EVENT_NAME"
           date -u
-          echo "repo: $GITHUB_REPOSITORY, sha: $GITHUB_SHA"
