@@ -2,13 +2,12 @@
 """
 yuc/scripts/scrape.py
 수지노외 공영주차장 잔여 주차대수 크롤링
-- GitHub Actions (scrape.yml)과 연동
-- 결과 CSV: yuc/parking_log.csv
+- GitHub Actions에서 5분마다 실행
+- 직전 레코드와 값이 같으면 CSV에 기록하지 않음
 """
 
 import csv
 import re
-import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -17,7 +16,6 @@ from playwright.sync_api import sync_playwright
 TARGET_URL = "https://park.yuc.co.kr/views/parkinglot/info/info.html"
 LOT_NAME = "수지노외 공영주차장"
 CSV_PATH = Path(__file__).resolve().parent.parent / "parking_log.csv"
-INTERVAL_S = 60  # GitHub Actions에서는 한 번만 실행하므로 무시됨
 
 KST = timezone(timedelta(hours=9))
 
@@ -27,8 +25,22 @@ def ensure_csv():
     if not CSV_PATH.exists():
         CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
         with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp_kst", "lot_name", "available"])
+            csv.writer(f).writerow(["timestamp_kst", "lot_name", "available"])
+
+
+def get_last_value() -> int | None:
+    """CSV의 마지막 available 값 반환"""
+    if not CSV_PATH.exists():
+        return None
+    try:
+        with CSV_PATH.open("r", encoding="utf-8") as f:
+            lines = f.read().strip().splitlines()
+            if len(lines) < 2:
+                return None
+            last_row = lines[-1].split(",")
+            return int(last_row[-1])
+    except Exception:
+        return None
 
 
 def extract_available(text: str) -> int | None:
@@ -76,10 +88,17 @@ def main():
     ensure_csv()
     try:
         ts, avail = scrape_once()
+        last = get_last_value()
+
+        if last == avail:
+            print(f"[{ts}] {LOT_NAME} available={avail} (변화 없음, 기록 생략)")
+            return  # 스킵
+
         with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([ts, LOT_NAME, avail])
-        print(f"[{ts}] {LOT_NAME} available={avail}")
+            csv.writer(f).writerow([ts, LOT_NAME, avail])
+
+        print(f"[{ts}] {LOT_NAME} available={avail} (이전 {last}) → 기록 완료")
+
     except Exception as e:
         print("스크랩 실패:", e)
 
