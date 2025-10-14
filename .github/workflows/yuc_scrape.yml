@@ -27,12 +27,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
-            yuc/requirements.txt
+          # ⚠️ pip 캐시 경로 지정(requirements/pyproject) 없어서 에러 나니 캐시 비활성화
 
-      # 브라우저 캐시
+      # ▶ Playwright 브라우저 캐시 (핵심)
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v4
@@ -46,15 +43,9 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          if [ -f "yuc/requirements.txt" ]; then
-            pip install -r yuc/requirements.txt
-          elif [ -f "requirements.txt" ]; then
-            pip install -r requirements.txt
-          else
-            pip install playwright
-          fi
+          pip install playwright
 
-      # 캐시 미스일 때만 브라우저 다운로드 (--with-deps 금지)
+      # 캐시 미스일 때만 브라우저 다운로드 (절대 --with-deps 쓰지 마)
       - name: Install Playwright browsers (cache miss only)
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: |
