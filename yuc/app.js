@@ -1,7 +1,7 @@
 'use strict';
 /**
  * 주차가능대수 뷰어 (로컬 전용/정적 페이지 OK)
- * - csv_loader를 통합: 파일 선택 API + input[type=file] 둘 다 지원
+ * - ./parking_log.csv 즉시 로딩 지원
  * - D3 v7 사용, 반응형 리사이즈, 간단한 라벨/그리드
  */
 (function () {
@@ -26,12 +26,10 @@
     }
 
     async function readText() {
-      // File System Access API 경로
       if (state.fileHandle && "getFile" in state.fileHandle) {
         const file = await state.fileHandle.getFile();
         return await file.text();
       }
-      // <input type="file"> 경로
       if (state.lastFile) {
         const file = state.lastFile;
         return await file.text();
@@ -42,9 +40,8 @@
     return { openFilePicker, setFileFromInput, readText, _state: state };
   })();
 
-  // ===== 앱 상수/유틸 =====
   const LOT_NAME = "수지노외 공영주차장";
-  const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5분
+  const AUTO_REFRESH_MS = 5 * 60 * 1000;
   const KST_TZ = "Asia/Seoul";
 
   const fmtTimeLabel = new Intl.DateTimeFormat("ko-KR", {
@@ -105,21 +102,17 @@
     const latestStr = latest ? fmtTimeLabel.format(latest) : "N/A";
     status.textContent = `${LOT_NAME} · 오늘 ${todayArr.length}개 · 어제 ${yestArr.length}개 · 7일 전 ${d7Arr.length}개 · 최신: ${latestStr}`;
 
-    // 컨테이너 크기
     const container = document.getElementById("chart");
     const W = container.clientWidth || 1000;
     const H = container.clientHeight || 420;
-
-    // 초기화
     d3.select("#chart").selectAll("*").remove();
 
-    const margin = { top: 20, right: 160, bottom: 48, left: 56 }; // legend 공간 확보
+    const margin = { top: 20, right: 160, bottom: 48, left: 56 };
     const width = Math.max(320, W) - margin.left - margin.right;
     const height = Math.max(220, H) - margin.top - margin.bottom;
 
     const svg = d3.select("#chart")
       .append("svg")
-      .attr("class", "chart-root")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
@@ -137,26 +130,22 @@
     const x = d3.scaleTime().domain([baseDate, endDate]).range([0, width]);
     const y = d3.scaleLinear().domain([0, maxY]).nice().range([height, 0]);
 
-    // 그리드 (레이블 없는 보조 그리드)
     const xGrid = d3.axisBottom(x).ticks(d3.timeHour.every(2)).tickSize(-height).tickFormat("");
     const yGrid = d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat("");
     svg.append("g").attr("class", "grid").attr("transform", `translate(0,${height})`).call(xGrid);
     svg.append("g").attr("class", "grid").call(yGrid);
 
-    // 축
     svg.append("g").attr("class", "axis")
       .attr("transform", `translate(0,${height})`)
       .call(d3.axisBottom(x).ticks(d3.timeHour.every(2)).tickFormat(d3.timeFormat("%H:%M")));
     svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(6));
 
-    // 라인
     const line = d3.line().curve(d3.curveMonotoneX).x(d => x(d.t)).y(d => y(d.v));
     let groups = [
-      { key: "오늘",   data: pToday, cls: "today"     , colorVar: "var(--orange)" },
-      { key: "어제",   data: pYest , cls: "yesterday" , colorVar: "var(--blue)"   },
-      { key: "7일 전", data: pD7   , cls: "d7ago"     , colorVar: "var(--green)"  },
+      { key: "오늘", data: pToday, cls: "today", colorVar: "var(--orange)" },
+      { key: "어제", data: pYest, cls: "yesterday", colorVar: "var(--blue)" },
+      { key: "7일 전", data: pD7, cls: "d7ago", colorVar: "var(--green)" },
     ].filter(g => g.data.length);
-    // 오늘 라인을 마지막에 그려서 최상위 z-order 확보
     groups.sort((a,b)=> (a.cls==="today") - (b.cls==="today"));
 
     groups.forEach(g => {
@@ -169,7 +158,6 @@
         .attr("fill", "none");
 
       const last = g.data[g.data.length - 1];
-      // end label은 '오늘'만
       if (last && g.cls === "today") {
         svg.append("text")
           .attr("class", `end-label ${g.cls}`)
@@ -180,38 +168,40 @@
       }
     });
 
-    // 오늘 라인/라벨을 가장 앞으로
     d3.selectAll('.line.today').raise();
     d3.selectAll('.end-label.today').raise();
 
-    // === Legend (right side) ===
     const legendData = groups.map(g => ({ key: g.key, cls: g.cls, colorVar: g.colorVar }));
     const legend = svg.append("g").attr("class", "legend")
       .attr("transform", `translate(${width + 16}, ${8})`);
-
     const legendItem = legend.selectAll(".legend-item")
       .data(legendData)
       .enter()
       .append("g")
       .attr("class", d => `legend-item ${d.cls}`)
       .attr("transform", (d,i) => `translate(0, ${i * 20})`);
-
     legendItem.append("line")
       .attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
       .attr("stroke", d => d.colorVar)
       .attr("stroke-width", d => d.cls === "today" ? 3 : 1.5);
-
     legendItem.append("text")
       .attr("x", 24).attr("y", 9)
       .attr("dominant-baseline", "middle")
       .text(d => d.key);
   }
 
-  async function loadAndRender() {
+  async function loadAndRender(defaultPath = null) {
     const status = document.getElementById("status");
     try {
       status.textContent = "데이터 불러오는 중…";
-      const text = await CSVLoader.readText();
+      let text;
+      if (defaultPath) {
+        const resp = await fetch(defaultPath);
+        if (!resp.ok) throw new Error("CSV 파일을 불러올 수 없습니다.");
+        text = await resp.text();
+      } else {
+        text = await CSVLoader.readText();
+      }
       const { todayArr, yestArr, d7Arr } = parseCSV(text);
       render(todayArr, yestArr, d7Arr);
     } catch (e) {
@@ -220,7 +210,6 @@
     }
   }
 
-  // ===== UI 바인딩 (로컬 친화) =====
   function bindUI() {
     const openBtn = document.getElementById("openBtn");
     const reloadBtn = document.getElementById("reloadBtn");
@@ -228,7 +217,6 @@
     const chart = document.getElementById("chart");
 
     openBtn.addEventListener("click", async () => {
-      // 우선 File System Access API 시도, 실패 시 input으로 포커스
       try {
         await CSVLoader.openFilePicker();
         await loadAndRender();
@@ -246,8 +234,6 @@
     });
 
     reloadBtn.addEventListener("click", loadAndRender);
-
-    // 드래그&드롭(선택)
     chart.addEventListener("dragover", (e) => { e.preventDefault(); });
     chart.addEventListener("drop", async (e) => {
       e.preventDefault();
@@ -257,9 +243,11 @@
       }
     });
 
-    // 자동 갱신 + 리사이즈
     setInterval(loadAndRender, AUTO_REFRESH_MS);
     window.addEventListener("resize", loadAndRender);
+
+    // 🚀 자동 ./parking_log.csv 로딩
+    loadAndRender("./parking_log.csv");
   }
 
   window.addEventListener("load", bindUI);
