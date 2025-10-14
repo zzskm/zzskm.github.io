@@ -2,10 +2,11 @@
 """
 yuc/scripts/scrape.py
 수지노외 공영주차장 잔여 주차대수 크롤링 (GitHub Actions 친화)
-- 페이지 대기는 networkidle 대신 domcontentloaded 사용
-- 명시적 요소 대기 + 재시도(기본 3회, 지수 백오프)
-- 직전 값과 동일하면 CSV 기록 생략
+- networkidle → domcontentloaded 로 전환 (느린 JS 페이지 대응)
+- 재시도 3회, 지수 백오프 (2s → 4s → 8s)
+- 직전 값 동일 시 CSV 생략
 """
+
 import csv
 import re
 import sys
@@ -21,11 +22,10 @@ TARGET_URL = "https://park.yuc.co.kr/views/parkinglot/info/info.html"
 LOT_NAME = "수지노외 공영주차장"
 CSV_PATH = Path(__file__).resolve().parent.parent / "parking_log.csv"
 
-# 타임아웃/재시도
-NAV_TIMEOUT_MS = 60_000          # page.goto
-WAIT_TIMEOUT_MS = 60_000         # locator wait
-RETRIES = 3
-BACKOFF_BASE_SEC = 2             # 2s, 4s, 8s ...
+NAV_TIMEOUT_MS = 60_000          # 페이지 로드 대기 (60초)
+WAIT_TIMEOUT_MS = 60_000         # LOT_NAME 요소 대기
+RETRIES = 3                      # 재시도 횟수
+BACKOFF_BASE_SEC = 2             # 백오프 시작 시간 (2s)
 
 KST = timezone(timedelta(hours=9))
 
@@ -55,34 +55,28 @@ def get_last_value() -> Optional[int]:
 
 def extract_available(text: str) -> Optional[int]:
     """텍스트에서 '잔여/가능/주차가능' 인근 숫자 추출"""
-    m = re.search(r"(잔여|가능|주차가능|빈|가용)[^\\d]{0,12}(\\d+)", text)
+    m = re.search(r"(잔여|가능|주차가능|빈|가용)[^\d]{0,12}(\d+)", text)
     if m:
         return int(m.group(2))
-    nums = [int(x) for x in re.findall(r"\\d+", text)]
+    nums = [int(x) for x in re.findall(r"\d+", text)]
     return min(nums) if nums else None
 
 
 def _once(page) -> Tuple[str, int]:
-    """
-    단일 시도: 페이지 열고 LOT_NAME 블록에서 숫자 추출
-    - domcontentloaded 까지 대기 후, LOT_NAME 등장까지 명시적 대기
-    """
+    """단일 시도: 페이지 열고 LOT_NAME 블록에서 숫자 추출"""
     page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
-
-    # LOT_NAME 포함 요소 등장 대기
     locator = page.locator(f"text={LOT_NAME}")
     locator.first.wait_for(timeout=WAIT_TIMEOUT_MS)
 
-    # 가장 가까운 행/카드 컨테이너 텍스트 추출
     handle = locator.first.element_handle()
     container = handle.evaluate_handle(
         "(el)=>el.closest('tr')||el.closest('li')||el.closest('div')||el"
     )
-    text = container.evaluate("(el)=>el.innerText||'')")
+    # ✅ 문법 오류 수정됨 (괄호 짝 맞춤)
+    text = container.evaluate("(el)=>el.innerText||''")
 
     available = extract_available(text)
     if available is None:
-        # 전체 본문에서 보정 시도
         full_text = page.inner_text("body")
         available = extract_available(full_text)
 
@@ -99,8 +93,8 @@ def scrape_once() -> Tuple[str, int]:
         browser = p.chromium.launch(
             headless=True,
             args=[
-                "--no-sandbox",            # GitHub Actions/CI에서 권장
-                "--disable-dev-shm-usage", # /dev/shm 이슈 회피
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
             ],
         )
         page = browser.new_page(user_agent=(
@@ -119,10 +113,8 @@ def scrape_once() -> Tuple[str, int]:
                 backoff = BACKOFF_BASE_SEC * (2 ** (attempt - 1))
                 print(f"[retry {attempt}/{RETRIES-1}] 실패: {e} → {backoff}s 후 재시도", file=sys.stderr)
                 try:
-                    # 가벼운 재시도: reload
                     page.reload(wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
                 except Exception:
-                    # 심각할 경우 새 페이지로 교체
                     page.close()
                     page = browser.new_page()
                 time.sleep(backoff)
