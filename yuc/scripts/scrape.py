@@ -22,9 +22,9 @@ TARGET_URL = "https://park.yuc.co.kr/views/parkinglot/info/info.html"
 LOT_NAME = "수지노외 공영주차장"
 CSV_PATH = Path(__file__).resolve().parent.parent / "parking_log.csv"
 
-NAV_TIMEOUT_MS = 60_000          # 페이지 로드 대기 (60초)
+NAV_TIMEOUT_MS = 90_000          # 페이지 로드 대기
 WAIT_TIMEOUT_MS = 60_000         # LOT_NAME 요소 대기
-RETRIES = 3                      # 재시도 횟수
+RETRIES = 5                      # 재시도 횟수
 BACKOFF_BASE_SEC = 2             # 백오프 시작 시간 (2s)
 
 KST = timezone(timedelta(hours=9))
