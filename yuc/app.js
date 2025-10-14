@@ -211,12 +211,26 @@
   }
 
   function bindUI() {
-    const openBtn = document.getElementById("openBtn");
-    const reloadBtn = document.getElementById("reloadBtn");
-    const fileInput = document.getElementById("fileInput");
-    const chart = document.getElementById("chart");
+    const $ = (id) => document.getElementById(id);
+    // 필수 컨테이너 없으면 생성해서 붙임(예외 방지)
+    if (!$('#chart')) {
+      const div = document.createElement('div');
+      div.id = 'chart';
+      div.setAttribute('role', 'img');
+      document.body.appendChild(div);
+    }
+    if (!$('#status')) {
+      const div = document.createElement('div');
+      div.id = 'status';
+      div.textContent = '상태 표시';
+      document.body.prepend(div);
+    }
+    const openBtn = $("openBtn");
+    const reloadBtn = $("reloadBtn");
+    const fileInput = $("fileInput");
+    const chart = $("chart");
 
-    openBtn.addEventListener("click", async () => {
+    openBtn && openBtn.addEventListener("click", async () => {
       try {
         await CSVLoader.openFilePicker();
         await loadAndRender();
@@ -225,7 +239,7 @@
       }
     });
 
-    fileInput.addEventListener("change", async (e) => {
+    fileInput && fileInput.addEventListener("change", async (e) => {
       const file = e.target.files && e.target.files[0];
       if (file) {
         CSVLoader.setFileFromInput(file);
@@ -233,9 +247,9 @@
       }
     });
 
-    reloadBtn.addEventListener("click", loadAndRender);
-    chart.addEventListener("dragover", (e) => { e.preventDefault(); });
-    chart.addEventListener("drop", async (e) => {
+    reloadBtn && reloadBtn.addEventListener("click", loadAndRender);
+    chart && chart.addEventListener("dragover", (e) => { e.preventDefault(); });
+    chart && chart.addEventListener("drop", async (e) => {
       e.preventDefault();
       if (e.dataTransfer?.files?.length) {
         CSVLoader.setFileFromInput(e.dataTransfer.files[0]);
