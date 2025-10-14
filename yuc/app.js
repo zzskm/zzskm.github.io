@@ -1,7 +1,9 @@
-// app_repo.js — GitHub Pages/서버용 (수지노외 공영주차장 고정, D3 렌더, 테마 강화)
+'use strict';
+// app.js — GitHub Pages/서버용 (자동 ./parking_log.csv 로드 + 리트라이 + 모바일 최적화)
 (() => {
   const LOT_NAME = "수지노외 공영주차장";
   const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5분
+  const DEFAULT_CSV = "./parking_log.csv";
   const KST_TZ = "Asia/Seoul";
 
   const fmtTimeLabel = new Intl.DateTimeFormat("ko-KR", {
@@ -27,7 +29,7 @@
     const tsIdx = header.indexOf("timestamp_kst");
     const nameIdx = header.indexOf("lot_name");
     const avIdx = header.indexOf("available");
-    if (tsIdx < 0 || nameIdx < 0 || avIdx < 0) throw new Error("CSV 헤더 오류");
+    if (tsIdx < 0 || nameIdx < 0 || avIdx < 0) throw new Error("CSV 헤더 오류: timestamp_kst, lot_name, available 필요");
 
     const all = rows.map((r) => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
       .filter((x) => x.name === LOT_NAME && !isNaN(x.t.getTime()) && !isNaN(x.v));
@@ -55,28 +57,39 @@
   }
 
   function render(todayArr, yestArr, d7Arr) {
-    const status = document.getElementById("status");
+    const $ = (id) => document.getElementById(id);
+    if (!$('#chart')) {
+      const div = document.createElement('div');
+      div.id = 'chart';
+      div.setAttribute('role', 'img');
+      document.body.appendChild(div);
+    }
+    if (!$('#status')) {
+      const div = document.createElement('div');
+      div.id = 'status';
+      div.textContent = '상태 표시';
+      document.body.prepend(div);
+    }
+
+    const status = $('#status');
     const latest = todayArr.length ? todayArr[todayArr.length - 1].t
       : yestArr.length ? yestArr[yestArr.length - 1].t
       : d7Arr.length ? d7Arr[d7Arr.length - 1].t : null;
     const latestStr = latest ? fmtTimeLabel.format(latest) : "N/A";
     status.textContent = `${LOT_NAME} · 오늘 ${todayArr.length}개 · 어제 ${yestArr.length}개 · 7일 전 ${d7Arr.length}개 · 최신: ${latestStr}`;
 
-    // === 준비
-    const container = document.getElementById("chart");
-    const W = container.clientWidth || 1000;
+    const container = $('#chart');
+    const W = container.clientWidth || window.innerWidth || 1000;
     const H = container.clientHeight || 420;
-
-    // 깨끗이
     d3.select("#chart").selectAll("*").remove();
 
-    const margin = { top: 20, right: 120, bottom: 48, left: 56 };
+    const isSmall = (W || window.innerWidth) < 480;
+    const margin = { top: 20, right: (isSmall ? 16 : 160), bottom: 48, left: 56 };
     const width = Math.max(320, W) - margin.left - margin.right;
     const height = Math.max(220, H) - margin.top - margin.bottom;
 
     const svg = d3.select("#chart")
       .append("svg")
-      .attr("class", "chart-root")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
@@ -90,52 +103,40 @@
     const pYest  = yestArr.map(d => ({ t: projectToBaseDate(baseDate, d.t), v: d.v }));
     const pD7    = d7Arr.map(d => ({ t: projectToBaseDate(baseDate, d.t), v: d.v }));
 
-    const maxY = Math.max(
-      10,
-      ...(pToday.map(d=>d.v)), ...(pYest.map(d=>d.v)), ...(pD7.map(d=>d.v))
-    );
+    const maxY = Math.max(10, ...(pToday.map(d=>d.v)), ...(pYest.map(d=>d.v)), ...(pD7.map(d=>d.v)));
     const x = d3.scaleTime().domain([baseDate, endDate]).range([0, width]);
     const y = d3.scaleLinear().domain([0, maxY]).nice().range([height, 0]);
 
-    // === 그리드
-    const xGrid = d3.axisBottom(x).ticks(d3.timeHour.every(2)).tickSize(-height).tickFormat(d3.timeFormat("%H:%M"));
-    const yGrid = d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat(d => d);
+    const hourStep = isSmall ? 4 : 2;
+    const xGrid = d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat("");
+    const yGrid = d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat("");
     svg.append("g").attr("class", "grid").attr("transform", `translate(0,${height})`).call(xGrid);
     svg.append("g").attr("class", "grid").call(yGrid);
 
-    // === 축
     svg.append("g").attr("class", "axis")
       .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x).ticks(d3.timeHour.every(2)).tickFormat(d3.timeFormat("%H:%M")));
+      .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(d3.timeFormat("%H:%M")));
     svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(6));
 
-    // === 라인 & 포인트
     const line = d3.line().curve(d3.curveMonotoneX).x(d => x(d.t)).y(d => y(d.v));
-
-    const groups = [
-      { key: "오늘", data: pToday, cls: "today"     , colorVar: "var(--orange)"   },
-      { key: "어제", data: pYest , cls: "yesterday" , colorVar: "var(--blue)" },
-      { key: "7일 전", data: pD7 , cls: "d7ago"     , colorVar: "var(--green)"  },
+    let groups = [
+      { key: "오늘", data: pToday, cls: "today", colorVar: "var(--orange)" },
+      { key: "어제", data: pYest, cls: "yesterday", colorVar: "var(--blue)" },
+      { key: "7일 전", data: pD7, cls: "d7ago", colorVar: "var(--green)" },
     ].filter(g => g.data.length);
+    groups.sort((a,b)=> (a.cls==="today") - (b.cls==="today"));
 
     groups.forEach(g => {
       svg.append("path")
         .datum(g.data)
         .attr("class", `line ${g.cls}`)
         .attr("stroke", g.colorVar)
-        .attr("d", line);
+        .attr("d", line)
+        .attr("stroke-width", g.cls === "today" ? 3 : 1.5)
+        .attr("fill", "none");
 
-      // 포인트 (간소화: 마지막 1개만)
       const last = g.data[g.data.length - 1];
-      if (last) {
-        svg.append("circle")
-          .attr("cx", x(last.t))
-          .attr("cy", y(last.v))
-          .attr("r", 3.5)
-          .attr("fill", g.colorVar)
-          .attr("opacity", 0.9);
-
-        // 엔드 라벨: “이름 값”
+      if (last && g.cls === "today") {
         svg.append("text")
           .attr("class", `end-label ${g.cls}`)
           .attr("x", Math.min(x(last.t) + 8, width - 4))
@@ -144,32 +145,87 @@
           .attr("opacity", 0.95);
       }
     });
+
+    d3.selectAll('.line.today').raise();
+    d3.selectAll('.end-label.today').raise();
+
+    const legendData = groups.map(g => ({ key: g.key, cls: g.cls, colorVar: g.colorVar }));
+    const legend = svg.append("g").attr("class", "legend")
+      .attr("transform", isSmall ? `translate(${width - 120}, ${8})` : `translate(${width + 16}, ${8})`);
+    const legendItem = legend.selectAll(".legend-item")
+      .data(legendData)
+      .enter()
+      .append("g")
+      .attr("class", d => `legend-item ${d.cls}`)
+      .attr("transform", (d,i) => `translate(0, ${i * 20})`);
+    legendItem.append("line")
+      .attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
+      .attr("stroke", d => d.colorVar)
+      .attr("stroke-width", d => d.cls === "today" ? 3 : 1.5);
+    legendItem.append("text")
+      .attr("x", 24).attr("y", 9)
+      .attr("dominant-baseline", "middle")
+      .text(d => d.key);
   }
 
-  async function loadAndRender() {
-    const status = document.getElementById("status");
+  // 현재 로딩에 사용한 경로를 기억
+  let currentPath = DEFAULT_CSV;
+
+  async function loadAndRender(path) {
+    const status = document.getElementById("status") || { textContent: "" };
     try {
       status.textContent = "데이터 불러오는 중…";
-      const text = await CSVLoader.readText(); // csv_repo.js가 fetch로 제공
+      const csvPath = path || currentPath || DEFAULT_CSV;
+      currentPath = csvPath;
+
+      const resp = await fetch(csvPath, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`CSV 로딩 실패: ${resp.status}`);
+      const text = await resp.text();
+
       const { todayArr, yestArr, d7Arr } = parseCSV(text);
       render(todayArr, yestArr, d7Arr);
     } catch (e) {
       status.textContent = "로딩 실패: " + e.message;
       console.error(e);
-    }
-    // 5초 후 재시도 로직 (자동 로딩용)
-    if (defaultPath) {
-      console.warn('로딩 실패 - 5초 후 재시도');
-      setTimeout(() => loadAndRender(defaultPath), 3000);
+      // 5초 후 재시도 (자동 로딩 경로에 대해서만)
+      if (currentPath) {
+        setTimeout(() => loadAndRender(currentPath), 5000);
+      }
     }
   }
 
-  // 버튼/자동 갱신/리사이즈
-  document.getElementById("reloadBtn").onclick = loadAndRender;
-  window.addEventListener("load", loadAndRender);
-  setInterval(loadAndRender, AUTO_REFRESH_MS);
-  window.addEventListener("resize", () => {
-    // 간단히 다시 렌더(데이터 재요청 없이 상태 텍스트 유지)
-    loadAndRender();
-  });
+  function bindUI() {
+    const $ = (id) => document.getElementById(id);
+    if (!$('#chart')) {
+      const div = document.createElement('div');
+      div.id = 'chart';
+      div.setAttribute('role', 'img');
+      document.body.appendChild(div);
+    }
+    if (!$('#status')) {
+      const div = document.createElement('div');
+      div.id = 'status';
+      div.textContent = '상태 표시';
+      document.body.prepend(div);
+    }
+
+    const openBtn = $("openBtn");
+    const reloadBtn = $("reloadBtn");
+
+    openBtn && openBtn.addEventListener("click", async () => {
+      // 수동 파일 로드 흐름은 서버 환경에선 fetch만 사용하므로 안내
+      alert("서버 배포용: ./parking_log.csv를 자동으로 읽습니다. 파일 교체 후 새로고침하세요.");
+    });
+
+    reloadBtn && reloadBtn.addEventListener("click", () => loadAndRender(currentPath));
+
+    // 자동 갱신 + 리사이즈
+    setInterval(() => loadAndRender(currentPath), AUTO_REFRESH_MS);
+    window.addEventListener("resize", () => loadAndRender(currentPath));
+
+    // 초기 자동 로딩
+    loadAndRender(DEFAULT_CSV);
+  }
+
+  window.addEventListener("load", bindUI);
 })();
