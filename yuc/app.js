@@ -172,9 +172,9 @@
   let currentPath = DEFAULT_CSV;
 
   async function loadAndRender(path) {
-    const status = document.getElementById("status") || { textContent: "" };
+    const statusEl = document.getElementById("status") || { textContent: "" };
     try {
-      status.textContent = "데이터 불러오는 중…";
+      statusEl.textContent = "데이터 불러오는 중…";
       const csvPath = path || currentPath || DEFAULT_CSV;
       currentPath = csvPath;
 
@@ -185,9 +185,9 @@
       const { todayArr, yestArr, d7Arr } = parseCSV(text);
       render(todayArr, yestArr, d7Arr);
     } catch (e) {
-      status.textContent = "로딩 실패: " + e.message;
+      statusEl.textContent = "로딩 실패: " + e.message;
       console.error(e);
-      // 5초 후 재시도 (자동 로딩 경로에 대해서만)
+      // 5초 후 재시도
       if (currentPath) {
         setTimeout(() => loadAndRender(currentPath), 5000);
       }
@@ -213,7 +213,6 @@
     const reloadBtn = $("reloadBtn");
 
     openBtn && openBtn.addEventListener("click", async () => {
-      // 수동 파일 로드 흐름은 서버 환경에선 fetch만 사용하므로 안내
       alert("서버 배포용: ./parking_log.csv를 자동으로 읽습니다. 파일 교체 후 새로고침하세요.");
     });
 
