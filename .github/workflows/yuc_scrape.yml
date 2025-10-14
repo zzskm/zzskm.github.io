@@ -10,7 +10,7 @@ on:
       - ".github/workflows/yuc_scrape.yml"
 
 permissions:
-  contents: write  # CSV 커밋하려면 필수
+  contents: write
 
 jobs:
   scrape:
@@ -28,12 +28,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          # requirements 파일이 있으면 캐시 키에 반영됨. 없으면 무시됨.
           cache-dependency-path: |
             requirements.txt
             yuc/requirements.txt
 
-      # Playwright 브라우저 캐시 (브라우저 내려받은 폴더를 그냥 저장)
+      # 브라우저 캐시
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v4
@@ -44,21 +43,18 @@ jobs:
             pw-browsers-${{ runner.os }}-playwright-1.55.
 
       - name: Install Python deps (incl. Playwright)
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           if [ -f "yuc/requirements.txt" ]; then
             pip install -r yuc/requirements.txt
-          fi
-          # requirements에 playwright가 없으면 설치
-          python - <<'PY'
-import pkgutil, sys
-sys.exit(0 if pkgutil.find_loader("playwright") else 1)
-PY
-          if [ $? -ne 0 ]; then
+          elif [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          else
             pip install playwright
           fi
 
-      # 캐시 미스일 때만 브라우저 다운로드 (절대 --with-deps 쓰지 마)
+      # 캐시 미스일 때만 브라우저 다운로드 (--with-deps 금지)
       - name: Install Playwright browsers (cache miss only)
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: |
