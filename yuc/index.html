@@ -2,92 +2,24 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>수지노외 공영주차장 — 주차가능대수 추이</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>주차가능대수 — 수지노외 공영주차장</title>
   <link rel="icon" href="data:," />
-  <style>
-    :root{color-scheme:dark light}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Malgun Gothic,sans-serif;margin:0;padding:16px;background:#0b0b0c;color:#eee}
-    .card{max-width:900px;margin:0 auto;background:#121214;border:1px solid #232326;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-    h1{font-size:20px;margin:0 0 8px}
-    #status{opacity:.8;margin-bottom:8px}
-    canvas{width:100%;height:60vh}
-    .hint{font-size:12px;opacity:.7;margin-top:8px}
-    a{color:#8ab4ff;text-decoration:none}
-  </style>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="card">
-    <h1>수지노외 공영주차장 — 주차가능대수 추이</h1>
-    <div id="status">데이터 불러오는 중…</div>
-    <canvas id="chart"></canvas>
-    <div class="hint">
-      CSV: <a href="./parking_log.csv">yuc/parking_log.csv</a><br>
-      5분마다 GitHub Actions로 자동 갱신됩니다.
+    <h1>주차가능대수 — 수지노외 공영주차장</h1>
+    <div class="toolbar">
+      <button id="openBtn" class="btn secondary" title="CSV 선택">CSV 열기</button>
+      <button id="reloadBtn" class="btn" title="즉시 다시 불러오기">새로고침</button>
+      <input id="fileInput" type="file" accept=".csv,text/csv" style="display:none" />
     </div>
+    <div id="status">CSV를 선택하세요. (파일 드롭도 가능)</div>
+    <div id="chart" role="img" aria-label="주차가능대수 라인 차트"></div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script>
-    async function loadCSV(url){
-      const res = await fetch(url, {cache: "no-cache"});
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      const text = await res.text();
-      const rows = text.trim().split(/\r?\n/).map(r => r.split(","));
-      const header = rows.shift();
-      const tsIdx = header.indexOf("timestamp_kst");
-      const avIdx = header.indexOf("available");
-      return rows.map(r => ({
-        t: new Date(r[tsIdx]),
-        v: Number(r[avIdx])
-      })).sort((a,b)=>a.t-b.t);
-    }
-
-    function fmtTime(d){
-      const pad = n => String(n).padStart(2,"0");
-      return `${d.getMonth()+1}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-
-    async function main(){
-      const status = document.getElementById("status");
-      try{
-        const data = await loadCSV("./parking_log.csv"); // ✅ /yuc/ 내부 상대경로
-        if(!data.length){ status.textContent = "데이터 없음."; return; }
-
-        status.textContent = `샘플 ${data.length}개 · 최신: ${fmtTime(data[data.length-1].t)} (KST)`;
-
-        const ctx = document.getElementById("chart");
-        new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: data.map(d=>fmtTime(d.t)),
-            datasets: [{
-              label: "주차가능대수",
-              data: data.map(d=>d.v),
-              tension: .25,
-              pointRadius: 2,
-              borderWidth: 2
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: { beginAtZero: true, title: { display: true, text: "대수" } },
-              x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }
-            },
-            plugins: {
-              legend: { labels: { boxWidth: 12 } },
-              tooltip: { intersect: false }
-            }
-          }
-        });
-      }catch(e){
-        status.textContent = "로딩 실패: " + e.message;
-        console.error(e);
-      }
-    }
-    main();
-  </script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
