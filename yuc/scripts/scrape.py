@@ -4,7 +4,7 @@ yuc/scripts/scrape.py
 수지노외 공영주차장 잔여 주차대수 크롤링 (GitHub Actions 친화)
 - networkidle → domcontentloaded 로 전환 (느린 JS 페이지 대응)
 - 재시도 3회, 지수 백오프 (2s → 4s → 8s)
-- 직전 값 동일 시 CSV 생략
+- 직전 값 동일해도 '시(hour)'가 바뀌면 CSV 기록
 """
 
 import csv
@@ -39,7 +39,7 @@ def ensure_csv() -> None:
 
 
 def get_last_value() -> Optional[int]:
-    """CSV의 마지막 available 값 반환"""
+    """CSV의 마지막 available 값 반환 (하위호환; 사용 안 해도 둠)"""
     if not CSV_PATH.exists():
         return None
     try:
@@ -49,6 +49,25 @@ def get_last_value() -> Optional[int]:
                 return None
             last_row = lines[-1].split(",")
             return int(last_row[-1])
+    except Exception:
+        return None
+
+
+def get_last_row() -> Optional[Tuple[datetime, int]]:
+    """CSV의 마지막 (timestamp_kst, available)를 반환. 없으면 None."""
+    if not CSV_PATH.exists():
+        return None
+    try:
+        with CSV_PATH.open("r", encoding="utf-8") as f:
+            lines = [ln for ln in f.read().strip().splitlines() if ln.strip()]
+            if len(lines) < 2:
+                return None
+            last_row = lines[-1].split(",")
+            ts_str = last_row[0].strip()
+            avail = int(last_row[-1].strip())
+            # ts_str는 +09:00 포함 ISO. fromisoformat로 파싱 가능.
+            ts = datetime.fromisoformat(ts_str)
+            return ts, avail
     except Exception:
         return None
 
@@ -128,17 +147,24 @@ def main() -> None:
     """메인 루틴"""
     ensure_csv()
     try:
-        ts, avail = scrape_once()
-        last = get_last_value()
+        ts_str, avail = scrape_once()
+        now_ts = datetime.fromisoformat(ts_str)
 
-        if last == avail:
-            print(f"[{ts}] {LOT_NAME} available={avail} (변화 없음, 기록 생략)")
-            return
+        last_row = get_last_row()
+        if last_row is not None:
+            last_ts, last_avail = last_row
+            # 동일한 수치라도 '시(hour)'가 바뀌면 기록, 아니면 생략
+            if last_avail == avail and now_ts.hour == last_ts.hour:
+                print(f"[{ts_str}] {LOT_NAME} available={avail} (변화 없음 & 동일 시간대, 기록 생략)")
+                return
 
         with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, LOT_NAME, avail])
+            csv.writer(f).writerow([ts_str, LOT_NAME, avail])
 
-        print(f"[{ts}] {LOT_NAME} available={avail} (이전 {last}) → 기록 완료")
+        if last_row is None:
+            print(f"[{ts_str}] {LOT_NAME} available={avail} (최초 기록)")
+        else:
+            print(f"[{ts_str}] {LOT_NAME} available={avail} (이전 {last_row[1]}, 시변화 {last_row[0].hour}->{now_ts.hour}) → 기록 완료")
 
     except Exception as e:
         print("스크랩 실패:", e)
@@ -147,3 +173,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
