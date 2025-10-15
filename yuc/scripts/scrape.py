@@ -228,8 +228,7 @@ def find_index(page, label: str) -> int:
     logger.warning("헤더 '%s' 찾기 실패", label)
     return -1
 
-# ============ 스크랩 ============
-def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
+# ============ 스크랩 ============def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
     navigate(page, attempt)
 
     idx_name  = find_index(page, "주차장")
@@ -237,41 +236,63 @@ def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
 
     available = None
     cell_text = None
-    name_pat = re.compile(LOT_NAME_REGEX, re.IGNORECASE)
 
+    # 1) 머리글 기반(정상 루트): “주차장” 셀의 anchor 텍스트로 정확히 행 선택
     if idx_name != -1 and idx_avail != -1 and not FALLBACK_FORCE:
-        rows = page.locator("#parkingLotTable tbody#parkingLotList tr")
-        rcnt = rows.count()
-        logger.debug("행 개수: %d", rcnt)
-        for r in range(rcnt):
-            cells = rows.nth(r).locator("th, td")
-            if cells.count() <= max(idx_name, idx_avail):
-                continue
-            name_cell = cells.nth(idx_name).inner_text().strip()
-            if name_pat.search(name_cell):
-                cell_text = cells.nth(idx_avail).inner_text().strip()
-                logger.debug("대상 셀 텍스트='%s'", cell_text)
-                if cell_text == "-":
-                    if TREAT_DASH_AS_ZERO:
-                        available = 0
-                    else:
-                        raise RuntimeError("데이터 없음('-')")
-                else:
-                    m = re.search(r"\d+", cell_text.replace(",", ""))
-                    if not m:
-                        raise RuntimeError(f"숫자 파싱 실패: '{cell_text}'")
-                    available = int(m.group(0))
-                break
+        # 이름셀(td:nth-child(idx_name+1)) 안의 <a> 텍스트가 LOT_NAME인 행만 선택
+        row = page.locator(
+            f"#parkingLotTable tbody#parkingLotList tr:has(td:nth-child({idx_name+1}) a:has-text('{LOT_NAME}'))"
+        ).first
+        if row.count() == 0:
+            # a 태그가 없을 수도 있으니 텍스트 직접 비교 폴백
+            row = page.locator(
+                f"#parkingLotTable tbody#parkingLotList tr:has(td:nth-child({idx_name+1}):has-text('{LOT_NAME}'))"
+            ).first
 
-    # 폴백: 헤더 인덱스 실패 시에도 5번째 셀(td[4])만 본다(요금 숫자 오탐 방지)
-    if available is None:
-        logger.warning("테이블 파싱 실패 또는 강제 폴백 → 폴백 시도")
-        row = page.locator(f"#parkingLotTable tbody#parkingLotList tr:has(a:has-text('{LOT_NAME}')), #parkingLotTable tbody#parkingLotList tr:has-text('{LOT_NAME}')").first
         row.wait_for(timeout=WAIT_MS)
         cells = row.locator("th, td")
-        if cells.count() < 5:
-            raise RuntimeError("폴백: 셀 개수 부족")
-        cell_text = cells.nth(4).inner_text().strip()
+        if cells.count() <= idx_avail:
+            raise RuntimeError(f"셀 개수 부족: need>{idx_avail}, got={cells.count()}")
+
+        cell_text = cells.nth(idx_avail).inner_text().strip()
+        if cell_text == "-":
+            if TREAT_DASH_AS_ZERO:
+                available = 0
+            else:
+                raise RuntimeError("데이터 없음('-')")
+        else:
+            m = re.search(r"\d+", cell_text.replace(",", ""))
+            if not m:
+                raise RuntimeError(f"숫자 파싱 실패: '{cell_text}'")
+            available = int(m.group(0))
+
+    # 2) 폴백: 행 전체에서 숫자 긁지 말고, **무조건 5번째 셀만** 읽어라 (주차가능대수 열)
+    if available is None:
+        # 이름 셀의 a 텍스트로 행을 특정 (일치 정확도 ↑)
+        row = page.locator(
+            "#parkingLotTable tbody#parkingLotList tr"
+            f":has(td:nth-child(2) a:has-text('{LOT_NAME}'))"
+        ).first
+        if row.count() == 0:
+            # anchor 없으면 텍스트 포함으로 폴백
+            row = page.locator(
+                "#parkingLotTable tbody#parkingLotList tr"
+                f":has(td:nth-child(2):has-text('{LOT_NAME}'))"
+            ).first
+
+        row.wait_for(timeout=WAIT_MS)
+        # 테이블 구조가 [구분, 주차장, 위치, 총면수, 주차가능대수, 기본요금, 추가요금]
+        # → 5번째 셀(td:nth-child(5))만 읽는다.
+        avail_cell = row.locator("td:nth-child(5)")
+        if avail_cell.count() == 0:
+            # 어떤 페이지는 th+td 혼합일 수 있으니, 전체 셀에서 0-base 4 인덱스로 재시도
+            cells = row.locator("th, td")
+            if cells.count() <= 4:
+                raise RuntimeError("폴백: 셀 개수 부족")
+            cell_text = cells.nth(4).inner_text().strip()
+        else:
+            cell_text = avail_cell.first.inner_text().strip()
+
         if cell_text == "-":
             if TREAT_DASH_AS_ZERO:
                 available = 0
@@ -282,17 +303,16 @@ def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
             if not m:
                 raise RuntimeError(f"폴백: 숫자 파싱 실패 '{cell_text}'")
             available = int(m.group(0))
-        logger.debug("폴백 추출: %d (cell='%s')", available, cell_text)
 
-    # 데이터 검증
+    # 검증 & 로그
     if available < 0:
         logger.warning("음수 값 감지: %d → 0으로 보정", available)
         available = 0
-    if available > 1000:  # 상한 가드
-        logger.warning("이상치 감지: %d (비정상 범위)", available)
+    if available > 5000:
+        logger.warning("이상치 감지: %d", available)
 
     ts = datetime.now(KST).isoformat(timespec="seconds")
-    logger.info("[확정] %s available=%d at %s (cell='%s')", LOT_NAME, available, ts, cell_text or "N/A")
+    logger.info("[확정] %s available=%d at %s (cell='%s')", LOT_NAME, available, ts, (cell_text or "N/A"))
     return ts, available
 
 def scrape_with_retries() -> Tuple[str, int]:
