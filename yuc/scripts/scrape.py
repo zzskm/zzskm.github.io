@@ -1,432 +1,133 @@
 # -*- coding: utf-8 -*-
 """
-수지노외 공영주차장 크롤러 (Playwright + GitHub Actions 최적화)
+수지노외 공영주차장 크롤러 (API 호출, 간결화)
 
 개선 요약
-- 네비게이션: load 대기 대신 domcontentloaded → networkidle → best-effort 순차 시도(goto_safely)
-- 리소스 차단: font/image/stylesheet/media 차단으로 타임아웃 완화
-- 아티팩트: 스크린샷 timeout 단축, full_page 비활성화 (폰트대기 방지)
-- 파싱: 헤더 인덱스 기반으로 해당 셀만 파싱(요금/주소 숫자 오탐 제거)
-- 폴백: 헤더 탐색 실패해도 행의 5번째 셀(td[4])에서만 숫자 추출
-- CSV: 마지막 줄이 개행으로 끝나는 경우도 안전하게 tail 읽기
-- 기록 규칙: 이전 available과 같고 같은 hour면 건너뜀. hour 달라지면 값 같아도 기록
+- requests로 API 호출, XML 파싱
+- 간단한 CSV 읽기/쓰기
+- 최소 재시도 및 에러 처리
+- 기본 로깅, 아티팩트 저장 간소화
 """
 
-import os, csv, sys, time, json, random, logging, re
+import csv, logging, re, requests, time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional, Tuple
-from filelock import FileLock, Timeout as LockTimeout
-from playwright.sync_api import (
-    sync_playwright,
-    TimeoutError as PlaywrightTimeoutError,
-    Error as PlaywrightError,
-)
+import xml.etree.ElementTree as ET
 
-# ============ 설정 ============
+# 설정
 KST = timezone(timedelta(hours=9))
+API_URL = "https://park.yuc.co.kr/usersite/userSiteParkingLotInfo?regionCd=&parkinglotDivisionCd=&_={timestamp}"
+LOT_NAME = "수지노외 공영주차장"
+LOT_NAME_REGEX = r"수지\s*노외\s*공영\s*주차장"
 
-TARGET_URL = os.getenv("TARGET_URL", "https://park.yuc.co.kr/views/parkinglot/info/info.html")
-ROOT_URL   = os.getenv("ROOT_URL",   "https://park.yuc.co.kr/")
-LOT_NAME   = os.getenv("LOT_NAME",   "수지노외 공영주차장")
-LOT_NAME_REGEX = os.getenv("LOT_NAME_REGEX", r"수지\s*노외\s*공영\s*주차장")
-
-BASE_DIR  = Path(__file__).resolve().parent.parent
-CSV_PATH  = BASE_DIR / "parking_log.csv"
-LOCK_PATH = CSV_PATH.with_suffix(".lock")
+BASE_DIR = Path(__file__).parent.parent
+CSV_PATH = BASE_DIR / "parking_log.csv"
 ARTIFACT_DIR = BASE_DIR / "artifacts"
 
-RETRIES            = int(os.getenv("RETRIES", "3"))
-BACKOFF_BASE_SEC   = float(os.getenv("BACKOFF_BASE_SEC", "2"))
-RETRY_JITTER_FACTOR= float(os.getenv("RETRY_JITTER_FACTOR", "0.3"))
+RETRIES = 3
+BACKOFF_BASE = 2.0
 
-HEADLESS = os.getenv("HEADFUL", "0") != "1"
-WAIT_MS  = int(os.getenv("WAIT_MS", "45000"))      # selector/일반 대기
-NAV_TIMEOUT_MS = int(os.getenv("NAV_TIMEOUT_MS", str(WAIT_MS)))  # nav 전용
-
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOG_JSON  = os.getenv("LOG_JSON", "1") == "1"
-
-TREAT_DASH_AS_ZERO = os.getenv("TREAT_DASH_AS_ZERO", "0") == "1"
-FALLBACK_FORCE     = os.getenv("FALLBACK_FORCE", "0") == "1"
-
-# ============ 로깅 ============
+# 로깅
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 logger = logging.getLogger("scrape")
-logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 
-if LOG_JSON:
-    class JsonHandler(logging.StreamHandler):
-        def emit(self, record: logging.LogRecord) -> None:
-            payload = {
-                "ts": datetime.fromtimestamp(record.created, tz=KST).isoformat(timespec="seconds"),
-                "level": record.levelname,
-                "msg": record.getMessage(),
-                "name": record.name,
-            }
-            if record.exc_info:
-                payload["exc"] = self.formatException(record.exc_info)
-            self.stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    handler = JsonHandler(sys.stderr)
-else:
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-
-logger.handlers = [handler]
-
-# ============ CSV 유틸 ============
-def setup_csv() -> None:
-    """CSV 초기화(헤더)"""
+# CSV 유틸
+def setup_csv():
     if not CSV_PATH.exists():
         CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with FileLock(str(LOCK_PATH), timeout=10):
-            with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerow(["timestamp_kst", "lot_name", "available"])
-                f.flush()
-                os.fsync(f.fileno())
-        logger.info("CSV 파일 초기화 완료: %s", CSV_PATH)
+        with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(["timestamp_kst", "lot_name", "available"])
 
-def get_last_row() -> Optional[Tuple[datetime, int]]:
-    """
-    CSV 마지막 유효 라인을 안전하게 읽어서 (timestamp, available) 반환.
-    - 파일 끝이 개행으로 끝나도 OK
-    - 빈 줄/깨진 줄 스킵
-    """
+def get_last_row():
     if not CSV_PATH.exists():
         return None
-    try:
-        with FileLock(str(LOCK_PATH), timeout=10):
-            with CSV_PATH.open("rb") as f:
-                f.seek(0, os.SEEK_END)
-                end = f.tell()
-                if end == 0:
-                    return None
-                pos = end
-                buffer = b""
-                lines_found = 0
-                last_valid = None
-                # 뒤에서 앞으로 훑으며 최대 5개 후보 스캔
-                while pos > 0 and lines_found < 5:
-                    pos -= 1
-                    f.seek(pos)
-                    ch = f.read(1)
-                    if ch == b"\n":
-                        line = buffer[::-1].decode("utf-8", errors="ignore").strip()
-                        buffer = b""
-                        if line:
-                            parts = line.split(",")
-                            if len(parts) >= 3:
-                                ts_str = parts[0].strip()
-                                avail_str = parts[-1].strip()
-                                try:
-                                    ts = datetime.fromisoformat(ts_str)
-                                    avail = int(avail_str)
-                                    last_valid = (ts, avail)
-                                    break
-                                except Exception:
-                                    pass
-                        lines_found += 1
-                    else:
-                        buffer += ch
-                # 파일의 첫 줄 포함 처리
-                if last_valid is None and buffer:
-                    line = buffer[::-1].decode("utf-8", errors="ignore").strip()
-                    if line:
-                        parts = line.split(",")
-                        if len(parts) >= 3:
-                            try:
-                                ts = datetime.fromisoformat(parts[0].strip())
-                                avail = int(parts[-1].strip())
-                                last_valid = (ts, avail)
-                            except Exception:
-                                pass
-        return last_valid
-    except LockTimeout:
-        logger.warning("CSV 읽기 잠금 타임아웃")
-        return None
-    except Exception as e:
-        logger.warning("CSV 마지막 행 읽기 실패: %s", e)
-        return None
+    with CSV_PATH.open("r", encoding="utf-8") as f:
+        lines = list(csv.reader(f))
+        for line in reversed(lines):
+            if len(line) >= 3:
+                try:
+                    return datetime.fromisoformat(line[0]), int(line[-1])
+                except Exception:
+                    continue
+    return None
 
-def append_csv(ts_str: str, lot_name: str, avail: int) -> None:
-    with FileLock(str(LOCK_PATH), timeout=10):
-        with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts_str, lot_name, avail])
-            f.flush()
-            os.fsync(f.fileno())
-    logger.debug("CSV 추가: %s, %s, %d", ts_str, lot_name, avail)
+def append_csv(ts_str, lot_name, avail):
+    with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([ts_str, lot_name, avail])
 
-# ============ 아티팩트 ============
-def dump_artifacts(page, tag: str) -> None:
-    try:
-        ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-        page.screenshot(
-            path=str(ARTIFACT_DIR / f"snap_{tag}.png"),
-            full_page=False,
-            timeout=5000  # 폰트 대기 타임아웃 회피
-        )
-        (ARTIFACT_DIR / f"dom_{tag}.html").write_text(page.content(), encoding="utf-8")
-        logger.info("아티팩트 저장: snap_%s.png, dom_%s.html", tag, tag)
-    except Exception as e:
-        logger.warning("아티팩트 저장 실패: %s", e)
-
-# ============ 네비게이션 유틸 ============
-def http_ok(resp) -> bool:
-    if not resp:
-        return False
-    st = getattr(resp, "status", 0)
-    if st in (429, 503):
-        logger.warning("HTTP 과부하/율제한: %d", st)
-        return False
-    return 200 <= st < 400
-
-def goto_safely(page, url: str, timeout_ms: int) -> None:
-    """DOMContentLoaded → networkidle → best-effort 순으로 네비게이션."""
-    try:
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        return
-    except PlaywrightTimeoutError:
-        pass
-    try:
-        page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-        return
-    except PlaywrightTimeoutError:
-        pass
-    page.goto(url, timeout=timeout_ms)
-    page.wait_for_timeout(800)
-
-def navigate(page, attempt: int = 0):
-    logger.debug("페이지 네비게이션 시작 (시도 %d)", attempt)
-    # 1) 루트 → GNB
-    try:
-        logger.debug("GNB 경유 시도 (시도 %d)", attempt)
-        goto_safely(page, ROOT_URL, NAV_TIMEOUT_MS)
-        link = page.locator('a:has-text("주차장 안내")')
-        if link.count():
-            link.first.click(timeout=10_000)
-            page.wait_for_load_state("domcontentloaded", timeout=WAIT_MS)
-            logger.debug("GNB 클릭 성공 (시도 %d)", attempt)
-            page.wait_for_selector("#parkingLotTable tbody#parkingLotList tr", timeout=WAIT_MS)
-            return
-        logger.warning("GNB 링크 없음 (시도 %d) → 직접 URL 시도", attempt)
-    except Exception as e:
-        logger.warning("GNB 경유 실패 (시도 %d): %s → 직접 URL 시도", attempt, e)
-
-    # 2) 직접 URL
-    goto_safely(page, TARGET_URL, NAV_TIMEOUT_MS)
-    page.wait_for_selector("#parkingLotTable tbody#parkingLotList tr", timeout=WAIT_MS)
-
-# ============ 파싱 유틸 ============
-def find_index(page, label: str) -> int:
-    headers = page.locator("#parkingLotTable thead tr th, #parkingLotTable thead tr td")
-    cnt = headers.count()
-    texts = [headers.nth(i).inner_text().strip() for i in range(cnt)]
-    logger.debug("헤더 텍스트: %s", texts)
-    for i, t in enumerate(texts):
-        if t.replace(" ", "") == label.replace(" ", ""):
-            logger.debug("헤더 매치: '%s' → %d", label, i)
-            return i
-    logger.warning("헤더 '%s' 찾기 실패", label)
-    return -1
-
-# ============ 스크랩 ============
-def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
-    navigate(page, attempt)
-
-    idx_name  = find_index(page, "주차장")
-    idx_avail = find_index(page, "주차가능대수")
-
-    available = None
-    cell_text = None
-
-    # 1) 머리글 기반(정상 루트): “주차장” 셀의 anchor 텍스트로 정확히 행 선택
-    if idx_name != -1 and idx_avail != -1 and not FALLBACK_FORCE:
-        # 이름셀(td:nth-child(idx_name+1)) 안의 <a> 텍스트가 LOT_NAME인 행만 선택
-        row = page.locator(
-            f"#parkingLotTable tbody#parkingLotList tr:has(td:nth-child({idx_name+1}) a:has-text('{LOT_NAME}'))"
-        ).first
-        if row.count() == 0:
-            # a 태그가 없을 수도 있으니 텍스트 직접 비교 폴백
-            row = page.locator(
-                f"#parkingLotTable tbody#parkingLotList tr:has(td:nth-child({idx_name+1}):has-text('{LOT_NAME}'))"
-            ).first
-
-        row.wait_for(timeout=WAIT_MS)
-        cells = row.locator("th, td")
-        if cells.count() <= idx_avail:
-            raise RuntimeError(f"셀 개수 부족: need>{idx_avail}, got={cells.count()}")
-
-        cell_text = cells.nth(idx_avail).inner_text().strip()
-        if cell_text == "-":
-            if TREAT_DASH_AS_ZERO:
-                available = 0
-            else:
-                raise RuntimeError("데이터 없음('-')")
-        else:
-            m = re.search(r"\d+", cell_text.replace(",", ""))
-            if not m:
-                raise RuntimeError(f"숫자 파싱 실패: '{cell_text}'")
-            available = int(m.group(0))
-
-    # 2) 폴백: 행 전체에서 숫자 긁지 말고, **무조건 5번째 셀만** 읽어라 (주차가능대수 열)
-    if available is None:
-        # 이름 셀의 a 텍스트로 행을 특정 (일치 정확도 ↑)
-        row = page.locator(
-            "#parkingLotTable tbody#parkingLotList tr"
-            f":has(td:nth-child(2) a:has-text('{LOT_NAME}'))"
-        ).first
-        if row.count() == 0:
-            # anchor 없으면 텍스트 포함으로 폴백
-            row = page.locator(
-                "#parkingLotTable tbody#parkingLotList tr"
-                f":has(td:nth-child(2):has-text('{LOT_NAME}'))"
-            ).first
-
-        row.wait_for(timeout=WAIT_MS)
-        # 테이블 구조가 [구분, 주차장, 위치, 총면수, 주차가능대수, 기본요금, 추가요금]
-        # → 5번째 셀(td:nth-child(5))만 읽는다.
-        avail_cell = row.locator("td:nth-child(5)")
-        if avail_cell.count() == 0:
-            # 어떤 페이지는 th+td 혼합일 수 있으니, 전체 셀에서 0-base 4 인덱스로 재시도
-            cells = row.locator("th, td")
-            if cells.count() <= 4:
-                raise RuntimeError("폴백: 셀 개수 부족")
-            cell_text = cells.nth(4).inner_text().strip()
-        else:
-            cell_text = avail_cell.first.inner_text().strip()
-
-        if cell_text == "-":
-            if TREAT_DASH_AS_ZERO:
-                available = 0
-            else:
-                raise RuntimeError("폴백: 데이터 없음('-')")
-        else:
-            m = re.search(r"\d+", cell_text.replace(",", ""))
-            if not m:
-                raise RuntimeError(f"폴백: 숫자 파싱 실패 '{cell_text}'")
-            available = int(m.group(0))
-
-    # 검증 & 로그
-    if available < 0:
-        logger.warning("음수 값 감지: %d → 0으로 보정", available)
-        available = 0
-    if available > 5000:
-        logger.warning("이상치 감지: %d", available)
-
-    ts = datetime.now(KST).isoformat(timespec="seconds")
-    logger.info("[확정] %s available=%d at %s (cell='%s')", LOT_NAME, available, ts, (cell_text or "N/A"))
-    return ts, available
-
-def scrape_with_retries() -> Tuple[str, int]:
+# 아티팩트
+def dump_artifact(xml_data, tag):
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-    with sync_playwright() as p:
-        browser = None
-        context = None
-        page = None
-        try:
-            browser = p.chromium.launch(
-                headless=HEADLESS,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
-            )
-            context = browser.new_context(
-                user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
-                ignore_https_errors=True,
-                viewport={"width": 1280, "height": 720},
-            )
-            # 리소스 차단으로 타임아웃 완화
-            def _block(route):
-                rt = route.request.resource_type
-                if rt in {"font", "image", "stylesheet", "media"}:
-                    return route.abort()
-                return route.continue_()
-            context.route("**/*", _block)
+    (ARTIFACT_DIR / f"xml_{tag}.xml").write_text(xml_data, encoding="utf-8")
 
-            page = context.new_page()
+# API 호출 및 파싱
+def scrape_once(attempt):
+    url = API_URL.format(timestamp=int(time.time() * 1000))
+    logger.debug("API 호출: %s (시도 %d)", url, attempt)
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        xml_text = resp.text
+        dump_artifact(xml_text, f"attempt{attempt}")
 
-            last_err: Optional[Exception] = None
-            for attempt in range(1, RETRIES + 1):
-                try:
-                    ts, avail = scrape_once(page, attempt)
-                    logger.info("스크랩 성공 (시도 %d)", attempt)
+        root = ET.fromstring(xml_text)
+        pattern = re.compile(LOT_NAME_REGEX, re.IGNORECASE)
+        for data in root.findall(".//resultData"):
+            name = data.find("park_name")
+            if name is not None and pattern.search(name.text):
+                cell_text = data.find("parkd_current_num").text.strip()
+                if cell_text == "-":
+                    return datetime.now(KST).isoformat(timespec="seconds"), 0
+                num = re.search(r"\d+", cell_text.replace(",", ""))
+                if num:
+                    avail = int(num.group(0))
+                    if avail < 0:
+                        logger.warning("음수 값 보정: %d → 0", avail)
+                        avail = 0
+                    ts = datetime.now(KST).isoformat(timespec="seconds")
+                    logger.info("%s available=%d at %s", LOT_NAME, avail, ts)
                     return ts, avail
+        raise RuntimeError("주차장 데이터 없음")
+    except Exception as e:
+        logger.warning("실패 (시도 %d): %s", attempt, e)
+        raise
 
-                except (PlaywrightTimeoutError, PlaywrightError) as e:
-                    last_err = e
-                    logger.warning("네트워크/타임아웃 실패 (시도 %d): %s", attempt, e)
-                    backoff = BACKOFF_BASE_SEC * (2 ** (attempt - 1))
-                except RuntimeError as e:
-                    last_err = e
-                    logger.warning("데이터 추출 실패 (시도 %d): %s", attempt, e)
-                    backoff = BACKOFF_BASE_SEC * (2 ** (attempt - 1))
-                except Exception as e:
-                    last_err = e
-                    logger.error("기타 실패 (시도 %d): %s", attempt, e)
-                    backoff = BACKOFF_BASE_SEC * (2 ** (attempt - 1))
+# 스크랩
+def scrape():
+    for attempt in range(1, RETRIES + 1):
+        try:
+            return scrape_once(attempt)
+        except Exception as e:
+            if attempt == RETRIES:
+                raise RuntimeError("모든 재시도 실패") from e
+            time.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
 
-                dump_artifacts(page, f"fail{attempt}")
-
-                if attempt < RETRIES:
-                    jitter = backoff * RETRY_JITTER_FACTOR * random.uniform(-1, 1)
-                    wait_time = max(0.0, backoff + jitter)
-                    logger.info("재시도 대기: %.1fs (backoff=%.1f, jitter=%.1f)", wait_time, backoff, jitter)
-                    time.sleep(wait_time)
-                    try:
-                        logger.debug("재시도 네비게이션 시작 (시도 %d)", attempt + 1)
-                        navigate(page, attempt + 1)
-                    except Exception as ne:
-                        logger.warning("재네비게이션 실패 (시도 %d): %s → 새 페이지 생성", attempt + 1, ne)
-                        try:
-                            page.close()
-                        except Exception:
-                            pass
-                        page = context.new_page()
-
-            raise last_err or RuntimeError("모든 재시도 실패")
-
-        finally:
-            try:
-                if page:
-                    page.close()
-            finally:
-                try:
-                    if context:
-                        context.close()
-                finally:
-                    if browser:
-                        browser.close()
-
-# ============ 메인 ============
+# 메인
 def main():
     logger.info("스크랩 시작")
     setup_csv()
     try:
-        ts_str, avail = scrape_with_retries()
+        ts_str, avail = scrape()
         now = datetime.fromisoformat(ts_str)
-
         last = get_last_row()
+
         if last is None:
-            logger.info("[%s] %s available=%d (최초 기록)", ts_str, LOT_NAME, avail)
             append_csv(ts_str, LOT_NAME, avail)
-            logger.info("스크랩 완료")
-            return
-
-        last_ts, last_avail = last
-        same_value = (last_avail == avail)
-        same_hour  = (now.hour == last_ts.hour)
-
-        if same_value and same_hour:
-            logger.info("[%s] %s available=%d (동일 값 & 동일 시간대 → 생략)", ts_str, LOT_NAME, avail)
-            return
-        elif same_value and not same_hour:
-            logger.info("[%s] %s available=%d (값 동일하지만 시간대 변경 → 기록)", ts_str, LOT_NAME, avail)
-
-        append_csv(ts_str, LOT_NAME, avail)
-        logger.info("[%s] %s available=%d 기록 완료", ts_str, LOT_NAME, avail)
-
+            logger.info("%s available=%d (최초 기록)", LOT_NAME, avail)
+        else:
+            last_ts, last_avail = last
+            if last_avail == avail and now.hour == last_ts.hour:
+                logger.info("%s available=%d (동일 값 & 시간 → 생략)", LOT_NAME, avail)
+            else:
+                append_csv(ts_str, LOT_NAME, avail)
+                logger.info("%s available=%d 기록", LOT_NAME, avail)
     except Exception as e:
-        logger.error("메인 실패: %s", e)
+        logger.error("실패: %s", e)
         sys.exit(1)
-
     logger.info("스크랩 완료")
 
 if __name__ == "__main__":
