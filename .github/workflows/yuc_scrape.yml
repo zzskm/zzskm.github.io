@@ -1,93 +1,46 @@
-name: yuc_scrape
+name: YUC Scraper
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: '*/10 * * * *'
-  workflow_dispatch: {}
-  push:
-    paths:
-      - "yuc/**"
-      - ".github/workflows/yuc_scrape.yml"
-
-permissions:
-  contents: write
+    - cron: "0 * * * *"  # 매 시간 정각 실행 (UTC 기준)
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    concurrency:
-      group: yuc-scrape
-      cancel-in-progress: true
 
     steps:
+      # 리포 체크아웃
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      # Python 환경 세팅
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      # ▶ 브라우저 캐시 (절대경로 사용)
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: /home/runner/.cache/ms-playwright
-          key: pw-browsers-${{ runner.os }}-playwright-1.55.0-chromium
-          restore-keys: |
-            pw-browsers-${{ runner.os }}-playwright-1.55.
-
-      - name: Install Python deps (incl. Playwright, filelock)
+      # pip 최신화 및 필요한 패키지 설치
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # requirements.txt가 있으면 우선 사용
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # 안전빵으로 필요한 것들 강제 설치
-          pip install playwright filelock
-          # (선택) CSV/로그 처리에 필요한 추가 패키지 있으면 여기에 더 적기
+          pip install requests
 
-      # 캐시 미스일 때만 브라우저 다운로드
-      - name: Install Playwright browsers (cache miss only)
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+      # 아티팩트 폴더 생성
+      - name: Prepare artifact folders
         run: |
-          python -m playwright install chromium
-
-      - name: Run scraper
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
-          PYTHONUNBUFFERED: "1"
-          CI: "1"
-          # ▼ 로그/동작 튜닝 (스크립트에서 ENV 읽음)
-          LOG_JSON: "1"               # JSON 로그로 깔끔하게
-          LOG_LEVEL: "DEBUG"
-          BLOCK_RESOURCES: "1"        # 이미지/폰트 차단
-          LOG_TRACE: "1"              # 실패 시 trace.zip 저장
-          RETRIES: "3"
-          NAV_TIMEOUT_MS: "45000"
-          WAIT_TIMEOUT_MS: "30000"
-        run: |
-          # 아티팩트 폴더 미리 생성 (스크린샷/HTML/trace)
           mkdir -p artifacts
+
+      # 스크래핑 실행
+      - name: Run scraper
+        run: |
           python yuc/scripts/scrape.py
 
-      # 실패/성공 상관없이 아티팩트 업로드 (디버깅에 도움)
+      # CSV, 아티팩트 업로드 (기록용)
       - name: Upload artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scrape-artifacts
+          name: yuc-artifacts
           path: |
-            artifacts/**
-            **/trace.zip
-          if-no-files-found: ignore
-
-      - name: Commit & Push CSV
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add yuc/parking_log.csv
-          git commit -m "update yuc/parking_log.csv [skip ci]" || echo "no changes"
-          git push
+            parking_log.csv
+            artifacts/
