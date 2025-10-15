@@ -3,41 +3,34 @@ name: YUC Scraper
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"  # 매 시간 정각 실행 (UTC 기준)
+    - cron: "*/10 * * * *"
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
     steps:
-      # 리포 체크아웃
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Python 환경 세팅
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # pip 최신화 및 필요한 패키지 설치
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      # 아티팩트 폴더 생성
       - name: Prepare artifact folders
-        run: |
-          mkdir -p artifacts
+        run: mkdir -p artifacts
 
-      # 스크래핑 실행
       - name: Run scraper
-        run: |
-          python yuc/scripts/scrape.py
+        run: python yuc/scripts/scrape.py
 
-      # CSV, 아티팩트 업로드 (기록용)
-      - name: Upload artifacts
+      - name: Upload artifacts (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: yuc-artifacts
