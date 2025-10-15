@@ -1,134 +1,106 @@
-# -*- coding: utf-8 -*-
-"""
-수지노외 공영주차장 크롤러 (API 호출, 간결화)
+# yuc/scripts/scrape.py
 
-개선 요약
-- requests로 API 호출, XML 파싱
-- 간단한 CSV 읽기/쓰기
-- 최소 재시도 및 에러 처리
-- 기본 로깅, 아티팩트 저장 간소화
-"""
+import csv, logging, re, requests, time, os, pathlib, xml.etree.ElementTree as ET, sys
+from datetime import datetime
 
-import csv, logging, re, requests, time
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-import xml.etree.ElementTree as ET
+ART_DIR = pathlib.Path("artifacts")
+ART_DIR.mkdir(parents=True, exist_ok=True)
 
-# 설정
-KST = timezone(timedelta(hours=9))
-API_URL = "https://park.yuc.co.kr/usersite/userSiteParkingLotInfo?regionCd=&parkinglotDivisionCd=&_={timestamp}"
-LOT_NAME = "수지노외 공영주차장"
-LOT_NAME_REGEX = r"수지\s*노외\s*공영\s*주차장"
-
-BASE_DIR = Path(__file__).parent.parent
-CSV_PATH = BASE_DIR / "parking_log.csv"
-ARTIFACT_DIR = BASE_DIR / "artifacts"
-
-RETRIES = 3
-BACKOFF_BASE = 2.0
-
-# 로깅
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 )
-logger = logging.getLogger("scrape")
 
-# CSV 유틸
-def setup_csv():
-    if not CSV_PATH.exists():
-        CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with CSV_PATH.open("w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(["timestamp_kst", "lot_name", "available"])
+BASE = "https://park.yuc.co.kr"
+INFO_PAGE = f"{BASE}/views/parkinglot/info/info"
+API_URL = f"{BASE}/usersite/userSiteParkingLotInfo"
 
-def get_last_row():
-    if not CSV_PATH.exists():
-        return None
-    with CSV_PATH.open("r", encoding="utf-8") as f:
-        lines = list(csv.reader(f))
-        for line in reversed(lines):
-            if len(line) >= 3:
-                try:
-                    return datetime.fromisoformat(line[0]), int(line[-1])
-                except Exception:
-                    continue
-    return None
-
-def append_csv(ts_str, lot_name, avail):
-    with CSV_PATH.open("a", newline="", encoding="utf-8") as f:
-        csv.writer(f).writerow([ts_str, lot_name, avail])
-
-# 아티팩트
-def dump_artifact(xml_data, tag):
-    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-    (ARTIFACT_DIR / f"xml_{tag}.xml").write_text(xml_data, encoding="utf-8")
-
-# API 호출 및 파싱
-def scrape_once(attempt):
-    url = API_URL.format(timestamp=int(time.time() * 1000))
-    logger.debug("API 호출: %s (시도 %d)", url, attempt)
+def make_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": UA,
+        "Accept": "application/xml,text/xml,application/xhtml+xml,text/html;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko,en;q=0.8",
+        "Connection": "keep-alive",
+    })
+    # Session warm-up
     try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        xml_text = resp.text
-        dump_artifact(xml_text, f"attempt{attempt}")
+        s.get(BASE, timeout=10)
+    except Exception:
+        pass
+    try:
+        s.get(INFO_PAGE, timeout=10, headers={"Referer": BASE})
+    except Exception:
+        pass
+    return s
 
-        root = ET.fromstring(xml_text)
-        pattern = re.compile(LOT_NAME_REGEX, re.IGNORECASE)
-        for data in root.findall(".//resultData"):
-            name = data.find("park_name")
-            if name is not None and pattern.search(name.text):
-                cell_text = data.find("parkd_current_num").text.strip()
-                if cell_text == "-":
-                    return datetime.now(KST).isoformat(timespec="seconds"), 0
-                num = re.search(r"\d+", cell_text.replace(",", ""))
-                if num:
-                    avail = int(num.group(0))
-                    if avail < 0:
-                        logger.warning("음수 값 보정: %d → 0", avail)
-                        avail = 0
-                    ts = datetime.now(KST).isoformat(timespec="seconds")
-                    logger.info("%s available=%d at %s", LOT_NAME, avail, ts)
-                    return ts, avail
-        raise RuntimeError("주차장 데이터 없음")
-    except Exception as e:
-        logger.warning("실패 (시도 %d): %s", attempt, e)
-        raise
+def fetch_xml_text(session: requests.Session, attempt: int) -> str:
+    ts = int(time.time() * 1000)
+    params = {"regionCd": "", "parkinglotDivisionCd": "", "_": str(ts)}
+    headers = {
+        "Referer": INFO_PAGE,
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    r = session.get(API_URL, params=params, headers=headers, timeout=20)
+    if not r.encoding:
+        r.encoding = "utf-8"
+    text = r.text.lstrip("\ufeff").strip()
 
-# 스크랩
-def scrape():
-    for attempt in range(1, RETRIES + 1):
+    # Quick XML check
+    if not text.startswith("<"):
+        dump = ART_DIR / f"non_xml_attempt{attempt}.txt"
+        dump.write_text(text, encoding="utf-8", errors="ignore")
+        raise ValueError("서버 응답이 XML이 아님 (본문 덤프 저장됨)")
+
+    # Save raw xml for debugging
+    (ART_DIR / f"raw_attempt{attempt}.xml").write_text(text, encoding="utf-8", errors="ignore")
+    return text
+
+def parse_xml(text: str):
+    cleaned = re.sub(r"^\s+", "", text)
+    return ET.fromstring(cleaned)
+
+def scrape_once(session: requests.Session, attempt: int):
+    xml_text = fetch_xml_text(session, attempt)
+    root = parse_xml(xml_text)
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    total_avail = 0
+    for rd in root.findall(".//resultData"):
+        val = rd.findtext("parkd_current_num") or "0"
         try:
-            return scrape_once(attempt)
-        except Exception as e:
-            if attempt == RETRIES:
-                raise RuntimeError("모든 재시도 실패") from e
-            time.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
+            total_avail += int(val)
+        except ValueError:
+            pass
+    return ts, total_avail
 
-# 메인
+def scrape(max_retry: int = 3, delay_sec: int = 4):
+    session = make_session()
+    last_exc = None
+    for attempt in range(1, max_retry + 1):
+        try:
+            return scrape_once(session, attempt)
+        except Exception as e:
+            logging.warning("실패 (시도 %d): %s", attempt, e)
+            last_exc = e
+            time.sleep(delay_sec)
+    logging.error("실패: 모든 재시도 실패")
+    raise RuntimeError("모든 재시도 실패") from last_exc
+
 def main():
-    logger.info("스크랩 시작")
-    setup_csv()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    logging.info("스크랩 시작")
     try:
         ts_str, avail = scrape()
-        now = datetime.fromisoformat(ts_str)
-        last = get_last_row()
-
-        if last is None:
-            append_csv(ts_str, LOT_NAME, avail)
-            logger.info("%s available=%d (최초 기록)", LOT_NAME, avail)
-        else:
-            last_ts, last_avail = last
-            if last_avail == avail and now.hour == last_ts.hour:
-                logger.info("%s available=%d (동일 값 & 시간 → 생략)", LOT_NAME, avail)
-            else:
-                append_csv(ts_str, LOT_NAME, avail)
-                logger.info("%s available=%d 기록", LOT_NAME, avail)
+        # Save CSV log
+        with open("parking_log.csv", "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow([ts_str, avail])
+        # Save success snapshot
+        (ART_DIR / "last_success.txt").write_text(f"{ts_str}\t{avail}\n", encoding="utf-8")
     except Exception as e:
-        logger.error("실패: %s", e)
+        # Save error snapshot
+        (ART_DIR / "last_error.txt").write_text(str(e), encoding="utf-8")
         sys.exit(1)
-    logger.info("스크랩 완료")
 
 if __name__ == "__main__":
     main()
