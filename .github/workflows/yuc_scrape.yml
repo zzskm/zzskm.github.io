@@ -1,15 +1,18 @@
-
 name: yuc scrape
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/12 * * * *"
+    # 매 시각 3, 15, 27, 39, 51분에 실행 (약 12분 간격)
+    - cron: "3,15,27,39,51 * * * *"
+
+permissions:
+  contents: write  # ✅ GitHub Actions가 레포에 커밋/푸시 가능하도록 설정
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -29,16 +32,18 @@ jobs:
         run: |
           mkdir -p yuc/scripts yuc/artifacts
 
-      - name: Write scraper if missing
+      - name: Check scraper existence
         run: |
           if [ ! -f yuc/scripts/scrape.py ]; then
-            echo "scrape.py missing" && exit 1
+            echo "❌ scrape.py missing" && exit 1
+          else
+            echo "✅ scrape.py found"
           fi
 
       - name: Run scraper
         env:
           ARTIFACT_DIR: yuc/artifacts
-          OUTPUT_CSV: yuc/parking_log.csv
+          OUTPUT_CSV: yuc/data/parking_log.csv
         run: |
           python yuc/scripts/scrape.py
 
@@ -48,6 +53,15 @@ jobs:
         with:
           name: yuc-artifacts
           path: |
-            yuc/parking_log.csv
+            yuc/data/parking_log.csv
             yuc/artifacts/**
           if-no-files-found: warn
+
+      # ✅ 추가: parking_log.csv 자동 커밋 & 푸시
+      - name: Commit and push updated CSV
+        if: success() || failure()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update parking_log.csv"
+          file_pattern: "yuc/data/parking_log.csv"
+          branch: ${{ github.ref_name }}
