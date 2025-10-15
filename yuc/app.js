@@ -23,37 +23,47 @@
     return ymdKST(d);
   }
 
-  function parseCSV(text) {
-    const rows = text.trim().split(/\r?\n/).map((r) => r.split(","));
-    const header = rows.shift();
-    const tsIdx = header.indexOf("timestamp_kst");
-    const nameIdx = header.indexOf("lot_name");
-    const avIdx = header.indexOf("available");
-    if (tsIdx < 0 || nameIdx < 0 || avIdx < 0) throw new Error("CSV 헤더 오류: timestamp_kst, lot_name, available 필요");
+function parseCSV(text) {
+  const rows = text.trim().split(/\r?\n/).map((r) => r.split(","));
+  const header = rows.shift();
+  const tsIdx = header.indexOf("timestamp_kst");
+  const nameIdx = header.indexOf("lot_name");
+  const avIdx = header.indexOf("available");
+  if (tsIdx < 0 || nameIdx < 0 || avIdx < 0)
+    throw new Error("CSV 헤더 오류: timestamp_kst, lot_name, available 필요");
 
-    const all = rows.map((r) => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
-      .filter((r) => r.name === LOT_NAME && !Number.isNaN(r.v))
-      .sort((a, b) => a.t - b.t);
+  const all = rows
+    .map((r) => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
+    .filter((r) => r.name === LOT_NAME && !Number.isNaN(r.v))
+    .sort((a, b) => a.t - b.t);
 
-    const t0 = ymdDaysAgo(0);
-    const t1 = ymdDaysAgo(1);
-    const t7 = ymdDaysAgo(7);
+  const t0 = ymdDaysAgo(0);
+  const t1 = ymdDaysAgo(1);
+  const t7 = ymdDaysAgo(7);
 
-    const todayArr = [];
-    const yestArr  = [];
-    const d7Arr    = [];
+  const todayArr = [];
+  const yestArr = [];
+  const d7Arr = [];
 
-    for (const d of all) {
-      const ymd = ymdKST(d.t);
-      if (ymd === t0) todayArr.push(d);
-      else if (ymd === t1) yestArr.push(d);
-      else if (ymd === t7) d7Arr.push(d);
-    }
-    todayArr.sort((a, b) => a.t - b.t);
-    yestArr.sort((a, b) => a.t - b.t);
-    d7Arr.sort((a, b) => a.t - b.t);
-    return { todayArr, yestArr, d7Arr };
+  for (const d of all) {
+    const ymd = ymdKST(d.t);
+    if (ymd === t0) todayArr.push(d);
+    else if (ymd === t1) yestArr.push(d);
+    else if (ymd === t7) d7Arr.push(d);
   }
+
+  todayArr.sort((a, b) => a.t - b.t);
+  yestArr.sort((a, b) => a.t - b.t);
+  d7Arr.sort((a, b) => a.t - b.t);
+
+  // ✅ 오늘 배열의 마지막 값과 동일한 v로 현재 시간 데이터 추가
+  if (todayArr.length > 0) {
+    const last = todayArr[todayArr.length - 1];
+    todayArr.push({ t: new Date(), name: last.name, v: last.v });
+  }
+
+  return { todayArr, yestArr, d7Arr };
+}
 
   function projectToBaseDate(baseDate, originalDate) {
     return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(),
