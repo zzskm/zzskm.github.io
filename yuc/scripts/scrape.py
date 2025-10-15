@@ -74,20 +74,35 @@ def get_last_row() -> Optional[Tuple[datetime, int]]:
         return None
     try:
         with FileLock(str(LOCK_PATH), timeout=10):
-            with CSV_PATH.open("r", encoding="utf-8") as f:
+            with CSV_PATH.open("rb") as f:
                 f.seek(0, os.SEEK_END)
-                pos = f.tell()
+                end = f.tell()
+                pos = end
                 lines = []
+
+                # 역방향으로 읽어서 마지막 2줄 확보
                 while pos > 0 and len(lines) < 2:
                     pos -= 1
                     f.seek(pos)
-                    if f.read(1) == "\n":
-                        lines.append(f.readline().strip())
-                if len(lines) < 2:
-                    return None
-                last = lines[-2] if lines[-1] == "" else lines[-1]
-                row = last.split(",")
-                return datetime.fromisoformat(row[0]), int(row[2])
+                    char = f.read(1)
+                    if char == b"\n" and pos != end - 1:
+                        line = f.readline().decode("utf-8").strip()
+                        if line:
+                            lines.append(line)
+                if pos == 0:
+                    f.seek(0)
+                    line = f.readline().decode("utf-8").strip()
+                    if line:
+                        lines.append(line)
+
+            if not lines:
+                return None
+            last_line = lines[0]  # 가장 마지막 유효 라인
+            row = last_line.split(",")
+            ts = datetime.fromisoformat(row[0].strip())
+            avail = int(row[2].strip())
+            logger.debug("마지막 행: %s", last_line)
+            return ts, avail
     except Exception as e:
         logger.error("마지막 행 읽기 실패: %s", e)
         return None
@@ -298,11 +313,21 @@ def main():
         ts_str, avail = scrape_with_retries()
         now = datetime.fromisoformat(ts_str)
         last = get_last_row()
-        if last and last[1] == avail and now.hour == last[0].hour:
-            logger.info("[%s] %s available=%d (동일 & 같은 시간대 → 생략)", ts_str, LOT_NAME, avail)
-            return
+
+        if last:
+            last_ts, last_avail = last
+            same_value = (last_avail == avail)
+            same_hour = (now.hour == last_ts.hour)
+
+            if same_value and same_hour:
+                logger.info("[%s] %s available=%d (동일 값 & 동일 시간대 → 생략)", ts_str, LOT_NAME, avail)
+                return
+            elif same_value and not same_hour:
+                logger.info("[%s] %s available=%d (값 동일하지만 시간대 변경 → 기록)", ts_str, LOT_NAME, avail)
+
         append_csv(ts_str, LOT_NAME, avail)
-        logger.info("[%s] %s available=%d 기록", ts_str, LOT_NAME, avail)
+        logger.info("[%s] %s available=%d 기록 완료", ts_str, LOT_NAME, avail)
+
     except Exception as e:
         logger.error("메인 실패: %s", e)
         sys.exit(1)
