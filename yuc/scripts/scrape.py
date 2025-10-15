@@ -17,13 +17,31 @@ from typing import Optional, Tuple
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
+
+def gnb_reenter(page) -> None:
+    """
+    GNB(전역 네비)로 재진입 시도.
+    1) 루트로 이동 → "주차장 안내" 메뉴 클릭
+    2) 실패 시 info.html 직접 진입
+    """
+    try:
+        page.goto("https://park.yuc.co.kr/", wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
+        link = page.locator('a:has-text("주차장 안내")')
+        if link.count() > 0:
+            link.first.click(timeout=20_000)
+            page.locator("h1:has-text('주차장 안내')").first.wait_for(timeout=WAIT_TIMEOUT_MS)
+            return
+    except Exception:
+        pass
+    page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
+
 # === 설정 ===
 TARGET_URL = "https://park.yuc.co.kr/views/parkinglot/info/info.html"
 LOT_NAME = "수지노외 공영주차장"
 CSV_PATH = Path(__file__).resolve().parent.parent / "parking_log.csv"
 
-NAV_TIMEOUT_MS = 90_000          # 페이지 로드 대기
-WAIT_TIMEOUT_MS = 80_000         # LOT_NAME 요소 대기
+NAV_TIMEOUT_MS = 60_000          # 페이지 로드 대기
+WAIT_TIMEOUT_MS = 60_000         # LOT_NAME 요소 대기
 RETRIES = 2                      # 재시도 횟수
 BACKOFF_BASE_SEC = 2             # 백오프 시작 시간 (2s)
 
@@ -132,7 +150,7 @@ def scrape_once() -> Tuple[str, int]:
                 backoff = BACKOFF_BASE_SEC * (2 ** (attempt - 1))
                 print(f"[retry {attempt}/{RETRIES-1}] 실패: {e} → {backoff}s 후 재시도", file=sys.stderr)
                 try:
-                    page.reload(wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
+                    gnb_reenter(page)
                 except Exception:
                     page.close()
                     page = browser.new_page()
@@ -173,4 +191,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    
