@@ -62,6 +62,7 @@ jobs:
           CI: "1"
           # ▼ 로그/동작 튜닝 (스크립트에서 ENV 읽음)
           LOG_JSON: "1"               # JSON 로그로 깔끔하게
+          LOG_LEVEL: "DEBUG"
           BLOCK_RESOURCES: "1"        # 이미지/폰트 차단
           LOG_TRACE: "1"              # 실패 시 trace.zip 저장
           RETRIES: "3"
