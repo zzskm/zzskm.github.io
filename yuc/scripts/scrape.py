@@ -228,7 +228,8 @@ def find_index(page, label: str) -> int:
     logger.warning("헤더 '%s' 찾기 실패", label)
     return -1
 
-# ============ 스크랩 ============def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
+# ============ 스크랩 ============
+def scrape_once(page, attempt: int = 0) -> Tuple[str, int]:
     navigate(page, attempt)
 
     idx_name  = find_index(page, "주차장")
