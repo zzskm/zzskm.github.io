@@ -1,160 +1,202 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import os, sys, csv, logging, time, random
+# yuc/scripts/scrape.py
+
+import os
+import sys
+import csv
+import logging
+import time
+import random
+import socket
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
+
 import requests
+from urllib3.util import Retry
+from requests.adapters import HTTPAdapter
 
-TARGET_NAME = "수지노외 공영주차장"
-OUT_PATH = "yuc/data.csv"
-SNAPSHOT_PATH = "yuc/last_response.txt"
-
-MAX_RETRY = 3
-TIMEOUT = 20
-KST = timezone(timedelta(hours=9))
-
+# ======================
+# 설정값
+# ======================
 BASE_URL = "https://park.yuc.co.kr/usersite/userSiteParkingLotInfo"
-
 COMMON_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/xml, text/xml;q=0.9, */*;q=0.8",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,*/*;q=0.8",
     "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
     "Connection": "keep-alive",
-    "Referer": "https://park.yuc.co.kr/views/parkinglot/info/info",
-    "X-Requested-With": "XMLHttpRequest",
 }
+# 타임아웃/재시도 정책
+CONNECT_TIMEOUT = 6
+READ_TIMEOUT = 10
+REQ_TIMEOUT = (CONNECT_TIMEOUT, READ_TIMEOUT)
+MAX_RETRY = 5
+BACKOFF_SECS = [2, 3, 5, 8, 13]  # 빠른 백오프 + 지터
 
+# 타겟 주차장 이름 (환경변수로 오버라이드 가능)
+TARGET_NAME = os.getenv("YUC_TARGET_NAME", "수지노외 공영주차장")
+
+# 아티팩트/로그 저장 경로 (CI에서 디버그용 파일 떨어뜨릴 폴더)
+ARTIFACT_DIR = os.getenv("YUC_ARTIFACT_DIR", "yuc/artifacts")
+os.makedirs(ARTIFACT_DIR, exist_ok=True)
+
+# 출력 CSV 경로 (옵션) — 기본은 stdout에 한 줄 출력
+OUTPUT_CSV = os.getenv("YUC_OUTPUT_CSV", "").strip()  # 비어있으면 stdout-only
+
+# ======================
+# 로깅
+# ======================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+
+# ======================
+# 유틸
+# ======================
 def ms() -> int:
     return int(time.time() * 1000)
 
-def ensure_dirs():
-    os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
-    os.makedirs(os.path.dirname(SNAPSHOT_PATH), exist_ok=True)
-
-def snapshot(text: str):
-    """최근 실패 응답을 저장해서 디버깅/다운로드 가능하게."""
+def snapshot(text: str, name: str = "last_response.txt") -> None:
     try:
-        ensure_dirs()
-        with open(SNAPSHOT_PATH, "w", encoding="utf-8", newline="") as f:
+        p = os.path.join(ARTIFACT_DIR, name)
+        with open(p, "w", encoding="utf-8", newline="") as f:
             f.write(text)
+    except Exception as _:
+        pass
+
+def build_session() -> requests.Session:
+    s = requests.Session()
+    s.trust_env = True  # CI/기업망 프록시/CA 활용
+    s.headers.update(COMMON_HEADERS)
+
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=1,
+        status=1,
+        status_forcelist=(429, 500, 502, 503, 504),
+        backoff_factor=0.5,
+        raise_on_status=False,
+        allowed_methods=frozenset(["GET"]),
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=8)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+def warmup(session: requests.Session) -> None:
+    # 서버가 화면경로를 먼저 친 뒤 Ajax를 더 잘 받는 경우를 대비해 예열
+    try:
+        session.get("https://park.yuc.co.kr/", timeout=REQ_TIMEOUT, allow_redirects=True)
+    except Exception:
+        pass
+    try:
+        session.get(
+            "https://park.yuc.co.kr/views/parkinglot/info/info",
+            timeout=REQ_TIMEOUT,
+            allow_redirects=True,
+        )
     except Exception:
         pass
 
 def fetch_xml(session: requests.Session) -> str:
-    # 매 요청마다 fresh한 _ 파라미터 부여
-    params = {
-        "regionCd": "",
-        "parkinglotDivisionCd": "",
-        "_": str(ms()),
-    }
-    r = session.get(BASE_URL, headers=COMMON_HEADERS, params=params, timeout=TIMEOUT)
+    params = {"regionCd": "", "parkinglotDivisionCd": "", "_": str(ms())}
+    r = session.get(BASE_URL, params=params, timeout=REQ_TIMEOUT, allow_redirects=True)
     r.raise_for_status()
-
-    # 일부 서버가 content-type을 text/html로 주는 경우가 있어도 본문 검사로 판별
     text = r.text.lstrip()
 
-    # 본문에서 ResultMaster가 시작하는 지점부터 잘라내기 (차단/광고 HTML 방어)
+    # 혹시 HTML이 앞에 섞여 들어온 경우를 방지
     anchor = text.find("<ResultMaster")
     if anchor > 0:
         text = text[anchor:]
 
-    # 최소한의 형태 검증
     if "<ResultMaster" not in text or "</ResultMaster>" not in text:
-        snapshot(text)
-        raise ValueError("XML 응답이 아님(차단/HTML 가능성). last_response.txt 확인")
+        snapshot(text, "not_xml_response.txt")
+        raise ValueError("XML 응답이 아님(차단/HTML 가능성). artifacts/not_xml_response.txt 확인")
 
     return text
 
-def parse_xml(xml_text: str) -> tuple[int, int] | None:
-    """원본 XML에서 대상 주차장의 (current, total)을 반환."""
-    xml_text = xml_text.lstrip()
-
-    # XML 파싱
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as e:
-        snapshot(xml_text)
-        raise
-
-    for rd in root.iter("resultData"):
+def parse_target_availability(xml_text: str, target_name: str) -> int:
+    """
+    XML에서 target_name(park_name)의 현재 가능 대수(parkd_current_num)를 정수로 반환.
+    없거나 수치가 비어있으면 0으로 간주.
+    """
+    root = ET.fromstring(xml_text)  # 여기서 파싱 에러 나면 상위에서 재시도
+    # resultData 블록들 순회
+    for rd in root.findall("./resultData"):
         name_el = rd.find("park_name")
         if name_el is None:
             continue
         name = (name_el.text or "").strip()
-        if name != TARGET_NAME:
+        if name != target_name:
             continue
 
-        cur_el = rd.find("parkd_current_num")
-        tot_el = rd.find("parkd_total_num")
-        if cur_el is None or tot_el is None:
-            return None
-
-        cur_raw = (cur_el.text or "").strip()
-        tot_raw = (tot_el.text or "").strip()
-
-        # 빈 값/하이픈 방어
-        if cur_raw in ("", "-") or tot_raw in ("", "-"):
-            return None
-
+        num_el = rd.find("parkd_current_num")
+        raw = (num_el.text or "").strip() if num_el is not None else ""
+        # 빈칸/하이픈 등은 0 처리
+        if raw == "" or raw == "-":
+            return 0
+        # 숫자만 남기기
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        if digits == "":
+            return 0
         try:
-            cur = int(cur_raw)
-            tot = int(tot_raw)
+            return int(digits)
         except ValueError:
-            return None
+            return 0
 
-        return (cur, tot)
+    raise KeyError(f"타깃 주차장 미발견: {target_name}")
 
-    return None
+def iso_now_kst() -> str:
+    kst = timezone(timedelta(hours=9))
+    # seconds 정밀도까지만
+    return datetime.now(kst).isoformat(timespec="seconds")
 
+def write_output_line(ts_iso: str, name: str, count: int) -> None:
+    line = f"{ts_iso},{name},{count}"
+    # stdout
+    print(line)
+    # 선택적으로 CSV 파일에도 append
+    if OUTPUT_CSV:
+        try:
+            # CSV 파일은 utf-8로 누적
+            new_file = not os.path.exists(OUTPUT_CSV)
+            with open(OUTPUT_CSV, "a", encoding="utf-8", newline="") as f:
+                w = csv.writer(f)
+                if new_file:
+                    w.writerow(["timestamp", "name", "available"])
+                w.writerow([ts_iso, name, count])
+        except Exception as e:
+            logging.warning(f"CSV 저장 실패: {e}")
+
+# ======================
+# 핵심 실행부
+# ======================
 def scrape_once(session: requests.Session) -> tuple[str, int]:
     xml_text = fetch_xml(session)
-    got = parse_xml(xml_text)
-    if not got:
-        raise ValueError("대상 주차장을 찾지 못함")
-
-    cur, tot = got
-
-    # 이상치 방어: current가 total을 초과하거나 음수면 무시
-    if not (0 <= cur <= tot):
-        snapshot(f"[이상치]\ncur={cur}, tot={tot}\n")
-        raise ValueError(f"이상치 감지: current={cur}, total={tot}")
-
-    # 극단적 오류(예: 3664 같은 비정상 큰 값) 추가 방어:
-    # 총면수 합리적 상한선(예: 1000 이하) — 실제 데이터에 맞춰 필요시 조정
-    if tot > 1100 or cur > 1100:
-        snapshot(f"[비정상큰값]\ncur={cur}, tot={tot}\n")
-        raise ValueError(f"비정상 큰 값: current={cur}, total={tot}")
-
-    # ISO8601 포맷(예: 2025-10-15T14:15:50+09:00)
-    ts = datetime.now(KST).isoformat(timespec="seconds")
-    return ts, cur
+    # 원본 XML 스냅샷 남기기(디버그)
+    snapshot(xml_text, "raw_1.xml")
+    count = parse_target_availability(xml_text, TARGET_NAME)
+    ts_iso = iso_now_kst()
+    return ts_iso, count
 
 def scrape() -> tuple[str, int]:
-    attempt = 0
     last_error = None
-    while attempt < MAX_RETRY:
-        attempt += 1
+    for attempt in range(1, MAX_RETRY + 1):
         try:
-            with requests.Session() as session:
-                # 루트 접근으로 쿠키/세션 예열
-                try:
-                    session.get(
-                        "https://park.yuc.co.kr/",
-                        headers=COMMON_HEADERS,
-                        timeout=10,
-                    )
-                except Exception:
-                    # 예열 실패는 치명적이지 않음
-                    pass
-
+            with build_session() as session:
+                warmup(session)
                 return scrape_once(session)
         except Exception as e:
             last_error = e
             logging.warning(f"실패 (시도 {attempt}): {e}")
-            # 서버/네트웍 사정 고려해서 지수적 대기
-            time.sleep(5 + attempt * 2 + random.uniform(0, 1.5))
+            # 빠른 백오프 + 지터
+            sleep_s = BACKOFF_SECS[min(attempt - 1, len(BACKOFF_SECS) - 1)] + random.uniform(0, 1.0)
+            time.sleep(sleep_s)
 
     logging.error("실패: 모든 재시도 실패")
     if last_error:
@@ -162,24 +204,17 @@ def scrape() -> tuple[str, int]:
         raise last_error
     raise RuntimeError("알 수 없는 실패")
 
-def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-    )
+def main() -> None:
     logging.info("스크랩 시작")
-
-    ensure_dirs()
     try:
-        ts, avail = scrape()
-        # 형식: ISO8601타임스탬프,이름,수치
-        line = f"{ts},{TARGET_NAME},{avail}"
-        with open(OUT_PATH, "a", newline="", encoding="utf-8") as f:
-            f.write(line + "\n")
-        logging.info(f"저장: {line}")
+        ts_iso, available = scrape()
+        # 한 줄만 출력 (형식: ISO8601,KST,이름,가용대수)
+        write_output_line(ts_iso, TARGET_NAME, available)
     except Exception as e:
-        # 실패 시 파일 미기록. 워크플로우를 실패로 만들고 싶으면 1로 종료.
-        sys.exit(0)
+        # 실패 시 CI에서 실패로 인식하도록 1로 종료
+        # 마지막 응답은 artifacts 아래 파일들 확인
+        logging.error(e)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
