@@ -1,39 +1,53 @@
-name: YUC Scraper
+
+name: yuc scrape
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/12 * * * *"
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests certifi
 
-      - name: Prepare artifact folders
-        run: mkdir -p artifacts
+      - name: Make folders
+        run: |
+          mkdir -p yuc/scripts yuc/artifacts
+
+      - name: Write scraper if missing
+        run: |
+          if [ ! -f yuc/scripts/scrape.py ]; then
+            echo "scrape.py missing" && exit 1
+          fi
 
       - name: Run scraper
-        run: python yuc/scripts/scrape.py
+        env:
+          ARTIFACT_DIR: yuc/artifacts
+          OUTPUT_CSV: yuc/parking_log.csv
+        run: |
+          python yuc/scripts/scrape.py
 
-      - name: Upload artifacts (always)
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: yuc-artifacts
           path: |
-            parking_log.csv
-            artifacts/
+            yuc/parking_log.csv
+            yuc/artifacts/**
+          if-no-files-found: warn
