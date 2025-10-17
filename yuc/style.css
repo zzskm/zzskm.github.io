@@ -1,5 +1,5 @@
 /* Light theme, Georgia vibe */
-:root{
+:root {
   color-scheme: light;
   --bg: #ffffff;
   --fg: #111;
@@ -11,44 +11,177 @@
   --green: #A4F4CF;
 }
 
-html,body{height:100%}
-body{
-  margin:0; padding:16px;
+/* 변경: 다크 모드 지원 (옵션) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #1a1a1a;
+    --fg: #e5e5e5;
+    --muted: #a0a0a0;
+    --border: #444;
+    --grid: #333;
+    --orange: #ff7043;
+    --blue: #4da8ff;
+    --green: #66cc99;
+  }
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 16px;
   font: normal 100%/1.5 Georgia, "Times New Roman", Times, serif;
-  background: var(--bg); color: var(--fg);
+  background: var(--bg);
+  color: var(--fg);
 }
 
-.card{
-  max-width:1000px; margin:0 auto; background:#fff; color:var(--fg);
-  border:1px solid var(--border); border-radius:16px; padding:16px 16px 8px 16px;
-  box-shadow:0 8px 24px rgba(0,0,0,.06);
+.card {
+  max-width: 1000px;
+  margin: 0 auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 16px 8px 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.06);
 }
 
-h1{font-size:20px; margin:0 0 12px}
-#status{font-size:14px; color:var(--muted); margin:6px 0 12px}
-.toolbar{display:flex; gap:8px; align-items:center; margin-bottom:8px}
-.btn{
-  background:#2563eb; color:#fff; border:none; border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:600;
+h1 {
+  font-size: 20px;
+  margin: 0 0 12px;
 }
-.btn:hover{filter:brightness(1.05)}
 
-#chart{width:100%; height:420px}
+#status {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 6px 0 12px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.btn {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn:hover {
+  filter: brightness(1.05);
+}
+
+/* 변경: 모바일 최적화 및 min-height 추가 */
+#chart {
+  width: 100%;
+  height: auto;
+  min-height: 200px; /* 모바일에서 너무 작아지지 않도록 */
+  max-width: 100vw;
+}
 
 /* SVG text & axes */
-.chart-root text{font-family: Georgia, "Times New Roman", Times, serif; fill: #333;}
-.axis path, .axis line{stroke: #cfd6df}
-.grid line{stroke: var(--grid)}
-.grid path{stroke: none}
+.chart-root text {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  fill: var(--fg);
+  font-size: calc(12px + 0.5vw); /* 변경: 반응형 폰트 크기 */
+}
+
+.axis path, .axis line {
+  stroke: #cfd6df;
+}
+
+.grid line {
+  stroke: var(--grid);
+}
+
+.grid path {
+  stroke: none;
+}
 
 /* line colors & hover */
-.line.today{stroke: var(--orange)}
-.line.yesterday{stroke: var(--blue)}
-.line.d7ago{stroke: var(--green)}
-.line{fill:none; stroke-width:2.5}
-.line:hover{stroke-width:4}
+.line.today {
+  stroke: var(--orange);
+}
+
+.line.yesterday {
+  stroke: var(--blue);
+}
+
+.line.d7ago {
+  stroke: var(--green);
+}
+
+.line {
+  fill: none;
+  stroke-width: 2.5;
+  transition: stroke-width 0.3s ease; /* 변경: 애니메이션 - 부드러운 호버 효과 */
+}
+
+.line:hover {
+  stroke-width: 4;
+}
+
+/* 변경: 오늘 라인 끝 점 스타일 */
+.end-dot.today {
+  fill: var(--orange);
+  transition: opacity 0.3s ease; /* 애니메이션 - 페이드인 효과 */
+}
 
 /* end labels */
-.end-label{font-size:13px; alignment-baseline: middle}
-.end-label.today{fill: var(--orange)}
-.end-label.yesterday{fill: var(--blue)}
-.end-label.d7ago{fill: var(--green)}
+.end-label {
+  font-size: calc(11px + 0.5vw); /* 변경: 반응형 폰트 크기 */
+  alignment-baseline: middle;
+}
+
+.end-label.today {
+  fill: var(--orange);
+}
+
+.end-label.yesterday {
+  fill: var(--blue);
+}
+
+.end-label.d7ago {
+  fill: var(--green);
+}
+
+/* 변경: 툴팁 스타일링 */
+.tooltip {
+  position: absolute;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: calc(10px + 0.5vw); /* 반응형 폰트 */
+  color: var(--fg);
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+  pointer-events: none;
+  z-index: 1000;
+  border-radius: 4px;
+}
+
+/* 변경: 모바일 반응형 조정 */
+@media (max-width: 480px) {
+  body {
+    padding: 8px; /* 패딩 축소 */
+  }
+  .card {
+    padding: 8px 8px 4px 8px; /* 모바일에서 패딩 축소 */
+  }
+  .end-label {
+    font-size: 10px; /* 모바일에서 라벨 크기 축소 */
+  }
+  .tooltip {
+    font-size: 10px; /* 모바일에서 툴팁 폰트 축소 */
+    padding: 4px 8px;
+  }
+}
