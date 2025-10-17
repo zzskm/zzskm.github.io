@@ -1,3 +1,4 @@
+```yaml
 name: yuc scrape
 
 on:
@@ -7,12 +8,12 @@ on:
     - cron: "3,15,27,39,51 * * * *"
 
 permissions:
-  contents: write  # ✅ GitHub Actions가 레포에 커밋/푸시 가능하도록 설정
+  contents: write  # GitHub Actions가 레포에 커밋/푸시 가능하도록 설정
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 9
 
     steps:
       - name: Checkout
@@ -23,10 +24,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests certifi
+          pip install httpx
 
       - name: Make folders
         run: |
@@ -42,11 +43,13 @@ jobs:
 
       - name: Run scraper
         env:
-          YUC_SOURCE_URL: https://park.yuc.co.kr/usersite/userSiteParkingLotInfo
+          YUC_SOURCE_URL: https://park.yuc.co.kr/userSiteParkingLotInfo
+          YUC_FRONTEND_URL: https://park.yuc.co.kr/views/parkinglot/info/info.html
           YUC_OUTPUT_CSV: yuc/parking_log.csv
           YUC_TARGET_NAME: 수지노외 공영주차장
+          LOG_LEVEL: DEBUG
         run: |
-          python yuc/scripts/scrape.py
+          python yuc/scripts/scrape.py --log-level DEBUG > yuc/artifacts/scrape.log 2>&1
 
       - name: Upload artifacts
         if: always()
@@ -55,10 +58,9 @@ jobs:
           name: yuc-artifacts
           path: |
             yuc/parking_log.csv
-            yuc/artifacts/**
+            yuc/artifacts/scrape.log
           if-no-files-found: warn
 
-      # ✅ 추가: parking_log.csv 자동 커밋 & 푸시
       - name: Commit and push updated CSV
         if: success() || failure()
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -66,3 +68,4 @@ jobs:
           commit_message: "chore: update parking_log.csv"
           file_pattern: "yuc/parking_log.csv"
           branch: ${{ github.ref_name }}
+```
