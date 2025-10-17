@@ -42,8 +42,9 @@ jobs:
 
       - name: Run scraper
         env:
-          ARTIFACT_DIR: yuc/artifacts
-          OUTPUT_CSV: yuc/data/parking_log.csv
+          YUC_SOURCE_URL: https://park.yuc.co.kr/usersite/userSiteParkingLotInfo
+          YUC_OUTPUT_CSV: yuc/parking_log.csv
+          YUC_TARGET_NAME: 수지노외 공영주차장
         run: |
           python yuc/scripts/scrape.py
 
