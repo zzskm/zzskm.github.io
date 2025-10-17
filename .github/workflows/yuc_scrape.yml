@@ -3,8 +3,8 @@ name: yuc scrape
 on:
   workflow_dispatch:
   schedule:
-    # 매 시각 3, 15, 27, 39, 51분에 실행 (약 12분 간격)
-    - cron: "3,15,27,39,51 * * * *"
+    # 매 시각 2, 11, 20, 29, 38, 47, 56분에 실행 (약 9분 간격)
+    - cron: "2,11,20,29,38,47,56 * * * *"
 
 permissions:
   contents: write  # GitHub Actions가 레포에 커밋/푸시 가능하도록 설정
@@ -12,7 +12,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
 
     steps:
       - name: Checkout
