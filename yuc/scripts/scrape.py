@@ -87,7 +87,7 @@ def parse_available(xml_text: str, target_name: str) -> tuple[int, str]:
     raise KeyError(f"타깃 미발견: {target_name!r} — 후보: {', '.join(cands[:30])}{' …' if len(cands)>30 else ''}")
 
 def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: int) -> None:
-    line = f\"{ts_kst_iso},{target_name},{available}\"
+    line = f"{ts_kst_iso},{target_name},{available}"
     if not path:
         print(line)
         return
