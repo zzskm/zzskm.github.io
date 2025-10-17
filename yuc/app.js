@@ -2,12 +2,16 @@
 // app.js — GitHub Pages/서버용 (자동 ./parking_log.csv 로드 + 리트라이 + 모바일 최적화)
 (() => {
   const LOT_NAME = "수지노외 공영주차장";
-  const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5분
+  const AUTO_REFRESH_MS = 3 * 60 * 1000;
   const DEFAULT_CSV = "./parking_log.csv";
   const KST_TZ = "Asia/Seoul";
 
   const fmtTimeLabel = new Intl.DateTimeFormat("ko-KR", {
-    timeZone: KST_TZ, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    timeZone: KST_TZ, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: 'h23'
+  });
+
+  const fmtTimeOnly = new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit", minute: "2-digit", hourCycle: 'h23'
   });
 
   function ymdKST(date) {
@@ -23,55 +27,73 @@
     return ymdKST(d);
   }
 
-function parseCSV(text) {
-  const rows = text.trim().split(/\r?\n/).map((r) => r.split(","));
-  const header = rows.shift();
-  const tsIdx = header.indexOf("timestamp_kst");
-  const nameIdx = header.indexOf("lot_name");
-  const avIdx = header.indexOf("available");
-  if (tsIdx < 0 || nameIdx < 0 || avIdx < 0)
-    throw new Error("CSV 헤더 오류: timestamp_kst, lot_name, available 필요");
-
-  const all = rows
-    .map((r) => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
-    .filter((r) => r.name === LOT_NAME && !Number.isNaN(r.v))
-    .sort((a, b) => a.t - b.t);
-
-  const t0 = ymdDaysAgo(0);
-  const t1 = ymdDaysAgo(1);
-  const t7 = ymdDaysAgo(7);
-
-  const todayArr = [];
-  const yestArr = [];
-  const d7Arr = [];
-
-  for (const d of all) {
-    const ymd = ymdKST(d.t);
-    if (ymd === t0) todayArr.push(d);
-    else if (ymd === t1) yestArr.push(d);
-    else if (ymd === t7) d7Arr.push(d);
+  // 변경: 다운샘플링 함수 (데이터 포인트 간소화, 성능 최적화)
+  function downsample(data, intervalMs = 5 * 60 * 1000) { // 5분 간격
+    if (data.length <= 100) return data; // 소규모 데이터는 그대로
+    const result = [];
+    let lastTime = null;
+    for (const d of data) {
+      if (!lastTime || (d.t - lastTime) >= intervalMs) {
+        result.push(d);
+        lastTime = d.t;
+      }
+    }
+    return result;
   }
 
-  todayArr.sort((a, b) => a.t - b.t);
-  yestArr.sort((a, b) => a.t - b.t);
-  d7Arr.sort((a, b) => a.t - b.t);
+  function parseCSV(text) {
+    const rows = text.trim().split(/\r?\n/).map((r) => r.split(","));
+    const header = rows.shift();
+    const tsIdx = header.indexOf("timestamp_kst");
+    const nameIdx = header.indexOf("lot_name");
+    const avIdx = header.indexOf("available");
+    if (tsIdx < 0 || nameIdx < 0 || avIdx < 0)
+      throw new Error("CSV 헤더 오류: timestamp_kst, lot_name, available 필요");
 
-  // ✅ 오늘 배열의 마지막 값과 동일한 v로 현재 시간 데이터 추가
-  if (todayArr.length > 0) {
-    const last = todayArr[todayArr.length - 1];
-    todayArr.push({ t: new Date(), name: last.name, v: last.v });
+    const all = rows
+      .map((r) => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
+      .filter((r) => r.name === LOT_NAME && !Number.isNaN(r.v))
+      .sort((a, b) => a.t - b.t);
+
+    const t0 = ymdDaysAgo(0);
+    const t1 = ymdDaysAgo(1);
+    const t7 = ymdDaysAgo(7);
+
+    const todayArr = [];
+    const yestArr = [];
+    const d7Arr = [];
+
+    for (const d of all) {
+      const ymd = ymdKST(d.t);
+      if (ymd === t0) todayArr.push(d);
+      else if (ymd === t1) yestArr.push(d);
+      else if (ymd === t7) d7Arr.push(d);
+    }
+
+    todayArr.sort((a, b) => a.t - b.t);
+    yestArr.sort((a, b) => a.t - b.t);
+    d7Arr.sort((a, b) => a.t - b.t);
+
+    if (todayArr.length > 0) {
+      const last = todayArr[todayArr.length - 1];
+      todayArr.push({ t: new Date(), name: last.name, v: last.v });
+    }
+
+    // 변경: 다운샘플링 적용
+    return {
+      todayArr: downsample(todayArr),
+      yestArr: downsample(yestArr),
+      d7Arr: downsample(d7Arr)
+    };
   }
-
-  return { todayArr, yestArr, d7Arr };
-}
 
   function projectToBaseDate(baseDate, originalDate) {
     return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(),
       originalDate.getHours(), originalDate.getMinutes(), originalDate.getSeconds(), originalDate.getMilliseconds());
   }
 
-  function render(todayArr, yestArr, d7Arr) {
-    // ✔ 셀렉터 호환(‘#id’ 그대로 가능) + 원본 구조 유지
+  // 변경: 차트 업데이트 함수 (성능 최적화)
+  function updateChart(todayArr, yestArr, d7Arr, isInitial = false) {
     const $ = (sel) => document.querySelector(sel);
     if (!$('#chart')) {
       const div = document.createElement('div');
@@ -95,24 +117,26 @@ function parseCSV(text) {
 
     const container = document.getElementById('chart');
     const W = container.clientWidth || window.innerWidth || 1000;
-    const H = container.clientHeight || 420;
+    const H = Math.max(200, W * 0.6);
 
-    d3.select("#chart").selectAll("*").remove();
+    if (isInitial) d3.select("#chart").selectAll("*").remove();
 
-    const isSmall = (W || window.innerWidth) < 480;
-    const margin = { top: 16, right: (isSmall ? 12 : 160), bottom: 44, left: 48 };
+    const isSmall = W < 480;
+    const margin = { top: 16, right: (isSmall ? 8 : 160), bottom: 44, left: (isSmall ? 32 : 48) };
     const width = Math.max(300, W - margin.left - margin.right);
     const height = Math.max(200, H - margin.top - margin.bottom);
 
-    const svg = d3.select("#chart").append("svg")
+    const svg = isInitial ? d3.select("#chart").append("svg")
       .attr("class", "chart-svg")
       .attr("width", width + margin.left + margin.right)
       .attr("height", height + margin.top + margin.bottom)
       .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+      .attr("role", "img")
+      .attr("aria-label", `${LOT_NAME} 주차 가능 대수 추이 차트`)
       .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
+      .attr("transform", `translate(${margin.left},${margin.top})`)
+      : d3.select("#chart").select("svg").select("g");
 
-    // ✔ 00:00 → 24:00 고정 도메인
     const baseDate = new Date(`${ymdKST(new Date())}T00:00:00+09:00`);
     const endDate = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000);
 
@@ -124,27 +148,49 @@ function parseCSV(text) {
     const x = d3.scaleTime().domain([baseDate, endDate]).range([0, width]);
     const y = d3.scaleLinear().domain([0, maxY]).nice().range([height, 0]);
 
-    // ✔ 항상 2시간 간격
-    const hourStep = 2;
+    const hourStep = 4;
 
-    const xGrid = d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat("");
-    const yGrid = d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat("");
-    svg.append("g").attr("class", "grid").attr("transform", `translate(0,${height})`).call(xGrid);
-    svg.append("g").attr("class", "grid").call(yGrid);
+    if (isInitial) {
+      const xGrid = d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat("");
+      const yGrid = d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat("");
+      svg.append("g").attr("class", "grid").attr("transform", `translate(0,${height})`).call(xGrid);
+      svg.append("g").attr("class", "grid").call(yGrid);
 
-    // ✔ 24:00 라벨 표시
-    const fmtTick = (d) => {
-      const endT = endDate.getTime();
-      const t = d.getTime();
-      if (t === endT) return "24:00";
-      return d3.timeFormat("%H:%M")(d);
-    };
-    svg.append("g").attr("class", "axis")
-      .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(fmtTick));
-    svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(6));
+      const fmtTick = (d) => {
+        const endT = endDate.getTime();
+        const t = d.getTime();
+        if (t === endT) return "24:00";
+        return d3.timeFormat("%H:%M")(d);
+      };
+      svg.append("g").attr("class", "axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(fmtTick));
+      svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(6));
+    } else {
+      svg.select(".grid").filter(".x-grid").call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat(""));
+      svg.select(".grid").filter(".y-grid").call(d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat(""));
+      svg.select(".axis").filter(".x-axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(fmtTick));
+      svg.select(".axis").filter(".y-axis").call(d3.axisLeft(y).ticks(6));
+    }
 
-    // ✔ 원본 스타일: 곡선, CSS 변수 색상, today 강조 두께
+    // 변경: 툴팁 div (초기 렌더링 시만 생성)
+    if (isInitial) {
+      d3.select("body").selectAll(".tooltip").remove();
+      d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("position", "absolute")
+        .style("background", "white")
+        .style("border", "1px solid #ccc")
+        .style("padding", "5px")
+        .style("opacity", 0)
+        .attr("role", "tooltip")
+        .attr("id", "chart-tooltip")
+        .attr("aria-live", "polite"); // 변경: 접근성 - 동적 콘텐츠 읽기
+    }
+    const tooltip = d3.select(".tooltip");
+
     const line = d3.line().curve(d3.curveMonotoneX).x(d => x(d.t)).y(d => y(d.v));
     let groups = [
       { key: "오늘", data: pToday, cls: "today",     colorVar: "var(--orange)" },
@@ -154,48 +200,116 @@ function parseCSV(text) {
     groups.sort((a,b)=> (a.cls==="today") - (b.cls==="today"));
 
     groups.forEach(g => {
-      svg.append("path")
-        .datum(g.data)
+      const path = svg.selectAll(`.line.${g.cls}`)
+        .data([g.data])
+        .join("path")
         .attr("class", `line ${g.cls}`)
         .attr("stroke", g.colorVar)
-        .attr("d", line)
         .attr("stroke-width", g.cls === "today" ? 3 : 1.5)
-        .attr("fill", "none");
+        .attr("fill", "none")
+        .attr("aria-describedby", "chart-tooltip");
+
+      // 변경: 애니메이션 - 라인 그리기 효과
+      path.transition().duration(1000)
+        .attrTween("d", function(d) {
+          const l = this.getTotalLength();
+          return t => {
+            const p = l * t;
+            return line(d.slice(0, Math.floor(d.length * t)));
+          };
+        });
+
+      // 변경: 툴팁 이벤트 - 마우스 및 터치 지원
+      svg.selectAll(`.dot-${g.cls}`)
+        .data(g.data)
+        .join("circle")
+        .attr("class", `dot-${g.cls}`)
+        .attr("cx", d => x(d.t))
+        .attr("cy", d => y(d.v))
+        .attr("r", 0)
+        .attr("fill", g.colorVar)
+        .style("opacity", 0);
+
+      path.on("mouseover touchstart", function(event, data) {
+        event.preventDefault();
+        const [mouseX] = d3.pointer(event);
+        const x0 = x.invert(mouseX);
+        const i = d3.bisectLeft(data.map(d => d.t), x0, 1);
+        const d0 = data[i - 1];
+        const d1 = data[i] || d0;
+        const d = x0 - d0.t > d1.t - x0 ? d1 : d0;
+
+        tooltip.transition().duration(200).style("opacity", .9);
+        tooltip.html(`${g.key}<br>시간: ${fmtTimeOnly.format(d.t)}<br>대수: ${d.v}`)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mousemove touchmove", function(event) {
+        event.preventDefault();
+        tooltip.style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mouseout touchend", function() {
+        tooltip.transition().duration(500).style("opacity", 0);
+      });
 
       const last = g.data[g.data.length - 1];
       if (last && g.cls === "today") {
-        svg.append("text")
+        svg.selectAll(`.end-label.${g.cls}`)
+          .data([last])
+          .join("text")
           .attr("class", `end-label ${g.cls}`)
           .attr("x", Math.min(x(last.t) + 8, width - 4))
           .attr("y", y(last.v))
-          .text(`${g.key} ${last.v}`)
+          .text(`${g.key} ${last.v} (${fmtTimeOnly.format(last.t)})`)
+          .attr("opacity", 0.95)
+          .attr("aria-hidden", "true");
+
+        // 변경: 애니메이션 - 오늘 dot 페이드인
+        svg.selectAll(`.end-dot.${g.cls}`)
+          .data([last])
+          .join("circle")
+          .attr("class", `end-dot ${g.cls}`)
+          .attr("cx", x(last.t))
+          .attr("cy", y(last.v))
+          .attr("r", 4)
+          .attr("fill", g.colorVar)
+          .attr("tabindex", "0")
+          .attr("aria-label", `오늘 마지막 값: ${last.v} 대, 시간: ${fmtTimeOnly.format(last.t)}`)
+          .transition().duration(1000)
           .attr("opacity", 0.95);
       }
     });
 
     d3.selectAll('.line.today').raise();
     d3.selectAll('.end-label.today').raise();
+    d3.selectAll('.end-dot.today').raise();
 
     const legendData = groups.map(g => ({ key: g.key, cls: g.cls, colorVar: g.colorVar }));
-    const legend = svg.append("g").attr("class", "legend")
-      .attr("transform", isSmall ? `translate(${width - 120}, ${8})` : `translate(${width + 16}, ${8})`);
+    const legend = svg.selectAll(".legend")
+      .data([null])
+      .join("g")
+      .attr("class", "legend")
+      .attr("transform", isSmall ? `translate(${width / 2 - 60}, -8)` : `translate(${width + 16}, ${8})`);
     const legendItem = legend.selectAll(".legend-item")
       .data(legendData)
-      .enter()
-      .append("g")
+      .join("g")
       .attr("class", d => `legend-item ${d.cls}`)
-      .attr("transform", (d,i) => `translate(0, ${i * 20})`);
-    legendItem.append("line")
+      .attr("transform", (d,i) => isSmall ? `translate(${i * 80}, 0)` : `translate(0, ${i * 20})`);
+    legendItem.selectAll("line")
+      .data(d => [d])
+      .join("line")
       .attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
       .attr("stroke", d => d.colorVar)
       .attr("stroke-width", d => d.cls === "today" ? 3 : 1.5);
-    legendItem.append("text")
+    legendItem.selectAll("text")
+      .data(d => [d])
+      .join("text")
       .attr("x", 24).attr("y", 9)
       .attr("dominant-baseline", "middle")
       .text(d => d.key);
   }
 
-  // 현재 로딩에 사용한 경로를 기억
   let currentPath = DEFAULT_CSV;
 
   async function loadAndRender(path) {
@@ -210,15 +324,23 @@ function parseCSV(text) {
       const text = await resp.text();
 
       const { todayArr, yestArr, d7Arr } = parseCSV(text);
-      render(todayArr, yestArr, d7Arr);
+      updateChart(todayArr, yestArr, d7Arr, true); // 초기 렌더링
     } catch (e) {
       statusEl.textContent = "로딩 실패: " + e.message;
       console.error(e);
-      // 5초 후 재시도
       if (currentPath) {
         setTimeout(() => loadAndRender(currentPath), 5000);
       }
     }
+  }
+
+  // 변경: 디바운싱 함수 (성능 최적화)
+  function debounce(fn, wait) {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn(...args), wait);
+    };
   }
 
   function bindUI() {
@@ -257,7 +379,7 @@ function parseCSV(text) {
       if (!file.name.endsWith(".csv")) return alert("CSV 파일만 가능합니다.");
       const text = await file.text();
       const { todayArr, yestArr, d7Arr } = parseCSV(text);
-      render(todayArr, yestArr, d7Arr);
+      updateChart(todayArr, yestArr, d7Arr, true);
     });
 
     fileInput && fileInput.addEventListener("change", async (e) => {
@@ -265,18 +387,22 @@ function parseCSV(text) {
       if (!file) return;
       const text = await file.text();
       const { todayArr, yestArr, d7Arr } = parseCSV(text);
-      render(todayArr, yestArr, d7Arr);
+      updateChart(todayArr, yestArr, d7Arr, true);
     });
 
     reloadBtn && reloadBtn.addEventListener("click", () => loadAndRender(currentPath));
 
-    // 자동 갱신 + 리사이즈
     setInterval(() => loadAndRender(currentPath), AUTO_REFRESH_MS);
-    window.addEventListener("resize", () => loadAndRender(currentPath));
 
-    // 초기 자동 로딩
+    // 변경: 디바운싱 적용한 resize 이벤트
+    window.addEventListener("resize", debounce(() => {
+      const { todayArr, yestArr, d7Arr } = parseCSV(lastText || "");
+      updateChart(todayArr, yestArr, d7Arr, false);
+    }, 200));
+
     loadAndRender(DEFAULT_CSV);
   }
 
+  let lastText = ""; // 변경: 마지막 CSV 텍스트 캐싱
   window.addEventListener("load", bindUI);
 })();
