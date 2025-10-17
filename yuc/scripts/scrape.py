@@ -108,7 +108,7 @@ def parse_available(xml_text: str, target_name: str) -> tuple[int, str]:
             logging.warning(f"부분 일치: {nm!r}")
             return avail_of(it), nm
     logging.error(f"타깃 미발견: {target_name!r}")
-    return -2, target_name  # 타겟 없음 표시
+    return -2, target_name
 
 def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: int) -> None:
     line = f"{ts_kst_iso},{target_name},{available}"
@@ -133,6 +133,9 @@ def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: 
 def main() -> int:
     args = parse_args()
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(message)s")
+    # httpx 내부 로깅 비활성화
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.info(f"CSV={args.output_csv or '(stdout)'} TARGET={args.target_name} URL={args.url} FRONTEND={args.frontend_url or '(none)'}")
 
     if not args.url or not args.target_name:
