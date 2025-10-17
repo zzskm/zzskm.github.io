@@ -93,7 +93,7 @@ def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: 
         return
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
-        f.write(line + "\\n")
+        f.write(line + "\n")
 
 def main() -> int:
     args = parse_args()
