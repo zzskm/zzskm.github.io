@@ -15,7 +15,7 @@ import httpx
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--url", default=os.getenv("YUC_SOURCE_URL", "https://park.yuc.co.kr/userSiteParkingLotInfo"), help="Backend XML endpoint")
+    p.add_argument("--url", default=os.getenv("YUC_SOURCE_URL", "https://park.yuc.co.kr/usersite/userSiteParkingLotInfo"), help="Backend XML endpoint")
     p.add_argument("--frontend-url", default=os.getenv("YUC_FRONTEND_URL", ""), help="Frontend URL for session (optional)")
     p.add_argument("--target-name", default=os.getenv("YUC_TARGET_NAME", ""), help="주차장 이름")
     p.add_argument("--output-csv", default=os.getenv("YUC_OUTPUT_CSV", ""), help="CSV 경로 (없으면 stdout)")
@@ -88,6 +88,9 @@ def parse_available(xml_text: str, target_name: str) -> tuple[int, str]:
         v = (it.findtext("parkd_current_num") or "").strip()
         return -1 if v == "-" else int(v) if v.isdigit() else -1
 
+    candidates = [name_of(it) for it in items if name_of(it)]
+    logging.debug(f"주차장 목록: {', '.join(candidates[:30])}{' …' if len(candidates) > 30 else ''}")
+
     for it in items:
         nm = name_of(it)
         if nm == target_name:
@@ -104,8 +107,8 @@ def parse_available(xml_text: str, target_name: str) -> tuple[int, str]:
         if nm and target_name and target_name in nm:
             logging.warning(f"부분 일치: {nm!r}")
             return avail_of(it), nm
-    cands = [name_of(it) for it in items if name_of(it)]
-    raise KeyError(f"타깃 미발견: {target_name!r} — 후보: {', '.join(cands[:30])}{' …' if len(cands)>30 else ''}")
+    logging.error(f"타깃 미발견: {target_name!r}")
+    return -2, target_name  # 타겟 없음 표시
 
 def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: int) -> None:
     line = f"{ts_kst_iso},{target_name},{available}"
@@ -115,14 +118,12 @@ def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: 
 
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     try:
-        # 기존 파일 끝의 빈 줄 제거
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
             content = content.rstrip("\n")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content + "\n" if content else "")
-        # 새로운 줄 추가 (마지막 줄바꿈만 추가)
         with open(path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except Exception as e:
