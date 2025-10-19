@@ -1,18 +1,23 @@
+```yaml
 name: yuc scrape
 
 on:
   workflow_dispatch:
   schedule:
-    # 매 시각 2, 11, 20, 29, 38, 47, 56분에 실행 (약 9분 간격)
-    - cron: "2,11,20,29,38,47,56 * * * *"
+    # 매시간 7,13,19,25,31,37,43,49,55분 실행 (7분 시작, 6분 간격)
+    - cron: "7,13,19,25,31,37,43,49,55 * * * *"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 permissions:
-  contents: write  # GitHub Actions가 레포에 커밋/푸시 가능하도록 설정
+  contents: write
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 3
 
     steps:
       - name: Checkout
@@ -21,12 +26,22 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-httpx
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install httpx
+          # 변경: 설치된 패키지로 requirements.txt 생성 (캐싱 최적화)
+          pip freeze > requirements.txt
 
       - name: Make folders
         run: |
@@ -40,15 +55,26 @@ jobs:
             echo "✅ scrape.py found"
           fi
 
-      - name: Run scraper
+      - name: Add jitter
+        run: sleep $((RANDOM % 60))
+
+      - name: Run scraper with retry
+        uses: nick-invision/retry@v3
+        with:
+          timeout_minutes: 2
+          max_attempts: 3
+          retry_wait_seconds: 30
+          retry_on_timeout: true  # 변경: 타임아웃 시 재시도
+          command: |
+            echo "Starting scrape at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> yuc/artifacts/scrape.log
+            python yuc/scripts/scrape.py --log-level DEBUG >> yuc/artifacts/scrape.log 2>&1
+            echo "Duration: $SECONDS s" >> yuc/artifacts/scrape.log  # 변경: 실행 시간 로깅
         env:
           YUC_SOURCE_URL: https://park.yuc.co.kr/usersite/userSiteParkingLotInfo
           YUC_FRONTEND_URL: https://park.yuc.co.kr/views/parkinglot/info/info.html
           YUC_OUTPUT_CSV: yuc/parking_log.csv
           YUC_TARGET_NAME: 수지노외 공영주차장
           LOG_LEVEL: DEBUG
-        run: |
-          python yuc/scripts/scrape.py --log-level DEBUG > yuc/artifacts/scrape.log 2>&1
 
       - name: Upload artifacts
         if: always()
@@ -58,6 +84,7 @@ jobs:
           path: |
             yuc/parking_log.csv
             yuc/artifacts/scrape.log
+            requirements.txt  # 변경: requirements.txt 업로드
           if-no-files-found: warn
 
       - name: Commit and push updated CSV
@@ -65,5 +92,6 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update parking_log.csv"
-          file_pattern: "yuc/parking_log.csv"
+          file_pattern: "yuc/parking_log.csv requirements.txt"  # 변경: requirements.txt 포함
           branch: ${{ github.ref_name }}
+```
