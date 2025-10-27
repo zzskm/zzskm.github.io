@@ -262,6 +262,7 @@
           .attr("stroke", g.colorVar)
           .attr("stroke-width", g.cls === "today" ? 4 : 1.5)
           .attr("fill", "none")
+          .attr("opacity", , g.cls === "today" ? 1 : 0.8)
           .attr("aria-describedby", "chart-tooltip");
 
         path.transition().duration(1000)
@@ -358,7 +359,7 @@
       .attr("stroke", d => d.colorVar)
       .attr("stroke-width", d => d.cls === "today" ? 3 : d.cls === "d7range" ? 1.5 : 1.5)
       .attr("fill", d => d.cls === "d7range" ? d.colorVar : "none")
-      .attr("opacity", d => d.cls === "d7range" ? 0.4 : 1);
+      .attr("opacity", d => d.cls === "d7range" ? 0.6 : 1);
     legendItem.selectAll("text")
       .data(d => [d])
       .join("text")
