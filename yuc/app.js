@@ -56,39 +56,48 @@
 
     const t0 = ymdDaysAgo(0);
     const t1 = ymdDaysAgo(1);
-    const t7 = ymdDaysAgo(7);
     const t7start = ymdDaysAgo(7);
 
     const todayArr = [];
     const yestArr = [];
-    const d7MinMax = [];
+    const minMaxByHour = Array.from({length: 24}, () => []);
 
-    const minMaxByTime = {};
     for (const d of all) {
       const ymd = ymdKST(d.t);
       if (ymd === t0) todayArr.push(d);
-      else if (ymd === t1) yestArr.push(d);
-      else if (ymd >= t7start && ymd <= t0) {
-        const timeKey = `${d.t.getHours()}:${d.t.getMinutes()}`;
-        if (!minMaxByTime[timeKey]) {
-          minMaxByTime[timeKey] = { min: Infinity, max: -Infinity, t: d.t };
-        }
-        minMaxByTime[timeKey].min = Math.min(minMaxByTime[timeKey].min, d.v);
-        minMaxByTime[timeKey].max = Math.max(minMaxByTime[timeKey].max, d.v);
+      if (ymd === t1) yestArr.push(d);
+      if (ymd >= t7start && ymd < t0) {
+        const hour = d.t.getHours();
+        minMaxByHour[hour].push(d.v);
       }
     }
 
-    for (const key in minMaxByTime) {
-      d7MinMax.push({
-        t: minMaxByTime[key].t,
-        min: minMaxByTime[key].min,
-        max: minMaxByTime[key].max
-      });
+    const d7MinMax = [];
+    let lastMin = null;
+    let lastMax = null;
+    for (let hour = 0; hour < 24; hour++) {
+      const vals = minMaxByHour[hour];
+      let minV, maxV;
+      if (vals.length > 0) {
+        minV = Math.min(...vals);
+        maxV = Math.max(...vals);
+        lastMin = minV;
+        lastMax = maxV;
+      } else {
+        if (lastMin === null) {
+          minV = 0;
+          maxV = 0;
+        } else {
+          minV = lastMin;
+          maxV = lastMax;
+        }
+      }
+      const dummyT = new Date(1970, 0, 1, hour, 0, 0, 0);
+      d7MinMax.push({ t: dummyT, min: minV, max: maxV });
     }
 
     todayArr.sort((a, b) => a.t - b.t);
     yestArr.sort((a, b) => a.t - b.t);
-    d7MinMax.sort((a, b) => a.t - b.t);
 
     if (todayArr.length > 0) {
       const last = todayArr[todayArr.length - 1];
@@ -98,7 +107,7 @@
     return {
       todayArr: downsample(todayArr),
       yestArr: downsample(yestArr),
-      d7MinMax: downsample(d7MinMax)
+      d7MinMax: d7MinMax // 24개 포인트이므로 downsample 불필요
     };
   }
 
@@ -136,7 +145,7 @@
     if (isInitial) d3.select("#chart").selectAll("*").remove();
 
     const isSmall = W < 480;
-    const margin = { top: 16, right: (isSmall ? 48 : 200), bottom: 44, left: (isSmall ? 32 : 48) }; // Increased right margin
+    const margin = { top: 16, right: (isSmall ? 48 : 200), bottom: 44, left: (isSmall ? 32 : 48) };
     const width = Math.max(300, W - margin.left - margin.right);
     const height = Math.max(200, H - margin.top - margin.bottom);
 
@@ -158,8 +167,8 @@
     const pYest = yestArr.map(d => ({ t: projectToBaseDate(baseDate, d.t), v: d.v }));
     const pD7MinMax = d7MinMax.map(d => ({
       t: projectToBaseDate(baseDate, d.t),
-      min: d.min === Infinity ? 0 : d.min,
-      max: d.max === -Infinity ? 0 : d.max
+      min: d.min,
+      max: d.max
     }));
 
     const maxY = Math.max(10, 
@@ -305,7 +314,7 @@
             .data([last])
             .join("text")
             .attr("class", `end-label ${g.cls}`)
-            .attr("x", Math.min(x(last.t) + 8, width - 80)) // Adjusted to account for increased right margin
+            .attr("x", Math.min(x(last.t) + 8, width - 80))
             .attr("y", y(last.v))
             .text(`${g.key} ${last.v} (${fmtTimeOnly.format(last.t)})`)
             .attr("opacity", 0.95)
