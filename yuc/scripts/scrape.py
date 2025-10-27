@@ -12,6 +12,7 @@ import unicodedata, re
 import xml.etree.ElementTree as ET
 import time
 import httpx
+import csv
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -110,6 +111,47 @@ def parse_available(xml_text: str, target_name: str) -> tuple[int, str]:
     logging.error(f"타깃 미발견: {target_name!r}")
     return -2, target_name
 
+def compress_csv(path: str) -> None:
+    """CSV 파일을 읽어서 3개 이상 연속되는 available 값은 첫 번째와 마지막만 남기고 압축"""
+    if not path or not os.path.exists(path):
+        return
+    
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            data = list(reader)
+        
+        if len(data) < 2:  # 헤더만 있거나 헤더도 없는 경우
+            return
+        
+        header = data[0]
+        rows = data[1:]
+        
+        # 연속된 같은 available 값 찾아서 압축
+        result = [header]
+        i = 0
+        while i < len(rows):
+            start = i
+            val = rows[i][2]  # available 값
+            while i < len(rows) and rows[i][2] == val:
+                i += 1
+            end = i - 1
+            
+            # 3개 이상 연속이면 첫 번째와 마지막만 유지
+            if end - start >= 2:
+                result.extend([rows[start], rows[end]])
+            else:
+                result.extend(rows[start:end + 1])
+        
+        # 압축된 데이터로 파일 재쓰기
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(result)
+        
+        logging.info(f"CSV 압축 완료: {len(data)} -> {len(result)} 행")
+    except Exception as e:
+        logging.warning(f"CSV 압축 실패: {e}")
+
 def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: int) -> None:
     line = f"{ts_kst_iso},{target_name},{available}"
     if not path:
@@ -126,6 +168,9 @@ def append_legacy_line(path: str, ts_kst_iso: str, target_name: str, available: 
                 f.write(content + "\n" if content else "")
         with open(path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
+        
+        # CSV 저장 후 즉시 압축 수행
+        compress_csv(path)
     except Exception as e:
         logging.error(f"CSV 쓰기 실패: {e}")
         raise
