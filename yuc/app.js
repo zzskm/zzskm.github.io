@@ -243,7 +243,7 @@
           .join("path")
           .attr("class", `area ${g.cls}`)
           .attr("fill", g.colorVar)
-          .attr("opacity", 0.2)
+          .attr("opacity", 0.15)
           .attr("aria-describedby", "chart-tooltip");
 
         path.transition().duration(1000)
@@ -260,7 +260,7 @@
           .join("path")
           .attr("class", `line ${g.cls}`)
           .attr("stroke", g.colorVar)
-          .attr("stroke-width", g.cls === "today" ? 3 : 1.5)
+          .attr("stroke-width", g.cls === "today" ? 4 : 1.5)
           .attr("fill", "none")
           .attr("aria-describedby", "chart-tooltip");
 
@@ -358,7 +358,7 @@
       .attr("stroke", d => d.colorVar)
       .attr("stroke-width", d => d.cls === "today" ? 3 : d.cls === "d7range" ? 1.5 : 1.5)
       .attr("fill", d => d.cls === "d7range" ? d.colorVar : "none")
-      .attr("opacity", d => d.cls === "d7range" ? 0.2 : 1);
+      .attr("opacity", d => d.cls === "d7range" ? 0.4 : 1);
     legendItem.selectAll("text")
       .data(d => [d])
       .join("text")
