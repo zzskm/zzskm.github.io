@@ -262,7 +262,7 @@
           .attr("stroke", g.colorVar)
           .attr("stroke-width", g.cls === "today" ? 4 : 1.5)
           .attr("fill", "none")
-          .attr("opacity", , g.cls === "today" ? 1 : 0.8)
+          .attr("opacity", g.cls === "today" ? 1 : 0.8)
           .attr("aria-describedby", "chart-tooltip");
 
         path.transition().duration(1000)
