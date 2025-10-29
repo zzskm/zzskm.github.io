@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>겨울방학 가족여행</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0}
+    @media(prefers-color-scheme:dark){:root{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44}}
+    *{margin:0;box-sizing:border-box}
+    body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.6;padding:1rem}
+    .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.1)}
+    header{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:2rem 1.5rem;text-align:center;position:relative}
+    header h1{font-size:2rem;font-weight:700;margin:0 0 .5rem}
+    .toggle{position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,.2);color:#fff;border:none;padding:.4rem .8rem;border-radius:99px;font-size:.8rem;cursor:pointer}
+    .sec{padding:1.5rem}
+    h2{font-size:1.4rem;color:var(--p);margin:1rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600}
+    ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem}
+    ul li{color:var(--m)}
+    table{width:100%;border-collapse:collapse;border:1px solid var(--b);border-radius:12px;overflow:hidden;margin:1rem 0;font-size:.95rem}
+    th{background:var(--p);color:#fff;padding:.9rem .7rem;text-align:center;font-weight:600}
+    td{padding:.8rem .7rem;text-align:center;border-bottom:1px solid var(--b)}
+    tr:hover{background:rgba(37,99,235,.05)}
+    .hl{color:var(--s);font-weight:700}
+    .chart{margin:1rem 0;background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.2rem;overflow:hidden}
+    .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:.5rem}
+    .card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1rem;transition:.2s}
+    .card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.1)}
+    .card h3{font-size:1.1rem;margin:0 0 .6rem;display:flex;gap:.4rem;align-items:center}
+    .tag{background:var(--p);color:#fff;padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600}
+    .con{background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:1.5rem;margin:1.5rem 0}
+    @media(prefers-color-scheme:dark){.con{background:#052e22;border-color:#14532d;color:#bbf7d0}}
+    footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b)}
+    .tooltip{position:fixed;background:rgba(15,23,42,.95);color:#fff;padding:8px 12px;border-radius:8px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:1000}
+    @media print{.toggle,footer{display:none}.wrap{box-shadow:none}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button class="toggle" id="t">다크모드</button>
+    <h1>겨울방학 가족여행</h1>
+    <p>아시아·남태평양 10대 휴양지 | 3박 5일 | 4인 가족</p>
+  </header>
+
+  <div class="sec">
+    <h2>비용 기준</h2>
+    <ul>
+      <li><strong>인원:</strong> 4인 가족</li>
+      <li><strong>일정:</strong> 3박 5일</li>
+      <li><strong>산정:</strong> 숙박(3박) + 체류비(4인×4일) + 항공(4인)</li>
+      <li><strong>환율:</strong> 1 USD = ₩1,400</li>
+      <li><strong>단위:</strong> 원화, 1의 자리 반올림</li>
+      <li><strong>교통:</strong> 대표 이동수단 기준</li>
+    </ul>
+  </div>
+
+  <div class="sec chart">
+    <h2>종합 스코어</h2>
+    <div id="c" style="min-height:460px"></div>
+  </div>
+
+  <div class="sec">
+    <h2>세부 점수</h2>
+    <table>
+      <tr><th>지역</th><th>가성비(40)</th><th>접근성(30)</th><th>체류(30)</th><th>총점</th></tr>
+      <tr><td>다낭</td><td>40</td><td>30</td><td>30</td><td class="hl">100</td></tr>
+      <tr><td>코타키나발루</td><td>39</td><td>28</td><td>29</td><td class="hl">96</td></tr>
+      <tr><td>세부</td><td>37</td><td>27</td><td>27</td><td class="hl">91</td></tr>
+      <tr><td>보홀</td><td>35</td><td>24</td><td>26</td><td>85</td></tr>
+      <tr><td>랑카위</td><td>36</td><td>21</td><td>24</td><td>81</td></tr>
+      <tr><td>발리</td><td>34</td><td>20</td><td>23</td><td>77</td></tr>
+      <tr><td>보라카이</td><td>32</td><td>19</td><td>21</td><td>72</td></tr>
+      <tr><td>롬복</td><td>31</td><td>18</td><td>20</td><td>69</td></tr>
+      <tr><td>괌</td><td>27</td><td>22</td><td>14</td><td>63</td></tr>
+      <tr><td>오키나와</td><td>28</td><td>18</td><td>13</td><td>59</td></tr>
+    </table>
+  </div>
+
+  <div class="sec">
+    <h2>지역 요약</h2>
+    <div class="grid">
+      <div class="card"><h3>다낭 <span class="tag">1위</span></h3><p><strong>210만</strong> | Grab</p><p><strong>장점:</strong> 저렴·직항</p><p><strong>단점:</strong> 폭우</p></div>
+      <div class="card"><h3>코타키나발루 <span class="tag">2위</span></h3><p><strong>215만</strong> | Grab+기사</p><p><strong>장점:</strong> 가족 리조트</p><p><strong>단점:</strong> 조명 부족</p></div>
+      <div class="card"><h3>세부 <span class="tag">3위</span></h3><p><strong>238만</strong> | 기사 ₱3k</p><p><strong>장점:</strong> 액티비티</p><p><strong>단점:</strong> 체증</p></div>
+      <div class="card"><h3>보홀</h3><p><strong>263만</strong> | 기사+트라이</p><p><strong>장점:</strong> 해양</p><p><strong>단점:</strong> 의료 약함</p></div>
+      <div class="card"><h3>랑카위 <span class="tag">드라이브</span></h3><p><strong>269만</strong> | 렌터카</p><p><strong>장점:</strong> 한적</p><p><strong>단점:</strong> 경유</p></div>
+      <div class="card"><h3>발리</h3><p><strong>282만</strong> | 기사</p><p><strong>장점:</strong> 문화</p><p><strong>단점:</strong> 체증</p></div>
+      <div class="card"><h3>보라카이 <span class="tag">비치</span></h3><p><strong>287만</strong> | e-트라이크</p><p><strong>장점:</strong> 화이트비치</p><p><strong>단점:</strong> 환승</p></div>
+      <div class="card"><h3>롬복 <span class="tag">서핑</span></h3><p><strong>293만</strong> | 기사</p><p><strong>장점:</strong> 저렴</p><p><strong>단점:</strong> 교통 부족</p></div>
+      <div class="card"><h3>괌 <span class="tag">직항</span></h3><p><strong>312만</strong> | 렌터카</p><p><strong>장점:</strong> 피로 최소</p><p><strong>단점:</strong> 비용</p></div>
+      <div class="card"><h3>오키나와 <span class="tag">청결</span></h3><p><strong>328만</strong> | 렌터카</p><p><strong>장점:</strong> 온화</p><p><strong>단점:</strong> 수영 짧음</p></div>
+    </div>
+  </div>
+
+  <div class="sec con">
+    <h2>결론</h2>
+    <p><strong>TOP3:</strong> 다낭 → 코타키나발루 → 세부</p>
+    <p><strong>드라이브:</strong> 랑카위 · 오키나와</p>
+    <p><strong>테마:</strong> 롬복(서핑) · 보라카이(비치) · 괌(휴양)</p>
+    <p style="margin-top:.8rem;font-weight:700;color:#166534">→ 동남아 압도적 가성비</p>
+  </div>
+
+  <footer>2025 겨울방학 | 3박 5일 4인 가족 기준</footer>
+</div>
+
+<script>
+  // 다크모드
+  const t=document.getElementById('t'), r=document.documentElement;
+  t.onclick=()=>{r.dataset.m=(r.dataset.m==='d'?'':'d');t.textContent=r.dataset.m?'라이트모드':'다크모드';localStorage.setItem('m',r.dataset.m)};
+  if(localStorage.getItem('m')==='d' || (!localStorage.getItem('m') && matchMedia('(prefers-color-scheme:dark)').matches)) {r.dataset.m='d';t.textContent='라이트모드'}
+
+  // D3 차트
+  const d=[{p:"다낭",s:100},{p:"코타키나발루",s:96},{p:"세부",s:91},{p:"보홀",s:85},{p:"랑카위",s:81},{p:"발리",s:77},{p:"보라카이",s:72},{p:"롬복",s:69},{p:"괌",s:63},{p:"오키나와",s:59}];
+  function chart(){
+    const c=document.getElementById('c'); c.innerHTML='';
+    const w=c.clientWidth, h=Math.max(460,d.length*48), m={t:20,r:40,b:40,l:130}, iw=w-m.l-m.r, ih=h-m.t-m.b;
+    const s=d3.select(c).append('svg').attr('width','100%').attr('height',h).append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x=d3.scaleLinear().domain([0,100]).range([0,iw]), y=d3.scaleBand().domain(d.map(o=>o.p)).range([0,ih]).padding(.2);
+    s.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat('')).selectAll('line').attr('stroke','#e5e7eb');
+    const b=s.selectAll('.b').data(d).enter().append('rect').attr('y',o=>y(o.p)).attr('height',y.bandwidth()).attr('x',0).attr('width',0)
+      .attr('fill',o=>o.s>=90?'#10b981':o.s>=80?'#3b82f6':'#6b7280').attr('rx',8);
+    b.transition().duration(700).delay((_,i)=>i*70).attr('width',o=>x(o.s));
+    s.selectAll('.l').data(d).enter().append('text').attr('x',o=>x(o.s)+10).attr('y',o=>y(o.p)+y.bandwidth()/2).attr('dy','.35em')
+      .text(o=>o.s).style('font-weight',700).style('fill','#1e293b').style('opacity',0).transition().delay((_,i)=>i*70+500).duration(300).style('opacity',1);
+    s.append('g').call(d3.axisLeft(y)).selectAll('text').style('font-size','14px').style('font-weight',600);
+    s.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(5)).selectAll('text').style('font-size','12px');
+    const tip=d3.select('body').append('div').attr('class','tooltip');
+    b.on('mousemove',(e,o)=>{tip.style('opacity',1).style('left',(e.pageX+15)+'px').style('top',(e.pageY-30)+'px').html(`<strong>${o.p}</strong><br>스코어: <b style="color:#10b981">${o.s}</b>`)})
+     .on('mouseout',()=>tip.style('opacity',0));
+  }
+  if(window.d3) chart(); else window.onload=chart;
+  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(chart,150)};
+</script>
+</body>
+</html>
