@@ -1,71 +1,74 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>겨울방학 가족여행</title>
+  <title>겨울방학 가족여행 가이드</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0}
-    @media(prefers-color-scheme:dark){:root{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44}}
+    :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0;--sh:0 10px 30px rgba(0,0,0,.1)}
+    [data-theme=dark]{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44;--sh:0 10px 30px rgba(0,0,0,.5)}
     *{margin:0;box-sizing:border-box}
-    body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.6;padding:1rem}
-    .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.1)}
-    header{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:2rem 1.5rem;text-align:center;position:relative}
-    header h1{font-size:2rem;font-weight:700;margin:0 0 .5rem}
-    .toggle{position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,.2);color:#fff;border:none;padding:.4rem .8rem;border-radius:99px;font-size:.8rem;cursor:pointer}
+    body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.7;padding:1rem}
+    .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:16px;overflow:hidden;box-shadow:var(--sh)}
+    header{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:2.5rem 1.5rem 2rem;text-align:center;position:relative}
+    h1{font-size:2rem;font-weight:700;margin:0 0 .5rem}
+    .toggle{position:absolute;top:1rem;right:1rem;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+    .toggle:hover{transform:scale(1.08)}
     .sec{padding:1.5rem}
-    h2{font-size:1.4rem;color:var(--p);margin:1rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600}
-    ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem}
-    ul li{color:var(--m)}
+    h2{font-size:1.4rem;color:var(--p);margin:1.2rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600}
+    ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem;color:var(--m)}
     table{width:100%;border-collapse:collapse;border:1px solid var(--b);border-radius:12px;overflow:hidden;margin:1rem 0;font-size:.95rem}
     th{background:var(--p);color:#fff;padding:.9rem .7rem;text-align:center;font-weight:600}
     td{padding:.8rem .7rem;text-align:center;border-bottom:1px solid var(--b)}
     tr:hover{background:rgba(37,99,235,.05)}
-    .hl{color:var(--s);font-weight:700}
+    .hl{color:var(--s);font-weight:700;font-size:1.1em}
     .chart{margin:1rem 0;background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.2rem;overflow:hidden}
-    .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-top:.5rem}
-    .card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1rem;transition:.2s}
-    .card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.1)}
-    .card h3{font-size:1.1rem;margin:0 0 .6rem;display:flex;gap:.4rem;align-items:center}
+    .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.5rem}
+    .card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.1rem;transition:.2s}
+    .card:hover{transform:translateY(-3px);box-shadow:var(--sh)}
+    .card h3{font-size:1.15rem;margin:0 0 .6rem;display:flex;gap:.4rem;align-items:center}
     .tag{background:var(--p);color:#fff;padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600}
     .con{background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:1.5rem;margin:1.5rem 0}
-    @media(prefers-color-scheme:dark){.con{background:#052e22;border-color:#14532d;color:#bbf7d0}}
+    [data-theme=dark] .con{background:#052e22;border-color:#14532d;color:#bbf7d0}
     footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b)}
-    .tooltip{position:fixed;background:rgba(15,23,42,.95);color:#fff;padding:8px 12px;border-radius:8px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:1000}
+    .tooltip{position:fixed;background:rgba(15,23,42,.95);color:#fff;padding:8px 12px;border-radius:8px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:1000;white-space:nowrap}
+    .flag{font-size:1.2em}
     @media print{.toggle,footer{display:none}.wrap{box-shadow:none}}
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <button class="toggle" id="t">다크모드</button>
-    <h1>겨울방학 가족여행</h1>
-    <p>아시아·남태평양 10대 휴양지 | 3박 5일 | 4인 가족</p>
+    <button class="toggle" id="t" aria-label="테마 전환">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg>
+    </button>
+    <h1>겨울방학 가족여행 가이드</h1>
+    <p>아시아·남태평양 10대 휴양지 | 3박 5일 | 4인 가족 기준</p>
   </header>
 
   <div class="sec">
-    <h2>비용 기준</h2>
+    <h2>비용 산정 기준</h2>
     <ul>
-      <li><strong>인원:</strong> 4인 가족</li>
-      <li><strong>일정:</strong> 3박 5일</li>
-      <li><strong>산정:</strong> 숙박(3박) + 체류비(4인×4일) + 항공(4인)</li>
+      <li><strong>기준 인원:</strong> 4인 가족</li>
+      <li><strong>여행 일정:</strong> 3박 5일</li>
+      <li><strong>산정 방식:</strong> 숙박비(3박) + 체류비(4인×4일) + 왕복 항공권(4인 기준)</li>
       <li><strong>환율:</strong> 1 USD = ₩1,400</li>
       <li><strong>단위:</strong> 원화, 1의 자리 반올림</li>
-      <li><strong>교통:</strong> 대표 이동수단 기준</li>
+      <li><strong>교통비:</strong> 대표 이동수단 기준 별도 표기</li>
     </ul>
   </div>
 
   <div class="sec chart">
-    <h2>종합 스코어</h2>
+    <h2>종합 스코어 비교</h2>
     <div id="c" style="min-height:460px"></div>
   </div>
 
   <div class="sec">
-    <h2>세부 점수</h2>
+    <h2>세부 점수 내역</h2>
     <table>
-      <tr><th>지역</th><th>가성비(40)</th><th>접근성(30)</th><th>체류(30)</th><th>총점</th></tr>
+      <tr><th>지역</th><th>가성비(40)</th><th>접근성(30)</th><th>체류환경(30)</th><th>총점(100)</th></tr>
       <tr><td>다낭</td><td>40</td><td>30</td><td>30</td><td class="hl">100</td></tr>
       <tr><td>코타키나발루</td><td>39</td><td>28</td><td>29</td><td class="hl">96</td></tr>
       <tr><td>세부</td><td>37</td><td>27</td><td>27</td><td class="hl">91</td></tr>
@@ -80,59 +83,127 @@
   </div>
 
   <div class="sec">
-    <h2>지역 요약</h2>
+    <h2>지역별 요약</h2>
     <div class="grid">
-      <div class="card"><h3>다낭 <span class="tag">1위</span></h3><p><strong>210만</strong> | Grab</p><p><strong>장점:</strong> 저렴·직항</p><p><strong>단점:</strong> 폭우</p></div>
-      <div class="card"><h3>코타키나발루 <span class="tag">2위</span></h3><p><strong>215만</strong> | Grab+기사</p><p><strong>장점:</strong> 가족 리조트</p><p><strong>단점:</strong> 조명 부족</p></div>
-      <div class="card"><h3>세부 <span class="tag">3위</span></h3><p><strong>238만</strong> | 기사 ₱3k</p><p><strong>장점:</strong> 액티비티</p><p><strong>단점:</strong> 체증</p></div>
-      <div class="card"><h3>보홀</h3><p><strong>263만</strong> | 기사+트라이</p><p><strong>장점:</strong> 해양</p><p><strong>단점:</strong> 의료 약함</p></div>
-      <div class="card"><h3>랑카위 <span class="tag">드라이브</span></h3><p><strong>269만</strong> | 렌터카</p><p><strong>장점:</strong> 한적</p><p><strong>단점:</strong> 경유</p></div>
-      <div class="card"><h3>발리</h3><p><strong>282만</strong> | 기사</p><p><strong>장점:</strong> 문화</p><p><strong>단점:</strong> 체증</p></div>
-      <div class="card"><h3>보라카이 <span class="tag">비치</span></h3><p><strong>287만</strong> | e-트라이크</p><p><strong>장점:</strong> 화이트비치</p><p><strong>단점:</strong> 환승</p></div>
-      <div class="card"><h3>롬복 <span class="tag">서핑</span></h3><p><strong>293만</strong> | 기사</p><p><strong>장점:</strong> 저렴</p><p><strong>단점:</strong> 교통 부족</p></div>
-      <div class="card"><h3>괌 <span class="tag">직항</span></h3><p><strong>312만</strong> | 렌터카</p><p><strong>장점:</strong> 피로 최소</p><p><strong>단점:</strong> 비용</p></div>
-      <div class="card"><h3>오키나와 <span class="tag">청결</span></h3><p><strong>328만</strong> | 렌터카</p><p><strong>장점:</strong> 온화</p><p><strong>단점:</strong> 수영 짧음</p></div>
+      <div class="card">
+        <h3><span class="flag">Vietnam</span> 다낭 <span class="tag">1위</span></h3>
+        <p><strong>총액:</strong> 210만원 ($1,516)</p>
+        <p><strong>교통:</strong> Grab — 잦은 호출 가능, 공항~미케비치 ₫40k~80k</p>
+        <p><strong>장점:</strong> 물가 저렴 · 도시+리조트 병행 · 직항 노선 다수</p>
+        <p><strong>단점:</strong> 11~12월 폭우 가능 · 성수기 혼잡</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Malaysia</span> 코타키나발루 <span class="tag">2위</span></h3>
+        <p><strong>총액:</strong> 215만원 ($1,536)</p>
+        <p><strong>교통:</strong> Grab/기사 혼용 — 저렴하고 접근성 양호</p>
+        <p><strong>장점:</strong> 가성비 안정 · 가족 리조트 집중</p>
+        <p><strong>단점:</strong> 외곽 조명 부족 · 초보 운전 비추천</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Philippines</span> 세부 <span class="tag">3위</span></h3>
+        <p><strong>총액:</strong> 238만원 ($1,700)</p>
+        <p><strong>교통:</strong> 기사 포함 — ₱3,000/일, 섬 이동 시 밴·보트 병행</p>
+        <p><strong>장점:</strong> 액티비티 다양 · 의료 인프라 우수</p>
+        <p><strong>단점:</strong> 교통체증 · 성수기 인파</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Philippines</span> 보홀</h3>
+        <p><strong>총액:</strong> 263만원 ($1,880)</p>
+        <p><strong>교통:</strong> 기사 포함 — ₱3,000~3,500/일, 트라이시클 ₱50~150</p>
+        <p><strong>장점:</strong> 해양 액티비티 풍부 · 리조트 쾌적</p>
+        <p><strong>단점:</strong> 의료 인프라 약함 · 이동 동선 길다</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Malaysia</span> 랑카위</h3>
+        <p><strong>총액:</strong> 269만원 ($1,920)</p>
+        <p><strong>교통:</strong> 렌터카 — RM120~180/일, 주유비 저렴</p>
+        <p><strong>장점:</strong> 드라이브 여행 최적 · 한적한 환경 · 가성비 우수</p>
+        <p><strong>단점:</strong> 경유 항공 많음 · 실내 대체 코스 제한적</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Indonesia</span> 발리</h3>
+        <p><strong>총액:</strong> 282만원 ($2,010)</p>
+        <p><strong>교통:</strong> 기사 포함 — Rp700k~1.0M/일, 단거리 앱 호출 Rp20k~60k</p>
+        <p><strong>장점:</strong> 가족 리조트 다양 · 문화+자연 코스 풍부</p>
+        <p><strong>단점:</strong> 교통체증 · 좌측통행 적응 필요 · 우기 영향</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Philippines</span> 보라카이</h3>
+        <p><strong>총액:</strong> 287만원 ($2,050)</p>
+        <p><strong>교통:</strong> e-트라이크+보트 — 섬 내 전용 이동, 공항~호텔 일괄 연계</p>
+        <p><strong>장점:</strong> 화이트비치 수준 높음 · 섬내 이동 단순</p>
+        <p><strong>단점:</strong> 환승 번거로움 · 성수기 혼잡</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Indonesia</span> 롬복</h3>
+        <p><strong>총액:</strong> 293만원 ($2,090)</p>
+        <p><strong>교통:</strong> 기사 포함 — IDR 700k~900k/12h 또는 렌터카 450k~/일</p>
+        <p><strong>장점:</strong> 한적한 환경 · 초보 서핑 적합 · 물가 저렴</p>
+        <p><strong>단점:</strong> 대중교통 부족 · 앱 호출 제한</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Guam</span> 괌</h3>
+        <p><strong>총액:</strong> 312만원 ($2,230)</p>
+        <p><strong>교통:</strong> 렌터카 — $90/일(중형), 주차 유료 구간 다수</p>
+        <p><strong>장점:</strong> 피로도 최소(직항 4시간) · 의료·리조트 인프라 우수</p>
+        <p><strong>단점:</strong> 숙박·식비 높음 · 주차비 부담</p>
+      </div>
+      <div class="card">
+        <h3><span class="flag">Japan</span> 오키나와</h3>
+        <p><strong>총액:</strong> 328만원 ($2,340)</p>
+        <p><strong>교통:</strong> 렌터카 — ¥8,000~10,000/일, 유료 주차 다수</p>
+        <p><strong>장점:</strong> 온화한 기후 · 청결 · 드라이브 중심 일정</p>
+        <p><strong>단점:</strong> 숙박 단가 중상 · 수영 시즌 짧음</p>
+      </div>
     </div>
   </div>
 
   <div class="sec con">
     <h2>결론</h2>
-    <p><strong>TOP3:</strong> 다낭 → 코타키나발루 → 세부</p>
-    <p><strong>드라이브:</strong> 랑카위 · 오키나와</p>
-    <p><strong>테마:</strong> 롬복(서핑) · 보라카이(비치) · 괌(휴양)</p>
-    <p style="margin-top:.8rem;font-weight:700;color:#166534">→ 동남아 압도적 가성비</p>
+    <p><strong>가성비 TOP 3:</strong> 다낭 · 코타키나발루 · 세부</p>
+    <p><strong>드라이브 중심 여행:</strong> 랑카위 · 오키나와</p>
+    <p><strong>테마형 추천:</strong> 롬복(서핑), 보라카이(비치), 괌(가족휴양)</p>
+    <p style="margin-top:1rem;font-weight:500;color:#166534">
+      → <em>총예산 대비 만족도 기준으로, 동남아 지역이 전반적으로 효율 우세.</em>
+    </p>
   </div>
 
-  <footer>2025 겨울방학 | 3박 5일 4인 가족 기준</footer>
+  <footer>2025 겨울방학 가족여행 비교 가이드 | 3박 5일 4인 가족 기준</footer>
 </div>
 
 <script>
-  // 다크모드
-  const t=document.getElementById('t'), r=document.documentElement;
-  t.onclick=()=>{r.dataset.m=(r.dataset.m==='d'?'':'d');t.textContent=r.dataset.m?'라이트모드':'다크모드';localStorage.setItem('m',r.dataset.m)};
-  if(localStorage.getItem('m')==='d' || (!localStorage.getItem('m') && matchMedia('(prefers-color-scheme:dark)').matches)) {r.dataset.m='d';t.textContent='라이트모드'}
+  const btn=document.getElementById('t'),root=document.documentElement;
+  const sun='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 14v2m8-8h-2M6 12H4m12.364-5.636l-1.414 1.414M7.05 7.05l-1.414 1.414m12.728 12.728l-1.414-1.414M7.05 16.95l-1.414-1.414"/></svg>';
+  const moon='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  const update=()=>{btn.innerHTML=root.dataset.theme==='dark'?sun:moon;localStorage.setItem('t',root.dataset.theme)};
+  btn.onclick=()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';update()};
+  const saved=localStorage.getItem('t'); if(saved) root.dataset.theme=saved; update();
 
-  // D3 차트
-  const d=[{p:"다낭",s:100},{p:"코타키나발루",s:96},{p:"세부",s:91},{p:"보홀",s:85},{p:"랑카위",s:81},{p:"발리",s:77},{p:"보라카이",s:72},{p:"롬복",s:69},{p:"괌",s:63},{p:"오키나와",s:59}];
-  function chart(){
+  const data=[{p:"다낭",s:100},{p:"코타키나발루",s:96},{p:"세부",s:91},{p:"보홀",s:85},{p:"랑카위",s:81},{p:"발리",s:77},{p:"보라카이",s:72},{p:"롬복",s:69},{p:"괌",s:63},{p:"오키나와",s:59}];
+  let drawn=false;
+  const obs=new IntersectionObserver(e=>{if(e[0].isIntersecting&&!drawn){drawn=true;draw();obs.unobserve(document.getElementById('c'))}}, {threshold:.3});
+  obs.observe(document.getElementById('c'));
+
+  function draw(){
     const c=document.getElementById('c'); c.innerHTML='';
-    const w=c.clientWidth, h=Math.max(460,d.length*48), m={t:20,r:40,b:40,l:130}, iw=w-m.l-m.r, ih=h-m.t-m.b;
-    const s=d3.select(c).append('svg').attr('width','100%').attr('height',h).append('g').attr('transform',`translate(${m.l},${m.t})`);
-    const x=d3.scaleLinear().domain([0,100]).range([0,iw]), y=d3.scaleBand().domain(d.map(o=>o.p)).range([0,ih]).padding(.2);
-    s.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat('')).selectAll('line').attr('stroke','#e5e7eb');
-    const b=s.selectAll('.b').data(d).enter().append('rect').attr('y',o=>y(o.p)).attr('height',y.bandwidth()).attr('x',0).attr('width',0)
+    const w=c.clientWidth,h=Math.max(460,data.length*48),m={t:20,r:40,b:40,l:100},iw=w-m.l-m.r,ih=h-m.t-m.b;
+    const svg=d3.select(c).append('svg').attr('width','100%').attr('height',h).append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x=d3.scaleLinear().domain([0,100]).range([0,iw]), y=d3.scaleBand().domain(data.map(o=>o.p)).range([0,ih]).padding(.2);
+    svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat('')).selectAll('line').attr('stroke','#e5e7eb');
+    const bars=svg.selectAll('.b').data(data).enter().append('rect').attr('y',o=>y(o.p)).attr('height',y.bandwidth()).attr('x',0).attr('width',0)
       .attr('fill',o=>o.s>=90?'#10b981':o.s>=80?'#3b82f6':'#6b7280').attr('rx',8);
-    b.transition().duration(700).delay((_,i)=>i*70).attr('width',o=>x(o.s));
-    s.selectAll('.l').data(d).enter().append('text').attr('x',o=>x(o.s)+10).attr('y',o=>y(o.p)+y.bandwidth()/2).attr('dy','.35em')
-      .text(o=>o.s).style('font-weight',700).style('fill','#1e293b').style('opacity',0).transition().delay((_,i)=>i*70+500).duration(300).style('opacity',1);
-    s.append('g').call(d3.axisLeft(y)).selectAll('text').style('font-size','14px').style('font-weight',600);
-    s.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(5)).selectAll('text').style('font-size','12px');
+    bars.transition().duration(800).delay((_,i)=>i*80).attr('width',o=>x(o.s));
+    svg.selectAll('.l').data(data).enter().append('text').attr('x',o=>x(o.s)+10).attr('y',o=>y(o.p)+y.bandwidth()/2).attr('dy','.35em')
+      .text(o=>o.s).style('font-weight',700).style('fill',o=>o.s>=90?'#10b981':o.s>=80?'#3b82f6':'#6b7280')
+      .style('opacity',0).transition().delay((_,i)=>i*80+600).duration(300).style('opacity',1);
+    svg.append('g').call(d3.axisLeft(y)).selectAll('text').style('font-size','14px').style('font-weight',600);
+    svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(5)).selectAll('text').style('font-size','12px');
     const tip=d3.select('body').append('div').attr('class','tooltip');
-    b.on('mousemove',(e,o)=>{tip.style('opacity',1).style('left',(e.pageX+15)+'px').style('top',(e.pageY-30)+'px').html(`<strong>${o.p}</strong><br>스코어: <b style="color:#10b981">${o.s}</b>`)})
-     .on('mouseout',()=>tip.style('opacity',0));
+    bars.on('mousemove',(e,o)=>{tip.style('opacity',1).style('left',(e.pageX+15)+'px').style('top',(e.pageY-30)+'px')
+      .html(`<strong>${o.p}</strong><br>스코어: <b style="color:#10b981">${o.s}</b>`)})
+      .on('mouseout',()=>tip.style('opacity',0));
   }
-  if(window.d3) chart(); else window.onload=chart;
-  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(chart,150)};
+  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{if(drawn) draw();},200)};
 </script>
 </body>
 </html>
