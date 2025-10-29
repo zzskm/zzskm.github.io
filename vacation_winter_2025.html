@@ -186,7 +186,7 @@
 
   function draw(){
     const c=document.getElementById('c'); c.innerHTML='';
-    const w=c.clientWidth,h=Math.max(460,data.length*48),m={t:20,r:60,b:40,l:70},iw=w-m.l-m.r,ih=h-m.t-m.b;
+    const w=c.clientWidth,h=Math.max(460,data.length*48),m={t:20,r:40,b:40,l:80},iw=w-m.l-m.r,ih=h-m.t-m.b;
     const svg=d3.select(c).append('svg').attr('width','100%').attr('height',h).append('g').attr('transform',`translate(${m.l},${m.t})`);
     const x=d3.scaleLinear().domain([0,100]).range([0,iw]), y=d3.scaleBand().domain(data.map(o=>o.p)).range([0,ih]).padding(.2);
     svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat('')).selectAll('line').attr('stroke','#e5e7eb');
