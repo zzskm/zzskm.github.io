@@ -26,8 +26,28 @@
     .hl{color:var(--s);font-weight:700;font-size:1.1em}
     .chart{margin:1rem 0;background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.2rem;overflow:hidden}
     #c{overflow:visible}
+    .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.5rem}
+    .card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.1rem;transition:.2s}
+    .card:hover{transform:translateY(-3px);box-shadow:var(--sh)}
+    .card h3{font-size:1.15rem;margin:0 0 .6rem;display:flex;gap:.4rem;align-items:center}
+    .tag{background:var(--p);color:#fff;padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600}
+    .flag { font-size: 1.3em; margin-right: 4px; }
+    .con{background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:1.5rem;margin:1.5rem 0}
+    [data-theme=dark] .con{background:#052e22;border-color:#14532d;color:#bbf7d0}
     footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b)}
     .tooltip{position:fixed;background:rgba(15,23,42,.95);color:#fff;padding:8px 12px;border-radius:8px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:1000;white-space:nowrap}
+    @media print{.toggle,footer{display:none}.wrap{box-shadow:none}}
+
+    /* ── 확장 상세(아코디언) ─────────────────────────────── */
+    .card-btn{all:unset;display:block;cursor:pointer}
+    .meta{font-size:.92rem;color:var(--m);margin:.35rem 0 .6rem}
+    .arrow{margin-left:auto;transition:transform .2s ease}
+    .details{max-height:0;overflow:hidden;transition:max-height .35s ease;border-top:1px dashed var(--b);margin-top:.6rem;padding-top:.6rem}
+    .details-inner{display:grid;grid-template-columns:1fr;gap:.35rem;font-size:.93rem}
+    .details b{color:#0b7}
+    .card[aria-expanded="true"]{border-color:var(--p);box-shadow:var(--sh)}
+    .card[aria-expanded="true"] .arrow{transform:rotate(180deg)}
+    .pill{display:inline-block;background:rgba(16,185,129,.12);color:#0ea5e9;border:1px solid rgba(16,185,129,.25);border-radius:999px;padding:.15rem .5rem;font-size:.72rem;margin-right:.3rem}
   </style>
 </head>
 <body>
@@ -40,16 +60,191 @@
     <p>아시아·남태평양 10대 휴양지 | 3박 5일 | 4인 가족 기준</p>
   </header>
 
+  <div class="sec">
+    <h2>비용 산정 기준</h2>
+    <ul>
+      <li><strong>기준 인원:</strong> 4인 가족</li>
+      <li><strong>여행 일정:</strong> 3박 5일</li>
+      <li><strong>산정 방식:</strong> 숙박비(3박, 2객실) + 체류비(4인×4일) + 왕복 항공권(4인)</li>
+      <li><strong>환율:</strong> 1 USD = ₩1,400</li>
+      <li><strong>단위:</strong> 원화(만원), 반올림</li>
+      <li><strong>교통비:</strong> 대표 이동수단 기준 별도 표기</li>
+    </ul>
+  </div>
+
   <div class="sec chart">
     <h2>종합 스코어 비교</h2>
     <div id="c" style="min-height:460px"></div>
+  </div>
+
+  <div class="sec">
+    <h2>세부 점수 내역</h2>
+    <table>
+      <tr><th>지역</th><th>가성비(40)</th><th>접근성(30)</th><th>체류환경(30)</th><th>총점(100)</th></tr>
+      <tr><td>다낭</td><td>40</td><td>30</td><td>30</td><td class="hl">100</td></tr>
+      <tr><td>코타키나발루</td><td>39</td><td>28</td><td>29</td><td class="hl">96</td></tr>
+      <tr><td>세부</td><td>37</td><td>27</td><td>27</td><td class="hl">91</td></tr>
+      <tr><td>보홀</td><td>35</td><td>24</td><td>26</td><td>85</td></tr>
+      <tr><td>랑카위</td><td>36</td><td>21</td><td>24</td><td>81</td></tr>
+      <tr><td>발리</td><td>34</td><td>20</td><td>23</td><td>77</td></tr>
+      <tr><td>보라카이</td><td>32</td><td>19</td><td>21</td><td>72</td></tr>
+      <tr><td>롬복</td><td>31</td><td>18</td><td>20</td><td>69</td></tr>
+      <tr><td>괌</td><td>27</td><td>22</td><td>14</td><td>63</td></tr>
+      <tr><td>오키나와</td><td>28</td><td>18</td><td>13</td><td>59</td></tr>
+    </table>
+  </div>
+
+  <div class="sec">
+    <h2>지역별 요약</h2>
+    <div class="grid" id="grid">
+      <!-- Cards with expandable details -->
+      <div class="card" data-key="다낭" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-다낭">
+        <div class="card-btn">
+          <h3><span class="flag">🇻🇳</span> 다낭 <span class="tag">1위</span>
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 210만원 ($1,516)</span> <span class="pill">교통 Grab</span></p>
+          <p><strong>장점:</strong> 물가 저렴, 도시+리조트, 직항 다수 · <strong>단점:</strong> 11~12월 폭우, 성수기 혼잡</p>
+        </div>
+        <div class="details" id="detail-다낭" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="코타키나발루" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-코타키나발루">
+        <div class="card-btn">
+          <h3><span class="flag">🇲🇾</span> 코타키나발루 <span class="tag">2위</span>
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 215만원 ($1,536)</span> <span class="pill">교통 Grab/기사</span></p>
+          <p><strong>장점:</strong> 가성비 안정, 가족 리조트 집중 · <strong>단점:</strong> 외곽 조명 부족, 초보 운전 비추천</p>
+        </div>
+        <div class="details" id="detail-코타키나발루" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="세부" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-세부">
+        <div class="card-btn">
+          <h3><span class="flag">🇵🇭</span> 세부 <span class="tag">3위</span>
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 238만원 ($1,700)</span> <span class="pill">교통 기사 포함</span></p>
+          <p><strong>장점:</strong> 액티비티 다양, 의료 우수 · <strong>단점:</strong> 교통체증, 성수기 인파</p>
+        </div>
+        <div class="details" id="detail-세부" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="보홀" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-보홀">
+        <div class="card-btn">
+          <h3><span class="flag">🇵🇭</span> 보홀
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 263만원 ($1,880)</span> <span class="pill">교통 기사 포함</span></p>
+          <p><strong>장점:</strong> 해양 액티비티 풍부, 리조트 쾌적 · <strong>단점:</strong> 의료 약함, 이동 동선 김</p>
+        </div>
+        <div class="details" id="detail-보홀" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="랑카위" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-랑카위">
+        <div class="card-btn">
+          <h3><span class="flag">🇲🇾</span> 랑카위
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 269만원 ($1,920)</span> <span class="pill">교통 렌터카</span></p>
+          <p><strong>장점:</strong> 드라이브 최적, 한적 · <strong>단점:</strong> 경유 많음, 실내 코스 제한</p>
+        </div>
+        <div class="details" id="detail-랑카위" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="발리" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-발리">
+        <div class="card-btn">
+          <h3><span class="flag">🇮🇩</span> 발리
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 282만원 ($2,010)</span> <span class="pill">교통 기사 포함</span></p>
+          <p><strong>장점:</strong> 가족 리조트 다양, 문화·자연 풍부 · <strong>단점:</strong> 교통체증, 좌측통행/우기</p>
+        </div>
+        <div class="details" id="detail-발리" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="보라카이" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-보라카이">
+        <div class="card-btn">
+          <h3><span class="flag">🇵🇭</span> 보라카이
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 287만원 ($2,050)</span> <span class="pill">교통 e-트라이크/보트</span></p>
+          <p><strong>장점:</strong> 화이트비치, 이동 단순 · <strong>단점:</strong> 환승 번거로움, 성수기 혼잡</p>
+        </div>
+        <div class="details" id="detail-보라카이" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="롬복" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-롬복">
+        <div class="card-btn">
+          <h3><span class="flag">🇮🇩</span> 롬복
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 293만원 ($2,090)</span> <span class="pill">교통 기사/렌터카</span></p>
+          <p><strong>장점:</strong> 한적, 초보 서핑, 물가 저렴 · <strong>단점:</strong> 대중교통 부족, 앱 제한</p>
+        </div>
+        <div class="details" id="detail-롬복" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="괌" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-괌">
+        <div class="card-btn">
+          <h3><span class="flag">🇬🇺</span> 괌
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 312만원 ($2,230)</span> <span class="pill">교통 렌터카</span></p>
+          <p><strong>장점:</strong> 직항 4h, 인프라 우수 · <strong>단점:</strong> 숙박·식비 높음, 주차비 부담</p>
+        </div>
+        <div class="details" id="detail-괌" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+
+      <div class="card" data-key="오키나와" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-오키나와">
+        <div class="card-btn">
+          <h3><span class="flag">🇯🇵</span> 오키나와
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 328만원 ($2,340)</span> <span class="pill">교통 렌터카</span></p>
+          <p><strong>장점:</strong> 온화/청결/드라이브 · <strong>단점:</strong> 숙박 단가 높음, 수영 시즌 짧음</p>
+        </div>
+        <div class="details" id="detail-오키나와" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec con">
+    <h2>결론</h2>
+    <p><strong>가성비 TOP 3:</strong> 다낭 · 코타키나발루 · 세부</p>
+    <p><strong>드라이브 중심 여행:</strong> 랑카위 · 오키나와</p>
+    <p><strong>테마형 추천:</strong> 롬복(서핑), 보라카이(비치), 괌(가족휴양)</p>
+    <p style="margin-top:1rem;font-weight:500;color:#166534">
+      → <em>총예산 대비 만족도 기준으로, 동남아 지역이 전반적으로 효율 우세.</em>
+    </p>
   </div>
 
   <footer>2025 겨울방학 가족여행 비교 가이드 | 3박 5일 4인 가족 기준</footer>
 </div>
 
 <script>
-  // 테마 토글
+  // ── 테마 토글
   const btn=document.getElementById('t'),root=document.documentElement;
   const sun='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 14v2m8-8h-2M6 12H4m12.364-5.636l-1.414 1.414M7.05 7.05l-1.414 1.414m12.728 12.728l-1.414-1.414M7.05 16.95l-1.414-1.414"/></svg>';
   const moon='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
@@ -57,26 +252,177 @@
   btn.onclick=()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';update()};
   const saved=localStorage.getItem('t'); if(saved) root.dataset.theme=saved; update();
 
-  // D3 차트 (우측 여백 축소 버전)
+  // ── D3 차트 (동적 마진 & 라벨 안/밖 배치)
   const data=[{p:"다낭",s:100},{p:"코타키나발루",s:96},{p:"세부",s:91},{p:"보홀",s:85},{p:"랑카위",s:81},{p:"발리",s:77},{p:"보라카이",s:72},{p:"롬복",s:69},{p:"괌",s:63},{p:"오키나와",s:59}];
+  let drawn=false;
+  const obs=new IntersectionObserver(e=>{if(e[0].isIntersecting&&!drawn){drawn=true;draw();obs.unobserve(document.getElementById('c'))}}, {threshold:.3});
+  obs.observe(document.getElementById('c'));
+
   function draw(){
     const c=document.getElementById('c'); c.innerHTML='';
-    const w=c.clientWidth||800, baseH=Math.max(460,data.length*48);
-    const svg=d3.select(c).append('svg').attr('width','100%').attr('height',baseH).style('overflow','visible');
-    let m={t:16,r:16,b:30,l:60}, iw=w-m.l-m.r, ih=baseH-m.t-m.b;
-    const x=d3.scaleLinear().domain([0,100]).range([0,iw]), y=d3.scaleBand().domain(data.map(d=>d.p)).range([0,ih]).padding(.2);
+    const w=c.clientWidth||800; const baseH=Math.max(460,data.length*48);
+    const svg=d3.select(c).append('svg').attr('width','100%').attr('height',baseH)
+      .attr('viewBox',`0 0 ${w} ${baseH}`).style('overflow','visible');
+
+    // 1) 임시 축으로 라벨 실측
+    let m={t:20,r:20,b:30,l:20};
+    let iw=w-m.l-m.r, ih=baseH-m.t-m.b;
+    const g0=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x0=d3.scaleLinear().domain([0,100]).range([0,iw]);
+    const y0=d3.scaleBand().domain(data.map(d=>d.p)).range([0,ih]).padding(.2);
+    const yAxis0=g0.append('g').attr('class','y0').call(d3.axisLeft(y0));
+    yAxis0.selectAll('text').style('font-size','14px').style('font-weight',600);
+    const xAxis0=g0.append('g').attr('class','x0').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x0).ticks(5));
+    const maxYLabelW=Math.ceil(Math.max(...yAxis0.selectAll('text').nodes().map(n=>n.getBBox().width),0));
+    const xAxisH=Math.ceil(xAxis0.node().getBBox().height);
+    const rightPad=40;
+    m={t:16,r:rightPad,b:Math.max(30,xAxisH+10),l:Math.max(60,maxYLabelW+16)};
+    iw=w-m.l-m.r; ih=baseH-m.t-m.b;
+    g0.remove();
+
+    // 2) 실제 차트
     const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
-    g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat('')).selectAll('line').attr('stroke','#e5e7eb');
-    const bars=g.selectAll('.bar').data(data).enter().append('rect').attr('y',d=>y(d.p)).attr('height',y.bandwidth()).attr('width',0)
+    const x=d3.scaleLinear().domain([0,100]).range([0,iw]);
+    const y=d3.scaleBand().domain(data.map(d=>d.p)).range([0,ih]).padding(.2);
+
+    g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat(''))
+      .selectAll('line').attr('stroke','#e5e7eb');
+
+    const bars=g.selectAll('.bar').data(data).enter().append('rect').attr('class','bar')
+      .attr('y',d=>y(d.p)).attr('x',0).attr('height',y.bandwidth()).attr('width',0)
       .attr('fill',d=>d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280').attr('rx',8);
     bars.transition().duration(800).delay((_,i)=>i*80).attr('width',d=>x(d.s));
+
     g.append('g').call(d3.axisLeft(y)).selectAll('text').style('font-size','14px').style('font-weight',600);
-    const labels=g.selectAll('.val').data(data).enter().append('text').attr('y',d=>y(d.p)+y.bandwidth()/2).attr('dy','.35em')
-      .text(d=>d.s).attr('x',d=>x(d.s)+8).style('font-weight',700).style('fill','#2563eb').style('opacity',0)
-      .transition().delay((_,i)=>i*80+500).duration(400).style('opacity',1);
+    g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(5)).selectAll('text').style('font-size','12px');
+
+    const labels=g.selectAll('.val').data(data).enter().append('text').attr('class','val')
+      .attr('y',d=>y(d.p)+y.bandwidth()/2).attr('dy','.35em').style('font-weight',700).style('font-size','12px').style('opacity',0);
+
+    setTimeout(()=>{
+      labels.text(d=>d.s).each(function(d){
+        const barW=x(d.s); const inside=barW>28;
+        d3.select(this).attr('x', inside? barW-8: barW+8)
+          .attr('text-anchor', inside? 'end':'start')
+          .style('fill', inside? '#fff': (d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280'));
+      }).transition().duration(300).style('opacity',1);
+    }, 900);
+
+    const tip=d3.select('body').append('div').attr('class','tooltip');
+    bars.on('mousemove',(e,o)=>{tip.style('opacity',1).style('left',(e.pageX+15)+'px').style('top',(e.pageY-30)+'px')
+      .html(`<strong>${o.p}</strong><br>스코어: <b style="color:#10b981">${o.s}</b>`) })
+      .on('mouseout',()=>tip.style('opacity',0));
   }
-  draw();
-  window.onresize=()=>{clearTimeout(window._rt);window._rt=setTimeout(draw,200)};
+  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{draw();},150)};
+
+  // ── 상세 컨텐츠(카드 클릭 시 렌더)
+  const DETAILS = {
+    "다낭": {
+      "비용 분해": "숙박(중급 4성 × 2객실 × 3박) + 체류(4인×4일) + 항공(4인)로 산정. 합리적 숙박단가와 저렴한 현지 물가가 강점.",
+      "추천 동선": "미케비치–안방비치 / 바나힐 반일 / 호이안 올드타운 야간. 어린이 동반 시 바나힐–케이블카 우선.",
+      "날씨·시즌": "11~12월 폭우 가능. 1–3월 건조·온화.",
+      "교통 팁": "Grab 호출 용이, 공항–시내 20–35분. 가족 4인 이동은 6인승 호출 추천.",
+      "위험·주의": "폭우 시 도로 침수 가능. 야간 강우 시 도보 이동 지양."
+    },
+    "코타키나발루": {
+      "비용 분해": "리조트 밀집·가성비 우수. 액티비티 대비 체류비 낮음.",
+      "추천 동선": "탄중아루 선셋 / 반딧불 투어 / 만따나니·사피 섬 데이투어.",
+      "날씨·시즌": "12–3월 건기 우수(비교적).",
+      "교통 팁": "Grab 저렴, 외곽은 기사포함 8–10h 계약이 효율적.",
+      "위험·주의": "외곽 도로 조명 부족. 야간 운전 지양."
+    },
+    "세부": {
+      "비용 분해": "항공·숙박 중간, 체류비 보통. 액티비티 다양해 선택지 넓음.",
+      "추천 동선": "막탄 리조트 / 오슬롭(고래상어) + 카와산 캐니어닝(연령 확인).",
+      "날씨·시즌": "12–5월 건기 우수.",
+      "교통 팁": "기사 일일 계약 ₱3,000±. 섬이동 시 밴+보트 연계.",
+      "위험·주의": "교통체증 심함. 이동 시간 여유 확보."
+    },
+    "보홀": {
+      "비용 분해": "숙박단가 준수, 항공 경유시 증액 가능.",
+      "추천 동선": "알로나 비치 / 초콜릿 힐 / 로복강 크루즈.",
+      "날씨·시즌": "12–4월 건기 선호.",
+      "교통 팁": "기사포함 8–10h 기준. 트라이시클은 단거리만.",
+      "위험·주의": "의료 인프라 약함→ 어린이 컨디션 관리 필수."
+    },
+    "랑카위": {
+      "비용 분해": "렌터카 중심이라 체류비 절감. 숙박·식비 가성비 우수.",
+      "추천 동선": "스카이브리지 / 텔라가터쥬나 폭포 / 판타이체낭 드라이브.",
+      "날씨·시즌": "12–2월 비교적 건조, 소나기 위주.",
+      "교통 팁": "렌터카 RM120–180/일. 주유비 낮음.",
+      "위험·주의": "우천 시 실내 대체코스 제한, 일정 유연성 필요."
+    },
+    "발리": {
+      "비용 분해": "숙박 가짓수 넓고 가격대 다양. 기사포함 이동이 시간 대비 효율.",
+      "추천 동선": "누사두아 리조트 / 울와뚜 사원 선셋 / 우붓 데이투어.",
+      "날씨·시즌": "11–3월 우기. 4–10월 건기(추천).",
+      "교통 팁": "기사 8–10h 계약 Rp700k–1.0M. 단거리는 앱 호출.",
+      "위험·주의": "교통체증 심함, 좌측통행. 이동 블록화(1~2코스/일)."
+    },
+    "보라카이": {
+      "비용 분해": "섬내 체류비 보통, 항공+환승 번거로움(시간 비용 존재).",
+      "추천 동선": "화이트비치(스테이션 1–3) / 호핑투어 / 해질녘 세일링.",
+      "날씨·시즌": "12–5월 건기 선호.",
+      "교통 팁": "e-트라이크 고정가 협상. 공항–섬 연계 티켓 패키지 편리.",
+      "위험·주의": "성수기 인파 혼잡. 환승 스케줄 빡빡하면 딜레이 리스크."
+    },
+    "롬복": {
+      "비용 분해": "숙박·식비 낮음. 기사/렌터카 혼합 시 경제적.",
+      "추천 동선": "쿠타/탄중안 서핑 입문 / 길리섬 당일 스노클.",
+      "날씨·시즌": "건기(5–10월) 서핑·스노클 적합.",
+      "교통 팁": "기사 12h 700k–900k IDR. 일부 앱 호출 제한 지역 존재.",
+      "위험·주의": "의료·대중교통 빈약. 가족 단위로는 이동 보수적 계획."
+    },
+    "괌": {
+      "비용 분해": "숙박·식비 높은 편. 렌터카+주차비 고려.",
+      "추천 동선": "투몬 베이 / 수중전망대 / 마이크로네시아몰.",
+      "날씨·시즌": "연중 온난. 우기(6–12월) 스콜 주의.",
+      "교통 팁": "렌터카 $90/일(중형). 주차 유료 구간 다수.",
+      "위험·주의": "성수기 가격 급등. 운전·주차비용 별도 예산."
+    },
+    "오키나와": {
+      "비용 분해": "숙박 단가 중상. 렌터카 필수 지출.",
+      "추천 동선": "차탄/선셋비치 / 추라우미 수족관 / 남부 드라이브.",
+      "날씨·시즌": "겨울 수영 제한. 봄·가을 온화.",
+      "교통 팁": "렌터카 ¥8k–10k/일. 유료주차 다수.",
+      "위험·주의": "성수기 숙박비 급등. 비바람 시 실내 코스 확보."
+    }
+  };
+
+  function renderDetails(card){
+    const key = card.dataset.key;
+    const panel = card.querySelector('.details');
+    const inner = card.querySelector('.details-inner');
+    if (!inner.dataset.rendered) {
+      const info = DETAILS[key] || {};
+      inner.innerHTML = Object.entries(info).map(([k,v]) =>
+        `<div><b>${k}</b><br><span>${v}</span></div>`
+      ).join('');
+      inner.dataset.rendered = "true";
+    }
+    const expanded = card.getAttribute('aria-expanded') === 'true';
+    card.setAttribute('aria-expanded', String(!expanded));
+    if (!expanded) {
+      panel.hidden = false;
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      setTimeout(()=> panel.style.maxHeight = panel.scrollHeight + 'px', 10);
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      requestAnimationFrame(()=> { panel.style.maxHeight = '0px'; });
+      panel.addEventListener('transitionend', () => {
+        if (card.getAttribute('aria-expanded') === 'false') panel.hidden = true;
+      }, { once: true });
+    }
+  }
+
+  document.querySelectorAll('.card').forEach(card=>{
+    card.addEventListener('click', ()=>{ renderDetails(card); });
+    card.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault(); renderDetails(card);
+      }
+    });
+  });
 </script>
 </body>
 </html>
