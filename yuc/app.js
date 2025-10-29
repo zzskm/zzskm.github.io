@@ -2,7 +2,7 @@
 // app.js — GitHub Pages/서버용 (자동 ./parking_log.csv 로드 + 리트라이 + 모바일 최적화)
 (() => {
   const LOT_NAME = "수지노외 공영주차장";
-  const AUTO_REFRESH_MS = 3 * 60 * 1000;
+  const AUTO_REFRESH_MS = 1 * 60 * 1000;
   const DEFAULT_CSV = "./parking_log.csv";
   const KST_TZ = "Asia/Seoul";
 
