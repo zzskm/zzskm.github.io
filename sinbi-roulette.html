@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>신비 룰렛</title>
+<style>
+:root {
+  --main-bg: #0d1117;
+  --accent: #ffe600;
+  --accent-dark: #ffae00;
+  --panel: #161b22;
+  --text: #f0f0f0;
+  --dim: rgba(255,255,255,0.08);
+  --ring: #ffcb00;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: radial-gradient(circle at 30% 15%, #1a1f25, var(--main-bg));
+  color: var(--text);
+  font-family: "Pretendard", "Noto Sans KR", sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px; gap: 16px;
+}
+@media (max-width: 780px){
+  body { padding: 10px; }
+}
+h1 {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: 2px 2px 0 #000, 0 0 14px rgba(255,230,0,0.4);
+}
+.wrap {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+  width: min(100%, 960px);
+  align-items: start;
+}
+@media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+}
+.panel .in { padding: 16px; }
+.wheel-area { position: relative; display: grid; place-items: center; padding: 10px; }
+.pointer {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%) rotate(180deg);
+  width: 0; height: 0;
+  border-left: 18px solid transparent; border-right: 18px solid transparent;
+  border-bottom: 36px solid var(--accent);
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));
+  z-index: 5;
+}
+/* Wider on mobile: push to near full width */
+canvas.wheel {
+  width: min(96vw, 560px); max-width: 560px; aspect-ratio: 1;
+  border-radius: 50%; background: #fffef6;
+  border: 10px solid var(--ring);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+canvas.fx {
+  position: absolute; inset: 0; margin: auto;
+  width: min(96vw, 560px); max-width: 560px; aspect-ratio: 1;
+  pointer-events: none; z-index: 3;
+}
+.result {
+  font-size: 22px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--accent);
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(255,230,0,0.4);
+  margin-top: 6px; min-height: 1.6em;
+}
+.btn {
+  appearance: none; border: none; border-radius: 12px;
+  padding: 10px 20px; font-weight: 800; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: #111; font-size: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+}
+.btn:hover { transform: scale(1.04); }
+textarea {
+  width: 100%; min-height: 240px;
+  background: #0d1117; border: 1px solid var(--dim);
+  border-radius: 12px; color: var(--text);
+  padding: 10px; font-size: 14px; line-height: 1.4;
+  resize: vertical; outline: none;
+}
+.counter { font-size: 12px; opacity: 0.7; margin-top: 6px; text-align: right; }
+</style>
+</head>
+<body>
+<h1>신비 룰렛</h1>
+<div class="wrap">
+  <section class="panel">
+    <div class="in">
+      <div class="wheel-area">
+        <div class="pointer"></div>
+        <canvas id="wheel" class="wheel"></canvas>
+        <canvas id="fx" class="fx"></canvas>
+      </div>
+      <div class="result" id="result">눌러서 돌리세요</div>
+      <div style="display:flex;justify-content:center;margin-top:10px;">
+        <button class="btn" id="spinBtn">돌려!</button>
+      </div>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="in">
+      <strong style="font-size:15px;">항목 목록</strong>
+      <textarea id="itemsInput" spellcheck="false">만능칩
+망부각시1
+현혹귀1
+바람적목귀
+토면귀1
+토이마스터
+포자귀
+미자귀
+귀신Z카드
+번개팔척귀
+사림귀
+마녀1
+바람토이마스터
+블랙웬디고1
+잭오랜턴1
+은혼귀
+귀신Z카드
+번개자간미자귀
+현룡
+팔척귀2
+번개야저귀2
+탈안귀2
+장산탈안귀2
+만능칩
+식원귀2
+망부각시2
+현혹귀2
+토면귀2
+마녀2
+블랙웬디고2
+잭오랜턴2
+귀신Z카드
+번개샌드맨1
+팔척귀1
+번개야저귀1
+탈안귀1
+녹수귀
+정산탈안귀1
+식원귀1</textarea>
+      <div class="counter" id="counter"></div>
+      <div style="text-align:center;margin-top:8px;">
+        <button class="btn" id="applyBtn" style="font-size:14px;">적용</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const TAU=Math.PI*2;
+const wheel=document.getElementById('wheel'),ctx=wheel.getContext('2d');
+const fx=document.getElementById('fx'),fctx=fx.getContext('2d');
+const resultEl=document.getElementById('result'),counterEl=document.getElementById('counter');
+const itemsInput=document.getElementById('itemsInput'),spinBtn=document.getElementById('spinBtn');
+let items=[],order=[],rotation=0,spinning=false;
+const POINTER_ANGLE=-Math.PI/2;
+const PALETTE=['#ffdc00','#ff7b00','#60a5fa','#a78bfa','#ff4d4d','#00dca5'];
+const dpr=()=>Math.max(1,Math.min(2,window.devicePixelRatio||1));
+const norm=a=>(a%=TAU,a<0?a+TAU:a);
+function parseList(t){
+  t=t.replace(/\u00A0/g,' ');
+  let arr=t.split(/\r\n|\n|\r/g).map(s=>s.trim()).filter(Boolean);
+  if(arr.length<=1&&t.includes(','))arr=t.split(',').map(s=>s.trim()).filter(Boolean);
+  return arr;
+}
+function setItems(list){
+  items=list.slice();order=Array.from({length:items.length},(_,i)=>i);
+  rotation=0;counterEl.textContent=order.length+' 항목';draw();
+}
+function resize(){
+  const size=Math.min(window.innerWidth*0.96,560),r=dpr();
+  for(const c of [wheel,fx]){c.style.width=c.style.height=size+'px';c.width=c.height=Math.floor(size*r);}
+  draw();
+}
+window.addEventListener('resize',()=>{if(!spinning)resize();},{passive:true});
+function draw(){
+  const N=order.length||1;const r=dpr();const R=wheel.width/(2*r);
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,wheel.width,wheel.height);
+  ctx.save();ctx.scale(r,r);ctx.translate(R,R);ctx.rotate(rotation);
+  const slice=TAU/N;
+  for(let k=0;k<N;k++){
+    const i=order[k];const a0=k*slice,a1=a0+slice;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R-10,a0,a1);ctx.closePath();
+    ctx.fillStyle=PALETTE[k%PALETTE.length];ctx.fill();
+    ctx.save();ctx.rotate(a0+slice/2);ctx.textAlign='right';ctx.fillStyle='#111';
+    ctx.font='700 '+Math.max(12,Math.min(18,R*0.07))+'px Pretendard';
+    ctx.fillText(items[i],R-18,6);ctx.restore();
+  }
+  ctx.beginPath();ctx.arc(0,0,R*0.12,0,TAU);ctx.fillStyle='#111';ctx.fill();
+  ctx.lineWidth=4;ctx.strokeStyle='#ffe600';ctx.stroke();
+  ctx.restore();
+}
+function indexAtPointer(angle){
+  const N=order.length;if(!N)return-1;
+  const slice=TAU/N;const base=norm(POINTER_ANGLE-norm(angle));
+  let idx=Math.round((base-slice/2)/slice)%N;if(idx<0)idx+=N;return idx;
+}
+function targetRotationForIndex(k){
+  const N=order.length,slice=TAU/N;const center=k*slice+slice/2;
+  return norm(POINTER_ANGLE-center);
+}
+function deltaToRotation(target,spins=7){
+  const cur=norm(rotation),fwd=norm(target-cur);
+  return spins*TAU+fwd;
+}
+// Minimal audio
+let audioCtx;
+function tickSnd(){try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='square';o.frequency.value=1200;g.gain.value=0.001;o.connect(g);g.connect(audioCtx.destination);o.start();g.gain.exponentialRampToValueAtTime(0.15,audioCtx.currentTime+0.02);g.gain.exponentialRampToValueAtTime(0.00001,audioCtx.currentTime+0.08);o.stop(audioCtx.currentTime+0.09);}catch(e){}}
+function winSnd(){try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(700,audioCtx.currentTime);o.frequency.exponentialRampToValueAtTime(1400,audioCtx.currentTime+0.25);g.gain.setValueAtTime(0.0001,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(0.3,audioCtx.currentTime+0.05);g.gain.exponentialRampToValueAtTime(0.00001,audioCtx.currentTime+0.4);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+0.45);}catch(e){}}
+// subtle ring flash
+function ringFlash(){
+  fctx.clearRect(0,0,fx.width,fx.height);
+  const r=dpr(),R=fx.width/(2*r);
+  let alpha=0.8;
+  const step=()=>{
+    fctx.setTransform(1,0,0,1,0,0);fctx.clearRect(0,0,fx.width,fx.height);
+    fctx.save();fctx.scale(r,r);fctx.translate(R,R);
+    fctx.globalAlpha=alpha;fctx.beginPath();fctx.arc(0,0,R-6,0,TAU);
+    fctx.lineWidth=8;fctx.strokeStyle='rgba(255,230,0,1)';fctx.shadowColor='#ffe600';fctx.shadowBlur=20;fctx.stroke();fctx.restore();
+    alpha-=0.08;if(alpha>0){requestAnimationFrame(step);}else{fctx.clearRect(0,0,fx.width,fx.height);}
+  };
+  step();
+}
+function easeOutCubic(t){return 1-Math.pow(1-t,3);}
+function spin(){
+  if(spinning||order.length===0)return;
+  spinning=true;spinBtn.disabled=true;
+  const N=order.length;const targetK=(Math.random()*N)|0;
+  const targetRot=targetRotationForIndex(targetK);
+  const delta=deltaToRotation(targetRot,7);
+  const start=rotation,end=start+delta;
+  const dur=2000; // halved duration
+  const t0=performance.now();let lastIdx=-1;
+  const step=(now)=>{
+    const t=Math.min(1,(now-t0)/dur);
+    rotation=start+(end-start)*easeOutCubic(t);draw();
+    const idx=indexAtPointer(rotation);
+    if(idx!==lastIdx){lastIdx=idx;tickSnd();}
+    if(t<1){requestAnimationFrame(step);}else{
+      const k=indexAtPointer(rotation);
+      rotation=targetRotationForIndex(k);draw();
+      const picked=items[order[k]];
+      resultEl.textContent='당첨! '+picked+'!';winSnd();ringFlash();
+      spinning=false;spinBtn.disabled=false;
+    }
+  };
+  requestAnimationFrame(step);
+}
+spinBtn.addEventListener('click',spin);
+document.getElementById('applyBtn').addEventListener('click',()=>setItems(parseList(itemsInput.value)));
+setItems(parseList(itemsInput.value));resize();
+</script>
+</body>
+</html>
