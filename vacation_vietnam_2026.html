@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>다낭 vs 푸꾸옥 vs 나트랑 비교</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0;--sh:0 10px 30px rgba(0,0,0,.1);--sh-hover:0 20px 40px rgba(0,0,0,.15)}
+    [data-theme=dark]{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44;--sh:0 10px 30px rgba(0,0,0,.5);--sh-hover:0 20px 40px rgba(0,0,0,.7)}
+    *{margin:0;box-sizing:border-box}
+    body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.7;padding:1rem;transition:background-color .3s ease,color .3s ease;scroll-behavior:smooth}
+    .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:20px;overflow:hidden;box-shadow:var(--sh);transition:box-shadow .3s ease;animation:fadeInUp .6s ease-out}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    header{background:linear-gradient(135deg,var(--p),#3b82f6,#6366f1);color:#fff;padding:2.5rem 1.5rem 2rem;text-align:center;position:relative;overflow:hidden}
+    header::before{content:'';position:absolute;top:-50%;right:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,.1) 0%,transparent 70%);pointer-events:none}
+    h1{font-size:2rem;font-weight:700;margin:0 0 .5rem;position:relative;z-index:1;text-shadow:0 2px 4px rgba(0,0,0,.1)}
+    .toggle{position:absolute;top:1rem;right:1rem;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);backdrop-filter:blur(10px);border:none;color:#fff;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .3s cubic-bezier(0.4,0,0.2,1);z-index:2}
+    .toggle:hover{transform:scale(1.1) rotate(15deg);background:rgba(255,255,255,.3)}
+    .toggle:active{transform:scale(0.95)}
+    .sec{padding:1.5rem;transition:padding .3s ease}
+    h2{font-size:1.4rem;color:var(--p);margin:1.2rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600;transition:color .3s ease}
+    ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem;color:var(--m);line-height:1.8}
+    table{width:100%;border-collapse:collapse;border:1px solid var(--b);border-radius:12px;overflow:hidden;margin:1rem 0;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    th{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:.9rem .7rem;text-align:center;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.1)}
+    td{padding:.8rem .7rem;text-align:center;border-bottom:1px solid var(--b);transition:background-color .2s ease}
+    tr:hover{background:rgba(37,99,235,.05)}
+    tr:last-child td{border-bottom:none}
+    .hl{color:var(--s);font-weight:700;font-size:1.1em}
+    .chart{margin:1rem 0;background:var(--c);border:1px solid var(--b);border-radius:16px;padding:1.2rem;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.05);transition:all .3s ease}
+    #c{overflow:visible;min-height:460px;position:relative}
+    .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.5rem}
+    .card{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:1.1rem;transition:all .3s cubic-bezier(0.4,0,0.2,1);cursor:pointer;position:relative;overflow:hidden}
+    .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--p),var(--s));transform:scaleX(0);transition:transform .3s ease;transform-origin:left}
+    .card:hover{transform:translateY(-4px);box-shadow:var(--sh-hover);border-color:var(--p)}
+    .card:hover::before{transform:scaleX(1)}
+    .card[aria-expanded="true"]::before{transform:scaleX(1)}
+    .card h3{font-size:1.15rem;margin:0 0 .6rem;display:flex;gap:.4rem;align-items:center;font-weight:600}
+    .tag{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:.25rem .7rem;border-radius:99px;font-size:.7rem;font-weight:600;box-shadow:0 2px 4px rgba(37,99,235,.2)}
+    .flag { font-size: 1.3em; margin-right: 4px; }
+    .con{background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:16px;padding:1.5rem;margin:1.5rem 0;box-shadow:0 4px 12px rgba(16,185,129,.1)}
+    [data-theme=dark] .con{background:linear-gradient(135deg,#052e22,#064e3b);border-color:#14532d;color:#bbf7d0}
+    footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b);background:var(--c)}
+    .tooltip{position:fixed;background:rgba(15,23,42,.95);backdrop-filter:blur(10px);color:#fff;padding:10px 14px;border-radius:10px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:1000;white-space:nowrap;transition:opacity .2s ease;border:1px solid rgba(255,255,255,.1)}
+    @media print{.toggle,footer{display:none}.wrap{box-shadow:none}}
+
+    /* ── 확장 상세(아코디언) ─────────────────────────────── */
+    .card-btn{all:unset;display:block;cursor:pointer;width:100%}
+    .meta{font-size:.92rem;color:var(--m);margin:.35rem 0 .6rem;display:flex;flex-wrap:wrap;gap:.3rem}
+    .arrow{margin-left:auto;transition:transform .3s cubic-bezier(0.4,0,0.2,1);flex-shrink:0}
+    .details{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(0.4,0,0.2,1);border-top:1px dashed var(--b);margin-top:.6rem;padding-top:0}
+    .details-inner{display:grid;grid-template-columns:1fr;gap:.5rem;font-size:.93rem;padding-top:.6rem}
+    .details b{color:var(--s);font-weight:600;display:inline-block;margin-bottom:.3rem}
+    .card[aria-expanded="true"]{border-color:var(--p);box-shadow:var(--sh);background:linear-gradient(to bottom,var(--c),rgba(37,99,235,.02))}
+    .card[aria-expanded="true"] .arrow{transform:rotate(180deg)}
+    .pill{display:inline-block;background:rgba(16,185,129,.12);color:var(--s);border:1px solid rgba(16,185,129,.25);border-radius:999px;padding:.2rem .6rem;font-size:.72rem;margin-right:.3rem;font-weight:500;transition:all .2s ease}
+    .pill:hover{background:rgba(16,185,129,.2);transform:scale(1.05)}
+
+    /* ── 모바일 세로 화면 최적화 ─────────────────────────────── */
+    @media (max-width: 768px) and (orientation: portrait) {
+      body{padding:.5rem}
+      .wrap{border-radius:12px}
+      header{padding:2rem 1rem 1.5rem}
+      h1{font-size:1.5rem}
+      .toggle{width:38px;height:38px;top:.75rem;right:.75rem}
+      .sec{padding:1rem}
+      h2{font-size:1.2rem;margin:1rem 0 .6rem}
+      table{font-size:.85rem;display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;border:none}
+      table thead{display:none}
+      table tbody{display:block}
+      table tr{display:block;border:1px solid var(--b);border-radius:8px;margin-bottom:.75rem;padding:0;background:var(--c);box-shadow:0 2px 4px rgba(0,0,0,.05);overflow:hidden}
+      table td{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;border-bottom:1px solid var(--b);text-align:left;width:100%}
+      table td:before{content:attr(data-label);font-weight:600;color:var(--p);margin-right:1rem;flex-shrink:0;min-width:120px}
+      table td:last-child{border-bottom:none}
+      table td strong{color:var(--t);font-weight:600}
+      .chart{padding:.8rem;margin:.8rem 0;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+      #c{min-height:600px;padding:.5rem 0;width:100%;overflow-x:auto}
+      .grid{grid-template-columns:1fr;gap:.8rem}
+      .card{padding:.9rem;border-radius:12px}
+      .card h3{font-size:1.05rem}
+      .con{padding:1rem;margin:1rem 0;border-radius:12px}
+      footer{padding:1rem;font-size:.75rem}
+    }
+
+    /* ── 모바일 그래프 시인성 개선 ─────────────────────────────── */
+    @media (max-width: 768px) and (orientation: portrait) {
+      #c svg{width:100%!important;height:auto!important}
+      #c .bar{min-height:32px!important;rx:6px!important}
+      #c text{font-size:13px!important;font-weight:600!important}
+      #c .y-axis text{font-size:12px!important;transform:translateX(-4px)}
+      #c .x-axis text{font-size:11px!important}
+      #c .val{font-size:13px!important;font-weight:700!important}
+    }
+
+    /* ── 작은 모바일 화면 추가 최적화 ─────────────────────────────── */
+    @media (max-width: 480px) and (orientation: portrait) {
+      #c{min-height:700px}
+      #c .bar{min-height:36px!important}
+      #c text{font-size:12px!important}
+      #c .y-axis text{font-size:11px!important}
+      #c .val{font-size:12px!important}
+      h1{font-size:1.3rem}
+      header p{font-size:.85rem}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button class="toggle" id="t" aria-label="테마 전환">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg>
+    </button>
+    <h1>2026년 2월 1주차 가족여행 비교</h1>
+    <p>다낭 vs 푸꾸옥 vs 나트랑 | 5박 6일 | 4인 가족 기준</p>
+  </header>
+
+  <div class="sec">
+    <h2>비용 산정 기준</h2>
+    <ul>
+      <li><strong>기준 인원:</strong> 4인 가족</li>
+      <li><strong>여행 일정:</strong> 5박 6일</li>
+      <li><strong>산정 방식:</strong> 숙박비(5박, 2객실) + 체류비(4인×5일) + 왕복 항공권(4인)</li>
+      <li><strong>환율:</strong> 1 USD = ₩1,420 (2025년 평균치 기반)</li>
+      <li><strong>단위:</strong> 원화(만원), 반올림</li>
+      <li><strong>항공권:</strong> 2026년 2월 1주차 성수기 추정치 (최근 최저가 기준 약 1.9~2.0배 상향)</li>
+      <li><strong>교통비:</strong> 대표 이동수단 기준 별도 표기</li>
+      <li><strong>숨은 지뢰 비용:</strong> 리조트피/입도세/섬이동/팁 등 별도 표기</li>
+    </ul>
+  </div>
+
+  <div class="sec chart">
+    <h2>종합 스코어 비교</h2>
+    <div id="c" style="min-height:460px"></div>
+  </div>
+
+  <div class="sec">
+    <h2>5박6일 기준 가족여행 가성비 스코어</h2>
+    <table id="score-table">
+      <thead>
+      <tr><th>여행지</th><th>총액(5박6일)</th><th>항공권(4인 왕복)</th><th>스코어</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="sec">
+    <h2>지역별 요약</h2>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="sec con">
+    <h2>플래너 결론 (3줄 요약)</h2>
+    <p><strong>가성비/안정/동선:</strong> <strong>다낭 1등</strong>. "무난하게 성공하는 빌드."</p>
+    <p><strong>2월 물놀이/리조트 휴양:</strong> <strong>푸꾸옥이 최강</strong>인데, <strong>예산은 확실히 더 듦.</strong></p>
+    <p><strong>중간 포지션(수온 좋고 비용 덜함):</strong> <strong>나트랑이 밸런스 픽.</strong></p>
+    <p style="margin-top:1rem;font-weight:500;color:#166534">
+      → <em>스코어 = 3개 중 최저 총액(다낭) 대비 상대가성비. "가족 편의/시즌 적합도"를 같이 보면 체감 순위가 더 벌어짐.</em>
+    </p>
+  </div>
+
+  <footer>2026년 2월 1주차 가족여행 비교 가이드 | 다낭 vs 푸꾸옥 vs 나트랑 | 5박 6일 4인 가족 기준 | 기준일: 2025-11-26</footer>
+</div>
+
+<!-- ============================================ -->
+<!-- 데이터 섹션: 컨텐츠와 코드 분리              -->
+<!-- ============================================ -->
+<script type="application/json" id="data-scores">
+[
+  {"region":"다낭","total":301,"flight":137,"score":100},
+  {"region":"나트랑(캄란)","total":330,"flight":152,"score":91},
+  {"region":"푸꾸옥","total":370,"flight":202,"score":81}
+]
+</script>
+
+<script type="application/json" id="data-cards">
+[
+  {"key":"다낭","flag":"🇻🇳","rank":"1위","total":"301만원 ($2,120)","transport":"Grab","pros":"동선 단순, 리조트+도시, 키즈풀/키즈클럽 리조트 많음, 의료/마트 접근성 좋음","cons":"한국 방학 피크면 인기 리조트 조기완판"},
+  {"key":"나트랑(캄란)","flag":"🇻🇳","rank":"2위","total":"330만원 ($2,320)","transport":"Grab/차량","pros":"2월 수온 최적(26°C), 해변 컨디션 우수, 캄란 리조트 라인 가족형, 수영/호핑 만족도 높음","cons":"리조트존에 묶이면 좋지만 먼 투어 넣으면 교통 피로도 상승"},
+  {"key":"푸꾸옥","flag":"🇻🇳","rank":"3위","total":"370만원 ($2,610)","transport":"리조트 셔틀/Grab","pros":"2월 바다 컨디션 GOAT(수온 28°C), 새 리조트/대형 키즈 시설, 섬 휴양으로 하루 루틴 단순","cons":"항공·숙박 성수기 프리미엄 큼, 응급 의료/대형 쇼핑 인프라 약함"}
+]
+</script>
+
+<script type="application/json" id="data-details">
+{
+    "다낭": {
+      "총액": "301만원 / 약 $2,120",
+      "항공권": "137만원 / 4인 왕복 (최근 최저 왕복 $121 수준 기준, 성수기 2배 상향 추정)",
+      "비행시간": "약 5시간 (직항)",
+      "교통": "Grab 중심. 공항→미케비치 15~20분, 호출 스트레스 낮음.",
+      "2월 1주차 날씨": "건기 성향. 비 적고 선선함. 바다 수온 약 24°C 근처로 '춥진 않은데 뜨겁지도 않음'.",
+      "가족 베스트 포인트": "1) 동선 단순: 시내·리조트·관광이 한 축에 몰려있어서 애들 데리고 굴리기 좋음. 2) 리조트/키즈 인프라: 키즈풀·키즈클럽 있는 숙소 선택 폭 넓음. 3) 의료/마트 접근: '혹시 애 아프면?' 대응이 쉬움.",
+      "리스크/주의": "한국 방학 피크면 숙박이 빨리 차서 좋은 방 타입이 사라짐.",
+      "한 줄 추천": "가성비 + 동선 안정이 최우선이면 다낭이 표준해답."
+    },
+    "나트랑(캄란)": {
+      "총액": "330만원 / 약 $2,320",
+      "항공권": "152만원 / 4인 왕복 (최근 최저 왕복 $141 기준, 성수기 1.9배 상향)",
+      "비행시간": "약 5시간 15분 (직항)",
+      "교통": "리조트존(캄란) 기준 차량/Grab 혼용. 공항 접근이 좋음.",
+      "2월 1주차 날씨": "드라이 시즌 상위 구간. 평균 22~28°C, 강수 적고 해양 액티비티 하기 딱 좋음. 수온도 약 26°C.",
+      "가족 베스트 포인트": "1) 해변 컨디션/수온이 2월에 더 유리: 다낭보다 '수영/호핑 만족도'가 높게 나옴. 2) 캄란 리조트 라인이 가족형으로 잘 깔려있음(키즈풀/조식/프라이빗 비치). 3) 시내 관광도 적당히 섞기 쉬움(너무 무겁지 않은 도시형 옵션).",
+      "리스크/주의": "리조트존에 묶이면 좋지만, 욕심내서 먼 투어 넣으면 교통 피로도 상승.",
+      "한 줄 추천": "2월 물놀이 확실히 하고 싶은 가족은 나트랑이 더 깔끔."
+    },
+    "푸꾸옥": {
+      "총액": "370만원 / 약 $2,610",
+      "항공권": "202만원 / 4인 왕복 (최근 최저 왕복 $178 기준, 성수기 2배 상향)",
+      "비행시간": "약 5시간 45분~6시간 (직항)",
+      "교통": "리조트 셔틀/그랩/기사 포함 혼용. 섬 특성상 이동은 '짧고 비싸다' 쪽.",
+      "2월 1주차 날씨": "건기 피크. 평균 25~27°C, 강수 매우 적고 수온이 약 28°C로 베트남 내 최고급 물놀이 컨디션.",
+      "가족 베스트 포인트": "1) 2월 바다 컨디션 GOAT: 애들 물놀이 만족도 최상. 2) 새 리조트/대형 키즈 시설 많은 편(특히 남부·서부 해안). 3) '섬 휴양'이라 하루 루틴이 단순해져서 부모도 살 확률 높음.",
+      "리스크/주의(숨은 지뢰)": "항공·숙박 성수기 프리미엄이 제일 크게 붙는 곳이라 총액이 훅 뛰어. 섬이라 응급 의료/대형 쇼핑 인프라는 다낭·나트랑보다 약함.",
+      "한 줄 추천": "돈 좀 더 써도 2월 '진짜 휴양+물놀이' 원하면 푸꾸옥."
+    }
+}
+</script>
+
+<script>
+  // ── 데이터 로드: JSON에서 컨텐츠 읽기
+  const scoreData = JSON.parse(document.getElementById('data-scores').textContent);
+  const cardData = JSON.parse(document.getElementById('data-cards').textContent);
+  const detailsData = JSON.parse(document.getElementById('data-details').textContent);
+
+  // ── 테마 토글
+  const btn=document.getElementById('t'),root=document.documentElement;
+  const sun='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 14v2m8-8h-2M6 12H4m12.364-5.636l-1.414 1.414M7.05 7.05l-1.414 1.414m12.728 12.728l-1.414-1.414M7.05 16.95l-1.414-1.414"/></svg>';
+  const moon='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  const update=()=>{btn.innerHTML=root.dataset.theme==='dark'?sun:moon;localStorage.setItem('t',root.dataset.theme)};
+  btn.onclick=()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';update()};
+  const saved=localStorage.getItem('t'); if(saved) root.dataset.theme=saved; update();
+
+  // ── 테이블 렌더링 (모바일 대응)
+  function renderTable() {
+    const tbody = document.querySelector('#score-table tbody');
+    tbody.innerHTML = scoreData.map(item => {
+      const isHighlight = item.score >= 90;
+      return `<tr>
+        <td data-label="여행지">${item.region}</td>
+        <td data-label="총액(5박6일)"><strong>${item.total}만원</strong></td>
+        <td data-label="항공권(4인 왕복)">${item.flight}만원</td>
+        <td data-label="스코어"${isHighlight ? ' class="hl"' : ''}>${item.score}</td>
+      </tr>`;
+    }).join('');
+  }
+  renderTable();
+
+  // ── 카드 렌더링
+  function renderCards() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = cardData.map(card => {
+      const rankTag = card.rank ? `<span class="tag">${card.rank}</span>` : '';
+      return `<div class="card" data-key="${card.key}" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-${card.key}">
+        <div class="card-btn">
+          <h3><span class="flag">${card.flag}</span> ${card.key} ${rankTag}
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 ${card.total}</span> <span class="pill">교통 ${card.transport}</span></p>
+          <p><strong>장점:</strong> ${card.pros} · <strong>단점:</strong> ${card.cons}</p>
+        </div>
+        <div class="details" id="detail-${card.key}" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  renderCards();
+
+  // ── D3 차트 (동적 마진 & 라벨 안/밖 배치, 모바일 최적화)
+  const chartData = scoreData.map(item => ({p: item.region, s: item.score}));
+  let drawn=false;
+  const obs=new IntersectionObserver(e=>{if(e[0].isIntersecting&&!drawn){drawn=true;draw();obs.unobserve(document.getElementById('c'))}}, {threshold:.3});
+  obs.observe(document.getElementById('c'));
+
+  function isMobilePortrait(){
+    return window.innerWidth <= 768 && window.matchMedia('(orientation: portrait)').matches;
+  }
+
+  function draw(){
+    const c=document.getElementById('c'); c.innerHTML='';
+    const isMobile = isMobilePortrait();
+    const w=c.clientWidth||800;
+    // 모바일에서는 더 높은 차트 높이 사용
+    const baseH = isMobile ? Math.max(600, chartData.length * (isMobile ? 42 : 48)) : Math.max(460, chartData.length * 48);
+    const svg=d3.select(c).append('svg').attr('width','100%').attr('height',baseH)
+      .attr('viewBox',`0 0 ${w} ${baseH}`).style('overflow','visible');
+
+    // 모바일 최적화된 마진 및 패딩
+    let m={t:20,r:20,b:30,l:20};
+    if(isMobile){
+      m={t:12,r:12,b:35,l:12};
+    }
+    let iw=w-m.l-m.r, ih=baseH-m.t-m.b;
+    const g0=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x0=d3.scaleLinear().domain([0,100]).range([0,iw]);
+    const padding = isMobile ? 0.15 : 0.2;
+    const y0=d3.scaleBand().domain(chartData.map(d=>d.p)).range([0,ih]).padding(padding);
+    const yAxis0=g0.append('g').attr('class','y0 y-axis').call(d3.axisLeft(y0));
+    const fontSize = isMobile ? '12px' : '14px';
+    yAxis0.selectAll('text').style('font-size',fontSize).style('font-weight',600);
+    const xAxis0=g0.append('g').attr('class','x0 x-axis').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x0).ticks(isMobile ? 4 : 5));
+    const maxYLabelW=Math.ceil(Math.max(...yAxis0.selectAll('text').nodes().map(n=>n.getBBox().width),0));
+    const xAxisH=Math.ceil(xAxis0.node().getBBox().height);
+    const rightPad = isMobile ? 50 : 40;
+    m={t:isMobile?12:16,r:rightPad,b:Math.max(isMobile?35:30,xAxisH+10),l:Math.max(isMobile?50:60,maxYLabelW+(isMobile?12:16))};
+    iw=w-m.l-m.r; ih=baseH-m.t-m.b;
+    g0.remove();
+
+    // 2) 실제 차트
+    const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x=d3.scaleLinear().domain([0,100]).range([0,iw]);
+    const y=d3.scaleBand().domain(chartData.map(d=>d.p)).range([0,ih]).padding(padding);
+
+    // 그리드 라인
+    g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat(''))
+      .selectAll('line').attr('stroke',isMobile?'#f1f5f9':'#e5e7eb').attr('stroke-width',isMobile?1:1)
+      .attr('stroke-dasharray',isMobile?'2,2':'none');
+
+    // 바 차트
+    const bars=g.selectAll('.bar').data(chartData).enter().append('rect').attr('class','bar')
+      .attr('y',d=>y(d.p)).attr('x',0).attr('height',y.bandwidth()).attr('width',0)
+      .attr('fill',d=>d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280')
+      .attr('rx',isMobile?6:8)
+      .style('filter','drop-shadow(0 2px 4px rgba(0,0,0,.1))');
+    bars.transition().duration(800).delay((_,i)=>i*80).attr('width',d=>x(d.s));
+
+    // Y축 (지역명)
+    const yAxis = g.append('g').attr('class','y-axis').call(d3.axisLeft(y));
+    yAxis.selectAll('text').style('font-size',fontSize).style('font-weight',600)
+      .style('fill',isMobile?'#475569':'var(--t)');
+    yAxis.selectAll('line').attr('stroke',isMobile?'transparent':'var(--b)');
+    yAxis.selectAll('path').attr('stroke',isMobile?'transparent':'var(--b)');
+
+    // X축 (스코어)
+    const xAxis = g.append('g').attr('class','x-axis').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(isMobile ? 4 : 5));
+    xAxis.selectAll('text').style('font-size',isMobile?'11px':'12px').style('fill','var(--m)');
+    xAxis.selectAll('line').attr('stroke','var(--b)');
+    xAxis.selectAll('path').attr('stroke','var(--b)');
+
+    // 값 라벨
+    const labelSize = isMobile ? '13px' : '12px';
+    const labels=g.selectAll('.val').data(chartData).enter().append('text').attr('class','val')
+      .attr('y',d=>y(d.p)+y.bandwidth()/2).attr('dy','.35em').style('font-weight',700)
+      .style('font-size',labelSize).style('opacity',0);
+
+    setTimeout(()=>{
+      labels.text(d=>d.s).each(function(d){
+        const barW=x(d.s); 
+        const minWidth = isMobile ? 35 : 28;
+        const inside=barW>minWidth;
+        d3.select(this).attr('x', inside? barW-(isMobile?10:8): barW+(isMobile?10:8))
+          .attr('text-anchor', inside? 'end':'start')
+          .style('fill', inside? '#fff': (d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280'))
+          .style('text-shadow', inside ? '0 1px 2px rgba(0,0,0,.3)' : 'none');
+      }).transition().duration(300).style('opacity',1);
+    }, 900);
+
+    // 툴팁 (데스크톱에서만)
+    if(!isMobile){
+      const tip=d3.select('body').select('.tooltip').empty() 
+        ? d3.select('body').append('div').attr('class','tooltip')
+        : d3.select('body').select('.tooltip');
+      bars.on('mousemove',(e,o)=>{tip.style('opacity',1).style('left',(e.pageX+15)+'px').style('top',(e.pageY-30)+'px')
+        .html(`<strong>${o.p}</strong><br>스코어: <b style="color:#10b981">${o.s}</b>`) })
+        .on('mouseout',()=>tip.style('opacity',0));
+    }
+  }
+  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{drawn=false;draw();},150)};
+
+  // ── 상세 컨텐츠(카드 클릭 시 렌더)
+  function renderDetails(card){
+    const key = card.dataset.key;
+    const panel = card.querySelector('.details');
+    const inner = card.querySelector('.details-inner');
+    if (!inner.dataset.rendered) {
+      const info = detailsData[key] || {};
+      inner.innerHTML = Object.entries(info).map(([k,v]) =>
+        `<div><b>${k}</b><br><span>${v}</span></div>`
+      ).join('');
+      inner.dataset.rendered = "true";
+    }
+    const expanded = card.getAttribute('aria-expanded') === 'true';
+    card.setAttribute('aria-expanded', String(!expanded));
+    if (!expanded) {
+      panel.hidden = false;
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      setTimeout(()=> panel.style.maxHeight = panel.scrollHeight + 'px', 10);
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      requestAnimationFrame(()=> { panel.style.maxHeight = '0px'; });
+      panel.addEventListener('transitionend', () => {
+        if (card.getAttribute('aria-expanded') === 'false') panel.hidden = true;
+      }, { once: true });
+    }
+  }
+
+  // 카드 이벤트 바인딩 (렌더링 후 실행)
+  setTimeout(() => {
+  document.querySelectorAll('.card').forEach(card=>{
+    card.addEventListener('click', ()=>{ renderDetails(card); });
+    card.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault(); renderDetails(card);
+      }
+    });
+  });
+  }, 0);
+</script>
+</body>
+</html>
