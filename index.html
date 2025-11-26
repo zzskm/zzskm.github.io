@@ -45,12 +45,14 @@
 
       return items
         .filter(x => x.type === "file" && x.name.endsWith(".html"))
-        .filter(x => x.name.toLowerCase() !== "index.html")
+        // 루트의 index.html만 제외, 다른 폴더 index는 포함
+        .filter(x => !(x.name.toLowerCase() === "index.html" && (path === "" || path === "/")))
         .map(x => ({
           name: x.name,
-          path: path, // 원본 path 저장
+          path: path,
           href: path ? `${path.replace(/^\/+|\/+$/g, "")}/${x.name}` : x.name
         }));
+
     }
 
     async function run() {
