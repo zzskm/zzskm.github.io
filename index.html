@@ -7,48 +7,96 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
     h1 { font-size: 24px; }
+    h2 { font-size: 16px; margin-top: 20px; }
     ul { line-height: 1.8; padding-left: 18px; }
     a { text-decoration: none; }
     a:hover { text-decoration: underline; }
     .meta { color: #666; font-size: 12px; }
+    .group { margin-bottom: 16px; }
   </style>
 </head>
 <body>
   <h1>웹 페이지 목록</h1>
   <p class="meta" id="meta">loading...</p>
-  <ul id="list"></ul>
+  <div id="groups"></div>
 
   <script>
     const owner = "zzskm";
     const repo  = "zzskm.github.io";
     const branch = "main";
-    const path = ""; // 루트
 
-    const api = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+    // 여기서 원하는 폴더 추가.
+    // "" = 루트
+    const paths = ["", "yuc"]; // 예: ["", "docs", "vacations"]
+
+    function makeApiUrl(path) {
+      // path가 ""면 /contents/ 가 되고, "docs"면 /contents/docs
+      const safePath = path ? path.replace(/^\/+|\/+$/g, "") : "";
+      return `https://api.github.com/repos/${owner}/${repo}/contents/${safePath}?ref=${branch}`;
+    }
+
+    async function fetchHtmlInPath(path) {
+      const api = makeApiUrl(path);
+      const res = await fetch(api);
+      if (!res.ok) throw new Error(`GitHub API error (${path || "root"}): ${res.status}`);
+
+      const items = await res.json();
+      if (!Array.isArray(items)) return []; // 폴더가 아닌 파일이면 배열 아님
+
+      return items
+        .filter(x => x.type === "file" && x.name.endsWith(".html"))
+        .filter(x => x.name.toLowerCase() !== "index.html")
+        .map(x => ({
+          name: x.name,
+          path: path, // 원본 path 저장
+          href: path ? `${path.replace(/^\/+|\/+$/g, "")}/${x.name}` : x.name
+        }));
+    }
 
     async function run() {
-      const listEl = document.getElementById("list");
       const metaEl = document.getElementById("meta");
+      const groupsEl = document.getElementById("groups");
 
       try {
-        const res = await fetch(api);
-        if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
-        const items = await res.json();
+        const results = await Promise.allSettled(paths.map(p => fetchHtmlInPath(p)));
 
-        const pages = items
-          .filter(x => x.type === "file" && x.name.endsWith(".html"))
-          .filter(x => x.name.toLowerCase() !== "index.html")
-          .sort((a,b) => a.name.localeCompare(b.name));
+        // 성공한 것만 추출 + 그룹 유지
+        const groups = results.map((r, i) => {
+          const path = paths[i];
+          if (r.status === "fulfilled") return { path, pages: r.value };
+          return { path, pages: [], error: r.reason };
+        });
 
-        metaEl.textContent = `${pages.length} pages found in ${owner}/${repo}`;
+        // 전체 카운트
+        const total = groups.reduce((sum, g) => sum + g.pages.length, 0);
+        metaEl.textContent = `${total} pages found in ${owner}/${repo}`;
 
-        listEl.innerHTML = pages.length
-          ? pages.map(p => `<li><a href="${p.name}">${p.name}</a></li>`).join("")
-          : "<li>없음. 진짜로 없음.</li>";
+        // 렌더링
+        groupsEl.innerHTML = groups.map(g => {
+          const title = g.path ? `/${g.path.replace(/^\/+|\/+$/g, "")}` : "(root)";
+          if (g.error) {
+            return `
+              <div class="group">
+                <h2>${title}</h2>
+                <ul><li>로드 실패: ${g.error.message}</li></ul>
+              </div>
+            `;
+          }
+          const sorted = g.pages.sort((a,b) => a.name.localeCompare(b.name));
+          const lis = sorted.length
+            ? sorted.map(p => `<li><a href="${p.href}">${p.name}</a></li>`).join("")
+            : "<li>없음.</li>";
+          return `
+            <div class="group">
+              <h2>${title}</h2>
+              <ul>${lis}</ul>
+            </div>
+          `;
+        }).join("");
 
       } catch (e) {
         metaEl.textContent = "목록 로드 실패";
-        listEl.innerHTML = `<li>${e.message}</li>`;
+        groupsEl.innerHTML = `<ul><li>${e.message}</li></ul>`;
       }
     }
 
