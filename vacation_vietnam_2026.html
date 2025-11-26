@@ -7,11 +7,12 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0;--sh:0 10px 30px rgba(0,0,0,.1);--sh-hover:0 20px 40px rgba(0,0,0,.15)}
-    [data-theme=dark]{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44;--sh:0 10px 30px rgba(0,0,0,.5);--sh-hover:0 20px 40px rgba(0,0,0,.7)}
+  :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0;--sh:0 10px 30px rgba(0,0,0,.1);--sh-hover:0 20px 40px rgba(0,0,0,.15);--k:#0f172a;--grad-soft:linear-gradient(135deg,#f8fbff,#eff6ff)}
+  [data-theme=dark]{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44;--sh:0 10px 30px rgba(0,0,0,.5);--sh-hover:0 20px 40px rgba(0,0,0,.7);--k:#e2e8f0;--grad-soft:linear-gradient(135deg,#111c33,#0e1524)}
     *{margin:0;box-sizing:border-box}
-    body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.7;padding:1rem;transition:background-color .3s ease,color .3s ease;scroll-behavior:smooth}
-    .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:20px;overflow:hidden;box-shadow:var(--sh);transition:box-shadow .3s ease;animation:fadeInUp .6s ease-out}
+  body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.7;padding:1rem;transition:background-color .3s ease,color .3s ease;scroll-behavior:smooth}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(circle at top,var(--p)0,transparent 40%),radial-gradient(circle at 20% 20%,rgba(16,185,129,.15)0,transparent 30%);opacity:.08;pointer-events:none;z-index:-1}
+  .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:20px;overflow:hidden;box-shadow:var(--sh);transition:box-shadow .3s ease;animation:fadeInUp .6s ease-out}
     @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
     header{background:linear-gradient(135deg,var(--p),#3b82f6,#6366f1);color:#fff;padding:2.5rem 1.5rem 2rem;text-align:center;position:relative;overflow:hidden}
     header::before{content:'';position:absolute;top:-50%;right:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,.1) 0%,transparent 70%);pointer-events:none}
@@ -20,18 +21,18 @@
     .toggle:hover{transform:scale(1.1) rotate(15deg);background:rgba(255,255,255,.3)}
     .toggle:active{transform:scale(0.95)}
     .sec{padding:1.5rem;transition:padding .3s ease}
-    h2{font-size:1.4rem;color:var(--p);margin:1.2rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600;transition:color .3s ease}
-    ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem;color:var(--m);line-height:1.8}
-    table{width:100%;border-collapse:collapse;border:1px solid var(--b);border-radius:12px;overflow:hidden;margin:1rem 0;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+  h2{font-size:1.4rem;color:var(--p);margin:1.2rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600;transition:color .3s ease}
+  ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem;color:var(--m);line-height:1.8;padding:0}
+  table{width:100%;border-collapse:collapse;border:1px solid var(--b);border-radius:12px;overflow:hidden;margin:1rem 0;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.05);background:var(--c)}
     th{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:.9rem .7rem;text-align:center;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.1)}
     td{padding:.8rem .7rem;text-align:center;border-bottom:1px solid var(--b);transition:background-color .2s ease}
     tr:hover{background:rgba(37,99,235,.05)}
     tr:last-child td{border-bottom:none}
     .hl{color:var(--s);font-weight:700;font-size:1.1em}
     .chart{margin:1rem 0;background:var(--c);border:1px solid var(--b);border-radius:16px;padding:1.2rem;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.05);transition:all .3s ease}
-    #c{overflow:visible;min-height:460px;position:relative}
+    #c{overflow:visible;min-height:230px;position:relative}
     .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.5rem}
-    .card{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:1.1rem;transition:all .3s cubic-bezier(0.4,0,0.2,1);cursor:pointer;position:relative;overflow:hidden}
+  .card{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:1.1rem;transition:all .3s cubic-bezier(0.4,0,0.2,1);cursor:pointer;position:relative;overflow:hidden}
     .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--p),var(--s));transform:scaleX(0);transition:transform .3s ease;transform-origin:left}
     .card:hover{transform:translateY(-4px);box-shadow:var(--sh-hover);border-color:var(--p)}
     .card:hover::before{transform:scaleX(1)}
@@ -41,7 +42,9 @@
     .flag { font-size: 1.3em; margin-right: 4px; }
     .con{background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:16px;padding:1.5rem;margin:1.5rem 0;box-shadow:0 4px 12px rgba(16,185,129,.1)}
     [data-theme=dark] .con{background:linear-gradient(135deg,#052e22,#064e3b);border-color:#14532d;color:#bbf7d0}
-    footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b);background:var(--c)}
+  footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b);background:var(--c)}
+  .toggle:focus-visible,.card:focus-visible{outline:3px solid rgba(37,99,235,.4);outline-offset:3px}
+  .toggle svg,.card svg{flex-shrink:0}
     .tooltip{position:fixed;background:rgba(15,23,42,.95);backdrop-filter:blur(10px);color:#fff;padding:10px 14px;border-radius:10px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:1000;white-space:nowrap;transition:opacity .2s ease;border:1px solid rgba(255,255,255,.1)}
     @media print{.toggle,footer{display:none}.wrap{box-shadow:none}}
 
@@ -56,6 +59,18 @@
     .card[aria-expanded="true"] .arrow{transform:rotate(180deg)}
     .pill{display:inline-block;background:rgba(16,185,129,.12);color:var(--s);border:1px solid rgba(16,185,129,.25);border-radius:999px;padding:.2rem .6rem;font-size:.72rem;margin-right:.3rem;font-weight:500;transition:all .2s ease}
     .pill:hover{background:rgba(16,185,129,.2);transform:scale(1.05)}
+  .card-btn:focus-visible{outline:none}
+  .card[role=button]{outline:none}
+
+  @media (min-width:1200px){
+    .wrap{max-width:1300px}
+    header{padding:3rem 2rem 2.2rem}
+    .grid{grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important;scroll-behavior:auto!important}
+  }
 
     /* ── 모바일 세로 화면 최적화 ─────────────────────────────── */
     @media (max-width: 768px) and (orientation: portrait) {
@@ -75,7 +90,7 @@
       table td:last-child{border-bottom:none}
       table td strong{color:var(--t);font-weight:600}
       .chart{padding:.8rem;margin:.8rem 0;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-      #c{min-height:600px;padding:.5rem 0;width:100%;overflow-x:auto}
+      #c{min-height:300px;padding:.5rem 0;width:100%;overflow-x:auto}
       .grid{grid-template-columns:1fr;gap:.8rem}
       .card{padding:.9rem;border-radius:12px}
       .card h3{font-size:1.05rem}
@@ -95,7 +110,7 @@
 
     /* ── 작은 모바일 화면 추가 최적화 ─────────────────────────────── */
     @media (max-width: 480px) and (orientation: portrait) {
-      #c{min-height:700px}
+      #c{min-height:350px}
       #c .bar{min-height:36px!important}
       #c text{font-size:12px!important}
       #c .y-axis text{font-size:11px!important}
@@ -103,7 +118,74 @@
       h1{font-size:1.3rem}
       header p{font-size:.85rem}
     }
-  </style>
+  
+  
+  /* ── Itinerary visibility upgrades (high contrast) */
+  #itinerary-grid .card{
+    border-left:6px solid var(--b);
+    background:linear-gradient(180deg, rgba(255,255,255,1), rgba(245,248,255,1));
+  }
+  #itinerary-grid .card.itinerary-card{cursor:default}
+  [data-theme=dark] #itinerary-grid .card{
+    background:linear-gradient(180deg,rgba(15,23,42,.95),rgba(15,23,42,.8));
+    border-left-color:#334155;
+  }
+  .it-title h3{
+    font-size:1.1rem;
+    font-weight:800;
+    color:var(--k);
+    letter-spacing:-.01em;
+  }
+  .it-sub{
+    color:var(--k);
+    font-weight:600;
+    font-size:.95rem;
+    margin:0 0 .85rem 0;
+    opacity:.9;
+  }
+  .it-days{
+    display:flex;
+    flex-direction:column;
+    gap:.65rem;
+    margin:.25rem 0 0 0;
+    padding:0;
+    list-style:none;
+  }
+  .it-day{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:.7rem;
+    align-items:start;
+    background:rgba(37, 99, 235, 0.08); /* light blue tint */
+    border:1px solid rgba(37, 99, 235, 0.18);
+    border-radius:14px;
+    padding:.7rem .8rem;
+    box-shadow:0 1px 0 rgba(0,0,0,.04);
+  }
+  .day-badge{
+    font-weight:900;
+    font-size:.9rem;
+    line-height:1;
+    padding:.45rem .85rem;
+    border-radius:999px;
+    background:linear-gradient(130deg,var(--p),#4f46e5);
+    color:#fff;
+    white-space:nowrap;
+    box-shadow:0 4px 10px rgba(79,70,229,.35);
+    border:1px solid rgba(255,255,255,.25);
+  }
+  .day-text{
+    color:var(--k);
+    font-size:1.02rem;
+    font-weight:600;
+  }
+  .day-text small{
+    color:var(--m);
+    font-size:.92rem;
+    font-weight:500;
+  }
+
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -131,7 +213,7 @@
 
   <div class="sec chart">
     <h2>종합 스코어 비교</h2>
-    <div id="c" style="min-height:460px"></div>
+    <div id="c" style="min-height:230px"></div>
   </div>
 
   <div class="sec">
@@ -147,6 +229,15 @@
   <div class="sec">
     <h2>지역별 요약</h2>
     <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="sec">
+    <h2>가족 맞춤 5박 6일 일정 제안</h2>
+    <p style="color:var(--m);font-size:.95rem;margin:.2rem 0 1rem">
+      아이 9세·3세 / 수영 매우 선호 / 운전 가능 / 휴양 70% · 액티비티 30% 기준으로,
+      “오전 1코스 → 점심 → 낮잠/리조트 → 저녁 라이트” 루틴에 맞춘 추천 일정입니다.
+    </p>
+    <div class="grid" id="itinerary-grid"></div>
   </div>
 
   <div class="sec con">
@@ -214,6 +305,36 @@
       "한 줄 추천": "돈 좀 더 써도 2월 '진짜 휴양+물놀이' 원하면 푸꾸옥."
     }
 }
+
+</script>
+
+<script type="application/json" id="data-itineraries">
+{
+  "다낭": [
+    "Day1 도착·체크인 → 리조트/미케비치 물놀이, 가벼운 저녁",
+    "Day2 오전 바나힐(테마파크·케이블카) → 오후 리조트 수영/휴식",
+    "Day3 오전 리조트 데이(키즈풀/해변) → 오후 낮잠 → 저녁 호이안 야경 반나절",
+    "Day4 오전 짧은 호핑/스노클 or 오행산 산책 → 오후 리조트 복귀",
+    "Day5 오전 자유 물놀이 + 부모 스파/마사지 → 오후 시내 카페·시장 라이트 쇼핑",
+    "Day6 체크아웃·귀국"
+  ],
+  "나트랑(캄란)": [
+    "Day1 도착 → 캄란 리조트 체크인, 프라이빗 비치/키즈풀",
+    "Day2 오전~오후 빈원더스/워터파크(아이 메인) → 늦은 오후 리조트 휴식",
+    "Day3 올데이 리조트 데이(수영·모래놀이·키즈클럽), 부모 스파 옵션",
+    "Day4 오전 가족 난이도 낮은 호핑/스노클 → 오후 낮잠/수영",
+    "Day5 오전 리조트 마지막 수영 → 오후 나트랑 시내 반나절(카페·야시장) + 마사지",
+    "Day6 체크아웃·귀국"
+  ],
+  "푸꾸옥": [
+    "Day1 도착·리조트 안착 → 해변/키즈풀, 섬 적응",
+    "Day2 오전 혼똔섬 케이블카+워터파크(남부) → 오후 리조트 복귀",
+    "Day3 올데이 리조트 데이(2월 최적 수온 28°C 활용, 물놀이 올인)",
+    "Day4 오전 빈펄 사파리+빈원더스(초등 아이 위주, 3세는 사파리만도 OK) → 오후 휴식",
+    "Day5 오전 마지막 비치/스노클(짧게) → 오후 쉬고 저녁 야시장/해산물",
+    "Day6 체크아웃·귀국"
+  ]
+}
 </script>
 
 <script>
@@ -221,25 +342,59 @@
   const scoreData = JSON.parse(document.getElementById('data-scores').textContent);
   const cardData = JSON.parse(document.getElementById('data-cards').textContent);
   const detailsData = JSON.parse(document.getElementById('data-details').textContent);
+  const itineraryData = JSON.parse(document.getElementById('data-itineraries').textContent);
 
-  // ── 테마 토글
+  const chartContainer = document.getElementById('c');
+  const cardLookup = cardData.reduce((acc, card) => {
+    acc[card.key] = card;
+    return acc;
+  }, {});
+
+  // ── 테마 토글 (시스템 선호도 연동)
   const btn=document.getElementById('t'),root=document.documentElement;
   const sun='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 14v2m8-8h-2M6 12H4m12.364-5.636l-1.414 1.414M7.05 7.05l-1.414 1.414m12.728 12.728l-1.414-1.414M7.05 16.95l-1.414-1.414"/></svg>';
   const moon='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  const update=()=>{btn.innerHTML=root.dataset.theme==='dark'?sun:moon;localStorage.setItem('t',root.dataset.theme)};
-  btn.onclick=()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';update()};
-  const saved=localStorage.getItem('t'); if(saved) root.dataset.theme=saved; update();
+  const themeKey='theme-pref';
+  const sysPref = window.matchMedia('(prefers-color-scheme: dark)');
+  btn.setAttribute('title','테마 전환');
+
+  const applyTheme = (theme, persist = true) => {
+    root.dataset.theme = theme;
+    btn.innerHTML = theme === 'dark' ? sun : moon;
+    btn.setAttribute('aria-pressed', theme === 'dark');
+    if (persist) localStorage.setItem(themeKey, theme);
+  };
+
+  const storedTheme = localStorage.getItem(themeKey);
+  applyTheme(storedTheme || (sysPref.matches ? 'dark' : 'light'), false);
+
+  btn.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+  });
+
+  const handleSystemThemeChange = (event) => {
+    if (!localStorage.getItem(themeKey)) {
+      applyTheme(event.matches ? 'dark' : 'light', false);
+    }
+  };
+  if (sysPref.addEventListener) {
+    sysPref.addEventListener('change', handleSystemThemeChange);
+  } else if (sysPref.addListener) {
+    sysPref.addListener(handleSystemThemeChange);
+  }
 
   // ── 테이블 렌더링 (모바일 대응)
   function renderTable() {
     const tbody = document.querySelector('#score-table tbody');
     tbody.innerHTML = scoreData.map(item => {
       const isHighlight = item.score >= 90;
+      const scoreClass = isHighlight ? ' class="hl"' : '';
       return `<tr>
         <td data-label="여행지">${item.region}</td>
         <td data-label="총액(5박6일)"><strong>${item.total}만원</strong></td>
         <td data-label="항공권(4인 왕복)">${item.flight}만원</td>
-        <td data-label="스코어"${isHighlight ? ' class="hl"' : ''}>${item.score}</td>
+        <td data-label="스코어"${scoreClass}>${item.score}</td>
       </tr>`;
     }).join('');
   }
@@ -264,28 +419,96 @@
       </div>`;
     }).join('');
   }
+
+  function bindCardInteractions(){
+    document.querySelectorAll('.card[data-key]').forEach(card=>{
+      if(card.dataset.bound==="true") return;
+      card.dataset.bound="true";
+      card.addEventListener('click', ()=>{ renderDetails(card); });
+      card.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter' || e.key === ' '){
+          e.preventDefault(); renderDetails(card);
+        }
+      });
+    });
+  }
+
+  
+  // ── 일정 카드 렌더링 (세로 Day 리스트)
+  function renderItineraries(){
+    const grid = document.getElementById('itinerary-grid');
+    if(!grid) return;
+    const order = scoreData.map(d => d.region);
+    grid.innerHTML = order.map(region => {
+      const days = itineraryData[region] || [];
+      const meta = cardLookup[region] || {};
+      const flag = meta.flag || '🌏';
+      const subline = meta.total ? `${meta.rank ? meta.rank+' · ' : ''}${meta.total}` : '추천 일정';
+      const items = days.map((d, i) => `
+        <li class="it-day">
+          <div class="day-badge">Day ${i+1}</div>
+          <div class="day-text">${d.replace(/^Day\\d\\s*/i,'')}</div>
+        </li>
+      `).join('');
+      return `
+        <div class="card itinerary-card">
+          <div class="it-title">
+            <h3 style="margin:0"><span class="flag">${flag}</span> ${region} 일정</h3>
+          </div>
+          <p class="it-sub">${subline}</p>
+          <ul class="it-days">${items}</ul>
+        </div>`;
+    }).join('');
+  }
+  renderItineraries();
+
+
   renderCards();
+  bindCardInteractions();
 
   // ── D3 차트 (동적 마진 & 라벨 안/밖 배치, 모바일 최적화)
   const chartData = scoreData.map(item => ({p: item.region, s: item.score}));
   let drawn=false;
-  const obs=new IntersectionObserver(e=>{if(e[0].isIntersecting&&!drawn){drawn=true;draw();obs.unobserve(document.getElementById('c'))}}, {threshold:.3});
-  obs.observe(document.getElementById('c'));
+  let resizeFrame=null;
+  let resizeObserver=null;
+
+  const obs=new IntersectionObserver(entries=>{
+    if(entries[0].isIntersecting&&!drawn){
+      drawn=true;
+      draw();
+      setupChartResizeWatcher();
+      obs.unobserve(chartContainer);
+    }
+  }, {threshold:.3});
+  obs.observe(chartContainer);
+
+  function setupChartResizeWatcher(){
+    const schedule=()=>{
+      if(!drawn) return;
+      if(resizeFrame) cancelAnimationFrame(resizeFrame);
+      resizeFrame=requestAnimationFrame(draw);
+    };
+    if('ResizeObserver' in window){
+      resizeObserver = new ResizeObserver(schedule);
+      resizeObserver.observe(chartContainer);
+    }else{
+      window.addEventListener('resize', schedule);
+    }
+  }
 
   function isMobilePortrait(){
     return window.innerWidth <= 768 && window.matchMedia('(orientation: portrait)').matches;
   }
 
   function draw(){
-    const c=document.getElementById('c'); c.innerHTML='';
+    if(!chartContainer) return;
+    chartContainer.innerHTML='';
     const isMobile = isMobilePortrait();
-    const w=c.clientWidth||800;
-    // 모바일에서는 더 높은 차트 높이 사용
-    const baseH = isMobile ? Math.max(600, chartData.length * (isMobile ? 42 : 48)) : Math.max(460, chartData.length * 48);
-    const svg=d3.select(c).append('svg').attr('width','100%').attr('height',baseH)
+    const w=chartContainer.clientWidth||800;
+    const baseH = isMobile ? Math.max(300, chartData.length * (isMobile ? 42 : 48)) : Math.max(230, chartData.length * 48);
+    const svg=d3.select(chartContainer).append('svg').attr('width','100%').attr('height',baseH)
       .attr('viewBox',`0 0 ${w} ${baseH}`).style('overflow','visible');
 
-    // 모바일 최적화된 마진 및 패딩
     let m={t:20,r:20,b:30,l:20};
     if(isMobile){
       m={t:12,r:12,b:35,l:12};
@@ -306,17 +529,14 @@
     iw=w-m.l-m.r; ih=baseH-m.t-m.b;
     g0.remove();
 
-    // 2) 실제 차트
     const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
     const x=d3.scaleLinear().domain([0,100]).range([0,iw]);
     const y=d3.scaleBand().domain(chartData.map(d=>d.p)).range([0,ih]).padding(padding);
 
-    // 그리드 라인
     g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat(''))
-      .selectAll('line').attr('stroke',isMobile?'#f1f5f9':'#e5e7eb').attr('stroke-width',isMobile?1:1)
+      .selectAll('line').attr('stroke',isMobile?'#f1f5f9':'#e5e7eb').attr('stroke-width',1)
       .attr('stroke-dasharray',isMobile?'2,2':'none');
 
-    // 바 차트
     const bars=g.selectAll('.bar').data(chartData).enter().append('rect').attr('class','bar')
       .attr('y',d=>y(d.p)).attr('x',0).attr('height',y.bandwidth()).attr('width',0)
       .attr('fill',d=>d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280')
@@ -324,20 +544,17 @@
       .style('filter','drop-shadow(0 2px 4px rgba(0,0,0,.1))');
     bars.transition().duration(800).delay((_,i)=>i*80).attr('width',d=>x(d.s));
 
-    // Y축 (지역명)
     const yAxis = g.append('g').attr('class','y-axis').call(d3.axisLeft(y));
     yAxis.selectAll('text').style('font-size',fontSize).style('font-weight',600)
       .style('fill',isMobile?'#475569':'var(--t)');
     yAxis.selectAll('line').attr('stroke',isMobile?'transparent':'var(--b)');
     yAxis.selectAll('path').attr('stroke',isMobile?'transparent':'var(--b)');
 
-    // X축 (스코어)
     const xAxis = g.append('g').attr('class','x-axis').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(isMobile ? 4 : 5));
     xAxis.selectAll('text').style('font-size',isMobile?'11px':'12px').style('fill','var(--m)');
     xAxis.selectAll('line').attr('stroke','var(--b)');
     xAxis.selectAll('path').attr('stroke','var(--b)');
 
-    // 값 라벨
     const labelSize = isMobile ? '13px' : '12px';
     const labels=g.selectAll('.val').data(chartData).enter().append('text').attr('class','val')
       .attr('y',d=>y(d.p)+y.bandwidth()/2).attr('dy','.35em').style('font-weight',700)
@@ -355,7 +572,6 @@
       }).transition().duration(300).style('opacity',1);
     }, 900);
 
-    // 툴팁 (데스크톱에서만)
     if(!isMobile){
       const tip=d3.select('body').select('.tooltip').empty() 
         ? d3.select('body').append('div').attr('class','tooltip')
@@ -365,13 +581,13 @@
         .on('mouseout',()=>tip.style('opacity',0));
     }
   }
-  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{drawn=false;draw();},150)};
 
   // ── 상세 컨텐츠(카드 클릭 시 렌더)
   function renderDetails(card){
     const key = card.dataset.key;
     const panel = card.querySelector('.details');
     const inner = card.querySelector('.details-inner');
+    if(!panel || !inner) return;
     if (!inner.dataset.rendered) {
       const info = detailsData[key] || {};
       inner.innerHTML = Object.entries(info).map(([k,v]) =>
@@ -393,18 +609,6 @@
       }, { once: true });
     }
   }
-
-  // 카드 이벤트 바인딩 (렌더링 후 실행)
-  setTimeout(() => {
-  document.querySelectorAll('.card').forEach(card=>{
-    card.addEventListener('click', ()=>{ renderDetails(card); });
-    card.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' || e.key === ' '){
-        e.preventDefault(); renderDetails(card);
-      }
-    });
-  });
-  }, 0);
 </script>
 </body>
 </html>
