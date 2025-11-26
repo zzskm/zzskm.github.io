@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pages Index</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 24px; }
+    ul { line-height: 1.8; padding-left: 18px; }
+    a { text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>웹 페이지 목록</h1>
+  <p class="meta" id="meta">loading...</p>
+  <ul id="list"></ul>
+
+  <script>
+    const owner = "zzskm";
+    const repo  = "zzskm.github.io";
+    const branch = "main";
+    const path = ""; // 루트
+
+    const api = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+
+    async function run() {
+      const listEl = document.getElementById("list");
+      const metaEl = document.getElementById("meta");
+
+      try {
+        const res = await fetch(api);
+        if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+        const items = await res.json();
+
+        const pages = items
+          .filter(x => x.type === "file" && x.name.endsWith(".html"))
+          .filter(x => x.name.toLowerCase() !== "index.html")
+          .sort((a,b) => a.name.localeCompare(b.name));
+
+        metaEl.textContent = `${pages.length} pages found in ${owner}/${repo}`;
+
+        listEl.innerHTML = pages.length
+          ? pages.map(p => `<li><a href="${p.name}">${p.name}</a></li>`).join("")
+          : "<li>없음. 진짜로 없음.</li>";
+
+      } catch (e) {
+        metaEl.textContent = "목록 로드 실패";
+        listEl.innerHTML = `<li>${e.message}</li>`;
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>
