@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>겨울방학 가족여행 가이드</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--p:#2563eb;--s:#10b981;--m:#64748b;--bg:#f8fafc;--c:#fff;--t:#0f172a;--b:#e2e8f0;--sh:0 10px 30px rgba(0,0,0,.1)}
+    [data-theme=dark]{--bg:#0b1220;--c:#0f172a;--t:#e5e7eb;--b:#1f2a44;--sh:0 10px 30px rgba(0,0,0,.5)}
+    *{margin:0;box-sizing:border-box}
+    body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.7;padding:1rem}
+    .wrap{max-width:1100px;margin:auto;background:var(--c);border-radius:16px;overflow:hidden;box-shadow:var(--sh)}
+    header{background:linear-gradient(135deg,var(--p),#3b82f6);color:#fff;padding:2.5rem 1.5rem 2rem;text-align:center;position:relative}
+    h1{font-size:2rem;font-weight:700;margin:0 0 .5rem}
+    .toggle{position:absolute;top:1rem;right:1rem;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+    .toggle:hover{transform:scale(1.08)}
+    .sec{padding:1.5rem}
+    h2{font-size:1.4rem;color:var(--p);margin:1.2rem 0 .8rem;display:flex;gap:.5rem;align-items:center;font-weight:600}
+    ul{list-style:none;display:grid;gap:.5rem;font-size:.95rem;color:var(--m)}
+    table{width:100%;border-collapse:collapse;border:1px solid var(--b);border-radius:12px;overflow:hidden;margin:1rem 0;font-size:.95rem}
+    th{background:var(--p);color:#fff;padding:.9rem .7rem;text-align:center;font-weight:600}
+    td{padding:.8rem .7rem;text-align:center;border-bottom:1px solid var(--b)}
+    tr:hover{background:rgba(37,99,235,.05)}
+    .hl{color:var(--s);font-weight:700;font-size:1.1em}
+    .chart{margin:1rem 0;background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.2rem;overflow:hidden}
+    #c{overflow:visible}
+    .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-top:.5rem}
+    .card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:1.1rem;transition:.2s}
+    .card:hover{transform:translateY(-3px);box-shadow:var(--sh)}
+    .card h3{font-size:1.15rem;margin:0 0 .6rem;display:flex;gap:.4rem;align-items:center}
+    .tag{background:var(--p);color:#fff;padding:.2rem .6rem;border-radius:99px;font-size:.7rem;font-weight:600}
+    .flag { font-size: 1.3em; margin-right: 4px; }
+    .con{background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:1.5rem;margin:1.5rem 0}
+    [data-theme=dark] .con{background:#052e22;border-color:#14532d;color:#bbf7d0}
+    footer{text-align:center;padding:1.2rem;color:var(--m);font-size:.8rem;border-top:1px solid var(--b)}
+    .tooltip{position:fixed;background:rgba(15,23,42,.95);color:#fff;padding:8px 12px;border-radius:8px;font-size:.85rem;pointer-events:none;opacity:0;box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:1000;white-space:nowrap}
+    @media print{.toggle,footer{display:none}.wrap{box-shadow:none}}
+
+    /* ── 확장 상세(아코디언) ─────────────────────────────── */
+    .card-btn{all:unset;display:block;cursor:pointer}
+    .meta{font-size:.92rem;color:var(--m);margin:.35rem 0 .6rem}
+    .arrow{margin-left:auto;transition:transform .2s ease}
+    .details{max-height:0;overflow:hidden;transition:max-height .35s ease;border-top:1px dashed var(--b);margin-top:.6rem;padding-top:.6rem}
+    .details-inner{display:grid;grid-template-columns:1fr;gap:.35rem;font-size:.93rem}
+    .details b{color:#0b7}
+    .card[aria-expanded="true"]{border-color:var(--p);box-shadow:var(--sh)}
+    .card[aria-expanded="true"] .arrow{transform:rotate(180deg)}
+    .pill{display:inline-block;background:rgba(16,185,129,.12);color:#0ea5e9;border:1px solid rgba(16,185,129,.25);border-radius:999px;padding:.15rem .5rem;font-size:.72rem;margin-right:.3rem}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button class="toggle" id="t" aria-label="테마 전환">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg>
+    </button>
+    <h1>2026년 2월 1주차 가족여행 가이드</h1>
+    <p>아시아·남태평양 15대 휴양지 | 5박 6일 | 4인 가족 기준</p>
+  </header>
+
+  <div class="sec">
+    <h2>비용 산정 기준</h2>
+    <ul>
+      <li><strong>기준 인원:</strong> 4인 가족</li>
+      <li><strong>여행 일정:</strong> 5박 6일</li>
+      <li><strong>산정 방식:</strong> 숙박비(5박, 2객실) + 체류비(4인×5일) + 왕복 항공권(4인)</li>
+      <li><strong>환율:</strong> 1 USD = ₩1,420 (2025년 평균치 기반)</li>
+      <li><strong>단위:</strong> 원화(만원), 반올림</li>
+      <li><strong>항공권:</strong> 2026년 2월 1주차 성수기 추정치 (최저가 기준 1.6~2.2배 상향)</li>
+      <li><strong>교통비:</strong> 대표 이동수단 기준 별도 표기</li>
+      <li><strong>숨은 지뢰 비용:</strong> 리조트피/입도세/섬이동/팁 등 별도 표기</li>
+    </ul>
+  </div>
+
+  <div class="sec chart">
+    <h2>종합 스코어 비교</h2>
+    <div id="c" style="min-height:460px"></div>
+  </div>
+
+  <div class="sec">
+    <h2>5박6일 기준 가족여행 가성비 스코어</h2>
+    <table id="score-table">
+      <thead>
+      <tr><th>여행지</th><th>총액(5박6일)</th><th>항공권(4인 왕복)</th><th>스코어</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="sec">
+    <h2>지역별 요약</h2>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="sec con">
+    <h2>플래너 결론 (가족 유형별 추천)</h2>
+    <p><strong>유아 동반 + 피로도 최소:</strong> 다낭 · 코타키나발루 · 괌<br>
+    → 동선 단순하고 의료/리조트 기반이 안정적.</p>
+    <p><strong>초등 이상 + 액티비티 우선:</strong> 세부 · 보라카이 · 푸껫/카오락<br>
+    → 수영·호핑·체험이 2월에도 확정적으로 돌아가는 곳.</p>
+    <p><strong>부모 휴식 + 한적함:</strong> 랑카위 · 롬복 · 하이난 산야<br>
+    → 리조트에 오래 머물수록 만족도 올라가는 타입.</p>
+    <p><strong>도시형 체험/테마파크:</strong> 타이베이+이란 · 홍콩 · 싱가포르<br>
+    → 휴양 대신 콘텐츠로 승부 보는 가족에게.</p>
+    <p style="margin-top:1rem;font-weight:500;color:#166534">
+      → <em>총예산 대비 만족도 기준으로, 동남아 지역이 전반적으로 효율 우세. 스코어는 총액이 낮을수록 높은 상대점수(비용 60% + 가족편의/안전 25% + 시즌적합 15%).</em>
+    </p>
+  </div>
+
+  <footer>2026년 2월 1주차 가족여행 비교 가이드 | 5박 6일 4인 가족 기준 | 기준일: 2025-11-26</footer>
+</div>
+
+<!-- ============================================ -->
+<!-- 데이터 섹션: 컨텐츠와 코드 분리              -->
+<!-- ============================================ -->
+<script type="application/json" id="data-scores">
+[
+  {"region":"다낭","total":301,"flight":142,"score":100},
+  {"region":"코타키나발루","total":308,"flight":159,"score":98},
+  {"region":"세부","total":341,"flight":159,"score":88},
+  {"region":"타이베이+이란(대만)","total":360,"flight":114,"score":84},
+  {"region":"보홀","total":377,"flight":170,"score":80},
+  {"region":"하이난 산야(중국)","total":380,"flight":159,"score":79},
+  {"region":"푸껫/카오락(태국)","total":390,"flight":170,"score":77},
+  {"region":"랑카위","total":385,"flight":182,"score":78},
+  {"region":"발리","total":404,"flight":256,"score":74},
+  {"region":"보라카이","total":411,"flight":182,"score":73},
+  {"region":"롬복","total":420,"flight":256,"score":72},
+  {"region":"괌","total":439,"flight":170,"score":69},
+  {"region":"홍콩","total":450,"flight":142,"score":67},
+  {"region":"오키나와","total":479,"flight":125,"score":63},
+  {"region":"싱가포르","total":500,"flight":199,"score":60}
+]
+</script>
+
+<script type="application/json" id="data-cards">
+[
+  {"key":"다낭","flag":"🇻🇳","rank":"1위","total":"301만원 ($2,120)","transport":"Grab","pros":"물가 저렴, 도시+리조트, 직항 다수, 키즈풀/키즈클럽 리조트 많음","cons":"설 연휴/한국 방학 피크면 인기 리조트 조기완판"},
+  {"key":"코타키나발루","flag":"🇲🇾","rank":"2위","total":"308만원 ($2,170)","transport":"Grab/기사","pros":"가성비 안정, 가족 리조트 집중, 섬 호핑 입문용 적당","cons":"야간 외곽 조도 낮음"},
+  {"key":"세부","flag":"🇵🇭","rank":"3위","total":"341만원 ($2,400)","transport":"기사 포함","pros":"액티비티 다양, 의료 우수, 직항 5시간 내외","cons":"교통 체증, 이동 구간 길면 아이 텐션 꺼짐"},
+  {"key":"타이베이+이란(대만)","flag":"🇹🇼","rank":"","total":"360만원 ($2,540)","transport":"대중교통","pros":"도시형+근교 자연/온천, 비 오는 날 플랜B 빵빵","cons":"순수 휴양 기대하면 결이 다름"},
+  {"key":"보홀","flag":"🇵🇭","rank":"","total":"377만원 ($2,650)","transport":"기사 포함","pros":"리조트 퀄리티 대비 가격 메리트, 해양+자연 코스","cons":"의료 인프라 약함, 유아 동반 시 리조트존에 묶이는 전략 필요"},
+  {"key":"하이난 산야(중국)","flag":"🇨🇳","rank":"","total":"380만원 ($2,680)","transport":"기사/렌터카","pros":"리조트 시설 크고 가족형 많음, 위생/도시 인프라 체감 양호","cons":"중국 연휴/단체관광 시즌이면 혼잡도 튈 수 있음"},
+  {"key":"푸껫/카오락(태국)","flag":"🇹🇭","rank":"","total":"390만원 ($2,750)","transport":"기사/렌터카","pros":"대형 가족리조트+키즈클럽, 바다/섬투어/워터파크, 카오락은 유아 동반에 특히 좋음","cons":"유명 비치존은 성수기 혼잡"},
+  {"key":"랑카위","flag":"🇲🇾","rank":"","total":"385만원 ($2,710)","transport":"렌터카","pros":"드라이브+한적함, 부모 휴식/아이 뛰놀기 밸런스 좋음","cons":"실내 대체 코스 적음, 날씨 나쁘면 리조트 의존도 커짐"},
+  {"key":"발리","flag":"🇮🇩","rank":"","total":"404만원 ($2,850)","transport":"기사 포함","pros":"가족형 풀빌라/리조트 선택 폭 넓음, 문화/자연/체험 다양","cons":"2월 우기 성향, 관광세(입도세) 150,000 IDR/인 부과, 교통체증"},
+  {"key":"보라카이","flag":"🇵🇭","rank":"","total":"411만원 ($2,895)","transport":"e-트라이크/보트","pros":"비치 퀄리티 확실, 물놀이 중심 가족 GOAT, 섬이 작아서 동선 스트레스 낮음","cons":"환승 과정이 작은 애들에겐 체감 난이도 높음"},
+  {"key":"롬복","flag":"🇮🇩","rank":"","total":"420만원 ($2,955)","transport":"기사/렌터카","pros":"조용하고 물가 낮아 리조트 가성비 좋음, 초보 서핑/휴양 조합 가능","cons":"대중교통/의료 접근성 약함, 리조트 중심 스테이 추천"},
+  {"key":"괌","flag":"🇬🇺","rank":"","total":"439만원 ($3,090)","transport":"렌터카","pros":"직항 4~5시간급, 시차 거의 없음, 미국권 의료/치안/쇼핑 인프라 안정","cons":"렌터카/주차/식비가 빠르게 총액을 끌어올림"},
+  {"key":"홍콩","flag":"🇭🇰","rank":"","total":"450만원 ($3,170)","transport":"대중교통","pros":"디즈니/오션파크 등 아이 시그니처 경험 확실, 대중교통으로 동선 단순화 가능","cons":"숙박/식비가 가성비를 깎음"},
+  {"key":"오키나와","flag":"🇯🇵","rank":"","total":"479만원 ($3,370)","transport":"렌터카","pros":"안전/위생/의료 최상, 키즈 체험/수족관/문화 동선 깔끔","cons":"2월은 바다 수영 애매, 숙박 단가가 조용히 비싸서 가성비는 하위권"},
+  {"key":"싱가포르","flag":"🇸🇬","rank":"","total":"500만원 ($3,520)","transport":"대중교통","pros":"안전/위생/의료 최상, 센토사·유니버설·동물원·가든스 등 가족 코스 집약","cons":"예산이 안 받쳐주면 스트레스가 더 큼"}
+]
+</script>
+
+<script type="application/json" id="data-details">
+{
+    "다낭": {
+      "비용 분해": "숙박(중급 4성 × 2객실 × 5박) + 체류(4인×5일) + 항공(4인)로 산정. 합리적 숙박단가와 저렴한 현지 물가가 강점.",
+      "2월 1주차 시즌": "건기 성향, 비 적고 쾌적. 바다는 살짝 차갑지만(수온 22~24°C) 물놀이는 가능.",
+      "가족 베스트 포인트": "리조트+도시 동선 단순(하루 1시간 이동룰 지키기 쉬움), 키즈풀/키즈클럽 있는 리조트 선택 폭 넓음, 의료/마트/식당 접근성 좋아서 '혹시 상황' 대응 편함.",
+      "교통 팁": "Grab 호출 용이, 공항→미케비치 15~20분, 가족 4인 이동은 6인승 호출 추천.",
+      "리스크/주의": "설 연휴/한국 방학 피크면 인기 리조트 조기완판.",
+      "한 줄 추천": "가성비 + 동선 단순이 최우선인 가족에게 1순위."
+    },
+    "코타키나발루": {
+      "비용 분해": "리조트 밀집·가성비 우수. 액티비티 대비 체류비 낮음.",
+      "시즌": "2월 건기 쪽, 해양 컨디션 양호.",
+      "베스트": "가족형 리조트 밀집(키즈 프로그램 잘 돼 있음), 섬 호핑이 '해양 액티비티 입문용'으로 적당, 물가 안정적이라 예산 튐 적음.",
+      "교통 팁": "Grab+기사 혼용. 리조트존 이동 편함.",
+      "주의": "야간 외곽은 조도 낮음 → 늦은 이동 줄이기.",
+      "한 줄 추천": "리조트에서 편하게 굴러가는 '안정형' 가족에 최적."
+    },
+    "세부": {
+      "비용 분해": "항공·숙박 중간, 체류비 보통. 액티비티 다양해 선택지 넓음.",
+      "시즌": "2월은 비교적 건조, 바다 컨디션 괜찮음.",
+      "베스트": "호핑/스노클/체험 다양 → 초등 이상 애들 만족도 높음, 병원/쇼핑몰 등 도시 인프라가 섬치고는 괜찮, 직항 5시간 내외라 피로도 관리 쉬움.",
+      "교통 팁": "기사 포함 차량+섬 이동.",
+      "주의": "교통 체증 + 이동 구간이 길어지면 아이 텐션 꺼짐.",
+      "한 줄 추천": "액티비티 중심 가족(특히 초등 이상)에 강추."
+    },
+    "보홀": {
+      "비용 분해": "숙박단가 준수, 항공 경유시 증액 가능.",
+      "베스트": "리조트 퀄리티 대비 가격 메리트, 해양+자연 코스(고래상어/초콜릿힐 등) 가족 기억 남음.",
+      "교통 팁": "기사 포함+트라이시클.",
+      "주의": "의료 인프라 약함 → 유아 동반이면 리조트존에 묶이는 전략 필요.",
+      "한 줄 추천": "조용한 바다+리조트 휴양 원하는 가족의 '세부 상위호환'."
+    },
+    "랑카위": {
+      "비용 분해": "렌터카 중심이라 체류비 절감. 숙박·식비 가성비 우수.",
+      "베스트": "드라이브+한적함 = 부모 휴식/아이 뛰놀기 밸런스 좋음, 리조트 단가 대비 공간 넓고 가족 친화적.",
+      "교통 팁": "렌터카 메타. 운전 난이도 낮은 편.",
+      "주의": "실내 대체 코스 적음 → 날씨 나쁘면 리조트 의존도 커짐.",
+      "한 줄 추천": "운전 OK인 가족에게 '한적+자유도' 최상."
+    },
+    "발리": {
+      "비용 분해": "숙박 가짓수 넓고 가격대 다양. 기사포함 이동이 시간 대비 효율.",
+      "시즌": "2월 우기 성향 → 비 오는 날 플랜B 필수.",
+      "베스트": "가족형 풀빌라/리조트 선택 폭 미침, 문화/자연/체험이 다 있다.",
+      "교통 팁": "기사 포함 차량이 사실상 표준.",
+      "주의(숨은 지뢰)": "관광세(입도세) 150,000 IDR/인 부과 중, 우기+교통체증 → '원거리 투어 욕심' 내면 가족 멘탈 터짐.",
+      "한 줄 추천": "콘텐츠 많은 대신, 우기 동선 관리 가능한 가족용."
+    },
+    "보라카이": {
+      "비용 분해": "섬내 체류비 보통, 항공+환승 번거로움(시간 비용 존재).",
+      "베스트": "비치 퀄리티 확실 → 물놀이 중심 가족 GOAT, 섬이 작아서 동선 스트레스 낮음.",
+      "교통 팁": "공항–섬 환승 패키지 필수. 섬 내 이동은 단순.",
+      "주의": "환승 과정이 작은 애들에겐 체감 난이도 높음.",
+      "한 줄 추천": "화이트비치 원툴이라도 확실한 만족 원하면 여기."
+    },
+    "롬복": {
+      "비용 분해": "숙박·식비 낮음. 기사/렌터카 혼합 시 경제적.",
+      "베스트": "조용하고 물가 낮아 리조트 가성비 좋음, 초보 서핑/휴양 조합 가능.",
+      "교통 팁": "기사 포함/렌터카.",
+      "주의": "대중교통/의료 접근성 약함 → 리조트 중심 스테이 추천.",
+      "한 줄 추천": "한적함이 최우선인 가족용 '숨은 대안'."
+    },
+    "괌": {
+      "비용 분해": "숙박·식비 높은 편. 렌터카+주차비 고려.",
+      "베스트": "직항 4~5시간급, 시차 거의 없음 → 피로도 최저, 미국권 의료/치안/쇼핑 인프라 안정.",
+      "교통 팁": "렌터카 사실상 필수.",
+      "주의(숨은 지뢰)": "렌터카/주차/식비가 빠르게 총액을 끌어올림.",
+      "한 줄 추천": "애 컨디션/부모 체력 최우선이면 돈 좀 더 주고 여기."
+    },
+    "오키나와": {
+      "비용 분해": "숙박 단가 중상. 렌터카 필수 지출.",
+      "시즌": "2월은 바다 수영은 애매 → 드라이브/체험형으로 재구성 필요.",
+      "베스트": "안전/위생/의료 최상, 키즈 체험/수족관/문화 동선 깔끔.",
+      "교통 팁": "렌터카 베이스.",
+      "주의": "숙박 단가가 조용히 비싸서 가성비는 하위권.",
+      "한 줄 추천": "물놀이보다 '안전+깔끔한 가족 체험' 원하면 OK."
+    },
+    "타이베이+이란(대만)": {
+      "비용 분해": "도시형+근교 자연/온천 믹스. 숙박/식비 합리적.",
+      "포지션": "바다 휴양 대신 도시형+근교 자연/온천.",
+      "베스트": "유모차/아이 데리고 도시 이동이 비교적 편함, 동물원·키즈카페·과학관·온천 등 '비 오는 날 플랜B' 빵빵.",
+      "교통 팁": "대중교통 우수.",
+      "주의": "순수 휴양 기대하면 결이 다름.",
+      "한 줄 추천": "유아/초등 동반 '체험+먹방+온천'형 가족에게 최적."
+    },
+    "하이난 산야(중국)": {
+      "비용 분해": "리조트 시설이 크고 가족형이 많음. 숙박/체류비 합리적.",
+      "비행/접근": "한국–하이난 직/경유로 6~8h권 구성 가능(리조트존 접근 쉬움).",
+      "시즌": "겨울에도 따뜻한 편이라 '중국판 휴양섬' 포지션.",
+      "베스트": "리조트 시설이 크고 가족형이 많음, 동남아보다 위생/도시 인프라 체감이 낫다고 느끼는 가족 많음.",
+      "주의": "중국 연휴/단체관광 시즌이면 혼잡도 튈 수 있음.",
+      "한 줄 추천": "동남아 감성과 중국 인프라 중간 지점 찾는 가족에게."
+    },
+    "푸껫/카오락(태국)": {
+      "비용 분해": "대형 가족리조트+키즈클럽 라인업 강함. 숙박/체류비 보통.",
+      "비행/접근": "직항 약 6시간 55분, 조건 충족.",
+      "시즌": "2월은 건기 한가운데라 날씨 안정적.",
+      "베스트": "대형 가족리조트+키즈클럽 라인업 강함, 바다/섬투어/워터파크 등 '아이 만족 확률 높음', 카오락은 푸껫 대비 한적해서 유아 동반에 특히 좋음.",
+      "주의": "유명 비치존은 성수기 혼잡.",
+      "한 줄 추천": "2월 날씨 안정+리조트형 가족휴양이면 태국 남부가 정답."
+    },
+    "홍콩": {
+      "비용 분해": "숙박/식비가 가성비를 깎음. 도시형 체험 중심.",
+      "포지션": "테마파크/도시 콘텐츠 밀도형.",
+      "베스트": "디즈니/오션파크 등 아이 시그니처 경험 확실, 대중교통으로 동선 단순화 가능.",
+      "교통 팁": "대중교통 우수.",
+      "주의": "숙박/식비가 가성비를 깎음.",
+      "한 줄 추천": "휴양보다 '도시형 가족 이벤트'에 올인하는 집."
+    },
+    "싱가포르": {
+      "비용 분해": "비용은 최상위지만 도시형 가족 원탑 테마. 숙박/식비 높음.",
+      "포지션": "비용은 최상위지만 도시형 가족 원탑 테마.",
+      "베스트": "안전/위생/의료 최상, 센토사·유니버설·동물원·가든스 등 가족 코스 집약.",
+      "교통 팁": "대중교통 우수.",
+      "주의": "예산이 안 받쳐주면 스트레스가 더 큼.",
+      "한 줄 추천": "돈으로 '확정된 가족 만족'을 사는 선택지."
+    }
+}
+</script>
+
+<script>
+  // ── 데이터 로드: JSON에서 컨텐츠 읽기
+  const scoreData = JSON.parse(document.getElementById('data-scores').textContent);
+  const cardData = JSON.parse(document.getElementById('data-cards').textContent);
+  const detailsData = JSON.parse(document.getElementById('data-details').textContent);
+
+  // ── 테마 토글
+  const btn=document.getElementById('t'),root=document.documentElement;
+  const sun='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 14v2m8-8h-2M6 12H4m12.364-5.636l-1.414 1.414M7.05 7.05l-1.414 1.414m12.728 12.728l-1.414-1.414M7.05 16.95l-1.414-1.414"/></svg>';
+  const moon='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  const update=()=>{btn.innerHTML=root.dataset.theme==='dark'?sun:moon;localStorage.setItem('t',root.dataset.theme)};
+  btn.onclick=()=>{root.dataset.theme=root.dataset.theme==='dark'?'light':'dark';update()};
+  const saved=localStorage.getItem('t'); if(saved) root.dataset.theme=saved; update();
+
+  // ── 테이블 렌더링
+  function renderTable() {
+    const tbody = document.querySelector('#score-table tbody');
+    tbody.innerHTML = scoreData.map(item => {
+      const isHighlight = item.score >= 90;
+      return `<tr>
+        <td>${item.region}</td>
+        <td><strong>${item.total}만원</strong></td>
+        <td>${item.flight}만원</td>
+        <td${isHighlight ? ' class="hl"' : ''}>${item.score}</td>
+      </tr>`;
+    }).join('');
+  }
+  renderTable();
+
+  // ── 카드 렌더링
+  function renderCards() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = cardData.map(card => {
+      const rankTag = card.rank ? `<span class="tag">${card.rank}</span>` : '';
+      return `<div class="card" data-key="${card.key}" tabindex="0" role="button" aria-expanded="false" aria-controls="detail-${card.key}">
+        <div class="card-btn">
+          <h3><span class="flag">${card.flag}</span> ${card.key} ${rankTag}
+            <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15l-7-7h14z"/></svg>
+          </h3>
+          <p class="meta"><span class="pill">총액 ${card.total}</span> <span class="pill">교통 ${card.transport}</span></p>
+          <p><strong>장점:</strong> ${card.pros} · <strong>단점:</strong> ${card.cons}</p>
+        </div>
+        <div class="details" id="detail-${card.key}" hidden>
+          <div class="details-inner"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  renderCards();
+
+  // ── D3 차트 (동적 마진 & 라벨 안/밖 배치)
+  const chartData = scoreData.map(item => ({p: item.region, s: item.score}));
+  let drawn=false;
+  const obs=new IntersectionObserver(e=>{if(e[0].isIntersecting&&!drawn){drawn=true;draw();obs.unobserve(document.getElementById('c'))}}, {threshold:.3});
+  obs.observe(document.getElementById('c'));
+
+  function draw(){
+    const c=document.getElementById('c'); c.innerHTML='';
+    const w=c.clientWidth||800; const baseH=Math.max(460,chartData.length*48);
+    const svg=d3.select(c).append('svg').attr('width','100%').attr('height',baseH)
+      .attr('viewBox',`0 0 ${w} ${baseH}`).style('overflow','visible');
+
+    // 1) 임시 축으로 라벨 실측
+    let m={t:20,r:20,b:30,l:20};
+    let iw=w-m.l-m.r, ih=baseH-m.t-m.b;
+    const g0=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x0=d3.scaleLinear().domain([0,100]).range([0,iw]);
+    const y0=d3.scaleBand().domain(chartData.map(d=>d.p)).range([0,ih]).padding(.2);
+    const yAxis0=g0.append('g').attr('class','y0').call(d3.axisLeft(y0));
+    yAxis0.selectAll('text').style('font-size','14px').style('font-weight',600);
+    const xAxis0=g0.append('g').attr('class','x0').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x0).ticks(5));
+    const maxYLabelW=Math.ceil(Math.max(...yAxis0.selectAll('text').nodes().map(n=>n.getBBox().width),0));
+    const xAxisH=Math.ceil(xAxis0.node().getBBox().height);
+    const rightPad=40;
+    m={t:16,r:rightPad,b:Math.max(30,xAxisH+10),l:Math.max(60,maxYLabelW+16)};
+    iw=w-m.l-m.r; ih=baseH-m.t-m.b;
+    g0.remove();
+
+    // 2) 실제 차트
+    const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+    const x=d3.scaleLinear().domain([0,100]).range([0,iw]);
+    const y=d3.scaleBand().domain(chartData.map(d=>d.p)).range([0,ih]).padding(.2);
+
+    g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).tickSize(-ih).tickFormat(''))
+      .selectAll('line').attr('stroke','#e5e7eb');
+
+    const bars=g.selectAll('.bar').data(chartData).enter().append('rect').attr('class','bar')
+      .attr('y',d=>y(d.p)).attr('x',0).attr('height',y.bandwidth()).attr('width',0)
+      .attr('fill',d=>d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280').attr('rx',8);
+    bars.transition().duration(800).delay((_,i)=>i*80).attr('width',d=>x(d.s));
+
+    g.append('g').call(d3.axisLeft(y)).selectAll('text').style('font-size','14px').style('font-weight',600);
+    g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(5)).selectAll('text').style('font-size','12px');
+
+    const labels=g.selectAll('.val').data(chartData).enter().append('text').attr('class','val')
+      .attr('y',d=>y(d.p)+y.bandwidth()/2).attr('dy','.35em').style('font-weight',700).style('font-size','12px').style('opacity',0);
+
+    setTimeout(()=>{
+      labels.text(d=>d.s).each(function(d){
+        const barW=x(d.s); const inside=barW>28;
+        d3.select(this).attr('x', inside? barW-8: barW+8)
+          .attr('text-anchor', inside? 'end':'start')
+          .style('fill', inside? '#fff': (d.s>=90?'#10b981':d.s>=80?'#3b82f6':'#6b7280'));
+      }).transition().duration(300).style('opacity',1);
+    }, 900);
+
+    const tip=d3.select('body').append('div').attr('class','tooltip');
+    bars.on('mousemove',(e,o)=>{tip.style('opacity',1).style('left',(e.pageX+15)+'px').style('top',(e.pageY-30)+'px')
+      .html(`<strong>${o.p}</strong><br>스코어: <b style="color:#10b981">${o.s}</b>`) })
+      .on('mouseout',()=>tip.style('opacity',0));
+  }
+  let rt; window.onresize=()=>{clearTimeout(rt);rt=setTimeout(()=>{draw();},150)};
+
+  // ── 상세 컨텐츠(카드 클릭 시 렌더)
+  function renderDetails(card){
+    const key = card.dataset.key;
+    const panel = card.querySelector('.details');
+    const inner = card.querySelector('.details-inner');
+    if (!inner.dataset.rendered) {
+      const info = detailsData[key] || {};
+      inner.innerHTML = Object.entries(info).map(([k,v]) =>
+        `<div><b>${k}</b><br><span>${v}</span></div>`
+      ).join('');
+      inner.dataset.rendered = "true";
+    }
+    const expanded = card.getAttribute('aria-expanded') === 'true';
+    card.setAttribute('aria-expanded', String(!expanded));
+    if (!expanded) {
+      panel.hidden = false;
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      setTimeout(()=> panel.style.maxHeight = panel.scrollHeight + 'px', 10);
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      requestAnimationFrame(()=> { panel.style.maxHeight = '0px'; });
+      panel.addEventListener('transitionend', () => {
+        if (card.getAttribute('aria-expanded') === 'false') panel.hidden = true;
+      }, { once: true });
+    }
+  }
+
+  // 카드 이벤트 바인딩 (렌더링 후 실행)
+  setTimeout(() => {
+  document.querySelectorAll('.card').forEach(card=>{
+    card.addEventListener('click', ()=>{ renderDetails(card); });
+    card.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault(); renderDetails(card);
+      }
+    });
+  });
+  }, 0);
+</script>
+</body>
+</html>
