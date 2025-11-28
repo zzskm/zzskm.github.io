@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>코타키나바루 항공편 선택 플래너 (ICN-BKI)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+  :root{
+    color-scheme:light dark;
+    --p:#2563eb;--s:#0ea5e9;--m:#64748b;--bg:#f8fafc;--c:#ffffff;--t:#0f172a;--b:#e2e8f0;
+    --sh:0 10px 30px rgba(15,23,42,.15);--sh-hover:0 16px 40px rgba(15,23,42,.25);
+    --grad-hero:linear-gradient(135deg,#2563eb,#3b82f6,#0ea5e9);--grad-card:linear-gradient(145deg,#eff6ff,#ffffff);
+    --k:#0f172a;--alpha-card:rgba(255,255,255,.08)
+  }
+  [data-theme="dark"]{
+    --bg:#050c1a;--c:#0b1220;--t:#e2e8f0;--b:#1e273d;--m:#94a3b8;
+    --sh:0 12px 30px rgba(0,0,0,.65);--sh-hover:0 18px 42px rgba(0,0,0,.75);
+    --grad-hero:linear-gradient(135deg,#1e3a8a,#312e81,#0f172a);--grad-card:linear-gradient(145deg,#101d35,#0f172a)
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--t);line-height:1.7;
+    padding:1.2rem;transition:background .35s ease,color .35s ease;scroll-behavior:smooth;min-height:100vh
+  }
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+    background:radial-gradient(circle at 20% 20%,rgba(37,99,235,.15),transparent 40%),
+               radial-gradient(circle at 80% 0,rgba(14,165,233,.18),transparent 45%);
+    opacity:.25
+  }
+  .wrap{
+    max-width:1200px;margin:auto;background:var(--c);border-radius:24px;
+    box-shadow:var(--sh);animation:fadeUp .6s ease-out;position:relative;overflow:visible;isolation:isolate
+  }
+  @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+  header{
+    background:var(--grad-hero);color:#fff;padding:3.2rem 1.6rem 2.6rem;text-align:center;position:relative;
+    overflow:hidden;border-top-left-radius:24px;border-top-right-radius:24px
+  }
+  header::after{
+    content:"";position:absolute;inset:0;background:radial-gradient(circle at 15% 20%,rgba(255,255,255,.25),transparent 45%),
+               radial-gradient(circle at 80% 0,rgba(14,165,233,.35),transparent 55%);
+    opacity:.45;pointer-events:none
+  }
+  h1{font-size:2.2rem;font-weight:700;margin-bottom:.4rem;text-shadow:0 5px 18px rgba(0,0,0,.25)}
+  header p{font-size:1rem;opacity:.95;margin:.2rem 0}
+  .badge{
+    display:inline-flex;align-items:center;gap:.35rem;background:rgba(15,23,42,.2);border:1px solid rgba(255,255,255,.35);
+    padding:.35rem .85rem;border-radius:999px;font-size:.88rem;font-weight:600;backdrop-filter:blur(6px)
+  }
+  .toggle{
+    position:absolute;top:1.3rem;right:1.3rem;width:46px;height:46px;border-radius:50%;
+    background:rgba(255,255,255,.25);border:none;color:#fff;font-size:1.25rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:transform .3s ease,background .3s ease;backdrop-filter:blur(8px)
+  }
+  .toggle:hover,.toggle:focus-visible{transform:scale(1.08) rotate(8deg);background:rgba(255,255,255,.35);outline:none;box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+  section{scroll-margin-top:90px}
+  .sec{padding:2rem 2.2rem;border-top:1px solid var(--b);position:relative}
+  .sec:first-of-type{border-top:none}
+  h2{font-size:1.45rem;color:var(--p);display:flex;align-items:center;gap:.4rem;margin-bottom:1rem}
+  .grid{
+    display:grid;gap:1.2rem;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr))
+  }
+  .card{
+    background:var(--grad-card);border:1px solid var(--b);border-radius:18px;padding:1.2rem 1.3rem;
+    box-shadow:0 12px 30px rgba(15,23,42,.08);transition:transform .25s ease,box-shadow .25s ease;border-left:6px solid rgba(37,99,235,.2)
+  }
+  .card:hover{transform:translateY(-6px);box-shadow:var(--sh-hover)}
+  .card h3{font-size:1.15rem;margin-bottom:.5rem}
+  .card p{color:var(--m);font-size:.95rem}
+  .card strong{color:var(--t)}
+  .card ul{list-style:none;margin-top:.7rem;color:var(--m);font-size:.93rem;display:flex;flex-direction:column;gap:.35rem;padding:0}
+  .pill{
+    display:inline-flex;align-items:center;gap:.3rem;font-size:.82rem;background:rgba(14,165,233,.15);color:#0284c7;
+    border:1px solid rgba(14,165,233,.35);padding:.25rem .7rem;border-radius:999px;font-weight:600
+  }
+  .timeline{
+    display:grid;gap:1rem;margin-top:1.2rem
+  }
+  .timeline-item{
+    display:grid;grid-template-columns:auto 1fr;gap:1rem;align-items:flex-start;
+    padding:1rem 1.2rem;border-radius:18px;background:rgba(37,99,235,.08);border:1px dashed rgba(37,99,235,.25)
+  }
+  .timeline-badge{
+    width:70px;height:70px;border-radius:16px;background:var(--p);color:#fff;font-weight:700;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;box-shadow:0 12px 24px rgba(37,99,235,.35)
+  }
+  .timeline-content h4{margin:0 0 .35rem;font-size:1.05rem}
+  .timeline-content span{display:block;color:var(--m);font-size:.9rem;margin-bottom:.3rem}
+  .list-check{list-style:none;padding:0;margin:1rem 0 0;display:grid;gap:.4rem;font-size:.95rem}
+  .list-check li{
+    padding:.65rem .8rem;border-radius:12px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.25);
+    display:flex;align-items:center;gap:.5rem;font-weight:500
+  }
+  footer{text-align:center;padding:1.4rem;color:var(--m);font-size:.85rem;border-top:1px solid var(--b);background:var(--c)}
+  .tagline{
+    display:inline-flex;align-items:center;gap:.35rem;color:#f0f9ff;font-weight:600;font-size:.92rem;margin-top:.6rem;
+    background:rgba(15,23,42,.35);padding:.4rem .9rem;border-radius:999px;backdrop-filter:blur(6px)
+  }
+  .hero-grid{
+    margin-top:1.8rem;display:grid;gap:.9rem;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr))
+  }
+  .hero-card{
+    background:rgba(15,23,42,.35);border:1px solid rgba(255,255,255,.25);padding:1rem;border-radius:18px;
+    text-align:left;backdrop-filter:blur(12px)
+  }
+  .hero-card strong{display:block;font-size:1.05rem;margin-bottom:.2rem;color:#fff}
+  .hero-card span{font-size:.9rem;color:rgba(255,255,255,.85)}
+  .hero-label{font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.7)}
+  nav.quick-nav{
+    display:flex;flex-wrap:wrap;gap:.6rem;background:var(--c);padding:1rem 1.6rem;
+    border-top:1px solid var(--b);border-bottom:1px solid var(--b);position:sticky;top:.6rem;z-index:5;
+    backdrop-filter:blur(8px)
+  }
+  .nav-link{
+    border:1px solid var(--b);background:rgba(37,99,235,.08);color:var(--t);padding:.4rem .9rem;border-radius:999px;
+    font-weight:600;font-size:.9rem;cursor:pointer;transition:all .2s ease
+  }
+  .nav-link:hover,.nav-link:focus-visible{border-color:var(--p);color:var(--p);outline:none;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+  .nav-link.active{background:var(--p);color:#fff;border-color:var(--p)}
+  #backToTop{
+    position:fixed;right:1.5rem;bottom:1.5rem;border:none;border-radius:999px;background:var(--p);color:#fff;
+    width:48px;height:48px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:0 12px 25px rgba(37,99,235,.35);opacity:0;pointer-events:none;transition:transform .25s ease,opacity .25s ease;
+    transform:translateY(12px)
+  }
+  #backToTop.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+  #backToTop:focus-visible{outline:2px solid #fff;outline-offset:4px}
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  }
+  @media (max-width:768px){
+    body{padding:.6rem}
+    header{padding:2.4rem 1rem 1.8rem}
+    h1{font-size:1.55rem}
+    .wrap{border-radius:16px}
+    .sec{padding:1.4rem 1.2rem}
+    nav.quick-nav{position:sticky;top:0;padding:.8rem;overflow-x:auto}
+    .timeline-item{grid-template-columns:1fr;gap:.6rem}
+    .timeline-badge{width:auto;height:auto;padding:.6rem .9rem;flex-direction:row;gap:.4rem;border-radius:999px}
+  }
+  @media (max-width:480px){
+    .nav-link{flex:1 0 auto;text-align:center}
+  }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button class="toggle" id="themeToggle" aria-label="테마 전환">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg>
+    </button>
+    <h1>코타키나바루 항공편 선택 안내</h1>
+    <p>인천(ICN) ↔ 코타키나바루(BKI) · 6일 가족여행(2월) 기준</p>
+    <div class="badge">✈️ 핵심 요약: 직항은 바틱 에어가 가장 합리적이며, 경유는 쿠알라룸푸르 1박으로 일정 확장이 가능합니다.</div>
+    <div class="tagline">항공권은 기본 운임보다 수하물 포함 총액 기준으로 비교하는 것이 안전합니다.</div>
+
+    <div class="hero-grid">
+      <article class="hero-card">
+        <p class="hero-label">분석 기준</p>
+        <strong>총 여행 비용 기준</strong>
+        <span>항공권 + 수하물 + (경유 시) 숙박·교통비 포함</span>
+      </article>
+      <article class="hero-card">
+        <p class="hero-label">핵심 변수</p>
+        <strong>수하물 포함 여부</strong>
+        <span>LCC는 수하물 추가 비용이 커질 수 있어 사전 확인이 필요합니다.</span>
+      </article>
+      <article class="hero-card">
+        <p class="hero-label">일정 전략</p>
+        <strong>주중 출발이 유리</strong>
+        <span>화·수 출발 편에서 낮은 운임이 관측되는 경향이 있습니다.</span>
+      </article>
+    </div>
+  </header>
+
+  <nav class="quick-nav" aria-label="주요 섹션 바로가기">
+    <button type="button" class="nav-link" data-target="summary">요약</button>
+    <button type="button" class="nav-link" data-target="market">2월 항공 시장</button>
+    <button type="button" class="nav-link" data-target="direct">직항 옵션</button>
+    <button type="button" class="nav-link" data-target="transit">경유 옵션</button>
+    <button type="button" class="nav-link" data-target="decision">추천 선택</button>
+    <button type="button" class="nav-link" data-target="check">예약 체크</button>
+  </nav>
+
+  <section class="sec" id="summary">
+    <h2>요약: 여행 목적에 따른 추천 방향</h2>
+    <div class="grid" id="summary-grid"></div>
+  </section>
+
+  <section class="sec" id="market">
+    <h2>2월 항공 시장 참고 사항</h2>
+    <div class="grid" id="market-grid"></div>
+  </section>
+
+  <section class="sec" id="direct">
+    <h2>옵션 A: 직항 항공편 비교</h2>
+    <p style="color:var(--m);margin-bottom:1rem">
+      직항 LCC는 기본 운임이 비슷해 보여도, 수하물 포함 여부에 따라 실제 총비용이 크게 달라집니다.
+    </p>
+    <div class="grid" id="direct-grid"></div>
+  </section>
+
+  <section class="sec" id="transit">
+    <h2>옵션 B: 쿠알라룸푸르 1박 경유 일정</h2>
+    <p style="color:var(--m);margin-bottom:1rem">
+      경유 일정은 이동 시간이 늘어나지만, 쿠알라룸푸르에서 반나절 체험을 추가해 여행 경험을 확장할 수 있습니다.
+    </p>
+    <div class="timeline" id="transit-list"></div>
+  </section>
+
+  <section class="sec" id="decision">
+    <h2>추천 선택: 두 가지 일정 전략</h2>
+    <div class="grid" id="decision-grid"></div>
+  </section>
+
+  <section class="sec" id="check">
+    <h2>예약 전 확인 체크리스트</h2>
+    <div class="grid" id="notes-grid"></div>
+    <ul class="list-check" id="checklist"></ul>
+  </section>
+
+  <footer>
+    ICN-BKI 항공권 비교 기반 권장안 · 기준일: 2025-11-27 · 가격 변동 시 총액 기준으로 재확인 권장
+  </footer>
+</div>
+
+<button id="backToTop" aria-label="맨 위로 이동">↑</button>
+
+<script>
+// 0) 요약
+const summaryData = [
+  {
+    title:"비용을 우선하는 경우",
+    highlight:"바틱 에어 직항이 가장 합리적인 선택입니다.",
+    points:[
+      "프로모션 기준 15kg 수하물이 포함되어 총비용이 낮습니다.",
+      "직항이라 이동 시간이 짧고 일정이 단순합니다.",
+      "가족 단위 여행에서 피로와 변수를 최소화할 수 있습니다."
+    ]
+  },
+  {
+    title:"여행 경험을 넓히고 싶은 경우",
+    highlight:"쿠알라룸푸르 1박 경유로 일정을 확장할 수 있습니다.",
+    points:[
+      "직항 대비 1인당 약 13~14만 원 정도 추가 비용이 예상됩니다.",
+      "쿠알라룸푸르에서 반나절 체험이나 관광을 더할 수 있습니다.",
+      "하루를 추가 여행지처럼 활용하는 일정입니다."
+    ]
+  }
+];
+
+// 1) 2월 시장/기준
+const marketData = [
+  {
+    title:"2월 시즌 특징",
+    highlight:"건기 초입으로 여행하기 좋은 시기입니다.",
+    points:[
+      "날씨가 안정적이라 항공 수요가 꾸준합니다.",
+      "구정 이후에는 가격이 상대적으로 안정되는 편입니다.",
+      "최근 기준 최저 왕복은 약 24.5만 원대부터 확인됩니다."
+    ]
+  },
+  {
+    title:"요일별 가격 경향",
+    highlight:"주중 출발이 더 저렴한 경우가 많습니다.",
+    points:[
+      "특히 화·수 출발 편에서 낮은 운임이 자주 관측됩니다.",
+      "6일 일정은 주중 출발 + 주말 포함 조합이 효율적입니다.",
+      "원하는 일정이 있다면 주중 출발 여부부터 확인해 보세요."
+    ]
+  },
+  {
+    title:"비교 기준",
+    highlight:"기본 운임이 아니라 ‘총비용’으로 판단합니다.",
+    points:[
+      "총비용 = 항공권 + 수하물 + (경유 시) 숙박·교통·체험비",
+      "수하물 제외 운임만 비교하면 실제 지출과 차이가 큽니다.",
+      "가족 여행은 수하물이 필수이므로 더 중요합니다."
+    ]
+  }
+];
+
+// 2) 직항 비교
+const directOptions = [
+  {
+    title:"바틱 에어 말레이시아",
+    tag:"추천 1순위 · 직항/총비용 최저",
+    copy:"15kg 수하물이 포함된 요금 기준으로 총비용이 가장 낮습니다.",
+    pros:[
+      "예상 총비용: 1인 약 25만 원 수준",
+      "수하물 추가 비용 부담이 적음",
+      "직항 이용으로 이동 피로 최소화"
+    ]
+  },
+  {
+    title:"에어아시아 X",
+    tag:"대안 · 기본 운임은 낮으나 수하물 비용 큼",
+    copy:"기본 운임은 낮게 보일 수 있으나 수하물 추가 시 총비용이 높아집니다.",
+    pros:[
+      "기본 왕복 운임은 바틱과 유사",
+      "20kg 수하물 추가 시 1인 왕복 약 9.4만 원 추가",
+      "예상 총비용: 1인 약 35만 원대"
+    ]
+  },
+  {
+    title:"기타 직항/LCC",
+    tag:"상황별 검토 · 프로모션 영향 큼",
+    copy:"프로모션과 포함 옵션에 따라 총비용이 달라질 수 있습니다.",
+    pros:[
+      "예상 총비용: 1인 약 28~33만 원대",
+      "수하물 포함 요금제 여부 확인 필요",
+      "좌석/기내식 옵션 추가 시 비용 상승"
+    ]
+  }
+];
+
+// 3) 경유 타임라인
+const transitSteps = [
+  {
+    title:"경유 일정 구조",
+    desc:"ICN → KUL → (1박) → BKI",
+    tip:"분리 발권으로 항공료는 직항 수준까지 조정 가능할 때가 있습니다."
+  },
+  {
+    title:"숙소 위치 선택",
+    desc:"도심(KLCC/KL Sentral) 주변 숙소가 이동 효율이 높습니다.",
+    tip:"공항 숙소는 저렴하지만 도심 이동 시간이 길어질 수 있습니다."
+  },
+  {
+    title:"추천 체험",
+    desc:"아쿠아리아 KLCC, 키자니아 등 도심 실내 체험이 동선에 유리합니다.",
+    tip:"1박 일정에서는 1개 핵심 체험을 집중하는 방식이 효율적입니다."
+  },
+  {
+    title:"추가 비용 감각",
+    desc:"숙박·교통·체험 포함 4인가족 약 35만 원 추가 예상",
+    tip:"1인 기준 약 8~9만 원이 추가 경험 비용으로 보면 됩니다."
+  }
+];
+
+// 4) 최종 추천
+const decisionData = [
+  {
+    title:"전략 1: 비용 효율 중심",
+    body:"바틱 에어 직항으로 6일 일정을 구성하는 방식입니다. 가격과 이동 효율이 가장 좋습니다.",
+    accent:"추천 일정: 화요일 출발 → 일요일 귀국 · 1인 약 25만 원"
+  },
+  {
+    title:"전략 2: 일정 확장 중심",
+    body:"쿠알라룸푸르 1박을 추가해 반나절 체험을 더하는 방식입니다. 여행 경험을 넓히고 싶을 때 적합합니다.",
+    accent:"추천 일정: 목요일 출발 → 다음 화요일 귀국 · 1인 약 38~39만 원"
+  }
+];
+
+// 5) 예약 주의/메모
+const notesData = [
+  {
+    title:"LCC 예약 시 확인 사항",
+    highlight:"수하물 포함 여부가 총비용을 좌우합니다.",
+    list:[
+      "운임에 수하물(15~20kg)이 포함되는지 먼저 확인하세요.",
+      "추가 수하물은 사전 결제가 현장 구매보다 저렴합니다.",
+      "온라인 체크인을 미리 진행하면 공항 대기 시간을 줄일 수 있습니다."
+    ]
+  },
+  {
+    title:"경유 일정 선택 시 유의점",
+    highlight:"일정과 이동 동선을 단순하게 잡는 것이 좋습니다.",
+    list:[
+      "KUL 입국 후 수하물 재위탁이 필요한지 확인하세요.",
+      "도심 이동 시간을 고려해 러시아워를 피하는 일정이 유리합니다.",
+      "체험은 1개를 확실히 즐기고 다음 구간으로 넘어가는 편이 안정적입니다."
+    ]
+  }
+];
+
+const checklist = [
+  "바틱 에어의 수하물 포함 프로모션이 현재도 적용되는지 확인했나요?",
+  "직항 옵션을 ‘수하물 포함 총액’ 기준으로 비교했나요?",
+  "가능하다면 화·수 출발 일정으로 최저가 구간을 확인했나요?",
+  "경유 선택 시 KUL 도심 숙소로 이동 시간을 줄일 계획인가요?",
+  "경유 체험은 동선이 간단한 도심 실내 체험 1개로 구성했나요?",
+  "온라인 체크인 및 탑승 절차를 사전에 준비했나요?"
+];
+
+
+// 렌더링
+function renderSummary(){
+  const grid=document.getElementById('summary-grid');
+  grid.innerHTML=summaryData.map(item=>`
+    <article class="card">
+      <h3>${item.title}</h3>
+      <p><strong>${item.highlight}</strong></p>
+      <ul>${item.points.map(p=>`<li>• ${p}</li>`).join("")}</ul>
+    </article>
+  `).join("");
+}
+
+function renderMarket(){
+  const grid=document.getElementById('market-grid');
+  grid.innerHTML=marketData.map(item=>`
+    <article class="card">
+      <h3>${item.title}</h3>
+      <p><strong>${item.highlight}</strong></p>
+      <ul>${item.points.map(p=>`<li>• ${p}</li>`).join("")}</ul>
+    </article>
+  `).join("");
+}
+
+function renderDirect(){
+  const grid=document.getElementById('direct-grid');
+  grid.innerHTML=directOptions.map(opt=>`
+    <article class="card">
+      <div class="pill">${opt.tag}</div>
+      <h3>${opt.title}</h3>
+      <p>${opt.copy}</p>
+      <ul>${opt.pros.map(p=>`<li>• ${p}</li>`).join("")}</ul>
+    </article>
+  `).join("");
+}
+
+function renderTransit(){
+  const list=document.getElementById('transit-list');
+  list.innerHTML=transitSteps.map((step,i)=>`
+    <div class="timeline-item">
+      <div class="timeline-badge">
+        <span>Step</span>
+        <strong>${i+1}</strong>
+      </div>
+      <div class="timeline-content">
+        <h4>${step.title}</h4>
+        <span>${step.desc}</span>
+        <p style="margin:0;color:var(--k);font-weight:600">${step.tip}</p>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderDecision(){
+  document.getElementById('decision-grid').innerHTML=decisionData.map(c=>`
+    <article class="card">
+      <h3>${c.title}</h3>
+      <p>${c.body}</p>
+      <p style="color:var(--p);font-weight:700">${c.accent}</p>
+    </article>
+  `).join("");
+}
+
+function renderNotes(){
+  const grid=document.getElementById('notes-grid');
+  grid.innerHTML=notesData.map(g=>`
+    <article class="card">
+      <div class="pill">${g.highlight}</div>
+      <h3>${g.title}</h3>
+      <ul>${g.list.map(item=>`<li>• ${item}</li>`).join("")}</ul>
+    </article>
+  `).join("");
+
+  document.getElementById('checklist').innerHTML=checklist.map(item=>`
+    <li>✅ ${item}</li>
+  `).join("");
+}
+
+// UI
+function setupThemeToggle(){
+  const btn=document.getElementById('themeToggle');
+  const root=document.documentElement;
+  const key='kotakinabalu-flight-theme';
+  const sun='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 14v2m8-8h-2M6 12H4m12.364-5.636l-1.414 1.414M7.05 7.05l-1.414 1.414m12.728 12.728l-1.414-1.414M7.05 16.95l-1.414-1.414"/></svg>';
+  const moon='<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+  const applyTheme=(theme,persist=true)=>{
+    root.dataset.theme=theme;
+    btn.innerHTML=theme==='dark'?sun:moon;
+    if(persist)localStorage.setItem(key,theme);
+  };
+
+  const stored=localStorage.getItem(key);
+  if(stored){
+    applyTheme(stored,false);
+  }else{
+    applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light',false);
+  }
+
+  btn.addEventListener('click',()=>{
+    applyTheme(root.dataset.theme==='dark'?'light':'dark');
+  });
+}
+
+function setupQuickNav(){
+  const buttons=document.querySelectorAll('.nav-link');
+  if(!buttons.length)return;
+  const sections=[...document.querySelectorAll('section')];
+  const setActive=id=>{
+    buttons.forEach(btn=>{
+      const active=btn.dataset.target===id;
+      btn.classList.toggle('active',active);
+      btn.setAttribute('aria-pressed',active);
+    });
+  };
+  buttons.forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const target=document.getElementById(btn.dataset.target);
+      if(target)target.scrollIntoView({behavior:'smooth'});
+      setActive(btn.dataset.target);
+    });
+  });
+  if('IntersectionObserver'in window){
+    const observer=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){
+          setActive(entry.target.id);
+        }
+      });
+    },{threshold:.35});
+    sections.forEach(section=>observer.observe(section));
+  }
+}
+
+function setupBackToTop(){
+  const btn=document.getElementById('backToTop');
+  if(!btn)return;
+  const toggle=()=>{
+    const shouldShow=window.scrollY>400;
+    btn.classList.toggle('show',shouldShow);
+  };
+  window.addEventListener('scroll',toggle,{passive:true});
+  btn.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+}
+
+function init(){
+  renderSummary();
+  renderMarket();
+  renderDirect();
+  renderTransit();
+  renderDecision();
+  renderNotes();
+  setupThemeToggle();
+  setupQuickNav();
+  setupBackToTop();
+}
+
+init();
+</script>
+</body>
+</html>
