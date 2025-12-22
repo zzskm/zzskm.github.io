@@ -9,7 +9,6 @@
     "locale": "ko-KR"
   },
   "traveler": {
-    "guestName": "WOONGHEE JANG",
     "party": {
       "adults": 2,
       "children": 2,
@@ -908,13 +907,10 @@ function renderHero(events, trip) {
   const range = (start && end) ? `${fmtYMD(start)} → ${fmtYMD(end)}` : "-";
 
   const cards = [
-    {k:"대표", v:guest},
-    {k:"인원", v:guests},
     {k:"기간", v:range},
     {k:"항공", v:`${flights.length}구간`},
     {k:"숙소", v:`${stays.length}건 / ${totalNights}박`},
     {k:"투어", v:`${tours.length}건`},
-    {k:"휴식", v:`${rests.length}일`},
   ];
   document.getElementById('hero').innerHTML = cards.map(c=>`
     <div class="hero-card">
@@ -1125,7 +1121,6 @@ function openStay(item) {
     <div class="details">
       <div class="kv"><div class="k">예약번호</div><div class="v"><code>${escapeHtml(pn)}</code> <button class="copy-btn" data-copy="${escapeHtml(pn)}" type="button">복사</button></div></div>
       <div class="kv"><div class="k">공급사 번호</div><div class="v"><code>${escapeHtml(sn)}</code> <button class="copy-btn" data-copy="${escapeHtml(sn)}" type="button">복사</button></div></div>
-      <div class="kv"><div class="k">대표 투숙객</div><div class="v">${escapeHtml(guest)}</div></div>
       <div class="kv"><div class="k">투숙 인원</div><div class="v">${escapeHtml(guests)}</div></div>
       <hr class="sep"/>
       <div class="kv"><div class="k">객실 타입</div><div class="v">${escapeHtml(d.room?.roomType || '-')}</div></div>
