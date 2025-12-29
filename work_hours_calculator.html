@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>근무시간 계산기</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 48px 40px;
+            max-width: 560px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #1a1a2e;
+            margin-bottom: 36px;
+            text-align: center;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .section {
+            margin-bottom: 28px;
+        }
+
+        .section-label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 15px;
+            letter-spacing: -0.2px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .input-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .time-input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            background: white;
+            transition: all 0.2s ease;
+            color: #2d3748;
+        }
+
+        .time-input:hover {
+            border-color: #cbd5e0;
+        }
+
+        .time-input:focus,
+        .time-input.active {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .separator {
+            color: #cbd5e0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .unit-label {
+            color: #718096;
+            font-size: 15px;
+            font-weight: 500;
+            min-width: 45px;
+        }
+
+        .dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 12px;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            width: 200px;  /* Adjust this value as needed */
+    left: auto;    /* Optional: Center it or position differently */
+    right: auto;   /* Optional: Remove full-width stretching */
+    margin: 0 auto; /* Optional: Center the dropdown under the input */
+        }
+
+        .dropdown.show {
+            display: grid;
+            animation: fadeIn 0.15s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .dropdown.hour-grid {
+            grid-template-columns: repeat(2, 1fr);
+            width: 120px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .dropdown.minute-grid {
+            grid-template-columns: repeat(6, 1fr);
+            width: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .dropdown-item {
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-align: center;
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 15px;
+        }
+
+        .dropdown-item:hover {
+            background: #f7fafc;
+        }
+
+        .dropdown-item:active {
+            background: #edf2f7;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .quick-btn {
+            flex: 1;
+            padding: 8px 12px;
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4a5568;
+            transition: all 0.2s ease;
+        }
+
+        .quick-btn:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+        }
+
+        .quick-btn:active {
+            transform: scale(0.97);
+        }
+
+        .now-btn {
+            padding: 14px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .now-btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .now-btn:active {
+            transform: translateY(0);
+        }
+
+        .break-section {
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 28px;
+        }
+
+        .break-input {
+            width: 80px;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 17px;
+            font-weight: 600;
+            text-align: center;
+            background: white;
+            color: #2d3748;
+            transition: all 0.2s ease;
+        }
+
+        .break-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .reset-btn {
+            width: 100%;
+            padding: 16px;
+            background: #718096;
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 28px;
+            letter-spacing: -0.3px;
+        }
+
+        .reset-btn:hover {
+            background: #4a5568;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(113, 128, 150, 0.3);
+        }
+
+        .reset-btn:active {
+            transform: translateY(0);
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 32px 28px;
+            border-radius: 18px;
+            text-align: center;
+            display: none;
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+        }
+
+        .result-card.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-title {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            letter-spacing: -0.2px;
+        }
+
+        .result-time {
+            color: white;
+            font-size: 52px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -1px;
+        }
+
+        .result-subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .result-details {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 14px;
+            line-height: 1.8;
+            font-weight: 500;
+        }
+
+        .dropdown::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .dropdown::-webkit-scrollbar-track {
+            background: #f7fafc;
+        }
+
+        .dropdown::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 4px;
+        }
+
+        .dropdown::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>⏰ 근무시간 계산기</h1>
+
+    <div class="section">
+        <label class="section-label">출근 시간</label>
+        <div class="input-row">
+            <div class="input-wrapper">
+                <input type="text" class="time-input" id="startHour" readonly placeholder="hh" onclick="toggleDropdown('startHour')">
+                <div class="dropdown hour-grid" id="startHourDropdown"></div>
+            </div>
+            <span class="separator">:</span>
+            <div class="input-wrapper">
+                <input type="text" class="time-input" id="startMinute" readonly placeholder="mm" onclick="toggleDropdown('startMinute')">
+                <div class="dropdown minute-grid" id="startMinuteDropdown"></div>
+            </div>
+            <button class="now-btn" onclick="setCurrentTime()">현재</button>
+        </div>
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="setStartTime(9, 0)">09:00</button>
+            <button class="quick-btn" onclick="setStartTime(10, 0)">10:00</button>
+            <button class="quick-btn" onclick="setStartTime(11, 0)">11:00</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <label class="section-label">목표 근무시간</label>
+        <div class="input-row">
+            <div class="input-wrapper">
+                <input type="text" class="time-input" id="targetHour" readonly placeholder="0" onclick="toggleDropdown('targetHour')">
+                <div class="dropdown hour-grid" id="targetHourDropdown"></div>
+            </div>
+            <span class="unit-label">시간</span>
+            <div class="input-wrapper">
+                <input type="text" class="time-input" id="targetMinute" readonly placeholder="0" onclick="toggleDropdown('targetMinute')">
+                <div class="dropdown minute-grid" id="targetMinuteDropdown"></div>
+            </div>
+            <span class="unit-label">분</span>
+        </div>
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="setTargetTime(8, 0)">8시간</button>
+            <button class="quick-btn" onclick="setTargetTime(9, 0)">9시간</button>
+            <button class="quick-btn" onclick="setTargetTime(10, 0)">10시간</button>
+        </div>
+    </div>
+
+    <div class="break-section section">
+        <label class="section-label">휴게시간</label>
+        <div class="input-row">
+            <input type="number" class="break-input" id="breakHour" min="0" max="23" value="1" oninput="calculate()">
+            <span class="unit-label">시간</span>
+            <input type="number" class="break-input" id="breakMinute" min="0" max="59" value="0" oninput="calculate()">
+            <span class="unit-label">분</span>
+        </div>
+    </div>
+
+    <button class="reset-btn" onclick="reset()">초기화</button>
+
+    <div class="result-card" id="result">
+        <div class="result-title">예상 퇴근시간</div>
+        <div class="result-time" id="resultTime"></div>
+        <div class="result-subtitle" id="resultSubtitle"></div>
+        <div class="result-details" id="resultDetails"></div>
+    </div>
+</div>
+
+<script>
+    let openDropdown = null;
+
+    // 초기화 함수: 드롭다운 생성, 기본값 설정, 이벤트 리스너 추가
+    function init() {
+        // 드롭다운 생성
+        createDropdown('startHour', 0, 23, true, 2);
+        createDropdown('startMinute', 0, 59, true, 6);
+        createDropdown('targetHour', 0, 24, false, 2);
+        createDropdown('targetMinute', 0, 59, false, 6);
+
+        // 기본값 설정
+        document.getElementById('startHour').value = '09';
+        document.getElementById('startMinute').value = '00';
+        document.getElementById('targetHour').value = '10';
+        document.getElementById('targetMinute').value = '0';
+
+        // 외부 클릭 시 드롭다운 닫기
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.input-wrapper')) {
+                closeDropdowns();
+            }
+        });
+
+        // 초기 계산
+        calculate();
+    }
+
+    // 드롭다운 아이템 생성 함수 (세로 배열을 위한 수정)
+    function createDropdown(id, min, max, padZero, numCols = 1) {
+        const dropdown = document.getElementById(id + 'Dropdown');
+        const total = max - min + 1;
+        const numRows = Math.ceil(total / numCols);
+        for (let row = 0; row < numRows; row++) {
+            for (let col = 0; col < numCols; col++) {
+                const value = min + col * numRows + row;
+                if (value > max) continue;
+                const item = document.createElement('div');
+                item.className = 'dropdown-item';
+                item.textContent = padZero ? String(value).padStart(2, '0') : value;
+                item.onclick = () => selectValue(id, value, padZero);
+                dropdown.appendChild(item);
+            }
+        }
+
+        const baseWidth = 50;
+        dropdown.style.width = `${baseWidth * numCols}px`;
+    }
+
+    // 드롭다운 토글 함수
+    function toggleDropdown(id) {
+        const dropdown = document.getElementById(id + 'Dropdown');
+        const input = document.getElementById(id);
+
+        if (openDropdown && openDropdown !== dropdown) {
+            openDropdown.classList.remove('show');
+            document.querySelector('.time-input.active')?.classList.remove('active');
+        }
+
+        const isShowing = dropdown.classList.toggle('show');
+        input.classList.toggle('active', isShowing);
+        openDropdown = isShowing ? dropdown : null;
+    }
+
+    // 모든 드롭다운 닫기 함수
+    function closeDropdowns() {
+        document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('show'));
+        document.querySelectorAll('.time-input').forEach(i => i.classList.remove('active'));
+        openDropdown = null;
+    }
+
+    // 값 선택 함수
+    function selectValue(id, value, padZero) {
+        document.getElementById(id).value = padZero ? String(value).padStart(2, '0') : value;
+        closeDropdowns();
+        calculate();
+    }
+
+    // 현재 시간 설정 함수
+    function setCurrentTime() {
+        const now = new Date();
+        document.getElementById('startHour').value = String(now.getHours()).padStart(2, '0');
+        document.getElementById('startMinute').value = String(now.getMinutes()).padStart(2, '0');
+        calculate();
+    }
+
+    // 출근 시간 빠른 설정 함수
+    function setStartTime(hour, minute) {
+        document.getElementById('startHour').value = String(hour).padStart(2, '0');
+        document.getElementById('startMinute').value = String(minute).padStart(2, '0');
+        calculate();
+    }
+
+    // 목표 시간 빠른 설정 함수
+    function setTargetTime(hour, minute) {
+        document.getElementById('targetHour').value = hour;
+        document.getElementById('targetMinute').value = minute;
+        calculate();
+    }
+
+    // 계산 함수: 퇴근 시간 및 결과 표시
+    function calculate() {
+        const startH = parseInt(document.getElementById('startHour').value);
+        const startM = parseInt(document.getElementById('startMinute').value);
+        const targetH = parseInt(document.getElementById('targetHour').value);
+        const targetM = parseInt(document.getElementById('targetMinute').value);
+        const breakH = parseInt(document.getElementById('breakHour').value) || 0;
+        const breakM = parseInt(document.getElementById('breakMinute').value) || 0;
+
+        if (isNaN(startH) || isNaN(startM) || isNaN(targetH) || isNaN(targetM)) {
+            document.getElementById('result').classList.remove('show');
+            return;
+        }
+
+        // 총 분 계산
+        const startMinutes = startH * 60 + startM;
+        const targetMinutes = targetH * 60 + targetM;
+        const breakMinutes = breakH * 60 + breakM;
+        const endMinutes = startMinutes + targetMinutes + breakMinutes;
+
+        // 퇴근 시간 계산
+        const endH = Math.floor(endMinutes / 60) % 24;
+        const endM = endMinutes % 60;
+        const workH = Math.floor(targetMinutes / 60);
+        const workM = targetMinutes % 60;
+
+        // 결과 표시
+        document.getElementById('resultTime').textContent =
+            `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+        document.getElementById('resultSubtitle').textContent =
+            `총 근무시간: ${workH}시간 ${workM}분`;
+
+        document.getElementById('resultDetails').innerHTML =
+            `출근: ${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}<br>` +
+            `휴게시간: ${breakH}시간 ${breakM}분<br>` +
+            `퇴근: ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+        document.getElementById('result').classList.add('show');
+    }
+
+    // 초기화 함수: 기본값으로 리셋
+    function reset() {
+        document.getElementById('startHour').value = '09';
+        document.getElementById('startMinute').value = '00';
+        document.getElementById('targetHour').value = '10';
+        document.getElementById('targetMinute').value = '0';
+        document.getElementById('breakHour').value = '1';
+        document.getElementById('breakMinute').value = '0';
+        calculate();
+    }
+
+    // 앱 초기화
+    init();
+</script>
+</body>
+</html>
