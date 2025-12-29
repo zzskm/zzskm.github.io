@@ -346,7 +346,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>⏰ 근무시간 계산기</h1>
+    <h1>근무시간 계산기</h1>
 
     <div class="section">
         <label class="section-label">출근 시간</label>
@@ -366,6 +366,11 @@
             <button class="quick-btn" onclick="setStartTime(9, 0)">09:00</button>
             <button class="quick-btn" onclick="setStartTime(10, 0)">10:00</button>
             <button class="quick-btn" onclick="setStartTime(11, 0)">11:00</button>
+        </div>
+        <div class="quick-actions"> <!-- Reuse quick-actions class for consistent styling -->
+            <button class="quick-btn" onclick="incrementStartHour(1)">+1시간</button>
+            <button class="quick-btn" onclick="incrementStartMinute(10)">+10분</button>
+            <button class="quick-btn" onclick="incrementStartMinute(1)">+1분</button>
         </div>
     </div>
 
@@ -513,6 +518,26 @@
         document.getElementById('targetHour').value = hour;
         document.getElementById('targetMinute').value = minute;
         calculate();
+    }
+
+    function incrementStartHour(amount) {
+        let hour = parseInt(document.getElementById('startHour').value) || 0;
+        hour = (hour + amount) % 24;
+        document.getElementById('startHour').value = String(hour).padStart(2, '0');
+        calculate();
+    }
+
+    function incrementStartMinute(amount) {
+        let minute = parseInt(document.getElementById('startMinute').value) || 0;
+        minute += amount;
+        let extraHours = Math.floor(minute / 60);
+        minute = minute % 60;
+        document.getElementById('startMinute').value = String(minute).padStart(2, '0');
+        if (extraHours > 0) {
+            incrementStartHour(extraHours);
+        } else {
+            calculate();
+        }
     }
 
     function incrementTargetHour(amount) {
