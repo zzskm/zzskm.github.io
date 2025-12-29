@@ -319,6 +319,21 @@
             margin-bottom: 16px;
         }
 
+        .result-countdown {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+            animation: pulse 1.5s infinite; /* Subtle pulse animation for countdown */
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
         .result-details {
             color: rgba(255, 255, 255, 0.85);
             font-size: 14px;
@@ -413,7 +428,7 @@
     <button class="reset-btn" onclick="reset()">초기화</button>
 
     <div class="result-card" id="result">
-        <div class="result-title">예상 퇴근시간</div>
+        <div class="result-countdown" id="resultCountdown"></div>
         <div class="result-time" id="resultTime"></div>
         <div class="result-subtitle" id="resultSubtitle"></div>
         <div class="result-details" id="resultDetails"></div>
@@ -581,8 +596,8 @@
         const endMinutes = startMinutes + targetMinutes + breakMinutes;
 
         // 퇴근 시간 계산
-        const endH = Math.floor(endMinutes / 60) % 24;
-        const endM = endMinutes % 60;
+        let endH = Math.floor(endMinutes / 60) % 24;
+        let endM = endMinutes % 60;
         const workH = Math.floor(targetMinutes / 60);
         const workM = targetMinutes % 60;
 
@@ -599,6 +614,47 @@
             `퇴근: ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 
         document.getElementById('result').classList.add('show');
+
+        // Clear any existing interval
+        if (window.countdownInterval) {
+            clearInterval(window.countdownInterval);
+        }
+
+        // Start countdown
+        updateCountdown(endH, endM);
+        window.countdownInterval = setInterval(() => updateCountdown(endH, endM), 1000);
+    }
+
+    function updateCountdown(endH, endM) {
+        const now = new Date();
+        const currentH = now.getHours();
+        const currentM = now.getMinutes();
+        const currentS = now.getSeconds();
+
+        let endMinutesToday = endH * 60 + endM;
+        let currentMinutes = currentH * 60 + currentM;
+
+        // Handle if end time is next day
+        if (endMinutesToday < currentMinutes) {
+            endMinutesToday += 24 * 60;
+        }
+
+        let remainingMinutes = endMinutesToday - currentMinutes;
+        remainingMinutes = Math.max(0, remainingMinutes);
+
+        const remainingH = Math.floor(remainingMinutes / 60);
+        const remainingM = remainingMinutes % 60;
+        const remainingS = 60 - currentS;
+
+        let countdownText;
+        if (remainingMinutes > 0 || remainingS > 0) {
+            countdownText = `퇴근까지 남은 시간 ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}:${String(remainingS).padStart(2, '0')}`;
+        } else {
+            countdownText = '퇴근 시간 지남!';
+            clearInterval(window.countdownInterval);
+        }
+
+        document.getElementById('resultCountdown').textContent = countdownText;
     }
 
     // 초기화 함수: 기본값으로 리셋
