@@ -378,14 +378,17 @@
             <button class="now-btn" onclick="setCurrentTime()">현재</button>
         </div>
         <div class="quick-actions">
+            <button class="quick-btn" onclick="setStartTime(8, 0)">08:00</button>
             <button class="quick-btn" onclick="setStartTime(9, 0)">09:00</button>
             <button class="quick-btn" onclick="setStartTime(10, 0)">10:00</button>
             <button class="quick-btn" onclick="setStartTime(11, 0)">11:00</button>
         </div>
         <div class="quick-actions"> <!-- Reuse quick-actions class for consistent styling -->
-            <button class="quick-btn" onclick="incrementStartHour(1)">+1시간</button>
+            <button class="quick-btn" onclick="incrementStartMinute(30)">+30분</button>
             <button class="quick-btn" onclick="incrementStartMinute(10)">+10분</button>
+            <button class="quick-btn" onclick="incrementStartMinute(5)">+5분</button>
             <button class="quick-btn" onclick="incrementStartMinute(1)">+1분</button>
+            <button class="quick-btn" onclick="incrementStartMinute(-1)">-1분</button>
         </div>
     </div>
 
@@ -411,7 +414,9 @@
         <div class="quick-actions"> <!-- Reuse quick-actions class for consistent styling -->
             <button class="quick-btn" onclick="incrementTargetHour(1)">+1시간</button>
             <button class="quick-btn" onclick="incrementTargetMinute(10)">+10분</button>
+            <button class="quick-btn" onclick="incrementTargetMinute(5)">+5분</button>
             <button class="quick-btn" onclick="incrementTargetMinute(1)">+1분</button>
+            <button class="quick-btn" onclick="incrementTargetMinute(-1)">-1분</button>
         </div>
     </div>
 
