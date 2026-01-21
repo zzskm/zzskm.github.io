@@ -68,10 +68,18 @@ function App() {
     return audioRef.current;
   };
 
-  const enableAudio = () => {
+  const unlockAudio = () => {
     const ctx = getAudioCtx();
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume();
+    // silent tick for stability
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.01);
     audioEnabledRef.current = true;
   };
 
@@ -118,26 +126,33 @@ function App() {
       playTone(ctx, 220, 0.14, "square", 0.24, baseGain * 0.5);
       return;
     }
-    if (kind === "start") {
-      playTone(ctx, 740, 0.05, "square", 0, baseGain * 0.7);
-      playTone(ctx, 988, 0.05, "square", 0.05, baseGain * 0.6);
-      playTone(ctx, 1245, 0.05, "square", 0.1, baseGain * 0.55);
-      playTone(ctx, 1480, 0.05, "square", 0.15, baseGain * 0.5);
-    }
   };
 
   const playStartSfx = () => {
     const t = now();
     if (t - lastStartSfxRef.current < 160) return;
     lastStartSfxRef.current = t;
-    playSfx("start");
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const baseGain = 0.04;
+    // 저역 킥
+    playTone(ctx, 196, 0.10, "sine", 0.00, baseGain * 1.2);
+    // 촘촘한 상승 아르페지오
+    const notes = [740, 932, 1110, 1245, 1480, 1760];
+    const step = 0.035;
+    notes.forEach((f, i) => {
+      playTone(ctx, f, 0.06, "triangle", 0.03 + i * step, baseGain * (0.95 - i * 0.08));
+      if (i % 2 === 0) playTone(ctx, f * 2, 0.03, "square", 0.03 + i * step, baseGain * 0.25);
+    });
+    // 하이라이트 톤
+    playTone(ctx, 1976, 0.07, "square", 0.03 + notes.length * step, baseGain * 0.55);
   };
 
   useEffect(() => {
     const handleFirstInteraction = () => {
       if (autoStartRef.current) return;
       autoStartRef.current = true;
-      enableAudio();
+      unlockAudio();
       playStartSfx();
     };
     window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
@@ -185,7 +200,7 @@ function App() {
   const reset = () => {
     if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
     rerollTimerRef.current = null;
-    enableAudio();
+    unlockAudio();
     playStartSfx();
     setLocked(false);
     setLevel(1);
@@ -238,11 +253,10 @@ function App() {
     setTimeLeftMs((prev) => Math.max(0, Math.min(TIME_LIMIT_MS, prev + deltaMs)));
   };
 
-  const triggerHint = (triggeredAt = now()) => {
-    if (locked || rerolling || gameOver) return false;
-    if (triggeredAt < hintReadyAt) return false;
-    setHintUntil(triggeredAt + HINT_MS);
-    setHintReadyAt(triggeredAt + HINT_COOLDOWN_MS);
+  const triggerHint = (t = now()) => {
+    if (t < hintReadyAt) return false;
+    setHintUntil(t + HINT_MS);
+    setHintReadyAt(t + HINT_COOLDOWN_MS);
     return true;
   };
 
@@ -266,7 +280,7 @@ function App() {
         const eligible = [];
         for (let i = 0; i < prev.length; i += 1) {
           const cell = prev[i];
-          if (!cell.hit && cell.value !== target) eligible.push(i);
+          if (!cell.hit && cell.value !== target && cell.value !== target + 1) eligible.push(i); // next+1 보호 추가
         }
         if (eligible.length < 2) return prev;
         const firstIndex = eligible[(Math.random() * eligible.length) | 0];
@@ -288,7 +302,7 @@ function App() {
 
   const onCellClick = (cell) => {
     if (locked || gameOver || cell.hit) return;
-    enableAudio();
+    unlockAudio();
     if (cell.value !== target) {
       markCell(cell.id, "miss");
       adjustTime(-TIME_PENALTY_MS);
