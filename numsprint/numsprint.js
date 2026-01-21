@@ -68,10 +68,17 @@ function App() {
     return audioRef.current;
   };
 
-  const enableAudio = () => {
+  // Make enableAudio async and await resume() so start SFX plays reliably.
+  const enableAudio = async () => {
     const ctx = getAudioCtx();
     if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume();
+    try {
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+    } catch (err) {
+      // ignore resume errors
+    }
     audioEnabledRef.current = true;
   };
 
@@ -134,10 +141,11 @@ function App() {
   };
 
   useEffect(() => {
-    const handleFirstInteraction = () => {
+    // make handler async so we await enableAudio before playing
+    const handleFirstInteraction = async () => {
       if (autoStartRef.current) return;
       autoStartRef.current = true;
-      enableAudio();
+      await enableAudio();
       playStartSfx();
     };
     window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
@@ -182,10 +190,11 @@ function App() {
     playSfx("gameover");
   }, [timeLeftMs, gameOver]);
 
-  const reset = () => {
+  // make reset async so it awaits enableAudio before playing start sfx
+  const reset = async () => {
     if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
     rerollTimerRef.current = null;
-    enableAudio();
+    await enableAudio();
     playStartSfx();
     setLocked(false);
     setLevel(1);
