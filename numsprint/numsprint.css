@@ -21,6 +21,9 @@
   --miss-ink: #f1dcdc;
 
   --pixel-border: 2px solid var(--line);
+
+  /* 그리드가 차지할 수 있도록 헤더 높이 변수 (조정 가능) */
+  --header-height: 260px;
 }
 
 * {
@@ -261,6 +264,8 @@ h1 {
   width: min(88vw, 420px);
   aspect-ratio: 1 / 1;
   margin: 16px auto 0;
+  /* 모바일에서 화면 높이에 맞춰 줄이기 위해 max-height 사용 (--header-height로 조정) */
+  max-height: calc(100vh - var(--header-height));
 }
 
 .grid {
@@ -459,8 +464,112 @@ h1 {
   }
 }
 
+/* 모바일 전용 압축 규칙 */
+@media (max-width: 420px) {
+  :root {
+    /* 헤더(타이틀+툴바+패널 등)의 실제 차지 높이에 맞춰 이 값을 조정하세요 */
+    --header-height: 140px;
+  }
+
+  .wrap {
+    padding: 12px 10px 16px;
+  }
+
+  .top {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .titleBlock {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    min-width: 0; /* 자식의 축소 허용 */
+  }
+
+  /* 제목/태그/서브가 한 줄에 들어가도록 축약 */
+  h1 {
+    font-size: 16px;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .tag {
+    font-size: 10px;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 36%;
+  }
+
+  .sub {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    max-width: 40%;
+  }
+
+  .btns {
+    width: auto;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .controlBtn {
+    padding: 6px 8px;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+  }
+
+  .panel {
+    padding: 10px;
+  }
+
+  .timeBar {
+    padding: 8px;
+  }
+
+  .status {
+    gap: 10px;
+  }
+
+  .gridOuter {
+    width: min(88vw, 360px);
+    margin: 8px auto 0;
+    aspect-ratio: 1 / 1;
+    /* 화면 높이에서 헤더를 뺀 나머지 높이까지 허용 */
+    max-height: calc(100vh - var(--header-height));
+  }
+
+  .grid {
+    gap: 8px;
+  }
+
+  .num {
+    /* 좀 더 작은 폰트 크기 범위로 축소 */
+    font-size: clamp(24px, 44cqi, 56px);
+  }
+
+  .num[data-digits="1"] {
+    font-size: clamp(28px, 56cqi, 64px);
+  }
+
+  .num[data-digits="3"] {
+    font-size: clamp(18px, 36cqi, 44px);
+  }
+}
+
 @media (max-width: 420px) {
   .grid {
-    gap: 10px;
+    gap: 8px;
   }
 }
