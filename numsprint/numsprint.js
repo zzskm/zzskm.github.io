@@ -1,10 +1,18 @@
 const { useEffect, useMemo, useRef, useState } = React;
-const COUNT = 36;
-const COLS = 6;
-const TIME_LIMIT_MS = 60_000;
+const h = React.createElement;
 
+const GRID = 4;
+const COUNT = GRID * GRID;
+const LEVEL_SIZE = COUNT;
 const FEEDBACK_MS = 240;
-const REROLL_DELAY_MS = 720;
+const REROLL_DELAY_MS = 150;
+const TIME_LIMIT_MS = 30000;
+const TIME_BONUS_MS = 200;
+const TIME_PENALTY_MS = 1500;
+const REROLL_BONUS_MS = 1500;
+const HINT_MS = 1200;
+const HINT_COOLDOWN_MS = 2500;
+const AUTO_HINT_DELAY_MS = 2300;
 
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -20,22 +28,19 @@ const shuffle = (arr) => {
   return arr;
 };
 
-const levelStart = (level) => (level - 1) * COUNT + 1;
-const levelEnd = (level) => level * COUNT;
+const levelStart = (level) => (level - 1) * LEVEL_SIZE + 1;
+const levelEnd = (level) => level * LEVEL_SIZE;
 
 const buildLevelCells = (level) => {
   const start = levelStart(level);
   const nums = Array.from({ length: COUNT }, (_, i) => start + i);
   shuffle(nums);
-
-  const cells = nums.map((n, i) => ({
+  return nums.map((n, i) => ({
     id: `${level}-${i}-${n}`,
     value: n,
     hit: false,
     state: "",
   }));
-
-  return cells;
 };
 
 // audio
@@ -65,10 +70,10 @@ const playTone = (ctx, freq, dur, type, when = 0, gain = 0.06) => {
   osc.stop(t0 + dur + 0.02);
 };
 
-const App = () => {
-  const [level, setLevel] = useState(1);
-  const [target, setTarget] = useState(levelStart(1));
+function App() {
   const [cells, setCells] = useState(() => buildLevelCells(1));
+  const [level, setLevel] = useState(1);
+  const [target, setTarget] = useState(() => levelStart(1));
   const [locked, setLocked] = useState(false);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
@@ -76,22 +81,49 @@ const App = () => {
   const [hintUntil, setHintUntil] = useState(0);
   const [hintReadyAt, setHintReadyAt] = useState(0);
   const [rerolling, setRerolling] = useState(false);
-  const [rerollTargetLevel, setRerollTargetLevel] = useState(null);
 
   const timeRef = useRef(now());
   const lastProgressRef = useRef(now());
   const rerollTimerRef = useRef(null);
   const audioEnabledRef = useRef(false);
-  const firstInteractionRef = useRef(false);
+  const autoStartRef = useRef(false);
+  const lastStartSfxRef = useRef(0);
 
   const enableAudio = async () => {
     const ctx = getAudioCtx();
     if (!ctx) return;
-    audioEnabledRef.current = true;
-    if (ctx.state === "suspended") {
-      try {
+    try {
+      if (ctx.state === "suspended") {
         await ctx.resume();
-      } catch (_) {}
+      }
+    } catch (err) {
+      // ignore resume errors
+    }
+    audioEnabledRef.current = true;
+  };
+
+  // Mobile Safari 등에서 최초 1회 SFX가 누락되는 문제를 완화하기 위한 오디오 unlock
+  const unlockAudio = () => {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    audioEnabledRef.current = true;
+
+    // resume는 제스처 컨텍스트에서 호출되는 것이 중요 (await로 끊지 않음)
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+
+    // 일부 브라우저는 무음 tick이 한 번 필요
+    try {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      g.gain.value = 0.00001;
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.01);
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -100,29 +132,58 @@ const App = () => {
     const ctx = getAudioCtx();
     if (!ctx) return;
 
-    const baseGain = 0.06;
+    const baseGain = 0.04;
+
+    if (kind === "hit") {
+      playTone(ctx, 880, 0.05, "square", 0, baseGain);
+      playTone(ctx, 1320, 0.05, "square", 0.06, baseGain * 0.8);
+      return;
+    }
+
+    if (kind === "miss") {
+      playTone(ctx, 220, 0.09, "square", 0, baseGain * 0.9);
+      playTone(ctx, 180, 0.09, "square", 0.09, baseGain * 0.7);
+      return;
+    }
+
+    if (kind === "reroll") {
+      const tickCount = Math.max(3, Math.round(REROLL_DELAY_MS / 60));
+      const step = 0.035;
+      for (let i = 0; i < tickCount; i += 1) {
+        playTone(ctx, 660 + i * 40, 0.03, "square", i * step, baseGain * 0.6);
+      }
+      return;
+    }
+
+    if (kind === "over") {
+      playTone(ctx, 196, 0.14, "sawtooth", 0, baseGain * 0.5);
+      playTone(ctx, 147, 0.18, "sawtooth", 0.12, baseGain * 0.35);
+      return;
+    }
 
     if (kind === "start") {
-      playTone(ctx, 740, 0.05, "square", 0, baseGain * 0.7);
-      playTone(ctx, 988, 0.05, "square", 0.05, baseGain * 0.6);
-      playTone(ctx, 1245, 0.05, "square", 0.1, baseGain * 0.55);
-      playTone(ctx, 1480, 0.05, "square", 0.15, baseGain * 0.5);
-    } else if (kind === "good") {
-      playTone(ctx, 880, 0.06, "triangle", 0, baseGain * 0.75);
-      playTone(ctx, 1320, 0.06, "triangle", 0.04, baseGain * 0.55);
-    } else if (kind === "bad") {
-      playTone(ctx, 200, 0.12, "sawtooth", 0, baseGain * 0.35);
-    } else if (kind === "levelup") {
-      playTone(ctx, 660, 0.06, "square", 0, baseGain * 0.6);
-      playTone(ctx, 880, 0.06, "square", 0.05, baseGain * 0.55);
-      playTone(ctx, 1180, 0.06, "square", 0.1, baseGain * 0.5);
-    } else if (kind === "reroll") {
-      playTone(ctx, 520, 0.08, "triangle", 0, baseGain * 0.55);
-      playTone(ctx, 390, 0.12, "triangle", 0.06, baseGain * 0.45);
-    } else if (kind === "over") {
-      playTone(ctx, 260, 0.14, "sawtooth", 0, baseGain * 0.35);
-      playTone(ctx, 180, 0.16, "sawtooth", 0.12, baseGain * 0.25);
+      // Kick(저역) + 촘촘한 상승 아르페지오 + 하이라이트
+      playTone(ctx, 196, 0.10, "sine", 0.00, baseGain * 1.2);
+
+      const notes = [740, 932, 1110, 1245, 1480, 1760];
+      const step = 0.035;
+      for (let i = 0; i < notes.length; i += 1) {
+        playTone(ctx, notes[i], 0.06, "triangle", 0.03 + i * step, baseGain * (0.95 - i * 0.08));
+        if (i % 2 === 0) {
+          playTone(ctx, notes[i] * 2, 0.03, "square", 0.03 + i * step, baseGain * 0.25);
+        }
+      }
+
+      playTone(ctx, 1976, 0.07, "square", 0.03 + notes.length * step, baseGain * 0.55);
+      return;
     }
+  };
+
+  const playStartSfx = () => {
+    const t = now();
+    if (t - lastStartSfxRef.current < 160) return;
+    lastStartSfxRef.current = t;
+    playSfx("start");
   };
 
   const toastRef = useRef(null);
@@ -155,15 +216,15 @@ const App = () => {
     if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
     rerollTimerRef.current = null;
 
-    await enableAudio();
-    playSfx("start");
+    // 최초 1회 SFX 누락 방지: await로 제스처 컨텍스트 끊지 않음
+    unlockAudio();
+    playStartSfx();
 
     setLocked(false);
     setLevel(1);
     setTarget(levelStart(1));
     setCells(buildLevelCells(1));
     setRerolling(false);
-    setRerollTargetLevel(null);
     setScore(0);
     setGameOver(false);
     setTimeLeftMs(TIME_LIMIT_MS);
@@ -185,13 +246,12 @@ const App = () => {
     back.classList.remove("show");
   };
 
-  // initial audio unlock on first interaction
   useEffect(() => {
-    const handleFirstInteraction = async () => {
-      if (firstInteractionRef.current) return;
-      firstInteractionRef.current = true;
-      await enableAudio();
-      playSfx("start");
+    const handleFirstInteraction = () => {
+      if (autoStartRef.current) return;
+      autoStartRef.current = true;
+      unlockAudio();
+      playStartSfx();
     };
 
     window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
@@ -215,7 +275,6 @@ const App = () => {
     return "RUN";
   }, [gameOver, locked, rerolling]);
 
-  // timer
   useEffect(() => {
     if (gameOver) return;
 
@@ -228,7 +287,6 @@ const App = () => {
       setTimeLeftMs((v) => {
         const nv = v - dt;
         if (nv <= 0) {
-          // end
           setGameOver(true);
           setLocked(true);
           playSfx("over");
@@ -248,24 +306,26 @@ const App = () => {
     return () => cancelAnimationFrame(raf);
   }, [gameOver]);
 
-  // keyboard: H hint, R reroll
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") closeHelp();
       if (gameOver) return;
+
       if (e.key.toLowerCase() === "h") {
         if (now() >= hintReadyAt) {
-          const until = now() + 1700;
+          const until = now() + HINT_MS;
           setHintUntil(until);
-          setHintReadyAt(now() + 3500);
+          setHintReadyAt(now() + HINT_COOLDOWN_MS);
         }
       }
+
       if (e.key.toLowerCase() === "r") {
         if (!rerolling && !locked) {
           requestReroll();
         }
       }
     };
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [gameOver, hintReadyAt, rerolling, locked]);
@@ -273,7 +333,6 @@ const App = () => {
   const requestReroll = () => {
     setRerolling(true);
     setLocked(true);
-    setRerollTargetLevel(level);
     playSfx("reroll");
 
     if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
@@ -281,7 +340,8 @@ const App = () => {
       setCells(buildLevelCells(level));
       setLocked(false);
       setRerolling(false);
-      setRerollTargetLevel(null);
+
+      setTimeLeftMs((v) => clamp(v + REROLL_BONUS_MS, 0, TIME_LIMIT_MS));
     }, REROLL_DELAY_MS);
   };
 
@@ -289,9 +349,9 @@ const App = () => {
     if (locked || gameOver || rerolling) return;
 
     if (cell.value === target) {
-      // correct
-      playSfx("good");
+      playSfx("hit");
       markCellTemp(cell.id, "good");
+
       setCells((prev) =>
         prev.map((c) => {
           if (c.id !== cell.id) return c;
@@ -304,8 +364,6 @@ const App = () => {
 
       const next = target + 1;
       if (next > levelEnd(level)) {
-        // level complete
-        playSfx("levelup");
         toast(`LEVEL ${level + 1}`);
         setLocked(true);
 
@@ -315,15 +373,18 @@ const App = () => {
           setTarget(levelStart(nl));
           setCells(buildLevelCells(nl));
           setLocked(false);
-        }, 240);
+
+          setTimeLeftMs((v) => clamp(v + TIME_BONUS_MS, 0, TIME_LIMIT_MS));
+        }, 200);
       } else {
         setTarget(next);
+        setTimeLeftMs((v) => clamp(v + TIME_BONUS_MS, 0, TIME_LIMIT_MS));
       }
     } else {
-      // wrong
-      playSfx("bad");
+      playSfx("miss");
       markCellTemp(cell.id, "bad");
       setScore((s) => Math.max(0, s - 6));
+      setTimeLeftMs((v) => clamp(v - TIME_PENALTY_MS, 0, TIME_LIMIT_MS));
     }
   };
 
@@ -337,26 +398,36 @@ const App = () => {
       if (locked || rerolling) return;
 
       const since = now() - lastProgressRef.current;
-      if (since < 1600) return;
+      if (since < AUTO_HINT_DELAY_MS) return;
 
       setCells((prev) => {
         const eligible = [];
+        const nextValue = target;
+        const nextPlusOne = target + 1;
+
         for (let i = 0; i < prev.length; i += 1) {
           const cell = prev[i];
-          if (!cell.hit && cell.value !== target) eligible.push(i);
+
+          // hit 제외 + next / next+1 swap 금지
+          if (cell.hit) continue;
+          if (cell.value === nextValue) continue;
+          if (cell.value === nextPlusOne) continue;
+
+          eligible.push(i);
         }
+
         if (eligible.length < 2) return prev;
 
         const a = eligible[randInt(0, eligible.length - 1)];
         let b = eligible[randInt(0, eligible.length - 1)];
         if (a === b) b = eligible[(eligible.indexOf(a) + 1) % eligible.length];
 
-        const next = [...prev];
-        const tmp = next[a];
-        next[a] = next[b];
-        next[b] = tmp;
+        const nextArr = [...prev];
+        const tmp = nextArr[a];
+        nextArr[a] = nextArr[b];
+        nextArr[b] = tmp;
 
-        return next;
+        return nextArr;
       });
     }, 520);
 
@@ -374,147 +445,220 @@ const App = () => {
     return `${s}s`;
   }, [timeLeftMs]);
 
-  return (
-    <div className="app">
-      <div className="top">
-        <div className="titleRow">
-          <div className="titleBlock">
-            <h1>NumSprint</h1>
-            <span className="tag">v1</span>
-            <span className="sub">Tap numbers in order</span>
-          </div>
-          <div className="controls">
-            <button className="btn" onClick={showHelp}>
-              Help
-            </button>
-            <button className="btn danger" onClick={reset}>
-              Reset
-            </button>
-            <button className="btn primary" onClick={requestReroll} disabled={locked || gameOver || rerolling}>
-              Reroll
-            </button>
-          </div>
-        </div>
-
-        <div className="status">
-          <div className="stats">
-            <div className="stat">
-              <div className="k">STATE</div>
-              <div className="v">{stateText}</div>
-            </div>
-            <div className="stat scoreStat">
-              <div className="k">SCORE</div>
-              <div className="v">{score}</div>
-            </div>
-          </div>
-
-          <div className="stateLine">
-            <span className={statePillClass}>{locked ? "LOCK" : "LIVE"}</span>
-            <span className="pill">{`LEVEL ${level}`}</span>
-          </div>
-        </div>
-
-        <div className="timeBar">
-          <div className="timeBarRow">
-            <div className="timeLabel">TIME</div>
-            <div className="timeLabel">{timeText}</div>
-          </div>
-          <div className="timeBarTrack">
-            <div className="timeBarFill" style={{ width: `${progress * 100}%` }}></div>
-          </div>
-        </div>
-      </div>
-
-      <div className="main">
-        <div className="hudRow">
-          <div className="hud">
-            <div className="mini">
-              Next: <b>{target}</b>
-            </div>
-            <div className="mini">
-              Hint: <b>{now() >= hintReadyAt ? "READY" : "COOLDOWN"}</b>
-            </div>
-          </div>
-          <div className="hud">
-            <button
-              className="btn"
-              onClick={() => {
+  // UI (no JSX)
+  return h(
+    "div",
+    { className: "app" },
+    h(
+      "div",
+      { className: "top" },
+      h(
+        "div",
+        { className: "titleRow" },
+        h(
+          "div",
+          { className: "titleBlock" },
+          h("h1", null, "NumSprint"),
+          h("span", { className: "tag" }, "v1"),
+          h("span", { className: "sub" }, "Tap numbers in order")
+        ),
+        h(
+          "div",
+          { className: "controls" },
+          h(
+            "button",
+            { className: "btn", onClick: showHelp },
+            "Help"
+          ),
+          h(
+            "button",
+            { className: "btn danger", onClick: reset },
+            "Reset"
+          ),
+          h(
+            "button",
+            {
+              className: "btn primary",
+              onClick: requestReroll,
+              disabled: locked || gameOver || rerolling,
+            },
+            "Reroll"
+          )
+        )
+      ),
+      h(
+        "div",
+        { className: "status" },
+        h(
+          "div",
+          { className: "stats" },
+          h(
+            "div",
+            { className: "stat" },
+            h("div", { className: "k" }, "STATE"),
+            h("div", { className: "v" }, stateText)
+          ),
+          h(
+            "div",
+            { className: "stat scoreStat" },
+            h("div", { className: "k" }, "SCORE"),
+            h("div", { className: "v" }, String(score))
+          )
+        ),
+        h(
+          "div",
+          { className: "stateLine" },
+          h("span", { className: statePillClass }, locked ? "LOCK" : "LIVE"),
+          h("span", { className: "pill" }, `LEVEL ${level}`)
+        )
+      ),
+      h(
+        "div",
+        { className: "timeBar" },
+        h(
+          "div",
+          { className: "timeBarRow" },
+          h("div", { className: "timeLabel" }, "TIME"),
+          h("div", { className: "timeLabel" }, timeText)
+        ),
+        h(
+          "div",
+          { className: "timeBarTrack" },
+          h("div", {
+            className: "timeBarFill",
+            style: { width: `${progress * 100}%` },
+          })
+        )
+      )
+    ),
+    h(
+      "div",
+      { className: "main" },
+      h(
+        "div",
+        { className: "hudRow" },
+        h(
+          "div",
+          { className: "hud" },
+          h(
+            "div",
+            { className: "mini" },
+            "Next: ",
+            h("b", null, String(target))
+          ),
+          h(
+            "div",
+            { className: "mini" },
+            "Hint: ",
+            h("b", null, now() >= hintReadyAt ? "READY" : "COOLDOWN")
+          )
+        ),
+        h(
+          "div",
+          { className: "hud" },
+          h(
+            "button",
+            {
+              className: "btn",
+              onClick: () => {
                 if (gameOver) return;
                 if (now() >= hintReadyAt) {
-                  const until = now() + 1700;
+                  const until = now() + HINT_MS;
                   setHintUntil(until);
-                  setHintReadyAt(now() + 3500);
+                  setHintReadyAt(now() + HINT_COOLDOWN_MS);
                 }
-              }}
-              disabled={now() < hintReadyAt}
-            >
-              Hint (H)
-            </button>
-          </div>
-        </div>
-
-        <div className="boardWrap">
-          <div className="board">
-            {cells.map((cell) => {
-              const isHint = visibleHint && cell.value === target;
-              const cls = ["cell", cell.state, isHint ? "hint" : "", cell.value > target ? "" : ""].filter(Boolean).join(" ");
-              return (
-                <div
-                  key={cell.id}
-                  className={cls}
-                  onPointerDown={() => handleHit(cell)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {cell.value}
-                  <span className="subnum">{cell.value - levelStart(level) + 1}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="footer">
-          <div>R: reroll, H: hint</div>
-          <div>
-            {rerolling ? `Rerolling L${rerollTargetLevel ?? ""}…` : gameOver ? "Try again" : "Keep going"}
-          </div>
-        </div>
-      </div>
-
-      <div className="toast" ref={toastRef}></div>
-
-      <div className="modalBack" onPointerDown={closeHelp}>
-        <div className="modal" onPointerDown={(e) => e.stopPropagation()}>
-          <div className="modalHead">
-            <h2>How to play</h2>
-            <button className="btn" onClick={closeHelp}>
-              Close
-            </button>
-          </div>
-          <div className="modalBody">
-            <p>
-              Tap numbers in ascending order as fast as possible within <code>60s</code>.
-            </p>
-            <p>
-              If you get stuck, use <code>Hint (H)</code> to highlight the next number.
-            </p>
-            <p>
-              <code>Reroll (R)</code> reshuffles current level.
-            </p>
-            <p>
-              Cells may swap if you make no progress for a while. Keep moving.
-            </p>
-          </div>
-          <div className="modalFoot">
-            <button className="btn primary" onClick={closeHelp}>
-              Got it
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+              },
+              disabled: now() < hintReadyAt,
+            },
+            "Hint (H)"
+          )
+        )
+      ),
+      h(
+        "div",
+        { className: "boardWrap" },
+        h(
+          "div",
+          { className: "board" },
+          cells.map((cell) => {
+            const isHint = visibleHint && cell.value === target;
+            const cls = ["cell", cell.state, isHint ? "hint" : ""].filter(Boolean).join(" ");
+            return h(
+              "div",
+              {
+                key: cell.id,
+                className: cls,
+                onPointerDown: () => handleHit(cell),
+                role: "button",
+                tabIndex: 0,
+              },
+              String(cell.value),
+              h("span", { className: "subnum" }, String(cell.value - levelStart(level) + 1))
+            );
+          })
+        )
+      ),
+      h(
+        "div",
+        { className: "footer" },
+        h("div", null, "R: reroll, H: hint"),
+        h("div", null, gameOver ? "Try again" : "Keep going")
+      )
+    ),
+    h("div", { className: "toast", ref: toastRef }),
+    h(
+      "div",
+      { className: "modalBack", onPointerDown: closeHelp },
+      h(
+        "div",
+        { className: "modal", onPointerDown: (e) => e.stopPropagation() },
+        h(
+          "div",
+          { className: "modalHead" },
+          h("h2", null, "How to play"),
+          h(
+            "button",
+            { className: "btn", onClick: closeHelp },
+            "Close"
+          )
+        ),
+        h(
+          "div",
+          { className: "modalBody" },
+          h(
+            "p",
+            null,
+            "Tap numbers in ascending order as fast as possible within ",
+            h("code", null, "30s"),
+            "."
+          ),
+          h(
+            "p",
+            null,
+            "If you get stuck, use ",
+            h("code", null, "Hint (H)"),
+            " to highlight the next number."
+          ),
+          h(
+            "p",
+            null,
+            h("code", null, "Reroll (R)"),
+            " reshuffles current level."
+          ),
+          h("p", null, "Cells may swap if you make no progress for a while. Keep moving.")
+        ),
+        h(
+          "div",
+          { className: "modalFoot" },
+          h(
+            "button",
+            { className: "btn primary", onClick: closeHelp },
+            "Got it"
+          )
+        )
+      )
+    )
   );
-};
+}
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
