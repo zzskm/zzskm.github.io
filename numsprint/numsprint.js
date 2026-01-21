@@ -4,134 +4,195 @@ const h = React.createElement;
 const GRID = 4;
 const COUNT = GRID * GRID;
 const LEVEL_SIZE = COUNT;
-const FEEDBACK_MS = 220;
-const REROLL_DELAY_MS = 140;
+const FEEDBACK_MS = 240;
+const REROLL_DELAY_MS = 150;
 const TIME_LIMIT_MS = 30000;
-const TIME_BONUS_MS = 180;
-const TIME_PENALTY_MS = 1400;
-const REROLL_BONUS_MS = 1400;
-const HINT_MS = 1100;
-const HINT_COOLDOWN_MS = 2400;
-const AUTO_DRIFT_DELAY_MS = 2200;
+const TIME_BONUS_MS = 200;
+const TIME_PENALTY_MS = 1500;
+const REROLL_BONUS_MS = 1500;
+const HINT_MS = 1200;
+const HINT_COOLDOWN_MS = 2500;
+const AUTO_HINT_DELAY_MS = 2000;
 
-const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const now = () => performance.now();
+const now = () => Date.now();
+const levelStart = (level) => (level - 1) * LEVEL_SIZE + 1;
+const levelEnd = (level) => level * LEVEL_SIZE;
 
-const shuffle = (arr) => {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = randInt(0, i);
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+function shuffle(values) {
+  for (let i = values.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [values[i], values[j]] = [values[j], values[i]];
   }
-  return arr;
-};
+  return values;
+}
 
-const levelStart = level => (level - 1) * LEVEL_SIZE + 1;
-const levelEnd   = level => level * LEVEL_SIZE;
-
-const buildLevelCells = (level) => {
+function buildLevelCells(level) {
+  const t = now();
   const start = levelStart(level);
-  const nums = Array.from({length: COUNT}, (_, i) => start + i);
-  shuffle(nums);
-  return nums.map((n, i) => ({
-    id: `${level}-${i}-${n}`,
-    value: n,
+  const values = shuffle(Array.from({ length: LEVEL_SIZE }, (_, i) => start + i));
+  return values.map((value, id) => ({
+    id,
+    value,
+    touchedAt: t,
     hit: false,
-    state: ""
+    missUntil: 0,
   }));
-};
-
-// ──────────────────────────────────────────────── Audio
-let audioCtx = null;
-const getAudioCtx = () => {
-  if (audioCtx) return audioCtx;
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  if (!Ctx) return null;
-  audioCtx = new Ctx();
-  return audioCtx;
-};
-
-const playTone = (freq, dur, type = "square", when = 0, gain = 0.05) => {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  const t0 = ctx.currentTime + when;
-  const osc = ctx.createOscillator();
-  const g = ctx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, t0);
-  g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.008);
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  osc.connect(g).connect(ctx.destination);
-  osc.start(t0);
-  osc.stop(t0 + dur + 0.02);
-};
-
-const playStartSfx = () => {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-
-  // 저역 킥
-  playTone(180, 0.09, "sine", 0.00, 0.12);
-
-  // 상승 아르페지오 (더 촘촘 + 밝게)
-  const notes = [659, 784, 880, 988, 1175, 1319, 1568];
-  const step = 0.028;
-  notes.forEach((f, i) => {
-    playTone(f, 0.05, "triangle", 0.04 + i * step, 0.07 - i*0.006);
-    if (i % 2 === 0) playTone(f * 1.5, 0.03, "square", 0.04 + i * step, 0.035);
-  });
-
-  // 마무리 하이라이트
-  playTone(1760, 0.06, "square", 0.04 + notes.length * step, 0.08);
-};
-
-const unlockAudio = () => {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  if (ctx.state === "suspended") {
-    ctx.resume().catch(() => {});
-  }
-  // silent tick (iOS 등 최초 unlock 보장)
-  playTone(200, 0.005, "sine", 0, 0.001);
-};
+}
 
 function App() {
   const [cells, setCells] = useState(() => buildLevelCells(1));
   const [level, setLevel] = useState(1);
-  const [target, setTarget] = useState(levelStart(1));
+  const [target, setTarget] = useState(() => levelStart(1));
   const [locked, setLocked] = useState(false);
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
+  const [rerolling, setRerolling] = useState(false);
+  const [rerollTargetLevel, setRerollTargetLevel] = useState(null);
+  const [tick, setTick] = useState(() => now());
   const [timeLeftMs, setTimeLeftMs] = useState(TIME_LIMIT_MS);
+  const [gameOver, setGameOver] = useState(false);
+  const [score, setScore] = useState(0);
   const [hintUntil, setHintUntil] = useState(0);
   const [hintReadyAt, setHintReadyAt] = useState(0);
-  const [rerolling, setRerolling] = useState(false);
-
+  const rerollTimerRef = useRef(null);
+  const gameOverRef = useRef(false);
   const timeRef = useRef(now());
+  const audioRef = useRef(null);
+  const audioEnabledRef = useRef(false);
+  const autoStartRef = useRef(false);
+  const lastStartSfxRef = useRef(0);
   const lastProgressRef = useRef(now());
-  const audioUnlockedRef = useRef(false);
 
-  const toastRef = useRef(null);
-  const toast = msg => {
-    const el = toastRef.current;
-    if (!el) return;
-    el.textContent = msg;
-    el.classList.add("show");
-    setTimeout(() => el.classList.remove("show"), 800);
+  const getAudioCtx = () => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!audioRef.current) audioRef.current = new AudioCtx();
+    return audioRef.current;
   };
 
-  const markCellTemp = (id, state) => {
-    setCells(prev => prev.map(c => c.id === id ? {...c, state} : c));
-    setTimeout(() => setCells(prev => prev.map(c => c.id === id ? {...c, state:""} : c)), FEEDBACK_MS);
+  const enableAudio = () => {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+    audioEnabledRef.current = true;
   };
+
+  const playTone = (ctx, freq, duration, type, offset, gain) => {
+    const start = ctx.currentTime + offset;
+    const osc = ctx.createOscillator();
+    const amp = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    amp.gain.setValueAtTime(gain, start);
+    amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(amp);
+    amp.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration);
+  };
+
+  const playSfx = (kind) => {
+    if (!audioEnabledRef.current) return;
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const baseGain = 0.04;
+    if (kind === "hit") {
+      playTone(ctx, 880, 0.05, "square", 0, baseGain);
+      playTone(ctx, 1320, 0.05, "square", 0.06, baseGain * 0.8);
+      return;
+    }
+    if (kind === "miss") {
+      playTone(ctx, 220, 0.09, "square", 0, baseGain * 0.9);
+      playTone(ctx, 180, 0.09, "square", 0.09, baseGain * 0.7);
+      return;
+    }
+    if (kind === "reroll") {
+      const tickCount = Math.max(3, Math.round(REROLL_DELAY_MS / 60));
+      const spacing = 0.04;
+      for (let i = 0; i < tickCount; i += 1) {
+        playTone(ctx, 520 + i * 90, 0.04, "square", i * spacing, baseGain * 0.6);
+      }
+      return;
+    }
+    if (kind === "gameover") {
+      playTone(ctx, 440, 0.12, "square", 0, baseGain * 0.7);
+      playTone(ctx, 330, 0.12, "square", 0.12, baseGain * 0.6);
+      playTone(ctx, 220, 0.14, "square", 0.24, baseGain * 0.5);
+      return;
+    }
+    if (kind === "start") {
+      playTone(ctx, 740, 0.05, "square", 0, baseGain * 0.7);
+      playTone(ctx, 988, 0.05, "square", 0.05, baseGain * 0.6);
+      playTone(ctx, 1245, 0.05, "square", 0.1, baseGain * 0.55);
+      playTone(ctx, 1480, 0.05, "square", 0.15, baseGain * 0.5);
+    }
+  };
+
+  const playStartSfx = () => {
+    const t = now();
+    if (t - lastStartSfxRef.current < 160) return;
+    lastStartSfxRef.current = t;
+    playSfx("start");
+  };
+
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (autoStartRef.current) return;
+      autoStartRef.current = true;
+      enableAudio();
+      playStartSfx();
+    };
+    window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
+    window.addEventListener("keydown", handleFirstInteraction, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", handleFirstInteraction);
+      window.removeEventListener("keydown", handleFirstInteraction);
+    };
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const t = now();
+      const delta = t - timeRef.current;
+      timeRef.current = t;
+      setTick(t);
+      if (!gameOverRef.current) {
+        setTimeLeftMs((prev) => Math.max(0, prev - delta));
+      }
+    }, 80);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    gameOverRef.current = gameOver;
+  }, [gameOver]);
+
+  useEffect(() => {
+    return () => {
+      if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (timeLeftMs > 0 || gameOver) return;
+    setGameOver(true);
+    setLocked(true);
+    setRerolling(false);
+    setRerollTargetLevel(null);
+    if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
+    rerollTimerRef.current = null;
+    playSfx("gameover");
+  }, [timeLeftMs, gameOver]);
 
   const reset = () => {
+    if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
+    rerollTimerRef.current = null;
+    enableAudio();
+    playStartSfx();
     setLocked(false);
     setLevel(1);
     setTarget(levelStart(1));
     setCells(buildLevelCells(1));
     setRerolling(false);
+    setRerollTargetLevel(null);
     setScore(0);
     setGameOver(false);
     setTimeLeftMs(TIME_LIMIT_MS);
@@ -139,256 +200,274 @@ function App() {
     setHintReadyAt(0);
     lastProgressRef.current = now();
     timeRef.current = now();
-
-    if (!audioUnlockedRef.current) {
-      unlockAudio();
-      audioUnlockedRef.current = true;
-    }
-    playStartSfx();
-    toast("RESTART");
   };
 
-  // 최초 제스처에서 오디오 unlock & 첫 사운드
-  useEffect(() => {
-    const handler = () => {
-      if (audioUnlockedRef.current) return;
-      unlockAudio();
-      audioUnlockedRef.current = true;
-      playStartSfx();
-    };
-    window.addEventListener("pointerdown", handler, {once: true});
-    window.addEventListener("keydown", handler, {once: true});
-    return () => {
-      window.removeEventListener("pointerdown", handler);
-      window.removeEventListener("keydown", handler);
-    };
-  }, []);
-
-  // 시간 타이머
-  useEffect(() => {
-    if (gameOver) return;
-    let raf;
-    const tick = () => {
-      const dt = now() - timeRef.current;
-      timeRef.current += dt;
-      setTimeLeftMs(v => {
-        const nv = v - dt;
-        if (nv <= 0) {
-          setGameOver(true);
-          setLocked(true);
-          playTone(180, 0.16, "sawtooth", 0, 0.06);
-          playTone(140, 0.20, "sawtooth", 0.08, 0.04);
-          return 0;
-        }
-        return nv;
-      });
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [gameOver]);
-
-  // 키보드
-  useEffect(() => {
-    const onKey = e => {
-      if (e.key === "Escape") document.querySelector(".modalBack")?.classList.remove("show");
-      if (gameOver || locked || rerolling) return;
-
-      if (e.key.toLowerCase() === "h" && now() >= hintReadyAt) {
-        setHintUntil(now() + HINT_MS);
-        setHintReadyAt(now() + HINT_COOLDOWN_MS);
-      }
-      if (e.key.toLowerCase() === "r") requestReroll();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [gameOver, locked, rerolling, hintReadyAt]);
-
-  const requestReroll = () => {
-    if (rerolling || locked) return;
-    setRerolling(true); setLocked(true);
-    // reroll 사운드 생략 (필요시 추가)
-
-    setTimeout(() => {
-      setCells(buildLevelCells(level));
-      setRerolling(false); setLocked(false);
-      setTimeLeftMs(v => clamp(v + REROLL_BONUS_MS, 0, TIME_LIMIT_MS));
-      toast("REROLLED");
+  const scheduleReroll = (nextLevel) => {
+    if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
+    setLocked(true);
+    setRerolling(true);
+    setRerollTargetLevel(nextLevel);
+    adjustTime(REROLL_BONUS_MS);
+    playSfx("reroll");
+    rerollTimerRef.current = setTimeout(() => {
+      setCells(buildLevelCells(nextLevel));
+      setTarget(levelStart(nextLevel));
+      setLevel(nextLevel);
+      setLocked(false);
+      setRerolling(false);
+      setRerollTargetLevel(null);
     }, REROLL_DELAY_MS);
   };
 
-  const handleHit = cell => {
-    if (locked || gameOver || rerolling) return;
-
-    if (cell.value === target) {
-      playTone(880, 0.04, "square", 0, 0.06);
-      playTone(1320, 0.04, "square", 0.05, 0.05);
-      markCellTemp(cell.id, "good");
-
-      setCells(prev => prev.map(c => c.id === cell.id ? {...c, hit: true} : c));
-      setScore(s => s + 10);
-      lastProgressRef.current = now();
-
-      const next = target + 1;
-      if (next > levelEnd(level)) {
-        toast(`LEVEL ${level + 1}`);
-        setLocked(true);
-        setTimeout(() => {
-          const nl = level + 1;
-          setLevel(nl);
-          setTarget(levelStart(nl));
-          setCells(buildLevelCells(nl));
-          setLocked(false);
-          setTimeLeftMs(v => clamp(v + TIME_BONUS_MS, 0, TIME_LIMIT_MS));
-          playStartSfx(); // 레벨업도 start 느낌으로
-        }, 180);
-      } else {
-        setTarget(next);
-        setTimeLeftMs(v => clamp(v + TIME_BONUS_MS, 0, TIME_LIMIT_MS));
-      }
-    } else {
-      playTone(220, 0.08, "square", 0, 0.055);
-      playTone(180, 0.08, "square", 0.07, 0.04);
-      markCellTemp(cell.id, "bad");
-      setScore(s => Math.max(0, s - 6));
-      setTimeLeftMs(v => clamp(v - TIME_PENALTY_MS, 0, TIME_LIMIT_MS));
-    }
+  const markCell = (id, kind) => {
+    const t = now();
+    setCells((prev) =>
+      prev.map((c) =>
+        c.id !== id
+          ? c
+          : {
+            ...c,
+            hit: kind === "hit" ? true : c.hit,
+            missUntil: kind === "miss" ? t + FEEDBACK_MS : 0,
+          }
+      )
+    );
   };
 
-  const visibleHint = now() < hintUntil;
+  const adjustTime = (deltaMs) => {
+    setTimeLeftMs((prev) => Math.max(0, Math.min(TIME_LIMIT_MS, prev + deltaMs)));
+  };
 
-  // Auto drift: next와 next+1 보호 강화
+  const triggerHint = (triggeredAt = now()) => {
+    if (locked || rerolling || gameOver) return false;
+    if (triggeredAt < hintReadyAt) return false;
+    setHintUntil(triggeredAt + HINT_MS);
+    setHintReadyAt(triggeredAt + HINT_COOLDOWN_MS);
+    return true;
+  };
+
+  const swapIntervalMs = Math.max(350, 1600 - level * 110);
+
   useEffect(() => {
-    if (gameOver) return;
-    const iv = setInterval(() => {
-      if (locked || rerolling) return;
-      if (now() - lastProgressRef.current < AUTO_DRIFT_DELAY_MS) return;
+    lastProgressRef.current = now();
+  }, [target]);
 
-      setCells(prev => {
+  useEffect(() => {
+    if (locked || rerolling || gameOver) return;
+    if (tick - lastProgressRef.current < AUTO_HINT_DELAY_MS) return;
+    if (tick < hintReadyAt) return;
+    if (triggerHint(tick)) lastProgressRef.current = tick;
+  }, [gameOver, hintReadyAt, locked, rerolling, tick]);
+
+  useEffect(() => {
+    if (locked || rerolling || gameOver) return;
+    const id = setInterval(() => {
+      setCells((prev) => {
         const eligible = [];
-        const nextVal = target;
-        const nextPlus = target + 1;
-
-        prev.forEach((c, i) => {
-          if (!c.hit && c.value !== nextVal && c.value !== nextPlus) {
-            eligible.push(i);
-          }
-        });
-
+        for (let i = 0; i < prev.length; i += 1) {
+          const cell = prev[i];
+          if (!cell.hit && cell.value !== target) eligible.push(i);
+        }
         if (eligible.length < 2) return prev;
-
-        let a = eligible[randInt(0, eligible.length - 1)];
-        let b = eligible[randInt(0, eligible.length - 1)];
-        if (a === b) b = eligible[(eligible.indexOf(a) + 1) % eligible.length];
-
-        const nextArr = [...prev];
-        [nextArr[a], nextArr[b]] = [nextArr[b], nextArr[a]];
-        return nextArr;
+        const firstIndex = eligible[(Math.random() * eligible.length) | 0];
+        let secondIndex = firstIndex;
+        while (secondIndex === firstIndex) {
+          secondIndex = eligible[(Math.random() * eligible.length) | 0];
+        }
+        const firstValue = prev[firstIndex].value;
+        const secondValue = prev[secondIndex].value;
+        return prev.map((cell, idx) => {
+          if (idx === firstIndex) return { ...cell, value: secondValue };
+          if (idx === secondIndex) return { ...cell, value: firstValue };
+          return cell;
+        });
       });
-    }, 480);
+    }, swapIntervalMs);
+    return () => clearInterval(id);
+  }, [gameOver, locked, rerolling, swapIntervalMs, target]);
 
-    return () => clearInterval(iv);
-  }, [gameOver, locked, rerolling, target]);
+  const onCellClick = (cell) => {
+    if (locked || gameOver || cell.hit) return;
+    enableAudio();
+    if (cell.value !== target) {
+      markCell(cell.id, "miss");
+      adjustTime(-TIME_PENALTY_MS);
+      playSfx("miss");
+      return;
+    }
 
-  const timeText = Math.ceil(timeLeftMs / 1000) + "s";
-  const progress = clamp((TIME_LIMIT_MS - timeLeftMs) / TIME_LIMIT_MS, 0, 1);
+    markCell(cell.id, "hit");
+    adjustTime(TIME_BONUS_MS);
+    setScore((prev) => prev + cell.value);
+    playSfx("hit");
+    lastProgressRef.current = now();
 
-  return h("div", {className: "app"},
-    h("div", {className: "top"},
-      h("div", {className: "titleRow"},
-        h("div", {className: "titleBlock"},
-          h("h1", null, "NumSprint"),
-          h("span", {className: "tag"}, "v2"),
-          h("span", {className: "sub"}, "Tap in order")
-        ),
-        h("div", {className: "controls"},
-          h("button", {className: "btn", onClick: () => document.querySelector(".modalBack")?.classList.add("show")}, "Help"),
-          h("button", {className: "btn danger", onClick: reset}, "Reset"),
-          h("button", {className: "btn primary", onClick: requestReroll, disabled: locked||gameOver||rerolling}, "Reroll")
-        )
-      ),
-      h("div", {className: "status"},
-        h("div", {className: "stats"},
-          h("div", {className: "stat"},
-            h("div", {className: "k"}, "STATE"),
-            h("div", {className: "v"}, gameOver ? "OVER" : locked ? "LOCKED" : "RUN")
-          ),
-          h("div", {className: "stat scoreStat"},
-            h("div", {className: "k"}, "SCORE"),
-            h("div", {className: "v"}, score)
+    if (target >= levelEnd(level)) {
+      scheduleReroll(level + 1);
+      return;
+    }
+
+    setTarget(target + 1);
+  };
+
+  const rangeStart = levelStart(level);
+  const rangeEnd = levelEnd(level);
+  const statusText = gameOver ? "GAME OVER" : rerolling ? "REROLLING" : "READY";
+  const subText = `Pick numbers from ${rangeStart} to ${rangeEnd} in order. Finish to advance.`;
+  const timeText = (timeLeftMs / 1000).toFixed(1);
+  const scoreText = String(score);
+  const timePercent = Math.max(0, Math.min(1, timeLeftMs / TIME_LIMIT_MS));
+  const controlsLocked = locked || gameOver;
+  const visualLocked = gameOver || (locked && !rerolling);
+  const lockTitle = rerolling ? "REROLLING" : gameOver ? "GAME OVER" : "LOCKED";
+  const hintActive = hintUntil > tick;
+  const hintDisabled = controlsLocked || tick < hintReadyAt;
+  const rollStep = (tick / 50) | 0;
+  const rollLevel = rerollTargetLevel ?? level;
+  const rollStart = levelStart(rollLevel);
+  const getRerollValue = (cellId) => {
+    const seed = (rollStep + cellId * 13) >>> 0;
+    const scramble = (seed * 1664525 + 1013904223) >>> 0;
+    return rollStart + (scramble % LEVEL_SIZE);
+  };
+  const gridClassName = ["grid", rerolling ? "rerolling" : ""].join(" ").trim();
+
+  const gridCells = useMemo(
+    () =>
+      cells.map((cell) => {
+        const hit = cell.hit;
+        const miss = cell.missUntil > tick;
+        const displayValue = rerolling ? getRerollValue(cell.id) : cell.value;
+        const hint = hintActive && cell.value === target && !cell.hit && !rerolling;
+        const rerollStyle = rerolling
+          ? {
+            "--reroll-delay": `${(cell.id * 37) % 120}ms`,
+            "--reroll-speed": `${360 + ((cell.id * 29) % 180)}ms`,
+          }
+          : undefined;
+        const cls = [
+          "cell",
+          visualLocked ? "locked" : "",
+          hit ? "hit" : "",
+          miss ? "miss" : "",
+          hint ? "hint" : "",
+        ]
+          .join(" ")
+          .trim();
+
+        return h(
+          "button",
+          {
+            key: cell.id,
+            type: "button",
+            className: cls,
+            onClick: () => onCellClick(cell),
+            disabled: controlsLocked,
+            "aria-label": `Number ${displayValue}`,
+            title: controlsLocked ? lockTitle : `N:${displayValue}`,
+          },
+          h(
+            "span",
+            {
+              className: "num",
+              "data-digits": String(displayValue).length,
+              style: rerollStyle,
+            },
+            displayValue
           )
-        ),
-        h("div", {className: "stateLine"},
-          h("span", {className: gameOver||locked ? "pill warn" : "pill ok"}, locked ? "LOCK" : "LIVE"),
-          h("span", {className: "pill"}, `LV ${level}`)
-        )
+        );
+      }),
+    [cells, controlsLocked, hintActive, rerolling, rerollTargetLevel, target, level, tick]
+  );
+
+  return h(
+    "div",
+    { className: "wrap" },
+    h(
+      "div",
+      { className: "top" },
+      h(
+        "div",
+        { className: "titleBlock" },
+        h("div", { className: "tag" }, "SYSTEM ACTIVE"),
+        h("h1", null, "NUMSPRINT"),
+        h("p", { className: "sub" }, subText)
       ),
-      h("div", {className: "timeBar"},
-        h("div", {className: "timeBarRow"},
-          h("div", null, "TIME"),
-          h("div", null, timeText)
-        ),
-        h("div", {className: "timeBarTrack"},
-          h("div", {className: "timeBarFill", style: {width: `${progress*100}%`}})
+      h(
+        "div",
+        { className: "btns" },
+        h("button", { className: "controlBtn primary", onClick: reset }, "RESTART"),
+        h(
+          "button",
+          {
+            className: "controlBtn secondary",
+            onClick: triggerHint,
+            disabled: hintDisabled,
+            title: hintDisabled ? "HINT COOLDOWN" : "SHOW HINT",
+          },
+          "HINT"
         )
       )
     ),
-
-    h("div", {className: "main"},
-      h("div", {className: "hudRow"},
-        h("div", {className: "hud"},
-          h("div", null, "Next: ", h("b", null, target)),
-          h("div", null, "Hint: ", now() >= hintReadyAt ? "READY" : "WAIT")
+    h(
+      "div",
+      { className: "panel" },
+      h(
+        "div",
+        { className: "status" },
+        h(
+          "div",
+          { className: "targetCard" },
+          h("div", { className: "targetLabel" }, "TARGET"),
+          h("div", { className: "targetNum" }, target),
+          h("div", { className: "targetMini" }, `LEVEL ${level}`)
         ),
-        h("button", {
-          className: "btn",
-          onClick: () => {
-            if (now() >= hintReadyAt) {
-              setHintUntil(now() + HINT_MS);
-              setHintReadyAt(now() + HINT_COOLDOWN_MS);
-            }
-          },
-          disabled: now() < hintReadyAt
-        }, "Hint (H)")
-      ),
-
-      h("div", {className: "board"},
-        cells.map(cell => {
-          const isHint = visibleHint && cell.value === target;
-          const cls = ["cell", cell.state, isHint ? "hint" : "", cell.hit ? "lock" : ""].filter(Boolean).join(" ");
-          return h("div", {
-            key: cell.id,
-            className: cls,
-            onPointerDown: () => handleHit(cell)
-          },
-            cell.value,
-            h("span", {className: "subnum"}, cell.value - levelStart(level) + 1)
-          );
-        })
-      ),
-
-      h("div", {className: "footer"}, gameOver ? "Game Over – Try again" : "R: Reroll  /  H: Hint")
-    ),
-
-    h("div", {className: "toast", ref: toastRef}),
-
-    // Help Modal
-    h("div", {className: "modalBack", onPointerDown: e => e.target.classList.remove("show")},
-      h("div", {className: "modal", onPointerDown: e => e.stopPropagation()},
-        h("div", {className: "modalHead"},
-          h("h2", null, "How to Play"),
-          h("button", {className: "btn", onClick: () => document.querySelector(".modalBack")?.classList.remove("show")}, "Close")
+        h(
+          "div",
+          { className: "stats" },
+          h(
+            "div",
+            { className: "stat" },
+            h("div", { className: "k" }, "STATE"),
+            h("div", { className: "v" }, statusText)
+          ),
+          h(
+            "div",
+            { className: "stat scoreStat" },
+            h("div", { className: "k" }, "SCORE"),
+            h("div", { className: "v" }, scoreText)
+          ),
         ),
-        h("div", {className: "modalBody"},
-          h("p", null, "Tap numbers in ascending order as fast as possible."),
-          h("p", null, "Time limit: 30 seconds"),
-          h("p", null, "Hint (H) highlights the next number (cooldown)"),
-          h("p", null, "Reroll (R) reshuffles the current level (+time bonus)"),
-          h("p", null, "Stuck? Cells auto-swap gently after a while (next number protected)")
+        h(
+          "div",
+          {
+            className: "timeBar",
+            role: "progressbar",
+            "aria-label": "Time remaining",
+            "aria-valuemin": 0,
+            "aria-valuemax": TIME_LIMIT_MS,
+            "aria-valuenow": Math.round(timeLeftMs),
+          },
+          h(
+            "div",
+            { className: "timeBarHead" },
+            h("div", { className: "timeBarLabel" }, "TIME LEFT"),
+            h("div", { className: "timeBarValue" }, `${timeText}s`)
+          ),
+          h(
+            "div",
+            { className: "timeBarTrack" },
+            h("div", { className: "timeBarFill", style: { width: `${timePercent * 100}%` } })
+          )
         )
+      ),
+      h(
+        "div",
+        { className: "gridOuter" },
+        h("div", { className: gridClassName, role: "grid", "aria-label": "number grid" }, gridCells)
       )
     )
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
