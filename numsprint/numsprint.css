@@ -43,15 +43,18 @@ body {
 
 .top {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 
 .titleBlock {
   display: grid;
   gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .tag {
@@ -95,8 +98,9 @@ h1 {
 .btns {
   display: flex;
   gap: 8px;
-  width: 100%;
+  width: auto;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .controlBtn {
@@ -136,13 +140,15 @@ h1 {
   margin-top: 8px;
   background: var(--panel);
   border: var(--pixel-border);
-  padding: 12px;
+  padding: 10px;
   box-shadow: var(--shadow);
 }
 
 .status {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  grid-template-columns: 1.1fr 1.9fr;
+  align-items: stretch;
 }
 
 .targetCard {
@@ -179,8 +185,8 @@ h1 {
 
 .stats {
   display: grid;
-  grid-template-columns: 1fr 1fr; /* 고정 2열로 변경하여 1줄 유지 */
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
 }
 
 .stat {
@@ -244,7 +250,7 @@ h1 {
 }
 
 .timeBarTrack {
-  height: 5px; /* 트랙 높이 축소로 경량화 */
+  height: 5px;
   border: var(--pixel-border);
   background: #dcdcd2;
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.12);
@@ -260,15 +266,31 @@ h1 {
 .gridOuter {
   width: min(88vw, 420px);
   aspect-ratio: 1 / 1;
-  margin: 12px auto 0;
+  margin: 10px auto 0;
+  position: relative;
 }
+.startOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.startBtn {
+  min-width: 160px;
+  padding: 12px 18px;
+  font-size: 28px;
+}
+
 
 .grid {
   width: 100%;
   height: 100%;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 6px;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -280,10 +302,25 @@ h1 {
 }
 
 @keyframes reroll-ticker {
-  0%   { transform: translateY(-16%) skewY(-2deg); opacity: 0.6; }
-  35%  { transform: translateY(10%)  skewY(1.5deg); opacity: 0.78; }
-  70%  { transform: translateY(-5%)  skewY(-1deg); opacity: 0.9; }
-  100% { transform: translateY(0)    skewY(0); opacity: 1; }
+  0% {
+    transform: translateY(-16%) skewY(-2deg);
+    opacity: 0.6;
+  }
+
+  35% {
+    transform: translateY(10%) skewY(1.5deg);
+    opacity: 0.78;
+  }
+
+  70% {
+    transform: translateY(-5%) skewY(-1deg);
+    opacity: 0.9;
+  }
+
+  100% {
+    transform: translateY(0) skewY(0);
+    opacity: 1;
+  }
 }
 
 .cell {
@@ -322,9 +359,9 @@ h1 {
 .cell::after {
   content: "";
   position: absolute;
-  top: 6px; /* 위치 조정 */
+  top: 6px;
   right: 6px;
-  width: 6px; /* 크기 축소 */
+  width: 6px;
   height: 6px;
   border: var(--pixel-border);
   background: rgba(10, 42, 63, 0.12);
@@ -402,10 +439,12 @@ h1 {
 }
 
 @keyframes hint-pulse {
+
   0%,
   100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.03);
   }
@@ -416,14 +455,17 @@ h1 {
 }
 
 @keyframes cell-shake {
+
   0%,
   100% {
     transform: translateX(0);
   }
+
   20%,
   60% {
     transform: translateX(-4px);
   }
+
   40%,
   80% {
     transform: translateX(4px);
@@ -435,23 +477,8 @@ h1 {
     padding: 28px 20px 44px;
   }
 
-  .top {
-    flex-direction: row;
-    align-items: flex-end;
-    justify-content: space-between;
-  }
-
-  .btns {
-    width: auto;
-  }
-
   h1 {
     font-size: 28px;
-  }
-
-  .status {
-    grid-template-columns: 1.1fr 1.9fr;
-    align-items: stretch;
   }
 
   .gridOuter {
@@ -460,19 +487,59 @@ h1 {
 }
 
 @media (max-width: 420px) {
-  .wrap { padding: 16px 12px 28px; }
-  h1 { font-size: 16px; }
-  .stats { gap: 10px; }
-  .stat { padding: 8px; }
-  .v { font-size: 14px; }
-  .scoreStat .v { font-size: 34px; }
-  .timeBarTrack { height: 5px; } /* 모바일 추가 축소 */
-  .grid { gap: 8px; }
-  .cell::after { width: 5px; height: 5px; top: 5px; right: 5px; }
-  .num { font-size: clamp(30px, 64cqi, 72px); }
-  .num[data-digits="3"] { font-size: clamp(24px, 48cqi, 56px); }
+  .wrap {
+    padding: 16px 12px 28px;
+  }
+
+  h1 {
+    font-size: 16px;
+  }
+
+  .stats {
+    gap: 8px;
+  }
+
+  .stat {
+    padding: 8px;
+  }
+
+  .v {
+    font-size: 14px;
+  }
+
+  .scoreStat .v {
+    font-size: 34px;
+  }
+
+  .timeBarTrack {
+    height: 5px;
+  }
+
+  .grid {
+    gap: 6px;
+  }
+
+  .cell::after {
+    width: 5px;
+    height: 5px;
+    top: 5px;
+    right: 5px;
+  }
+
+  .num {
+    font-size: clamp(30px, 64cqi, 72px);
+  }
+
+  .num[data-digits="3"] {
+    font-size: clamp(24px, 48cqi, 56px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .grid.rerolling .num, .hint, .miss { animation: none; }
+
+  .grid.rerolling .num,
+  .hint,
+  .miss {
+    animation: none;
+  }
 }
