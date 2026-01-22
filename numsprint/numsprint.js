@@ -2,8 +2,7 @@ const { useEffect, useMemo, useRef, useState } = React;
 const h = React.createElement;
 
 const GRID = 4;
-const COUNT = GRID * GRID;
-const LEVEL_SIZE = COUNT;
+const LEVEL_SIZE = GRID * GRID;
 const FEEDBACK_MS = 240;
 const REROLL_DELAY_MS = 150;
 const TIME_LIMIT_MS = 30000;
@@ -27,13 +26,11 @@ function shuffle(values) {
 }
 
 function buildLevelCells(level) {
-  const t = now();
   const start = levelStart(level);
   const values = shuffle(Array.from({ length: LEVEL_SIZE }, (_, i) => start + i));
   return values.map((value, id) => ({
     id,
     value,
-    touchedAt: t,
     hit: false,
     missUntil: 0,
   }));
@@ -49,15 +46,13 @@ function App() {
   const [tick, setTick] = useState(() => now());
   const [timeLeftMs, setTimeLeftMs] = useState(TIME_LIMIT_MS);
   const [gameOver, setGameOver] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
   const [score, setScore] = useState(0);
   const [hintUntil, setHintUntil] = useState(0);
   const [hintReadyAt, setHintReadyAt] = useState(0);
-  const rerollTimerRef = useRef(null);
-  const gameOverRef = useRef(false);
-  const timeRef = useRef(now());
+  const rerollTimerRef = useRef(null);  const timeRef = useRef(now());
   const audioRef = useRef(null);
   const audioEnabledRef = useRef(false);
-  const autoStartRef = useRef(false);
   const lastStartSfxRef = useRef(0);
   const lastProgressRef = useRef(now());
 
@@ -70,17 +65,25 @@ function App() {
 
   const unlockAudio = () => {
     const ctx = getAudioCtx();
-    if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume();
-    // silent tick for stability
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    gain.gain.value = 0.0001;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.01);
-    audioEnabledRef.current = true;
+    if (!ctx) return Promise.resolve(null);
+    const warmUp = () => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.01);
+      audioEnabledRef.current = true;
+      return ctx;
+    };
+    if (ctx.state === "suspended") {
+      return ctx
+        .resume()
+        .then(() => warmUp())
+        .catch(() => null);
+    }
+    return Promise.resolve(warmUp());
   };
 
   const playTone = (ctx, freq, duration, type, offset, gain) => {
@@ -113,72 +116,86 @@ function App() {
       return;
     }
     if (kind === "reroll") {
-      const tickCount = Math.max(3, Math.round(REROLL_DELAY_MS / 60));
-      const spacing = 0.04;
-      for (let i = 0; i < tickCount; i += 1) {
-        playTone(ctx, 520 + i * 90, 0.04, "square", i * spacing, baseGain * 0.6);
-      }
+      const rise = [0, 4, 7, 12, 19];
+      const base = 520;
+      const spacing = 0.035;
+      rise.forEach((step, i) => {
+        const freq = base * Math.pow(2, step / 12);
+        playTone(ctx, freq, 0.05, "square", i * spacing, baseGain * 0.55);
+      });
+      playTone(ctx, base * 2, 0.06, "square", rise.length * spacing + 0.02, baseGain * 0.45);
       return;
     }
     if (kind === "gameover") {
-      playTone(ctx, 440, 0.12, "square", 0, baseGain * 0.7);
-      playTone(ctx, 330, 0.12, "square", 0.12, baseGain * 0.6);
-      playTone(ctx, 220, 0.14, "square", 0.24, baseGain * 0.5);
+      const g = baseGain * 1.15;
+      playTone(ctx, 196, 0.26, "triangle", 0, g);
+      playTone(ctx, 174, 0.3, "triangle", 0.12, g * 0.9);
+      playTone(ctx, 146, 0.34, "triangle", 0.24, g * 0.85);
+      playTone(ctx, 110, 0.48, "square", 0.18, g * 0.55);
+      playTone(ctx, 98, 0.52, "square", 0.3, g * 0.45);
       return;
     }
   };
 
   const playStartSfx = () => {
     const t = now();
-    if (t - lastStartSfxRef.current < 160) return;
+    if (t - lastStartSfxRef.current < 400) return;
     lastStartSfxRef.current = t;
     const ctx = getAudioCtx();
     if (!ctx) return;
-    const baseGain = 0.04;
-    // 저역 킥
-    playTone(ctx, 196, 0.10, "sine", 0.00, baseGain * 1.2);
-    // 촘촘한 상승 아르페지오
-    const notes = [740, 932, 1110, 1245, 1480, 1760];
-    const step = 0.035;
-    notes.forEach((f, i) => {
-      playTone(ctx, f, 0.06, "triangle", 0.03 + i * step, baseGain * (0.95 - i * 0.08));
-      if (i % 2 === 0) playTone(ctx, f * 2, 0.03, "square", 0.03 + i * step, baseGain * 0.25);
+    const tempo = 168;
+    const step = 60 / tempo / 4;
+    const leadGain = 0.035;
+    const bassGain = 0.024;
+    const midiToFreq = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+    const lead = [
+      { m: 64, s: 0, d: 1 },
+      { m: 67, s: 1, d: 1 },
+      { m: 69, s: 2, d: 1 },
+      { m: 71, s: 3, d: 1 },
+      { m: 74, s: 4, d: 2 },
+      { m: 71, s: 6, d: 2 },
+      { m: 69, s: 8, d: 2 },
+      { m: 67, s: 10, d: 2 },
+      { m: 64, s: 12, d: 4 },
+      { m: 67, s: 16, d: 1 },
+      { m: 69, s: 17, d: 1 },
+      { m: 70, s: 18, d: 1 },
+      { m: 71, s: 19, d: 1 },
+      { m: 74, s: 20, d: 2 },
+      { m: 71, s: 22, d: 2 },
+    ];
+    const bass = [
+      { m: 40, s: 0, d: 4 },
+      { m: 47, s: 8, d: 4 },
+      { m: 40, s: 16, d: 4 },
+    ];
+
+    lead.forEach((note) => {
+      const freq = midiToFreq(note.m);
+      const duration = step * note.d * 0.92;
+      const offset = step * note.s;
+      playTone(ctx, freq, duration, "square", offset, leadGain);
+      playTone(ctx, freq * 1.004, duration * 0.88, "square", offset + 0.002, leadGain * 0.45);
     });
-    // 하이라이트 톤
-    playTone(ctx, 1976, 0.07, "square", 0.03 + notes.length * step, baseGain * 0.55);
+
+    bass.forEach((note) => {
+      const freq = midiToFreq(note.m);
+      const duration = step * note.d * 0.95;
+      playTone(ctx, freq, duration, "triangle", step * note.s, bassGain);
+    });
   };
-
   useEffect(() => {
-    const handleFirstInteraction = () => {
-      if (autoStartRef.current) return;
-      autoStartRef.current = true;
-      unlockAudio();
-      playStartSfx();
-    };
-    window.addEventListener("pointerdown", handleFirstInteraction, { once: true });
-    window.addEventListener("keydown", handleFirstInteraction, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", handleFirstInteraction);
-      window.removeEventListener("keydown", handleFirstInteraction);
-    };
-  }, []);
-
-  useEffect(() => {
+    if (!gameStarted || gameOver) return;
     const id = setInterval(() => {
       const t = now();
       const delta = t - timeRef.current;
       timeRef.current = t;
       setTick(t);
-      if (!gameOverRef.current) {
-        setTimeLeftMs((prev) => Math.max(0, prev - delta));
-      }
+      setTimeLeftMs((prev) => Math.max(0, prev - delta));
     }, 80);
     return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    gameOverRef.current = gameOver;
-  }, [gameOver]);
+  }, [gameStarted, gameOver]);
 
   useEffect(() => {
     return () => {
@@ -187,7 +204,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (timeLeftMs > 0 || gameOver) return;
+    if (!gameStarted || timeLeftMs > 0 || gameOver) return;
     setGameOver(true);
     setLocked(true);
     setRerolling(false);
@@ -195,13 +212,15 @@ function App() {
     if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
     rerollTimerRef.current = null;
     playSfx("gameover");
-  }, [timeLeftMs, gameOver]);
+  }, [gameStarted, timeLeftMs, gameOver]);
 
   const reset = () => {
     if (rerollTimerRef.current) clearTimeout(rerollTimerRef.current);
     rerollTimerRef.current = null;
-    unlockAudio();
-    playStartSfx();
+    setGameStarted(true);
+    unlockAudio().then((ctx) => {
+      if (ctx) playStartSfx();
+    });
     setLocked(false);
     setLevel(1);
     setTarget(levelStart(1));
@@ -215,6 +234,11 @@ function App() {
     setHintReadyAt(0);
     lastProgressRef.current = now();
     timeRef.current = now();
+  };
+
+  const startGame = () => {
+    if (gameStarted) return;
+    reset();
   };
 
   const scheduleReroll = (nextLevel) => {
@@ -267,20 +291,20 @@ function App() {
   }, [target]);
 
   useEffect(() => {
-    if (locked || rerolling || gameOver) return;
+    if (!gameStarted || locked || rerolling || gameOver) return;
     if (tick - lastProgressRef.current < AUTO_HINT_DELAY_MS) return;
     if (tick < hintReadyAt) return;
     if (triggerHint(tick)) lastProgressRef.current = tick;
-  }, [gameOver, hintReadyAt, locked, rerolling, tick]);
+  }, [gameOver, gameStarted, hintReadyAt, locked, rerolling, tick]);
 
   useEffect(() => {
-    if (locked || rerolling || gameOver) return;
+    if (!gameStarted || locked || rerolling || gameOver) return;
     const id = setInterval(() => {
       setCells((prev) => {
         const eligible = [];
         for (let i = 0; i < prev.length; i += 1) {
           const cell = prev[i];
-          if (!cell.hit && cell.value !== target && cell.value !== target + 1) eligible.push(i); // next+1 보호 추가
+          if (!cell.hit && cell.value !== target && cell.value !== target + 1) eligible.push(i);
         }
         if (eligible.length < 2) return prev;
         const firstIndex = eligible[(Math.random() * eligible.length) | 0];
@@ -298,10 +322,10 @@ function App() {
       });
     }, swapIntervalMs);
     return () => clearInterval(id);
-  }, [gameOver, locked, rerolling, swapIntervalMs, target]);
+  }, [gameOver, gameStarted, locked, rerolling, swapIntervalMs, target]);
 
   const onCellClick = (cell) => {
-    if (locked || gameOver || cell.hit) return;
+    if (!gameStarted || locked || gameOver || cell.hit) return;
     unlockAudio();
     if (cell.value !== target) {
       markCell(cell.id, "miss");
@@ -326,14 +350,14 @@ function App() {
 
   const rangeStart = levelStart(level);
   const rangeEnd = levelEnd(level);
-  const statusText = gameOver ? "GAME OVER" : rerolling ? "REROLLING" : "READY";
+  const statusText = gameOver ? "GAME OVER" : !gameStarted ? "PRESS START" : rerolling ? "REROLLING" : "READY";
   const subText = `Pick numbers from ${rangeStart} to ${rangeEnd} in order. Finish to advance.`;
   const timeText = (timeLeftMs / 1000).toFixed(1);
   const scoreText = String(score);
   const timePercent = Math.max(0, Math.min(1, timeLeftMs / TIME_LIMIT_MS));
-  const controlsLocked = locked || gameOver;
-  const visualLocked = gameOver || (locked && !rerolling);
-  const lockTitle = rerolling ? "REROLLING" : gameOver ? "GAME OVER" : "LOCKED";
+  const controlsLocked = !gameStarted || locked || gameOver;
+  const visualLocked = !gameStarted || gameOver || (locked && !rerolling);
+  const lockTitle = gameOver ? "GAME OVER" : !gameStarted ? "PRESS START" : rerolling ? "REROLLING" : "LOCKED";
   const hintActive = hintUntil > tick;
   const hintDisabled = controlsLocked || tick < hintReadyAt;
   const rollStep = (tick / 50) | 0;
@@ -345,6 +369,7 @@ function App() {
     return rollStart + (scramble % LEVEL_SIZE);
   };
   const gridClassName = ["grid", rerolling ? "rerolling" : ""].join(" ").trim();
+  const showStart = !gameStarted;
 
   const gridCells = useMemo(
     () =>
@@ -410,7 +435,7 @@ function App() {
       h(
         "div",
         { className: "btns" },
-        h("button", { className: "controlBtn primary", onClick: reset }, "RESTART"),
+        h("button", { className: "controlBtn primary", onClick: reset, disabled: !gameStarted }, "RESTART"),
         h(
           "button",
           {
@@ -478,6 +503,21 @@ function App() {
       h(
         "div",
         { className: "gridOuter" },
+        showStart
+          ? h(
+              "div",
+              { className: "startOverlay" },
+              h(
+                "button",
+                {
+                  className: "controlBtn primary startBtn",
+                  type: "button",
+                  onClick: startGame,
+                },
+                "GAME START"
+              )
+            )
+          : null,
         h("div", { className: gridClassName, role: "grid", "aria-label": "number grid" }, gridCells)
       )
     )
