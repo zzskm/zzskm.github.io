@@ -262,8 +262,10 @@ function App() {
   const wrapRef = useRef(null);
   const outerRef = useRef(null);
   const boardRef = useRef(null);
+  const nextRowFrameRef = useRef(null);
 
-  // NOTE: state-less geometry. We sync CSS vars directly.
+  // Keep geometry without driving game logic; re-render only when geometry changes.
+  const [layoutTick, setLayoutTick] = useState(0);
   const geomRef = useRef({ cell: 24, gap: 4 });
 
   // timer loop
@@ -423,7 +425,6 @@ function App() {
   );
 
   const prevLevelRef = useRef(level);
-
   useEffect(() => {
     if (level > prevLevelRef.current) {
       unlockAudio().then(() => playSfx("levelup"));
@@ -437,11 +438,12 @@ function App() {
     return s;
   }, [hoverGroup]);
 
-  // Measure board geometry (responsive) — state-less, write CSS vars directly
+  // Measure board geometry (responsive)
   useLayoutEffect(() => {
     const wrapEl = wrapRef.current;
     const boardEl = boardRef.current;
     const outerEl = outerRef.current;
+    const nextEl = nextRowFrameRef.current;
     if (!wrapEl || !boardEl || !outerEl) return;
 
     const compute = () => {
@@ -452,27 +454,30 @@ function App() {
       const cellW = (w - gapPx * (COLS - 1)) / COLS;
       const cell = Math.max(10, Math.floor(cellW));
 
+      const prev = geomRef.current;
+      if (prev.cell === cell && prev.gap === gapPx) return;
+
       geomRef.current = { cell, gap: gapPx };
 
+      // sync CSS vars used by inputLayer / nextRow
       boardEl.style.setProperty("--cell", `${cell}px`);
       boardEl.style.setProperty("--gap", `${gapPx}px`);
-      boardEl.style.setProperty("--step", `calc(${cell}px + ${gapPx}px)`);
 
       const boardW = COLS * cell + (COLS - 1) * gapPx;
       const boardH = ROWS * cell + (ROWS - 1) * gapPx;
       outerEl.style.width = `${boardW}px`;
       outerEl.style.height = `${boardH}px`;
 
-      // Next row frame width (includes padding)
-      const nextFrame = boardW + NEXT_ROW_PAD * 2;
-      const nextRowFrameEl = wrapEl.querySelector(".nextRowFrame");
-      if (nextRowFrameEl) {
-        nextRowFrameEl.style.width = `${nextFrame}px`;
-        nextRowFrameEl.style.setProperty("--row-pad", `${NEXT_ROW_PAD}px`);
-        nextRowFrameEl.style.setProperty("--cell", `${cell}px`);
-        nextRowFrameEl.style.setProperty("--gap", `${gapPx}px`);
-        nextRowFrameEl.style.setProperty("--scale", String(BRICK_SCALE));
+      if (nextEl) {
+        nextEl.style.width = `${boardW + NEXT_ROW_PAD * 2}px`;
+        nextEl.style.setProperty("--row-pad", `${NEXT_ROW_PAD}px`);
+        nextEl.style.setProperty("--cell", `${cell}px`);
+        nextEl.style.setProperty("--gap", `${gapPx}px`);
+        nextEl.style.setProperty("--scale", String(BRICK_SCALE));
       }
+
+      // trigger re-render so tile px positions are recalculated
+      setLayoutTick(t => t + 1);
     };
 
     compute();
@@ -515,7 +520,6 @@ function App() {
     const g = groupAt(grid, x, y);
     setHoverGroup(g.length >= MIN_GROUP ? g : []);
   };
-
   const onCellLeave = () => setHoverGroup([]);
 
   const onCellClick = (x, y) => {
@@ -583,9 +587,7 @@ function App() {
     }, POP_MS);
   };
 
-  useEffect(() => {
-    setNextReveal(0);
-  }, [nextLine]);
+  useEffect(() => { setNextReveal(0); }, [nextLine]);
 
   useEffect(() => {
     if (!gameStarted || locked || gameOver) return;
@@ -664,6 +666,11 @@ function App() {
     for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) arr.push({ x, y });
     return arr;
   }, []);
+
+  // read tick to make sure render updates after resize
+  void layoutTick;
+
+  const { cell, gap } = geomRef.current;
 
   const showStart = !gameStarted;
 
@@ -774,6 +781,9 @@ function App() {
                 const spawning = spawnIds.has(tile.id);
                 const isMiss = missActive && missPos && missPos.x === tile.x && missPos.y === tile.y;
 
+                const tx = tile.x * (cell + gap);
+                const ty = tile.y * (cell + gap);
+
                 const cls = [
                   "tile",
                   "brick",
@@ -789,10 +799,10 @@ function App() {
                   key: tile.id,
                   className: cls,
                   style: {
-                    width: "var(--cell)",
-                    height: "var(--cell)",
-                    "--x": tile.x,
-                    "--y": tile.y,
+                    width: `${cell}px`,
+                    height: `${cell}px`,
+                    "--tx": `${tx}px`,
+                    "--ty": `${ty}px`,
                     "--scale": String(BRICK_SCALE),
                   }
                 });
@@ -834,7 +844,7 @@ function App() {
         ),
         h(
           "div",
-          { className: "nextRowFrame" },
+          { className: "nextRowFrame", ref: nextRowFrameRef },
           h(
             "div",
             { className: "nextRow" },
