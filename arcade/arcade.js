@@ -50,7 +50,7 @@ function renderCard(g) {
         <p class="desc">${blurb}</p>
         <div class="footer">
           <span class="play">PLAY</span>
-          <span>→</span>
+          <span></span>
         </div>
       </div>
     </a>
@@ -60,14 +60,20 @@ function renderCard(g) {
 async function main() {
   const grid = document.getElementById("grid");
   const error = document.getElementById("error");
+  if (!grid) {
+    console.warn("Missing #grid element; cannot render games.");
+    return;
+  }
 
   try {
     const games = await loadGames();
     grid.innerHTML = games.map(renderCard).join("");
   } catch (e) {
     console.error(e);
-    error.textContent = String(e?.message ?? e);
-    error.style.display = "block";
+    if (error) {
+      error.textContent = String(e?.message ?? e);
+      error.style.display = "block";
+    }
   }
 }
 
