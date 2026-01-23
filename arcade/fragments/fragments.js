@@ -262,7 +262,9 @@ function App() {
   const wrapRef = useRef(null);
   const outerRef = useRef(null);
   const boardRef = useRef(null);
-  const [geom, setGeom] = useState({ cell: 24, gap: 4 });
+
+  // NOTE: state-less geometry. We sync CSS vars directly.
+  const geomRef = useRef({ cell: 24, gap: 4 });
 
   // timer loop
   const lastTickRef = useRef(now());
@@ -414,10 +416,12 @@ function App() {
   };
 
   const tiles = useMemo(() => collectTiles(grid), [grid]);
+
   const revealMs = useMemo(
     () => Math.max(REVEAL_MIN_MS, Math.floor(REVEAL_START_MS * Math.pow(REVEAL_DECAY, Math.max(0, level - 1)))),
     [level]
   );
+
   const prevLevelRef = useRef(level);
 
   useEffect(() => {
@@ -433,25 +437,47 @@ function App() {
     return s;
   }, [hoverGroup]);
 
-  // Measure board geometry (responsive)
+  // Measure board geometry (responsive) — state-less, write CSS vars directly
   useLayoutEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
+    const wrapEl = wrapRef.current;
+    const boardEl = boardRef.current;
+    const outerEl = outerRef.current;
+    if (!wrapEl || !boardEl || !outerEl) return;
 
     const compute = () => {
-      const style = window.getComputedStyle(boardRef.current || el);
+      const style = window.getComputedStyle(boardEl);
       const gapPx = parseFloat(style.getPropertyValue("--gap")) || 6;
 
-      const w = el.clientWidth;
+      const w = wrapEl.clientWidth;
       const cellW = (w - gapPx * (COLS - 1)) / COLS;
       const cell = Math.max(10, Math.floor(cellW));
 
-      setGeom(prev => (prev.cell === cell && prev.gap === gapPx ? prev : { cell, gap: gapPx }));
+      geomRef.current = { cell, gap: gapPx };
+
+      boardEl.style.setProperty("--cell", `${cell}px`);
+      boardEl.style.setProperty("--gap", `${gapPx}px`);
+      boardEl.style.setProperty("--step", `calc(${cell}px + ${gapPx}px)`);
+
+      const boardW = COLS * cell + (COLS - 1) * gapPx;
+      const boardH = ROWS * cell + (ROWS - 1) * gapPx;
+      outerEl.style.width = `${boardW}px`;
+      outerEl.style.height = `${boardH}px`;
+
+      // Next row frame width (includes padding)
+      const nextFrame = boardW + NEXT_ROW_PAD * 2;
+      const nextRowFrameEl = wrapEl.querySelector(".nextRowFrame");
+      if (nextRowFrameEl) {
+        nextRowFrameEl.style.width = `${nextFrame}px`;
+        nextRowFrameEl.style.setProperty("--row-pad", `${NEXT_ROW_PAD}px`);
+        nextRowFrameEl.style.setProperty("--cell", `${cell}px`);
+        nextRowFrameEl.style.setProperty("--gap", `${gapPx}px`);
+        nextRowFrameEl.style.setProperty("--scale", String(BRICK_SCALE));
+      }
     };
 
     compute();
     const ro = new ResizeObserver(compute);
-    ro.observe(el);
+    ro.observe(wrapEl);
     return () => ro.disconnect();
   }, []);
 
@@ -489,6 +515,7 @@ function App() {
     const g = groupAt(grid, x, y);
     setHoverGroup(g.length >= MIN_GROUP ? g : []);
   };
+
   const onCellLeave = () => setHoverGroup([]);
 
   const onCellClick = (x, y) => {
@@ -627,7 +654,7 @@ function App() {
       : missActive
         ? "NO VALID CLUSTER // INPUT IGNORED"
         : locked
-          ? "SYSTEM HOLD // MEMORY LOCKED\nWAITING FOR STABILITY"
+          ? "SYSTEM HOLD // MEMORY LOCKED\nPLEASE WAIT"
           : `IDENTIFY CLUSTERS \u2265${MIN_GROUP} // PURGE FRAGMENTS`;
 
   const stateText = gameOver ? "FAILED" : (!gameStarted ? "IDLE" : (locked ? "HOLD" : "ACTIVE"));
@@ -638,28 +665,6 @@ function App() {
     return arr;
   }, []);
 
-  const boardPx = useMemo(() => {
-    const w = COLS * geom.cell + (COLS - 1) * geom.gap;
-    const h = ROWS * geom.cell + (ROWS - 1) * geom.gap;
-    return { w, h };
-  }, [geom]);
-  const boardStyle = useMemo(() => ({
-    "--gap": `${geom.gap}px`,
-    "--cell": `${geom.cell}px`,
-  }), [geom]);
-
-  const outerStyle = useMemo(() => ({
-    width: `${boardPx.w}px`,
-    height: `${boardPx.h}px`,
-  }), [boardPx]);
-
-  const nextRowStyle = useMemo(() => ({
-    width: `${boardPx.w + NEXT_ROW_PAD * 2}px`,
-    "--gap": `${geom.gap}px`,
-    "--cell": `${geom.cell}px`,
-    "--row-pad": `${NEXT_ROW_PAD}px`,
-    "--scale": String(BRICK_SCALE),
-  }), [boardPx, geom]);
   const showStart = !gameStarted;
 
   return h(
@@ -717,6 +722,12 @@ function App() {
           h(
             "div",
             { className: "stat" },
+            h("div", { className: "k" }, "STATE"),
+            h("div", { className: "v" }, stateText)
+          ),
+          h(
+            "div",
+            { className: "stat" },
             h("div", { className: "k" }, "LEVEL"),
             h("div", { className: "v" }, String(level))
           ),
@@ -734,7 +745,7 @@ function App() {
         { className: "boardWrap", ref: wrapRef },
         h(
           "div",
-          { className: "gridOuter", ref: outerRef, style: outerStyle },
+          { className: "gridOuter", ref: outerRef },
           showStart
             ? h(
                 "div",
@@ -752,7 +763,7 @@ function App() {
             : null,
           h(
             "div",
-            { className: "board", ref: boardRef, style: boardStyle },
+            { className: "board", ref: boardRef },
 
             h(
               "div",
@@ -762,9 +773,6 @@ function App() {
                 const removing = removingIds.has(tile.id);
                 const spawning = spawnIds.has(tile.id);
                 const isMiss = missActive && missPos && missPos.x === tile.x && missPos.y === tile.y;
-
-                const tx = tile.x * (geom.cell + geom.gap);
-                const ty = tile.y * (geom.cell + geom.gap);
 
                 const cls = [
                   "tile",
@@ -781,10 +789,10 @@ function App() {
                   key: tile.id,
                   className: cls,
                   style: {
-                    width: `${geom.cell}px`,
-                    height: `${geom.cell}px`,
-                    "--tx": `${tx}px`,
-                    "--ty": `${ty}px`,
+                    width: "var(--cell)",
+                    height: "var(--cell)",
+                    "--x": tile.x,
+                    "--y": tile.y,
                     "--scale": String(BRICK_SCALE),
                   }
                 });
@@ -826,7 +834,7 @@ function App() {
         ),
         h(
           "div",
-          { className: "nextRowFrame", style: nextRowStyle },
+          { className: "nextRowFrame" },
           h(
             "div",
             { className: "nextRow" },
