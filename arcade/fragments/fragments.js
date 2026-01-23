@@ -627,7 +627,7 @@ function App() {
       : missActive
         ? "NO VALID CLUSTER // INPUT IGNORED"
         : locked
-          ? "SYSTEM HOLD // MEMORY LOCKED\n"
+          ? "SYSTEM HOLD // MEMORY LOCKED\nWAITING FOR STABILITY"
           : `IDENTIFY CLUSTERS \u2265${MIN_GROUP} // PURGE FRAGMENTS`;
 
   const stateText = gameOver ? "FAILED" : (!gameStarted ? "IDLE" : (locked ? "HOLD" : "ACTIVE"));
