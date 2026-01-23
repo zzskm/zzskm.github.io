@@ -717,12 +717,6 @@ function App() {
           h(
             "div",
             { className: "stat" },
-            h("div", { className: "k" }, "STATE"),
-            h("div", { className: "v" }, stateText)
-          ),
-          h(
-            "div",
-            { className: "stat" },
             h("div", { className: "k" }, "LEVEL"),
             h("div", { className: "v" }, String(level))
           ),
