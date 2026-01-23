@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARCADE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="arcade.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="tag">SYSTEM ONLINE</div>
+      <h1>ARCADE</h1>
+      <p class="sub">Select a protocol. Game list is loaded from <code>games.json</code>.</p>
+    </header>
+
+    <p id="error" class="error" style="display:none;"></p>
+
+  <section class="grid" id="grid" aria-label="Game list">
+      <!-- populated by arcade.js -->
+    </section>
+  </main>
+
+  <script type="application/json" id="games-data">
+    [
+      {
+        "id": "numsprint",
+        "title": "NUMSPRINT",
+        "blurb": "Sprint protocol under constraint.",
+        "href": "numsprint/index.html",
+        "tags": [
+          "PROTOCOL"
+        ]
+      },
+      {
+        "id": "fragments",
+        "title": "FRAGMENTS // PURGE",
+        "blurb": "Isolate and purge corrupted clusters.",
+        "href": "fragments/index.html",
+        "tags": [
+          "MAINT"
+        ]
+      }
+    ]
+  </script>
+
+  <script src="arcade.js"></script>
+</body>
+</html>
