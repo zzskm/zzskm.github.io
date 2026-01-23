@@ -659,8 +659,6 @@ function App() {
           ? "SYSTEM HOLD // MEMORY LOCKED\nPLEASE WAIT"
           : `IDENTIFY CLUSTERS \u2265${MIN_GROUP} // PURGE FRAGMENTS`;
 
-  const stateText = gameOver ? "FAILED" : (!gameStarted ? "IDLE" : (locked ? "HOLD" : "ACTIVE"));
-
   const flat = useMemo(() => {
     const arr = [];
     for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) arr.push({ x, y });
@@ -726,13 +724,7 @@ function App() {
         h(
           "div",
           { className: "stats" },
-          h(
-            "div",
-            { className: "stat" },
-            h("div", { className: "k" }, "STATE"),
-            h("div", { className: "v" }, stateText)
-          ),
-          h(
+                    h(
             "div",
             { className: "stat" },
             h("div", { className: "k" }, "LEVEL"),
