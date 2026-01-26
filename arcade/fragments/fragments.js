@@ -24,6 +24,7 @@ const REVEAL_DECAY = 0.92;
 
 // Animation timings (ms)
 const POP_MS = 170;      // remove pop/fade
+const POP_STAGGER_MS = 18;
 const LOCK_PAD_MS = 40;  // small pad to avoid input during layout
 const NEXT_ROW_PAD = 8;
 
@@ -230,6 +231,21 @@ function levelFromRemoved(removed) {
   return { level, progress: removed - consumed, next: need };
 }
 
+function popDelayMs(origin, x, y) {
+  if (!origin) return 0;
+  return (Math.abs(x - origin.x) + Math.abs(y - origin.y)) * POP_STAGGER_MS;
+}
+
+function maxPopDelay(origin, positions) {
+  if (!origin) return 0;
+  let max = 0;
+  for (const pos of positions) {
+    const delay = popDelayMs(origin, pos.x, pos.y);
+    if (delay > max) max = delay;
+  }
+  return max;
+}
+
 /* =========================
    APP
 ========================= */
@@ -254,6 +270,7 @@ function App() {
 
   const [hoverGroup, setHoverGroup] = useState([]); // {x,y,id}
   const [removingIds, setRemovingIds] = useState(() => new Set());
+  const [removeOrigin, setRemoveOrigin] = useState(null);
   const [spawnIds, setSpawnIds] = useState(() => new Set());
   const [missAt, setMissAt] = useState(0);
   const [missPos, setMissPos] = useState(null);
@@ -502,6 +519,7 @@ function App() {
     setGameOver(false);
     setHoverGroup([]);
     setRemovingIds(new Set());
+    setRemoveOrigin(null);
     setSpawnIds(new Set());
     setMissAt(0);
     setMissPos(null);
@@ -531,6 +549,7 @@ function App() {
     if (target.bomb) {
       const removing = new Set();
       const next = cloneGrid(grid);
+      const removedPositions = [];
       let removedCount = 0;
       for (let yy = 0; yy < ROWS; yy++) {
         for (let xx = 0; xx < COLS; xx++) {
@@ -538,6 +557,7 @@ function App() {
           if (tile && tile.t === target.t) {
             removing.add(tile.id);
             next[yy][xx] = null;
+            removedPositions.push({ x: xx, y: yy });
             removedCount++;
           }
         }
@@ -546,15 +566,20 @@ function App() {
       setLocked(true);
       setHoverGroup([]);
       setRemovingIds(removing);
+      const origin = { x, y };
+      setRemoveOrigin(origin);
       setScore(s => s + removedCount * removedCount);
       setRemoved(r => r + removedCount);
       playSfx("bomb");
       const after = centerOutCompressCols(applyGravity(next));
+      const maxDelay = maxPopDelay(origin, removedPositions);
+      const totalDelay = POP_MS + maxDelay;
       window.setTimeout(() => {
         setGrid(after);
         setRemovingIds(new Set());
+        setRemoveOrigin(null);
         window.setTimeout(() => setLocked(false), LOCK_PAD_MS);
-      }, POP_MS);
+      }, totalDelay);
       return;
     }
 
@@ -571,6 +596,8 @@ function App() {
 
     const removing = new Set(g.map(p => p.id));
     setRemovingIds(removing);
+    const origin = { x, y };
+    setRemoveOrigin(origin);
 
     const next = cloneGrid(grid);
     for (const p of g) next[p.y][p.x] = null;
@@ -580,11 +607,14 @@ function App() {
     setRemoved(r => r + g.length);
     playSfx("hit");
 
+    const maxDelay = maxPopDelay(origin, g);
+    const totalDelay = POP_MS + maxDelay;
     window.setTimeout(() => {
       setGrid(after);
       setRemovingIds(new Set());
+      setRemoveOrigin(null);
       window.setTimeout(() => setLocked(false), LOCK_PAD_MS);
-    }, POP_MS);
+    }, totalDelay);
   };
 
   useEffect(() => { setNextReveal(0); }, [nextLine]);
@@ -649,15 +679,15 @@ function App() {
   const missActive = (now() - missAt) < 220;
 
   const title = "FRAGMENTS // PURGE";
-  const subText = !gameStarted
-    ? "SYSTEM IDLE // PRESS START TO INITIATE"
+  const subTextLines = !gameStarted
+    ? ["SYSTEM IDLE // PRESS START", "TO INITIATE"]
     : gameOver
-      ? "CORE INSTABILITY // SIGNAL LOST"
+      ? ["CORE INSTABILITY // SIGNAL", "LOST"]
       : missActive
-        ? "NO VALID CLUSTER // INPUT IGNORED"
+        ? ["NO VALID CLUSTER // INPUT", "IGNORED"]
         : locked
-          ? "SYSTEM HOLD // MEMORY LOCKED\nPLEASE WAIT"
-          : `IDENTIFY CLUSTERS \u2265${MIN_GROUP} // PURGE FRAGMENTS`;
+          ? ["SYSTEM HOLD // MEMORY LOCKED", "PLEASE WAIT"]
+          : [`IDENTIFY CLUSTERS \u2265${MIN_GROUP}`, "PURGE FRAGMENTS"];
 
   const flat = useMemo(() => {
     const arr = [];
@@ -684,7 +714,11 @@ function App() {
         { className: "titleBlock" },
         h("div", { className: "tag" }, "SYSTEM ACTIVE"),
         h("h1", null, title),
-        h("p", { className: "sub" }, subText)
+        h(
+          "p",
+          { className: "sub" },
+          subTextLines.map((line, i) => h("span", { key: i, className: "subLine" }, line))
+        )
       ),
       h(
         "div",
@@ -697,7 +731,7 @@ function App() {
         h(
           "button",
           {
-            className: "controlBtn secondary",
+            className: "controlBtn secondary pauseBtn",
             onClick: () => setLocked(v => !v),
             disabled: gameOver || !gameStarted,
           },
@@ -772,6 +806,7 @@ function App() {
                 const removing = removingIds.has(tile.id);
                 const spawning = spawnIds.has(tile.id);
                 const isMiss = missActive && missPos && missPos.x === tile.x && missPos.y === tile.y;
+                const popDelay = removing && removeOrigin ? popDelayMs(removeOrigin, tile.x, tile.y) : 0;
 
                 const tx = tile.x * (cell + gap);
                 const ty = tile.y * (cell + gap);
@@ -796,6 +831,7 @@ function App() {
                     "--tx": `${tx}px`,
                     "--ty": `${ty}px`,
                     "--scale": String(BRICK_SCALE),
+                    "--pop-delay": `${popDelay}ms`,
                   }
                 });
               })
