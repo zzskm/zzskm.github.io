@@ -81,11 +81,18 @@ h1 {
   font-size: 12px;
   line-height: 1.3;
   font-family: "Share Tech Mono", monospace;
-  white-space: pre-line;
-}
+  min-height: calc(1.3em * 2);
+  display: grid;
+  gap: 0;
 }
 
-.sub::before {
+.subLine {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subLine:first-child::before {
   content: "// ";
   color: var(--line);
 }
@@ -123,6 +130,11 @@ h1 {
 
 .controlBtn.secondary {
   background: #ecece2;
+}
+
+.controlBtn.pauseBtn {
+  width: 96px;
+  text-align: center;
 }
 
 .controlBtn:focus-visible,
@@ -679,6 +691,7 @@ h1 {
 /* Removing pop/fade */
 .tile.removing{
   transition: transform 160ms cubic-bezier(.20,.85,.20,1), opacity 140ms ease-out;
+  transition-delay: var(--pop-delay, 0ms);
   opacity: 0;
   transform: translate(var(--tx), var(--ty)) scale(calc(var(--scale, 1) * 0.75));
 }
