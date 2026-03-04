@@ -1,0 +1,142 @@
+﻿<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>다낭 여행 견적 MVP</title>
+  <link rel="stylesheet" href="trip_2026_oct_danang.styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>다낭 여행 견적 MVP</h1>
+    <p>인원 고정: 성인 6 + 아동 2 (총 8명)</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel panel-left" aria-label="카드 선택">
+      <h2>카드 선택</h2>
+
+      <div class="category is-open" data-section="flight">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">항공</span>
+          <span id="summary-flight" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="flight-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="roomConfig">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">객실 구성</span>
+          <span id="summary-roomConfig" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="roomConfig-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="stayA">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">A숙소 (3박)</span>
+          <span id="summary-stayA" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="stayA-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="stayB">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">B숙소 (2박)</span>
+          <span id="summary-stayB" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="stayB-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="meal">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">식비</span>
+          <span id="summary-meal" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="meal-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="transport">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">이동</span>
+          <span id="summary-transport" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="transport-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="activities">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">액티비티</span>
+          <span id="summary-activities" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="activity-controls"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="activityPacks">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">액티비티 팩</span>
+          <span id="summary-activityPack" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="activityPack-options" class="card-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-right" aria-label="결과">
+      <h2>결과 (1인 평균)</h2>
+      <div class="result-sticky">
+        <p class="big-number" id="per-person-total">-</p>
+      </div>
+
+      <div class="result-block">
+        <h3>Breakdown</h3>
+        <ul id="breakdown-list" class="breakdown-list"></ul>
+      </div>
+
+      <div class="result-block">
+        <h3>Timeline</h3>
+        <ul id="timeline-list" class="timeline-list"></ul>
+      </div>
+
+      <button id="open-evidence" class="evidence-btn" type="button">근거 보기</button>
+    </section>
+  </main>
+
+  <div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evidence-title">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="evidence-title">근거</h2>
+        <button id="close-evidence" class="close-btn" type="button" aria-label="닫기">닫기</button>
+      </div>
+      <p class="modal-meta">기준일(asOf): <strong id="evidence-asof">-</strong></p>
+      <ul id="evidence-sources" class="source-list"></ul>
+    </div>
+  </div>
+
+  <script src="trip_2026_oct_danang.data.js"></script>
+  <script src="trip_2026_oct_danang.app.js"></script>
+</body>
+</html>
