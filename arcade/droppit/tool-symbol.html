@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DROP // PIT - Symbol Viewer</title>
+  <style>
+    :root {
+      --bg: #e7e7e1;
+      --panel: #d7d7d1;
+      --ink: #1f1f1a;
+      --muted: #4a4a42;
+      --line: #8a8a80;
+      --accent: #2f2f28;
+      --border: 2px solid var(--line);
+      --shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Share Tech Mono", ui-monospace, monospace;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .panel {
+      border: var(--border);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      padding: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .sub {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button, select, input, textarea {
+      font: inherit;
+      color: inherit;
+      border: var(--border);
+      background: #ecece2;
+      padding: 6px 8px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 96px;
+      resize: vertical;
+      line-height: 1.3;
+      font-size: 12px;
+    }
+
+    button {
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status b {
+      color: var(--ink);
+    }
+
+    .toolRow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .toolBtns {
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .toolBtns button.active {
+      background: #d8d8cc;
+      outline: 2px solid var(--accent);
+      outline-offset: 0;
+    }
+
+    .paletteGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+      gap: 6px;
+      width: 100%;
+    }
+
+    .swatch {
+      border: var(--border);
+      background: #ecece2;
+      min-height: 36px;
+      display: grid;
+      place-items: center;
+      padding: 2px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .swatch.active {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .swatchChip {
+      width: 100%;
+      height: 16px;
+      border: 1px solid rgba(0, 0, 0, 0.35);
+      margin-bottom: 2px;
+    }
+
+    .mainView {
+      display: grid;
+      justify-items: center;
+      gap: 8px;
+    }
+
+    #mainCanvas {
+      border: var(--border);
+      background: #f2f3ee;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    #mainCanvas {
+      cursor: crosshair;
+    }
+
+    .miniGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+    }
+
+    .miniCard {
+      border: var(--border);
+      background: #ecece2;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+      justify-items: center;
+    }
+
+    .miniCard .k {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+
+    .miniCard canvas {
+      border: 1px solid rgba(0, 0, 0, 0.35);
+      background: #f2f3ee;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="panel">
+      <h1>DROP // PIT - Symbol Viewer</h1>
+      <p class="sub">Inspect and edit symbols pixel-by-pixel. Q/W/E = Pick/Erase/Paint, Left/Right = Color, Up/Down = Symbol.</p>
+    </section>
+
+    <section class="panel controls">
+      <button id="prevBtn" type="button">Prev</button>
+      <button id="nextBtn" type="button">Next</button>
+
+      <label>
+        Symbol
+        <select id="symbolSelect"></select>
+      </label>
+
+      <label>
+        Zoom
+        <input id="zoomInput" type="range" min="6" max="24" value="12" step="1" />
+        <span id="zoomText">12x</span>
+      </label>
+
+      <label>
+        <input id="gridToggle" type="checkbox" checked />
+        Show Grid
+      </label>
+    </section>
+
+    <section class="panel">
+      <div class="toolRow">
+        <div class="toolBtns">
+          <button id="paintToolBtn" type="button" class="active">Paint</button>
+          <button id="eraseToolBtn" type="button">Erase</button>
+          <button id="pickToolBtn" type="button">Pick</button>
+        </div>
+
+        <label>
+          Color
+          <select id="colorSelect"></select>
+        </label>
+
+        <button id="resetSymbolBtn" type="button">Reset Symbol</button>
+        <button id="copySymbolBtn" type="button">Copy Symbol Px</button>
+      </div>
+
+      <div class="toolRow" style="margin-top:8px;">
+        <button id="saveCurrentBtn" type="button">Save Current</button>
+        <button id="saveAllBtn" type="button">Save All</button>
+        <button id="discardAllBtn" type="button">Discard All</button>
+        <button id="exportJsonBtn" type="button">Export JSON</button>
+        <button id="importJsonBtn" type="button">Import JSON</button>
+        <button id="exportPatchBtn" type="button">Export JS Patch</button>
+        <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;" />
+      </div>
+
+      <div id="paletteGrid" class="paletteGrid" style="margin-top:8px;"></div>
+
+      <div class="status" style="margin-top:8px;">
+        <div>Tool: <b id="toolText">paint</b></div>
+        <div>Selected: <b id="selectedText">-</b></div>
+        <div>Cursor: <b id="cursorText">-</b></div>
+      </div>
+
+      <div class="status" style="margin-top:6px;">
+        <div>Dirty Symbols: <b id="dirtyText">0</b></div>
+        <div>Changed Px: <b id="changedText">0</b></div>
+        <div>Save State: <b id="saveStateText">idle</b></div>
+        <div>Saved At: <b id="savedAtText">-</b></div>
+      </div>
+
+      <textarea id="copyOutput" readonly placeholder="Copied pixel data will appear here."></textarea>
+    </section>
+
+    <section class="panel">
+      <div class="status">
+        <div>Index: <b id="indexText">-</b></div>
+        <div>Name: <b id="nameText">-</b></div>
+        <div>Size: <b id="sizeText">-</b></div>
+        <div>Filled Px: <b id="filledText">-</b></div>
+      </div>
+    </section>
+
+    <section class="panel mainView">
+      <canvas id="mainCanvas" width="288" height="288"></canvas>
+    </section>
+
+    <section class="panel miniGrid">
+      <div class="miniCard">
+        <div class="k">1x (24x24)</div>
+        <canvas id="mini1x" width="24" height="24"></canvas>
+      </div>
+      <div class="miniCard">
+        <div class="k">2x (48x48)</div>
+        <canvas id="mini2x" width="48" height="48"></canvas>
+      </div>
+      <div class="miniCard">
+        <div class="k">3x (72x72)</div>
+        <canvas id="mini3x" width="72" height="72"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script src="./symbols.js"></script>
+  <script>
+    const symbols = Array.isArray(window.DROP_PIT_SYMBOLS) ? window.DROP_PIT_SYMBOLS : [];
+    const palette = Array.isArray(window.DROP_PIT_PALETTE) ? window.DROP_PIT_PALETTE : [];
+    if (!symbols.length) {
+      throw new Error("DROP_PIT_SYMBOLS not found. Load symbols.js first.");
+    }
+    if (!palette.length) {
+      throw new Error("DROP_PIT_PALETTE not found. Load symbols.js first.");
+    }
+
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const symbolSelect = document.getElementById("symbolSelect");
+    const zoomInput = document.getElementById("zoomInput");
+    const zoomText = document.getElementById("zoomText");
+    const gridToggle = document.getElementById("gridToggle");
+    const paintToolBtn = document.getElementById("paintToolBtn");
+    const eraseToolBtn = document.getElementById("eraseToolBtn");
+    const pickToolBtn = document.getElementById("pickToolBtn");
+    const colorSelect = document.getElementById("colorSelect");
+    const resetSymbolBtn = document.getElementById("resetSymbolBtn");
+    const copySymbolBtn = document.getElementById("copySymbolBtn");
+    const saveCurrentBtn = document.getElementById("saveCurrentBtn");
+    const saveAllBtn = document.getElementById("saveAllBtn");
+    const discardAllBtn = document.getElementById("discardAllBtn");
+    const exportJsonBtn = document.getElementById("exportJsonBtn");
+    const importJsonBtn = document.getElementById("importJsonBtn");
+    const exportPatchBtn = document.getElementById("exportPatchBtn");
+    const importJsonInput = document.getElementById("importJsonInput");
+    const copyOutput = document.getElementById("copyOutput");
+    const paletteGrid = document.getElementById("paletteGrid");
+
+    const indexText = document.getElementById("indexText");
+    const nameText = document.getElementById("nameText");
+    const sizeText = document.getElementById("sizeText");
+    const filledText = document.getElementById("filledText");
+    const toolText = document.getElementById("toolText");
+    const selectedText = document.getElementById("selectedText");
+    const cursorText = document.getElementById("cursorText");
+    const dirtyText = document.getElementById("dirtyText");
+    const changedText = document.getElementById("changedText");
+    const saveStateText = document.getElementById("saveStateText");
+    const savedAtText = document.getElementById("savedAtText");
+
+    const mainCanvas = document.getElementById("mainCanvas");
+    const mainCtx = mainCanvas.getContext("2d");
+    const mini1x = document.getElementById("mini1x");
+    const mini2x = document.getElementById("mini2x");
+    const mini3x = document.getElementById("mini3x");
+
+    const SAVE_VERSION = 1;
+    const SAVE_KEY = "drop_pit_symbol_viewer_save_v1";
+    const AUTOSAVE_DELAY_MS = 450;
+    const symbolIndexByName = Object.freeze(
+      symbols.reduce((acc, icon, i) => {
+        acc[icon.name] = i;
+        return acc;
+      }, {})
+    );
+
+    const originalPx = symbols.map((icon) => new Uint8Array(icon.px));
+    const editedPx = symbols.map((icon) => new Uint8Array(icon.px));
+    const persistedPx = symbols.map((icon) => new Uint8Array(icon.px));
+
+    let currentIndex = 0;
+    let currentTool = "paint";
+    let selectedColor = Math.min(7, palette.length - 1);
+    let isPointerDown = false;
+    let pointerButton = 0;
+    let lastPaintKey = "";
+    let autosaveTimer = 0;
+    let outputMode = "symbol";
+    let lastSavedIso = "";
+
+    function fillChecker(ctx, w, h, cell = 8) {
+      ctx.fillStyle = "#f6f7f2";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#ecece3";
+      for (let y = 0; y < h; y += cell) {
+        for (let x = 0; x < w; x += cell) {
+          if (((x / cell) + (y / cell)) % 2 === 0) continue;
+          ctx.fillRect(x, y, cell, cell);
+        }
+      }
+    }
+
+    function drawGrid(ctx, icon, scale) {
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= icon.w; x++) {
+        const xx = x * scale + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(xx, 0);
+        ctx.lineTo(xx, icon.h * scale);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= icon.h; y++) {
+        const yy = y * scale + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, yy);
+        ctx.lineTo(icon.w * scale, yy);
+        ctx.stroke();
+      }
+    }
+
+    function drawIcon(ctx, icon, pxData, scale, transparentIndex = 0) {
+      ctx.imageSmoothingEnabled = false;
+      for (let y = 0; y < icon.h; y++) {
+        for (let x = 0; x < icon.w; x++) {
+          const idx = pxData[(y * icon.w) + x];
+          if (idx === transparentIndex) continue;
+          ctx.fillStyle = palette[idx];
+          ctx.fillRect(x * scale, y * scale, scale, scale);
+        }
+      }
+    }
+
+    function filledCount(pxData) {
+      let count = 0;
+      for (let i = 0; i < pxData.length; i++) {
+        if (pxData[i] !== 0) count++;
+      }
+      return count;
+    }
+
+    function arraysEqual(a, b) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+      }
+      return true;
+    }
+
+    function renderMini(canvas, icon, pxData, scale) {
+      const ctx = canvas.getContext("2d");
+      fillChecker(ctx, canvas.width, canvas.height, 6);
+      drawIcon(ctx, icon, pxData, scale, 0);
+    }
+
+    function currentIcon() {
+      return symbols[currentIndex];
+    }
+
+    function currentPx() {
+      return editedPx[currentIndex];
+    }
+
+    function currentZoom() {
+      return Math.max(1, parseInt(zoomInput.value, 10) || 12);
+    }
+
+    function pixelIndex(icon, x, y) {
+      return (y * icon.w) + x;
+    }
+
+    function canvasToPixel(event) {
+      const icon = currentIcon();
+      const zoom = currentZoom();
+      const rect = mainCanvas.getBoundingClientRect();
+      const x = Math.floor((event.clientX - rect.left) / zoom);
+      const y = Math.floor((event.clientY - rect.top) / zoom);
+      if (x < 0 || y < 0 || x >= icon.w || y >= icon.h) return null;
+      return { x, y };
+    }
+
+    function setTool(tool) {
+      currentTool = tool;
+      paintToolBtn.classList.toggle("active", tool === "paint");
+      eraseToolBtn.classList.toggle("active", tool === "erase");
+      pickToolBtn.classList.toggle("active", tool === "pick");
+      toolText.textContent = tool;
+    }
+
+    function setSelectedColor(index) {
+      selectedColor = Math.max(0, Math.min(palette.length - 1, index | 0));
+      colorSelect.value = String(selectedColor);
+      selectedText.textContent = `${selectedColor} (${palette[selectedColor]})`;
+      const swatches = paletteGrid.querySelectorAll(".swatch");
+      for (const swatch of swatches) {
+        const i = parseInt(swatch.dataset.idx, 10);
+        swatch.classList.toggle("active", i === selectedColor);
+      }
+    }
+
+    function shiftSelectedColor(delta) {
+      const len = palette.length;
+      const next = ((selectedColor + delta) % len + len) % len;
+      setSelectedColor(next);
+    }
+
+    function countChangedPixelsForSymbol(index) {
+      const base = originalPx[index];
+      const cur = editedPx[index];
+      let changed = 0;
+      for (let i = 0; i < cur.length; i++) {
+        if (cur[i] !== base[i]) changed++;
+      }
+      return changed;
+    }
+
+    function countDirtySymbols() {
+      let count = 0;
+      for (let i = 0; i < symbols.length; i++) {
+        if (!arraysEqual(editedPx[i], originalPx[i])) count++;
+      }
+      return count;
+    }
+
+    function countUnsavedSymbols() {
+      let count = 0;
+      for (let i = 0; i < symbols.length; i++) {
+        if (!arraysEqual(editedPx[i], persistedPx[i])) count++;
+      }
+      return count;
+    }
+
+    function countTotalChangedPixels() {
+      let total = 0;
+      for (let i = 0; i < symbols.length; i++) {
+        total += countChangedPixelsForSymbol(i);
+      }
+      return total;
+    }
+
+    function refreshSymbolSelectOptions() {
+      for (let i = 0; i < symbols.length; i++) {
+        const dirty = !arraysEqual(editedPx[i], originalPx[i]);
+        const marker = dirty ? " *" : "";
+        symbolSelect.options[i].textContent = `${i + 1}. ${symbols[i].name}${marker}`;
+      }
+    }
+
+    function formatSavedAt(iso) {
+      if (!iso) return "-";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString();
+    }
+
+    function setSaveState(state, iso = undefined) {
+      if (iso === null) {
+        lastSavedIso = "";
+      } else if (typeof iso === "string" && iso.length > 0) {
+        lastSavedIso = iso;
+      } else if (iso === undefined) {
+        // Keep previous timestamp.
+      }
+      saveStateText.textContent = state;
+      savedAtText.textContent = formatSavedAt(lastSavedIso);
+    }
+
+    function snapshotPersisted(indices) {
+      for (const i of indices) {
+        persistedPx[i] = new Uint8Array(editedPx[i]);
+      }
+    }
+
+    function setOutput(text, mode) {
+      copyOutput.value = text;
+      outputMode = mode;
+    }
+
+    function renderPaletteControls() {
+      colorSelect.innerHTML = "";
+      paletteGrid.innerHTML = "";
+      for (let i = 0; i < palette.length; i++) {
+        const option = document.createElement("option");
+        option.value = String(i);
+        option.textContent = `${i}: ${palette[i]}`;
+        colorSelect.appendChild(option);
+
+        const swatch = document.createElement("button");
+        swatch.type = "button";
+        swatch.className = "swatch";
+        swatch.dataset.idx = String(i);
+        swatch.title = `Palette ${i} (${palette[i]})`;
+        swatch.innerHTML = `<div class="swatchChip" style="background:${palette[i]}"></div><div>${i}</div>`;
+        swatch.addEventListener("click", () => setSelectedColor(i));
+        paletteGrid.appendChild(swatch);
+      }
+      setSelectedColor(selectedColor);
+    }
+
+    function makeCopyText(icon, pxData) {
+      return `{ name: "${icon.name}", px: [${Array.from(pxData).join(", ")}] }`;
+    }
+
+    function formatPxRows(pxArray) {
+      const rows = [];
+      const width = symbols[0].w;
+      const height = symbols[0].h;
+      for (let y = 0; y < height; y++) {
+        const row = [];
+        for (let x = 0; x < width; x++) {
+          row.push(pxArray[(y * width) + x]);
+        }
+        rows.push(`      ${row.join(", ")},`);
+      }
+      return rows.join("\n");
+    }
+
+    function createPayload() {
+      return {
+        version: SAVE_VERSION,
+        updatedAt: new Date().toISOString(),
+        symbols: {},
+      };
+    }
+
+    function allIndices() {
+      return symbols.map((_, i) => i);
+    }
+
+    function buildPayloadForIndices(indices) {
+      const payload = createPayload();
+      for (const i of indices) {
+        payload.symbols[symbols[i].name] = Array.from(editedPx[i]);
+      }
+      return payload;
+    }
+
+    function validatePxArray(name, px) {
+      if (!Array.isArray(px)) {
+        throw new Error(`${name}: px must be an array`);
+      }
+      const expected = symbols[0].w * symbols[0].h;
+      if (px.length !== expected) {
+        throw new Error(`${name}: px length must be ${expected}`);
+      }
+      const out = new Array(px.length);
+      for (let i = 0; i < px.length; i++) {
+        const value = px[i];
+        if (!Number.isInteger(value) || value < 0 || value >= palette.length) {
+          throw new Error(`${name}: invalid palette index at ${i} -> ${value}`);
+        }
+        out[i] = value;
+      }
+      return out;
+    }
+
+    function sanitizePayload(raw) {
+      if (!raw || typeof raw !== "object") {
+        throw new Error("Payload must be an object.");
+      }
+
+      if (raw.version != null && raw.version !== SAVE_VERSION) {
+        throw new Error(`Unsupported payload version: ${raw.version}`);
+      }
+
+      let sourceSymbols = null;
+      if (Array.isArray(raw)) {
+        sourceSymbols = {};
+        for (const item of raw) {
+          if (!item || typeof item !== "object" || typeof item.name !== "string") continue;
+          sourceSymbols[item.name] = item.px;
+        }
+      } else if (raw.symbols && typeof raw.symbols === "object" && !Array.isArray(raw.symbols)) {
+        sourceSymbols = raw.symbols;
+      }
+
+      if (!sourceSymbols) {
+        throw new Error("Payload must contain a symbols object.");
+      }
+
+      const cleaned = createPayload();
+      if (typeof raw.updatedAt === "string") cleaned.updatedAt = raw.updatedAt;
+
+      let accepted = 0;
+      for (const [name, px] of Object.entries(sourceSymbols)) {
+        if (symbolIndexByName[name] == null) continue;
+        cleaned.symbols[name] = validatePxArray(name, px);
+        accepted++;
+      }
+
+      if (accepted === 0) {
+        throw new Error("No valid symbols found in payload.");
+      }
+      return cleaned;
+    }
+
+    function applyPayload(payload, clearFirst = false) {
+      if (clearFirst) {
+        for (let i = 0; i < symbols.length; i++) {
+          editedPx[i] = new Uint8Array(originalPx[i]);
+        }
+      }
+      for (const [name, px] of Object.entries(payload.symbols)) {
+        const index = symbolIndexByName[name];
+        if (index == null) continue;
+        editedPx[index] = new Uint8Array(px);
+      }
+    }
+
+    function loadStoredPayload() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+        return sanitizePayload(JSON.parse(raw));
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function savePayload(payload, stateLabel) {
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+        const persistedIndices = [];
+        for (const name of Object.keys(payload.symbols)) {
+          const i = symbolIndexByName[name];
+          if (i != null) persistedIndices.push(i);
+        }
+        snapshotPersisted(persistedIndices);
+        setSaveState(stateLabel, payload.updatedAt);
+      } catch (error) {
+        setSaveState("save error");
+        console.error(error);
+      }
+    }
+
+    function scheduleAutosave() {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = window.setTimeout(() => {
+        const payload = buildPayloadForIndices(allIndices());
+        savePayload(payload, "autosaved");
+      }, AUTOSAVE_DELAY_MS);
+    }
+
+    function downloadText(filename, text) {
+      const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function makePatchText(changedOnly = true) {
+      const targets = allIndices().filter((i) => !changedOnly || !arraysEqual(editedPx[i], originalPx[i]));
+      if (!targets.length) {
+        return "// No changed symbols.";
+      }
+      const blocks = targets.map((i) => {
+        const icon = symbols[i];
+        const rows = formatPxRows(editedPx[i]);
+        return `  {\n    name: "${icon.name}",\n    px: [\n${rows}\n    ],\n  },`;
+      });
+      return [
+        "// Paste these blocks into DROP_PIT_RAW_SYMBOLS in symbols.js",
+        ...blocks,
+      ].join("\n");
+    }
+
+    function applyEditAt(x, y, sourceButton = 0) {
+      const icon = currentIcon();
+      const pxData = currentPx();
+      const at = pixelIndex(icon, x, y);
+      const oldValue = pxData[at];
+
+      if (currentTool === "pick") {
+        setSelectedColor(oldValue);
+        cursorText.textContent = `${x},${y} = ${oldValue}`;
+        setTool("paint");
+        return;
+      }
+
+      const forceErase = sourceButton === 2;
+      const nextValue = (currentTool === "erase" || forceErase) ? 0 : selectedColor;
+      if (oldValue === nextValue) {
+        cursorText.textContent = `${x},${y} = ${oldValue}`;
+        return;
+      }
+
+      pxData[at] = nextValue;
+      cursorText.textContent = `${x},${y} = ${nextValue}`;
+      renderCurrent();
+      scheduleAutosave();
+    }
+
+    function handlePointerMove(event) {
+      const point = canvasToPixel(event);
+      if (!point) {
+        cursorText.textContent = "-";
+        return;
+      }
+      const icon = currentIcon();
+      const pxData = currentPx();
+      const at = pixelIndex(icon, point.x, point.y);
+      cursorText.textContent = `${point.x},${point.y} = ${pxData[at]}`;
+
+      if (!isPointerDown || currentTool === "pick") return;
+      const key = `${point.x},${point.y},${pointerButton}`;
+      if (key === lastPaintKey) return;
+      lastPaintKey = key;
+      applyEditAt(point.x, point.y, pointerButton);
+    }
+
+    function renderCurrent() {
+      const icon = currentIcon();
+      const pxData = currentPx();
+      const zoom = currentZoom();
+      const w = icon.w * zoom;
+      const h = icon.h * zoom;
+
+      mainCanvas.width = w;
+      mainCanvas.height = h;
+      fillChecker(mainCtx, w, h, Math.max(6, zoom));
+      drawIcon(mainCtx, icon, pxData, zoom, 0);
+      if (gridToggle.checked) drawGrid(mainCtx, icon, zoom);
+
+      renderMini(mini1x, icon, pxData, 1);
+      renderMini(mini2x, icon, pxData, 2);
+      renderMini(mini3x, icon, pxData, 3);
+
+      indexText.textContent = `${currentIndex + 1}/${symbols.length}`;
+      nameText.textContent = icon.name;
+      sizeText.textContent = `${icon.w}x${icon.h}`;
+      filledText.textContent = String(filledCount(pxData));
+      zoomText.textContent = `${zoom}x`;
+      symbolSelect.value = String(currentIndex);
+      refreshSymbolSelectOptions();
+      dirtyText.textContent = String(countDirtySymbols());
+      changedText.textContent = String(countTotalChangedPixels());
+      setSelectedColor(selectedColor);
+      if (outputMode === "symbol") {
+        copyOutput.value = makeCopyText(icon, pxData);
+      }
+    }
+
+    function setIndex(next) {
+      const len = symbols.length;
+      currentIndex = ((next % len) + len) % len;
+      renderCurrent();
+    }
+
+    for (let i = 0; i < symbols.length; i++) {
+      const option = document.createElement("option");
+      option.value = String(i);
+      option.textContent = `${i + 1}. ${symbols[i].name}`;
+      symbolSelect.appendChild(option);
+    }
+
+    renderPaletteControls();
+    setTool("paint");
+
+    prevBtn.addEventListener("click", () => setIndex(currentIndex - 1));
+    nextBtn.addEventListener("click", () => setIndex(currentIndex + 1));
+    symbolSelect.addEventListener("change", () => setIndex(parseInt(symbolSelect.value, 10) || 0));
+    zoomInput.addEventListener("input", renderCurrent);
+    gridToggle.addEventListener("change", renderCurrent);
+    colorSelect.addEventListener("change", () => setSelectedColor(parseInt(colorSelect.value, 10) || 0));
+    paintToolBtn.addEventListener("click", () => setTool("paint"));
+    eraseToolBtn.addEventListener("click", () => setTool("erase"));
+    pickToolBtn.addEventListener("click", () => setTool("pick"));
+
+    resetSymbolBtn.addEventListener("click", () => {
+      editedPx[currentIndex] = new Uint8Array(originalPx[currentIndex]);
+      renderCurrent();
+      scheduleAutosave();
+    });
+
+    copySymbolBtn.addEventListener("click", async () => {
+      const text = makeCopyText(currentIcon(), currentPx());
+      setOutput(text, "symbol");
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        // Clipboard permission may fail in some browser contexts.
+      }
+    });
+
+    saveCurrentBtn.addEventListener("click", () => {
+      const payload = loadStoredPayload() || createPayload();
+      payload.symbols[currentIcon().name] = Array.from(currentPx());
+      payload.updatedAt = new Date().toISOString();
+      savePayload(payload, "saved current");
+    });
+
+    saveAllBtn.addEventListener("click", () => {
+      const payload = buildPayloadForIndices(allIndices());
+      savePayload(payload, "saved all");
+    });
+
+    discardAllBtn.addEventListener("click", () => {
+      const dirty = countDirtySymbols();
+      if (dirty > 0 && !window.confirm("Discard all edits and clear saved local data?")) {
+        return;
+      }
+      for (let i = 0; i < symbols.length; i++) {
+        editedPx[i] = new Uint8Array(originalPx[i]);
+      }
+      try {
+        localStorage.removeItem(SAVE_KEY);
+      } catch (_) {
+        // ignore
+      }
+      snapshotPersisted(allIndices());
+      setSaveState("discarded", null);
+      renderCurrent();
+      setOutput(makeCopyText(currentIcon(), currentPx()), "symbol");
+    });
+
+    exportJsonBtn.addEventListener("click", async () => {
+      const payload = buildPayloadForIndices(allIndices());
+      const text = JSON.stringify(payload, null, 2);
+      setOutput(text, "export");
+      downloadText("drop-pit-symbols.json", text);
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        // ignore clipboard failures
+      }
+      setSaveState("exported json");
+    });
+
+    importJsonBtn.addEventListener("click", () => {
+      importJsonInput.click();
+    });
+
+    importJsonInput.addEventListener("change", async () => {
+      const file = importJsonInput.files && importJsonInput.files[0];
+      importJsonInput.value = "";
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const payload = sanitizePayload(JSON.parse(text));
+        applyPayload(payload, false);
+        const merged = buildPayloadForIndices(allIndices());
+        savePayload(merged, "imported");
+        renderCurrent();
+        setOutput(JSON.stringify(payload, null, 2), "export");
+      } catch (error) {
+        setSaveState("import error");
+        setOutput(String(error && error.message ? error.message : error), "export");
+      }
+    });
+
+    exportPatchBtn.addEventListener("click", async () => {
+      const text = makePatchText(true);
+      setOutput(text, "export");
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        // ignore clipboard failures
+      }
+      setSaveState("exported patch");
+    });
+
+    mainCanvas.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+    });
+
+    mainCanvas.addEventListener("mousedown", (event) => {
+      const point = canvasToPixel(event);
+      if (!point) return;
+      isPointerDown = true;
+      pointerButton = event.button;
+      lastPaintKey = "";
+      applyEditAt(point.x, point.y, event.button);
+    });
+
+    mainCanvas.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", () => {
+      isPointerDown = false;
+      pointerButton = 0;
+      lastPaintKey = "";
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        shiftSelectedColor(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        shiftSelectedColor(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setIndex(currentIndex - 1);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setIndex(currentIndex + 1);
+      } else if (event.key.toLowerCase() === "q") {
+        setTool("pick");
+      } else if (event.key.toLowerCase() === "w") {
+        setTool("erase");
+      } else if (event.key.toLowerCase() === "e") {
+        setTool("paint");
+      }
+    });
+
+    window.addEventListener("beforeunload", (event) => {
+      if (countUnsavedSymbols() === 0) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+
+    const storedPayload = loadStoredPayload();
+    if (storedPayload) {
+      applyPayload(storedPayload, false);
+      snapshotPersisted(allIndices());
+      setSaveState("loaded", storedPayload.updatedAt);
+      setOutput(JSON.stringify(storedPayload, null, 2), "export");
+    } else {
+      snapshotPersisted(allIndices());
+      setSaveState("idle");
+    }
+
+    renderCurrent();
+  </script>
+</body>
+</html>

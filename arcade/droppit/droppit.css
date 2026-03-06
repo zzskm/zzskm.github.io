@@ -1,0 +1,542 @@
+﻿:root {
+  --bg: #e7e7e1;
+  --panel: #d7d7d1;
+  --tile: #ecece6;
+  --ink: #1f201d;
+  --muted: #5a5d54;
+  --line: #8a8c82;
+  --accent: #2b2d28;
+  --ok: #254d3d;
+  --warn: #6e4a1d;
+  --b0: #ffffff;
+  --b1: #c7c7c7;
+  --b2: #666666;
+  --b3: #1e1e1e;
+  --pixel-border: 2px solid var(--line);
+  --shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  background: var(--bg);
+}
+
+.wrap {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.console {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.panel {
+  border: var(--pixel-border);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 8px;
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0 0;
+  order: 0;
+}
+
+.topFloating {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.titleBlock {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tag {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tag::before {
+  content: "> ";
+}
+
+h1 {
+  margin: 0;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: clamp(18px, 3vw, 24px);
+  letter-spacing: 0.06em;
+  line-height: 1.08;
+  text-transform: uppercase;
+}
+
+.sub {
+  margin: 0;
+  font-size: 11px;
+  color: #61645c;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color 100ms linear;
+}
+
+.sub::before {
+  content: "// ";
+}
+
+.sub.win {
+  color: var(--ok);
+}
+
+.sub.warn {
+  color: var(--warn);
+}
+
+.btns {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.controlBtn {
+  border: var(--pixel-border);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 11px;
+  min-height: 38px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.controlBtn.primary {
+  background: #dcdcd4;
+}
+
+.controlBtn.secondary {
+  background: #ecece3;
+}
+
+.controlBtn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.controlBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  order: 1;
+}
+
+.stat {
+  border: var(--pixel-border);
+  background: var(--tile);
+  box-shadow: var(--shadow);
+  padding: 7px 9px;
+}
+
+.k {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.v {
+  margin-top: 5px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreStat .v {
+  font-size: 18px;
+}
+
+.playPanel {
+  display: grid;
+  gap: 8px;
+  order: 2;
+}
+
+.stagePanel {
+  position: relative;
+}
+
+#stage {
+  width: 100%;
+  display: block;
+  border: var(--pixel-border);
+  background: #efefe9;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.startOverlay {
+  position: absolute;
+  inset: 2px;
+  background: rgba(231, 231, 225, 0.78);
+  border: 1px solid rgba(138, 140, 130, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+}
+
+.startOverlay.hidden {
+  display: none;
+}
+
+.startBtn {
+  min-width: 132px;
+  min-height: 40px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.controlsRow {
+  display: grid;
+  grid-template-columns: 0.92fr 0.92fr 1fr 1.4fr;
+  gap: 9px;
+  padding: 2px 0 0;
+}
+
+.controlsRow .controlBtn {
+  width: 100%;
+  min-height: 42px;
+  letter-spacing: 0.1em;
+}
+
+.controlsRow .controlBtn:focus-visible {
+  outline: 2px solid #2f5d4a;
+  outline-offset: 1px;
+}
+
+.btnBet {
+  background: #e8e8df;
+  border-color: #898b81;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.16);
+}
+
+.btnAuto {
+  background: #e3e5dd;
+  border-color: #7f867e;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.16);
+  transition: background-color 120ms linear, border-color 120ms linear, color 120ms linear, box-shadow 120ms linear;
+}
+
+.controlsRow #autoBtn[aria-pressed="true"] {
+  background: #b9d7bc;
+  border-color: #4f7c59;
+  color: #193325;
+  box-shadow: 0 2px 0 rgba(29, 71, 44, 0.35);
+}
+
+.controlsRow .btnSpin {
+  background: #5a5d54;
+  border-color: #1f2421;
+  color: #f4f6ef;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  order: 3;
+}
+
+.infoTile {
+  border: var(--pixel-border);
+  background: var(--tile);
+  box-shadow: var(--shadow);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.metricRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: var(--pixel-border);
+  background: var(--bg);
+  padding: 6px 8px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.metricRow strong {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runLines {
+  display: grid;
+  gap: 6px;
+}
+
+.runLine {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.metricItem {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.runNeutral {
+  color: var(--ink);
+}
+
+.runWin {
+  color: var(--ok);
+}
+
+.runWarn {
+  color: var(--warn);
+}
+
+details summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+details summary::before {
+  content: ">> ";
+}
+
+.paytable {
+  display: grid;
+  gap: 8px;
+}
+
+.payHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.payHead h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mini {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th,
+td {
+  border: var(--pixel-border);
+  background: var(--tile);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+th {
+  background: #dfdfd7;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.symbolCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconChip {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(0, 0, 0, 0.28);
+  background: #f2f3ee;
+  image-rendering: pixelated;
+}
+
+@media (max-width: 760px) {
+  .wrap {
+    padding: 4px;
+    gap: 6px;
+  }
+
+  .console {
+    padding: 0;
+    gap: 6px;
+  }
+
+  .top {
+    padding: 1px 0 0;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .tag {
+    font-size: 10px;
+  }
+
+  h1 {
+    font-size: 16px;
+  }
+
+  .sub {
+    font-size: 10px;
+  }
+
+  .btns {
+    margin-left: auto;
+  }
+
+  .btns .controlBtn {
+    min-width: 90px;
+    min-height: 34px;
+    padding: 5px 8px;
+  }
+
+  .hud {
+    gap: 6px;
+  }
+
+  .stat {
+    padding: 6px;
+  }
+
+  .v {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .scoreStat .v {
+    font-size: 16px;
+  }
+
+  .startOverlay {
+    inset: 2px;
+  }
+
+  .startBtn {
+    min-width: 114px;
+    min-height: 34px;
+    font-size: 11px;
+  }
+
+  .controlsRow {
+    grid-template-columns: 0.9fr 0.9fr 1fr 1.3fr;
+    gap: 6px;
+  }
+
+  .controlsRow .controlBtn {
+    min-height: 36px;
+  }
+
+  .controlBtn {
+    font-size: 10px;
+    min-height: 34px;
+    padding: 6px 8px;
+  }
+
+  .infoGrid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .metricRow {
+    font-size: 11px;
+    padding: 5px 7px;
+  }
+
+  .metricRow strong {
+    font-size: 13px;
+  }
+
+  .runLine {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .metricItem {
+    gap: 4px;
+  }
+
+  .payHead {
+    display: grid;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+
+  table {
+    font-size: 11px;
+  }
+
+  th,
+  td {
+    padding: 5px 6px;
+  }
+}
