@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DROP // PIT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./droppit.css" />
+</head>
+<body>
+  <main class="wrap">
+    <section class="console">
+      <header class="top topFloating">
+        <div class="titleBlock">
+          <div class="tag">DROPPIT CONSOLE</div>
+          <h1>DROP // PIT</h1>
+          <p class="sub" id="statusSub">PIT IDLE. ARM SPIN.</p>
+        </div>
+        <div class="btns">
+          <button id="resetBtn" type="button" class="controlBtn secondary">RESET</button>
+        </div>
+      </header>
+
+      <section class="hud">
+        <div class="stat scoreStat">
+          <div class="k">CREDIT</div>
+          <div class="v" id="creditValue">0</div>
+        </div>
+        <div class="stat">
+          <div class="k">BET</div>
+          <div class="v" id="betValue">0</div>
+        </div>
+        <div class="stat">
+          <div class="k">LAST WIN</div>
+          <div class="v" id="lastWinValue">0</div>
+        </div>
+      </section>
+
+      <section class="panel playPanel">
+        <div class="stagePanel">
+          <canvas id="stage" width="760" height="460"></canvas>
+          <div class="startOverlay" id="startOverlay" role="dialog" aria-modal="true" aria-hidden="false" aria-live="polite">
+            <button id="startGameBtn" type="button" class="controlBtn primary startBtn" aria-label="Start game signal">START</button>
+          </div>
+        </div>
+        <div class="controlsRow">
+          <button id="betDownBtn" type="button" class="controlBtn secondary btnBet">BET -</button>
+          <button id="betUpBtn" type="button" class="controlBtn secondary btnBet">BET +</button>
+          <button id="autoBtn" type="button" class="controlBtn secondary btnAuto" aria-pressed="false">AUTO</button>
+          <button id="spinBtn" type="button" class="controlBtn primary btnSpin">SPIN</button>
+        </div>
+      </section>
+
+      <section class="infoGrid">
+        <article class="infoTile telemetry">
+          <div class="k">RUN LOG</div>
+          <div class="runLines">
+            <div class="metricRow runLine">
+              <span class="metricItem">DEPTH <strong id="runDepthValue" class="runNeutral">0</strong></span>
+              <span class="metricItem">NET <strong id="runNetValue" class="runNeutral">0</strong></span>
+              <span class="metricItem">BEST <strong id="runBestValue" class="runNeutral">0</strong></span>
+            </div>
+            <div class="metricRow runLine">
+              <span class="metricItem">HIT% <strong id="runHitValue" class="runNeutral">0.0%</strong></span>
+              <span class="metricItem">YIELD <strong id="runYieldValue" class="runNeutral">0.00%</strong></span>
+              <span class="metricItem">STREAK <strong id="runStreakValue" class="runNeutral">IDLE</strong></span>
+            </div>
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <details class="panel paytable" id="paytablePanel" open>
+      <summary>PIT PAY TABLE</summary>
+      <div class="payHead">
+        <h2>REWARD MATRIX</h2>
+        <div class="mini">3 MATCH = MAJOR / 2 MATCH = MINOR</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>RELIC</th>
+            <th>2 MATCH</th>
+            <th>3 MATCH</th>
+          </tr>
+        </thead>
+        <tbody id="paytableBody"></tbody>
+      </table>
+    </details>
+  </main>
+
+  <script src="./symbols.js"></script>
+  <script src="./droppit.audio.js"></script>
+  <script src="./droppit.js"></script>
+</body>
+</html>

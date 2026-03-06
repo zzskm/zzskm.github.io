@@ -1,0 +1,1070 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DROP // PIT - Icon Data Tool</title>
+  <style>
+    :root {
+      --bg: #e7e7e1;
+      --panel: #d7d7d1;
+      --ink: #1f1f1a;
+      --muted: #4a4a42;
+      --line: #8a8a80;
+      --accent: #2f2f28;
+      --pixel-border: 2px solid var(--line);
+      --shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Share Tech Mono", ui-monospace, monospace;
+      color: var(--ink);
+      background: var(--bg);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 14px 12px 24px;
+    }
+
+    .top {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .tag::before {
+      content: ">";
+      color: var(--accent);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .sub {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 10px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: var(--pixel-border);
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    label {
+      display: grid;
+      gap: 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    input[type="number"],
+    select,
+    textarea,
+    button,
+    input[type="file"] {
+      font: inherit;
+      color: var(--ink);
+      border: var(--pixel-border);
+      background: #ecece2;
+      padding: 7px 8px;
+    }
+
+    textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 72px;
+      line-height: 1.35;
+      font-size: 12px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      box-shadow: var(--shadow);
+    }
+
+    .drop {
+      border: var(--pixel-border);
+      background: #ecece2;
+      padding: 12px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .drop.active {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      color: var(--ink);
+    }
+
+    .previewGrid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .previewCard {
+      border: var(--pixel-border);
+      background: #ecece2;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .previewCard .k {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      border: var(--pixel-border);
+      background: #f2f3ee;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .outBox {
+      margin-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .outHead {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .outHead .k {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      min-height: 16px;
+    }
+
+    .paletteTools {
+      display: grid;
+      gap: 8px;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .swatch {
+      border: var(--pixel-border);
+      background: #ecece2;
+      padding: 4px;
+      display: grid;
+      gap: 4px;
+      justify-items: center;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .swatchChip {
+      width: 100%;
+      height: 16px;
+      border: 1px solid rgba(0, 0, 0, 0.35);
+      background: #fff;
+    }
+
+    .mini {
+      font-size: 10px;
+      color: var(--muted);
+      min-height: 14px;
+    }
+
+    .checkRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .checkRow input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+    }
+
+    .inlineBtns {
+      display: flex;
+      gap: 8px;
+    }
+
+    #originalCanvas {
+      cursor: crosshair;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .previewGrid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="tag">DROP // PIT TOOLING</div>
+      <h1>Icon Source to Int Array</h1>
+      <p class="sub">Upload any size image, convert to indexed palette data (0..N), export as JS object or Uint8Array.</p>
+    </header>
+
+    <section class="layout">
+      <aside class="panel">
+        <h2>Input</h2>
+        <div class="form">
+          <input id="fileInput" type="file" accept="image/*" />
+          <div id="dropZone" class="drop">Drop PNG/JPG/WebP here</div>
+
+          <div class="row">
+            <label>
+              Width
+              <input id="widthInput" type="number" min="1" value="24" />
+            </label>
+            <label>
+              Height
+              <input id="heightInput" type="number" min="1" value="24" />
+            </label>
+          </div>
+
+          <label>
+            Fit Mode
+            <select id="fitModeInput">
+              <option value="contain">contain (recommended)</option>
+              <option value="cover">cover (crop)</option>
+              <option value="stretch">stretch</option>
+            </select>
+          </label>
+
+          <div class="checkRow">
+            <input id="hueAwareInput" type="checkbox" checked />
+            <span>Hue-aware grayscale mapping</span>
+          </div>
+
+          <div class="row">
+            <label>
+              R/G Separation
+              <input id="rgSeparationInput" type="number" min="0" max="1" step="0.01" value="0.34" />
+            </label>
+            <label>
+              Gamma
+              <input id="gammaInput" type="number" min="0.4" max="2.2" step="0.05" value="0.95" />
+            </label>
+          </div>
+
+          <div class="checkRow">
+            <input id="autoLevelsInput" type="checkbox" checked />
+            <span>Auto levels (3%~97% stretch)</span>
+          </div>
+
+          <div class="checkRow">
+            <input id="useSelectionInput" type="checkbox" checked />
+            <span>Use source region (sprite sheet crop)</span>
+          </div>
+
+          <div class="row">
+            <label>
+              Src X
+              <input id="srcXInput" type="number" min="0" value="0" />
+            </label>
+            <label>
+              Src Y
+              <input id="srcYInput" type="number" min="0" value="0" />
+            </label>
+          </div>
+
+          <div class="row">
+            <label>
+              Src W
+              <input id="srcWInput" type="number" min="1" value="24" />
+            </label>
+            <label>
+              Src H
+              <input id="srcHInput" type="number" min="1" value="24" />
+            </label>
+          </div>
+
+          <div class="inlineBtns">
+            <button id="resetSelectionBtn" type="button">Reset to full image</button>
+          </div>
+          <div id="selectionMeta" class="mini"></div>
+
+          <label>
+            Transparent -> Palette Index
+            <input id="alphaIndexInput" type="number" min="0" value="0" />
+          </label>
+
+          <label>
+            Palette (comma-separated hex)
+            <textarea id="paletteInput">#000000, #1e1e1e, #353535, #4d4d4d, #666666, #828282, #a2a2a2, #c7c7c7</textarea>
+          </label>
+
+          <div class="paletteTools">
+            <button id="presetGray8Btn" type="button">Apply grayscale 8 preset</button>
+            <div id="paletteMeta" class="mini"></div>
+            <div id="paletteSwatches" class="swatches"></div>
+          </div>
+
+          <button id="convertBtn" type="button">Convert</button>
+          <div id="status" class="status"></div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <h2>Preview + Output</h2>
+        <div class="previewGrid">
+          <article class="previewCard">
+            <div class="k">Original</div>
+            <canvas id="originalCanvas" width="240" height="240"></canvas>
+          </article>
+          <article class="previewCard">
+            <div class="k">Resized (RGBA)</div>
+            <canvas id="resizedCanvas" width="240" height="240"></canvas>
+          </article>
+          <article class="previewCard">
+            <div class="k">Indexed Palette</div>
+            <canvas id="indexedCanvas" width="240" height="240"></canvas>
+          </article>
+        </div>
+
+        <div class="outBox">
+          <div class="outHead">
+            <div class="k">Object Literal</div>
+            <button id="copyObjBtn" type="button">Copy</button>
+          </div>
+          <textarea id="objectOut" spellcheck="false"></textarea>
+        </div>
+
+        <div class="outBox">
+          <div class="outHead">
+            <div class="k">Uint8Array</div>
+            <button id="copyTypedBtn" type="button">Copy</button>
+          </div>
+          <textarea id="typedOut" spellcheck="false"></textarea>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const PRESET_GRAY8 = [
+      "#000000",
+      "#1e1e1e",
+      "#353535",
+      "#4d4d4d",
+      "#666666",
+      "#828282",
+      "#a2a2a2",
+      "#c7c7c7",
+    ];
+
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const widthInput = document.getElementById("widthInput");
+    const heightInput = document.getElementById("heightInput");
+    const fitModeInput = document.getElementById("fitModeInput");
+    const hueAwareInput = document.getElementById("hueAwareInput");
+    const rgSeparationInput = document.getElementById("rgSeparationInput");
+    const gammaInput = document.getElementById("gammaInput");
+    const autoLevelsInput = document.getElementById("autoLevelsInput");
+    const useSelectionInput = document.getElementById("useSelectionInput");
+    const srcXInput = document.getElementById("srcXInput");
+    const srcYInput = document.getElementById("srcYInput");
+    const srcWInput = document.getElementById("srcWInput");
+    const srcHInput = document.getElementById("srcHInput");
+    const resetSelectionBtn = document.getElementById("resetSelectionBtn");
+    const selectionMeta = document.getElementById("selectionMeta");
+    const alphaIndexInput = document.getElementById("alphaIndexInput");
+    const paletteInput = document.getElementById("paletteInput");
+    const convertBtn = document.getElementById("convertBtn");
+    const presetGray8Btn = document.getElementById("presetGray8Btn");
+    const paletteMeta = document.getElementById("paletteMeta");
+    const paletteSwatches = document.getElementById("paletteSwatches");
+    const statusEl = document.getElementById("status");
+
+    const originalCanvas = document.getElementById("originalCanvas");
+    const resizedCanvas = document.getElementById("resizedCanvas");
+    const indexedCanvas = document.getElementById("indexedCanvas");
+    const objectOut = document.getElementById("objectOut");
+    const typedOut = document.getElementById("typedOut");
+    const copyObjBtn = document.getElementById("copyObjBtn");
+    const copyTypedBtn = document.getElementById("copyTypedBtn");
+
+    let currentImage = null;
+    let lastCounts = null;
+    let previewMap = null;
+    let sourceRect = null;
+    let draggingSelection = false;
+    let dragStart = null;
+
+    function setStatus(msg) {
+      statusEl.textContent = msg || "";
+    }
+
+    function parseHexColor(hex) {
+      const s = String(hex).trim();
+      const m = s.match(/^#?([0-9a-fA-F]{6})$/);
+      if (!m) return null;
+      const n = parseInt(m[1], 16);
+      return {
+        hex: `#${m[1].toLowerCase()}`,
+        r: (n >> 16) & 255,
+        g: (n >> 8) & 255,
+        b: n & 255,
+      };
+    }
+
+    function parsePalette(value) {
+      const items = String(value)
+        .split(",")
+        .map(v => v.trim())
+        .filter(Boolean);
+      return items.map(parseHexColor).filter(Boolean);
+    }
+
+    function lumaOf(r, g, b) {
+      return ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    }
+
+    function clamp01(v) {
+      if (!Number.isFinite(v)) return 0;
+      if (v < 0) return 0;
+      if (v > 1) return 1;
+      return v;
+    }
+
+    function clamp255(v) {
+      if (!Number.isFinite(v)) return 0;
+      if (v < 0) return 0;
+      if (v > 255) return 255;
+      return v;
+    }
+
+    function percentileSorted(sorted, p) {
+      if (!sorted.length) return 0;
+      const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * p)));
+      return sorted[idx];
+    }
+
+    function grayMetricFromColor(r, g, b, hueAware, rgSeparation) {
+      let gray = lumaOf(r, g, b);
+      if (hueAware) {
+        // Positive value brightens green relative to red to preserve red/green separation.
+        gray += (g - r) * rgSeparation;
+      }
+      return clamp255(gray);
+    }
+
+    function nearestPaletteIndexByLuma(r, g, b, paletteLuma) {
+      const l = lumaOf(r, g, b);
+      let best = 0;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < paletteLuma.length; i++) {
+        const dist = Math.abs(l - paletteLuma[i]);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    function clearCanvas(canvas, fillStyle) {
+      const ctx = canvas.getContext("2d");
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = fillStyle || "#f2f3ee";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+
+    function computeContainRect(canvas, image, pad = 8) {
+      const w = canvas.width - (pad * 2);
+      const h = canvas.height - (pad * 2);
+      const ir = image.width / image.height;
+      const cr = w / h;
+      let dw = w;
+      let dh = h;
+      if (ir > cr) dh = w / ir;
+      else dw = h * ir;
+      const dx = (canvas.width - dw) * 0.5;
+      const dy = (canvas.height - dh) * 0.5;
+      return { dx, dy, dw, dh };
+    }
+
+    function drawPreviewImage(canvas, image) {
+      const ctx = canvas.getContext("2d");
+      clearCanvas(canvas, "#f2f3ee");
+      previewMap = null;
+      if (!image) return;
+
+      const { dx, dy, dw, dh } = computeContainRect(canvas, image, 8);
+      previewMap = { dx, dy, dw, dh };
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(image, dx, dy, dw, dh);
+
+      if (!sourceRect || !useSelectionInput.checked) return;
+      const rx = dx + ((sourceRect.x / image.width) * dw);
+      const ry = dy + ((sourceRect.y / image.height) * dh);
+      const rw = (sourceRect.w / image.width) * dw;
+      const rh = (sourceRect.h / image.height) * dh;
+
+      ctx.save();
+      ctx.strokeStyle = "#1f1f1a";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(rx + 0.5, ry + 0.5, rw, rh);
+      ctx.strokeStyle = "#75c857";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(rx + 1, ry + 1, Math.max(1, rw - 2), Math.max(1, rh - 2));
+      ctx.fillStyle = "rgba(117, 200, 87, 0.14)";
+      ctx.fillRect(rx + 1, ry + 1, Math.max(1, rw - 2), Math.max(1, rh - 2));
+      ctx.restore();
+    }
+
+    function fitDraw(ctx, image, tw, th, fitMode, source) {
+      ctx.clearRect(0, 0, tw, th);
+      ctx.imageSmoothingEnabled = false;
+      const src = source || { x: 0, y: 0, w: image.width, h: image.height };
+      const sx = src.x;
+      const sy = src.y;
+      const sw = src.w;
+      const sh = src.h;
+
+      if (fitMode === "stretch") {
+        ctx.drawImage(image, sx, sy, sw, sh, 0, 0, tw, th);
+        return;
+      }
+
+      const ir = sw / sh;
+      const tr = tw / th;
+      let dw = tw;
+      let dh = th;
+
+      if (fitMode === "contain") {
+        if (ir > tr) dh = tw / ir;
+        else dw = th * ir;
+      } else {
+        if (ir > tr) dw = th * ir;
+        else dh = tw / ir;
+      }
+
+      const dx = (tw - dw) * 0.5;
+      const dy = (th - dh) * 0.5;
+      ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+
+    function renderIndexedPreview(canvas, data, w, h, palette) {
+      const ctx = canvas.getContext("2d");
+      clearCanvas(canvas, "#f2f3ee");
+
+      const scale = Math.floor(Math.min(canvas.width / w, canvas.height / h));
+      const cell = Math.max(1, scale);
+      const drawW = w * cell;
+      const drawH = h * cell;
+      const ox = Math.floor((canvas.width - drawW) / 2);
+      const oy = Math.floor((canvas.height - drawH) / 2);
+
+      ctx.imageSmoothingEnabled = false;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = data[(y * w) + x] || 0;
+          const c = palette[idx] || palette[0];
+          ctx.fillStyle = c.hex;
+          ctx.fillRect(ox + (x * cell), oy + (y * cell), cell, cell);
+        }
+      }
+    }
+
+    function formatRows(data, w) {
+      const rows = [];
+      for (let i = 0; i < data.length; i += w) {
+        rows.push(`  ${Array.from(data.slice(i, i + w)).join(", ")}`);
+      }
+      return rows.join(",\n");
+    }
+
+    function makeObjectOutput(data, w, h, palette) {
+      return `{
+  w: ${w},
+  h: ${h},
+  palette: [${palette.map(c => `"${c.hex}"`).join(", ")}],
+  px: [
+${formatRows(data, w)}
+  ]
+}`;
+    }
+
+    function makeTypedArrayOutput(data, w, h) {
+      return `const ICON_${w}x${h} = new Uint8Array([
+${formatRows(data, w)}
+]);`;
+    }
+
+    function renderPaletteSwatches(palette, counts) {
+      paletteSwatches.innerHTML = "";
+      const total = counts ? counts.reduce((a, b) => a + b, 0) : 0;
+      for (let i = 0; i < palette.length; i++) {
+        const item = document.createElement("div");
+        item.className = "swatch";
+
+        const chip = document.createElement("div");
+        chip.className = "swatchChip";
+        chip.style.background = palette[i].hex;
+
+        const idx = document.createElement("div");
+        idx.textContent = `#${i}`;
+
+        const use = document.createElement("div");
+        if (counts && total > 0) {
+          const pct = ((counts[i] / total) * 100).toFixed(1);
+          use.textContent = `${pct}%`;
+        } else {
+          use.textContent = "-";
+        }
+
+        item.appendChild(chip);
+        item.appendChild(idx);
+        item.appendChild(use);
+        paletteSwatches.appendChild(item);
+      }
+    }
+
+    function updatePaletteMeta() {
+      const palette = parsePalette(paletteInput.value);
+      const colorCount = palette.length;
+      const isGray = palette.every((c) => c.r === c.g && c.g === c.b);
+      const hasGray8 = colorCount === 8 && isGray;
+      paletteMeta.textContent = hasGray8
+        ? "Palette: grayscale 8 colors (recommended)."
+        : `Palette: ${colorCount} colors (${isGray ? "grayscale" : "non-grayscale"}, recommended: grayscale 8).`;
+      renderPaletteSwatches(palette, lastCounts);
+      return palette;
+    }
+
+    function clampSourceRect(rect, image) {
+      if (!image) return null;
+      let x = Number.isFinite(rect.x) ? Math.floor(rect.x) : 0;
+      let y = Number.isFinite(rect.y) ? Math.floor(rect.y) : 0;
+      let w = Number.isFinite(rect.w) ? Math.floor(rect.w) : image.width;
+      let h = Number.isFinite(rect.h) ? Math.floor(rect.h) : image.height;
+
+      x = Math.max(0, Math.min(x, image.width - 1));
+      y = Math.max(0, Math.min(y, image.height - 1));
+      w = Math.max(1, w);
+      h = Math.max(1, h);
+      if (x + w > image.width) w = image.width - x;
+      if (y + h > image.height) h = image.height - y;
+      return { x, y, w, h };
+    }
+
+    function syncSourceInputs() {
+      if (!sourceRect) return;
+      srcXInput.value = String(sourceRect.x);
+      srcYInput.value = String(sourceRect.y);
+      srcWInput.value = String(sourceRect.w);
+      srcHInput.value = String(sourceRect.h);
+    }
+
+    function updateSelectionMeta() {
+      if (!currentImage || !sourceRect) {
+        selectionMeta.textContent = "Selection: -";
+        return;
+      }
+      const mode = useSelectionInput.checked ? "active" : "ignored";
+      selectionMeta.textContent = `Selection (${mode}): x=${sourceRect.x}, y=${sourceRect.y}, w=${sourceRect.w}, h=${sourceRect.h}`;
+    }
+
+    function setSourceRect(nextRect, rerender = true) {
+      if (!currentImage) return;
+      sourceRect = clampSourceRect(nextRect, currentImage);
+      syncSourceInputs();
+      updateSelectionMeta();
+      if (rerender) drawPreviewImage(originalCanvas, currentImage);
+    }
+
+    function readSourceRectFromInputs() {
+      if (!currentImage) return null;
+      return clampSourceRect({
+        x: parseInt(srcXInput.value || "0", 10),
+        y: parseInt(srcYInput.value || "0", 10),
+        w: parseInt(srcWInput.value || String(currentImage.width), 10),
+        h: parseInt(srcHInput.value || String(currentImage.height), 10),
+      }, currentImage);
+    }
+
+    function getActiveSourceRect() {
+      if (!currentImage) return null;
+      if (!useSelectionInput.checked || !sourceRect) {
+        return { x: 0, y: 0, w: currentImage.width, h: currentImage.height };
+      }
+      return sourceRect;
+    }
+
+    function resetSelectionToFullImage(rerender = true) {
+      if (!currentImage) return;
+      setSourceRect({ x: 0, y: 0, w: currentImage.width, h: currentImage.height }, rerender);
+    }
+
+    function canvasToImagePoint(ev, clampOutside = false) {
+      if (!currentImage || !previewMap) return null;
+      const rect = originalCanvas.getBoundingClientRect();
+      const cx = ((ev.clientX - rect.left) / rect.width) * originalCanvas.width;
+      const cy = ((ev.clientY - rect.top) / rect.height) * originalCanvas.height;
+      const { dx, dy, dw, dh } = previewMap;
+      let nx = cx;
+      let ny = cy;
+      if (!clampOutside && (cx < dx || cy < dy || cx > dx + dw || cy > dy + dh)) return null;
+      if (clampOutside) {
+        nx = Math.max(dx, Math.min(cx, dx + dw));
+        ny = Math.max(dy, Math.min(cy, dy + dh));
+      }
+      const ix = Math.floor(((nx - dx) / dw) * currentImage.width);
+      const iy = Math.floor(((ny - dy) / dh) * currentImage.height);
+      return {
+        x: Math.max(0, Math.min(ix, currentImage.width - 1)),
+        y: Math.max(0, Math.min(iy, currentImage.height - 1)),
+      };
+    }
+
+    function convertCurrent() {
+      if (!currentImage) {
+        setStatus("Upload an image first.");
+        return;
+      }
+
+      const w = Math.max(1, parseInt(widthInput.value || "24", 10));
+      const h = Math.max(1, parseInt(heightInput.value || "24", 10));
+      const fitMode = fitModeInput.value;
+      const hueAware = !!hueAwareInput.checked;
+      const rgSeparation = clamp01(parseFloat(rgSeparationInput.value || "0.34"));
+      const gamma = Math.min(2.2, Math.max(0.4, parseFloat(gammaInput.value || "0.95")));
+      const autoLevels = !!autoLevelsInput.checked;
+      const alphaIndex = Math.max(0, parseInt(alphaIndexInput.value || "0", 10));
+      const palette = parsePalette(paletteInput.value);
+      const paletteLuma = palette.map((c) => lumaOf(c.r, c.g, c.b));
+
+      if (palette.length < 2) {
+        setStatus("Palette needs at least 2 colors.");
+        lastCounts = null;
+        updatePaletteMeta();
+        return;
+      }
+
+      const isGrayPalette = palette.every((c) => c.r === c.g && c.g === c.b);
+      if (palette.length !== 8 || !isGrayPalette) {
+        setStatus("Use exactly grayscale 8 colors. Click 'Apply grayscale 8 preset'.");
+        lastCounts = null;
+        updatePaletteMeta();
+        return;
+      }
+
+      if (alphaIndex >= palette.length) {
+        setStatus(`Transparent index must be 0..${palette.length - 1}.`);
+        lastCounts = null;
+        updatePaletteMeta();
+        return;
+      }
+
+      const srcCanvas = document.createElement("canvas");
+      srcCanvas.width = w;
+      srcCanvas.height = h;
+      const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true });
+      const source = getActiveSourceRect();
+      fitDraw(srcCtx, currentImage, w, h, fitMode, source);
+
+      const previewCtx = resizedCanvas.getContext("2d");
+      clearCanvas(resizedCanvas, "#f2f3ee");
+      const zoom = Math.max(1, Math.floor(Math.min(resizedCanvas.width / w, resizedCanvas.height / h)));
+      const ox = Math.floor((resizedCanvas.width - (w * zoom)) / 2);
+      const oy = Math.floor((resizedCanvas.height - (h * zoom)) / 2);
+      previewCtx.imageSmoothingEnabled = false;
+      previewCtx.drawImage(srcCanvas, ox, oy, w * zoom, h * zoom);
+
+      const img = srcCtx.getImageData(0, 0, w, h);
+      const out = new Uint8Array(w * h);
+      const counts = Array.from({ length: palette.length }, () => 0);
+      const px = img.data;
+      const grayMetrics = new Float32Array(out.length);
+      const isOpaque = new Uint8Array(out.length);
+      const opaqueValues = [];
+
+      // Pass 1: compute hue-aware grayscale metric.
+      for (let i = 0, p = 0; i < out.length; i++, p += 4) {
+        const a = px[p + 3];
+        if (a < 8) {
+          out[i] = alphaIndex;
+          counts[alphaIndex] += 1;
+          continue;
+        }
+        isOpaque[i] = 1;
+        const g = grayMetricFromColor(px[p], px[p + 1], px[p + 2], hueAware, rgSeparation);
+        grayMetrics[i] = g;
+        opaqueValues.push(g);
+      }
+
+      let low = 0;
+      let high = 255;
+      if (autoLevels && opaqueValues.length > 0) {
+        const sorted = opaqueValues.slice().sort((a, b) => a - b);
+        low = percentileSorted(sorted, 0.03);
+        high = percentileSorted(sorted, 0.97);
+        if ((high - low) < 1) {
+          low = 0;
+          high = 255;
+        }
+      }
+
+      // Pass 2: levels/gamma -> palette index.
+      for (let i = 0; i < out.length; i++) {
+        if (!isOpaque[i]) continue;
+        let g = grayMetrics[i];
+        if (autoLevels) g = ((g - low) * 255) / (high - low);
+        g = clamp255(g);
+        if (Math.abs(gamma - 1) > 0.001) {
+          g = 255 * Math.pow(g / 255, gamma);
+          g = clamp255(g);
+        }
+        const idx = nearestPaletteIndexByLuma(g, g, g, paletteLuma);
+        out[i] = idx;
+        counts[idx] += 1;
+      }
+
+      lastCounts = counts;
+      updatePaletteMeta();
+      renderIndexedPreview(indexedCanvas, out, w, h, palette);
+
+      objectOut.value = makeObjectOutput(out, w, h, palette);
+      typedOut.value = makeTypedArrayOutput(out, w, h);
+
+      const used = counts.filter(n => n > 0).length;
+      const isGray = palette.every((c) => c.r === c.g && c.g === c.b);
+      const mode = (palette.length === 8 && isGray) ? "grayscale-8 mode" : `${palette.length}-color luma mode`;
+      setStatus(`Done: src(${source.x},${source.y},${source.w},${source.h}) -> ${w}x${h}, used ${used}/${palette.length} colors (${mode}), rg=${rgSeparation.toFixed(2)}, gamma=${gamma.toFixed(2)}, levels=${autoLevels ? "on" : "off"}.`);
+    }
+
+    function handleFile(file) {
+      if (!file || !file.type.startsWith("image/")) {
+        setStatus("Select an image file.");
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        currentImage = img;
+        resetSelectionToFullImage(false);
+        drawPreviewImage(originalCanvas, img);
+        updateSelectionMeta();
+        clearCanvas(resizedCanvas, "#f2f3ee");
+        clearCanvas(indexedCanvas, "#f2f3ee");
+        setStatus(`Loaded: ${file.name} (${img.width}x${img.height})`);
+        convertCurrent();
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        setStatus("Failed to load image.");
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
+
+    fileInput.addEventListener("change", (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      handleFile(file);
+    });
+
+    convertBtn.addEventListener("click", convertCurrent);
+    widthInput.addEventListener("change", convertCurrent);
+    heightInput.addEventListener("change", convertCurrent);
+    fitModeInput.addEventListener("change", convertCurrent);
+    hueAwareInput.addEventListener("change", convertCurrent);
+    rgSeparationInput.addEventListener("change", convertCurrent);
+    gammaInput.addEventListener("change", convertCurrent);
+    autoLevelsInput.addEventListener("change", convertCurrent);
+    useSelectionInput.addEventListener("change", () => {
+      updateSelectionMeta();
+      if (currentImage) drawPreviewImage(originalCanvas, currentImage);
+      convertCurrent();
+    });
+    [srcXInput, srcYInput, srcWInput, srcHInput].forEach((el) => {
+      el.addEventListener("change", () => {
+        if (!currentImage) return;
+        setSourceRect(readSourceRectFromInputs());
+        convertCurrent();
+      });
+    });
+    resetSelectionBtn.addEventListener("click", () => {
+      resetSelectionToFullImage();
+      convertCurrent();
+    });
+    alphaIndexInput.addEventListener("change", convertCurrent);
+    paletteInput.addEventListener("change", () => {
+      lastCounts = null;
+      updatePaletteMeta();
+      convertCurrent();
+    });
+    paletteInput.addEventListener("input", () => {
+      lastCounts = null;
+      updatePaletteMeta();
+    });
+
+    presetGray8Btn.addEventListener("click", () => {
+      paletteInput.value = PRESET_GRAY8.join(", ");
+      alphaIndexInput.value = "0";
+      lastCounts = null;
+      updatePaletteMeta();
+      convertCurrent();
+    });
+
+    originalCanvas.addEventListener("mousedown", (ev) => {
+      if (!currentImage || !useSelectionInput.checked) return;
+      const p = canvasToImagePoint(ev, false);
+      if (!p) return;
+      draggingSelection = true;
+      dragStart = p;
+      setSourceRect({ x: p.x, y: p.y, w: 1, h: 1 });
+    });
+
+    window.addEventListener("mousemove", (ev) => {
+      if (!draggingSelection || !dragStart || !currentImage) return;
+      const p = canvasToImagePoint(ev, true);
+      if (!p) return;
+      const x0 = Math.min(dragStart.x, p.x);
+      const y0 = Math.min(dragStart.y, p.y);
+      const x1 = Math.max(dragStart.x, p.x);
+      const y1 = Math.max(dragStart.y, p.y);
+      setSourceRect({ x: x0, y: y0, w: (x1 - x0) + 1, h: (y1 - y0) + 1 }, true);
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (!draggingSelection) return;
+      draggingSelection = false;
+      dragStart = null;
+      convertCurrent();
+    });
+
+    function preventDefaults(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+
+    ["dragenter", "dragover", "dragleave", "drop"].forEach(type => {
+      dropZone.addEventListener(type, preventDefaults, false);
+    });
+
+    ["dragenter", "dragover"].forEach(type => {
+      dropZone.addEventListener(type, () => dropZone.classList.add("active"), false);
+    });
+
+    ["dragleave", "drop"].forEach(type => {
+      dropZone.addEventListener(type, () => dropZone.classList.remove("active"), false);
+    });
+
+    dropZone.addEventListener("drop", (ev) => {
+      const file = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+      handleFile(file);
+    });
+
+    async function copyText(text, onDone) {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus(onDone);
+      } catch {
+        setStatus("Copy failed. Check browser clipboard permission.");
+      }
+    }
+
+    copyObjBtn.addEventListener("click", () => copyText(objectOut.value, "Copied object literal."));
+    copyTypedBtn.addEventListener("click", () => copyText(typedOut.value, "Copied Uint8Array."));
+
+    clearCanvas(originalCanvas, "#f2f3ee");
+    clearCanvas(resizedCanvas, "#f2f3ee");
+    clearCanvas(indexedCanvas, "#f2f3ee");
+    updatePaletteMeta();
+    updateSelectionMeta();
+    setStatus("Upload an image to auto-convert.");
+  </script>
+</body>
+</html>
