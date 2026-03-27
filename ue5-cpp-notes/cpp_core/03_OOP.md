@@ -1,6 +1,6 @@
 # OOP
 
-> 카테고리 1: C++ 핵심 | 섹션 3/6
+> 카테고리 1: C++ 핵심 | 섹션 3/8
 > 토픽 수: 4개 | 예상 학습 시간: 6시간
 
 ---
@@ -13,7 +13,7 @@
 
 생성자는 객체가 만들어질 때 불변 조건을 세우고 자원을 획득하는 함수이고, 소멸자는 객체가 끝날 때 자원을 반납하는 함수다. 핵심은 "객체가 유효한 상태로만 존재하도록 보장하는 것"이다.
 
-기본 생성자, 매개변수 생성자, 복사/이동 생성자, 초기화 리스트, 소멸 순서를 함께 이해해야 한다. 특히 멤버 초기화는 생성자 본문보다 초기화 리스트에서 이뤄지며, 소멸 순서는 생성과 반대 방향으로 진행된다는 점이 중요하다.
+기본 생성자, 매개변수 생성자, 복사/이동 생성자, copy/move assignment, 초기화 리스트, 소멸 순서를 함께 이해해야 한다. 특히 자원을 직접 소유하는 타입은 `Rule of 3 / 5 / 0` 관점에서 설계해야 한다. 직접 소멸자를 정의했다면 복사와 대입 정책도 같이 고민해야 하며, 가능하면 표준 타입과 RAII 멤버를 조합해 `Rule of 0`로 가는 편이 더 안전하다.
 
 ### 2. 코드 예시
 
@@ -34,6 +34,44 @@ public:
 
 private:
     std::string Path;
+};
+
+class BufferOwner
+{
+public:
+    explicit BufferOwner(size_t InSize)
+        : Size(InSize)
+        , Data(new int[InSize]{})
+    {
+    }
+
+    BufferOwner(const BufferOwner& Other) // deep copy
+        : Size(Other.Size)
+        , Data(new int[Other.Size])
+    {
+        std::copy(Other.Data, Other.Data + Size, Data);
+    }
+
+    BufferOwner& operator=(const BufferOwner& Other)
+    {
+        if (this != &Other)
+        {
+            int* NewData = new int[Other.Size];
+            std::copy(Other.Data, Other.Data + Other.Size, NewData);
+            delete[] Data;
+            Data = NewData;
+            Size = Other.Size;
+        }
+        return *this;
+    }
+
+    BufferOwner(BufferOwner&& Other) noexcept = default;
+    BufferOwner& operator=(BufferOwner&& Other) noexcept = default;
+    ~BufferOwner() { delete[] Data; }
+
+private:
+    size_t Size = 0;
+    int* Data = nullptr;
 };
 ```
 
@@ -61,11 +99,18 @@ private:
 **Q6: 실무에서 생성자 설계가 나쁘다는 신호는 무엇인가요?**
 > A: 생성자가 너무 많은 일을 하거나, 외부 시스템 접근과 실패 가능성이 큰 로직을 과도하게 담을 때다. 기본 불변 조건과 무거운 런타임 작업은 분리하는 편이 좋다.
 
+**Q7: `Rule of 3 / 5 / 0`는 어떻게 구분하나요?**
+> A: 소멸자, 복사 생성자, copy assignment가 필요하면 전통적으로 Rule of 3을 떠올리고, move constructor와 move assignment까지 관리해야 하면 Rule of 5가 된다. 반대로 자원을 직접 들지 않고 RAII 멤버만 조합하면 특별 멤버 함수를 직접 쓰지 않아도 되는 Rule of 0이 이상적이다.
+
+**Q8: shallow copy와 deep copy의 차이는 무엇인가요?**
+> A: shallow copy는 포인터 값 같은 외형만 복사하고, deep copy는 실제 자원까지 별도로 복제한다. 자원 소유 타입에서 shallow copy를 무심코 허용하면 이중 해제와 lifetime 충돌이 생긴다.
+
 ### 5. 흔한 실수
 
 - 멤버 초기화 순서를 선언 순서와 다르게 착각한다.
 - 생성자 본문에서 복잡한 초기화를 하며 예외 안전을 약하게 만든다.
 - 자원 정리를 소멸자 대신 수동 호출에 의존한다.
+- 자원 소유 멤버를 얕게 복사해 shallow copy 버그를 만든다.
 
 ### 6. UE5 소스 참고 경로
 
@@ -161,7 +206,7 @@ public:
 
 `virtual(버추얼, 가상 함수)` 함수는 파생 클래스에서 재정의 가능한 동작을 제공하며, 실행 시점에 실제 객체 타입에 맞는 함수를 호출하게 해 준다. 이 동적 디스패치를 구현하기 위해 많은 컴파일러가 `vtable(브이테이블, 가상 함수 테이블)`과 `vptr(브이포인터, 가상 함수 테이블 포인터)` 구조를 사용한다.
 
-핵심은 "포인터 타입이 아니라 실제 객체 타입이 호출 대상을 결정한다"는 점이다. 또한 기반 클래스를 다형적으로 쓸 계획이라면 소멸자를 virtual로 두는 것이 매우 중요하다.
+핵심은 "포인터 타입이 아니라 실제 객체 타입이 호출 대상을 결정한다"는 점이다. 또한 기반 클래스를 다형적으로 쓸 계획이라면 소멸자를 virtual로 두는 것이 매우 중요하다. interface 설계에서는 "확장 포인트를 정말 열어야 하는가"와 "값, 포인터, 참조 중 어떤 형태로 API를 노출할 것인가"를 함께 판단해야 한다.
 
 ### 2. 코드 예시
 
@@ -203,13 +248,16 @@ public:
 > A: 기반 포인터로 파생 객체를 삭제할 때 파생 소멸자가 호출되지 않을 수 있기 때문이다. 자원 누수나 부분 소멸이 생길 수 있다.
 
 **Q4: virtual 호출의 비용은 어떻게 이해해야 하나요?**
-> A: 간접 호출과 인라이닝 제약이 생길 수 있다. 대부분 큰 문제가 아니지만, 아주 자주 호출되는 핫패스에서는 구조 선택에 영향을 줄 수 있다.
+> A: 간접 호출과 인라이닝 제약이 생길 수 있고, 객체마다 `vptr` 저장 비용도 추가된다. 대부분 큰 문제가 아니지만, 아주 자주 호출되는 핫패스에서는 구조 선택에 영향을 줄 수 있다.
 
 **Q5: `override`를 왜 쓰는 것이 좋나요?**
 > A: 실제로 기반 가상 함수를 재정의하는지 컴파일러가 검증해 주기 때문이다. 오타나 시그니처 불일치를 빨리 잡을 수 있다.
 
 **Q6: 실무에서 virtual 사용이 과하다는 신호는 무엇인가요?**
 > A: 계층 전체가 불필요한 다형성으로 덮여 있고, 실제로는 단일 구현만 존재하는데도 모든 함수가 virtual일 때다. 유연성보다 복잡성이 커진다.
+
+**Q7: interface 설계에서 virtual을 어디까지 열어 두는 것이 좋나요?**
+> A: 기본적으로 확장 포인트가 필요한 동작만 virtual로 열고, 나머지는 비가상 함수와 조합으로 고정하는 편이 안전하다. API 계약이 흔들리면 파생 클래스가 지켜야 할 불변식도 흐려진다. 그래서 pure virtual interface와 final 구현의 경계를 의식적으로 나누는 것이 좋다.
 
 ### 5. 흔한 실수
 

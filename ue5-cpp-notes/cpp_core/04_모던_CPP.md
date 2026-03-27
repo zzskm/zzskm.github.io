@@ -1,6 +1,6 @@
 # 모던 C++
 
-> 카테고리 1: C++ 핵심 | 섹션 4/6
+> 카테고리 1: C++ 핵심 | 섹션 4/8
 > 토픽 수: 6개 | 예상 학습 시간: 9시간
 
 ---
@@ -11,9 +11,9 @@
 
 ### 1. 핵심 개념
 
-move semantics(무브 세맨틱스, 이동 의미론)는 "복사 대신 자원의 소유권을 옮겨 불필요한 비용을 줄이는 규칙"이다. 핵심은 lvalue와 rvalue를 구분하고, rvalue에서 자원을 훔쳐 오는 move constructor와 move assignment를 이해하는 것이다.
+move semantics(무브 세맨틱스, 이동 의미론)는 "복사 대신 자원의 소유권을 옮겨 불필요한 비용을 줄이는 규칙"이다. 핵심은 value categories(값 범주), 즉 `lvalue`, `xvalue`, `prvalue`를 구분하고, rvalue 계열에서 자원을 훔쳐 오는 move constructor와 move assignment를 이해하는 것이다.
 
-`std::move`는 실제로 옮기지 않고 "이 값을 rvalue로 취급해도 된다"는 캐스트에 가깝다. 반면 `std::forward`는 전달받은 값의 value category를 유지하는 데 쓰이며 perfect forwarding 문맥에서 중요하다. 이동 후 객체는 파괴 가능하고 재할당 가능한 유효 상태여야 하지만, 구체 값은 보장되지 않는 moved-from 상태라는 점도 함께 기억해야 한다.
+`std::move`는 실제로 옮기지 않고 "이 값을 rvalue로 취급해도 된다"는 캐스트에 가깝다. 반면 `std::forward`는 전달받은 값의 value category를 유지하는 데 쓰이며 perfect forwarding 문맥에서 중요하다. 이동 후 객체는 파괴 가능하고 재할당 가능한 유효 상태여야 하지만, 구체 값은 보장되지 않는 moved-from 상태라는 점도 함께 기억해야 한다. 또한 move가 항상 빠른 것은 아니다. 작은 trivially copyable 타입은 복사가 더 단순할 수 있고, `noexcept`가 빠진 move는 컨테이너가 복사를 선택하게 만들기도 한다.
 
 ### 2. 코드 예시
 
@@ -74,6 +74,9 @@ private:
 
 **Q6: perfect forwarding은 왜 필요한가요?**
 > A: 호출자가 넘긴 lvalue/rvalue 성격을 잃지 않고 다시 전달하기 위해서다. 래퍼 함수나 팩토리 함수에서 불필요한 복사를 막는 데 중요하다.
+
+**Q7: move가 항상 빠른가요?**
+> A: 아니다. 작고 단순한 타입은 복사 비용이 사실상 무시될 수 있고, move 자체도 포인터 교체나 상태 정리가 필요하면 공짜가 아니다. 특히 `noexcept`가 아니면 컨테이너가 안전을 위해 복사를 택할 수도 있어 "move = 무조건 빠름"이라고 말하면 위험하다.
 
 ### 5. 흔한 실수
 
@@ -245,7 +248,7 @@ auto Bound = std::bind(PrintSum, 10, std::placeholders::_1);
 
 템플릿은 타입이나 값을 파라미터로 받아 컴파일 시점에 코드를 생성하는 메커니즘이다. 함수 템플릿, 클래스 템플릿, 특수화, 부분 특수화, `if constexpr`, SFINAE, 그리고 modern C++에서는 concepts까지 이어진다.
 
-핵심은 "하나의 규칙을 여러 타입에 적용하되, 필요한 제약과 분기를 컴파일 시점에 표현한다"는 점이다. SFINAE는 부적절한 치환을 후보군에서 조용히 제외하는 규칙이고, `if constexpr`는 컴파일 타임 분기를 더 읽기 쉽게 만든다. concepts는 템플릿 제약을 문서처럼 드러내는 도구다.
+핵심은 "하나의 규칙을 여러 타입에 적용하되, 필요한 제약과 분기를 컴파일 시점에 표현한다"는 점이다. SFINAE는 부적절한 치환을 후보군에서 조용히 제외하는 규칙이고, `if constexpr`는 컴파일 타임 분기를 더 읽기 쉽게 만든다. `enable_if`는 그 제약을 함수 시그니처 쪽에 거는 오래된 실전 도구이고, concepts는 템플릿 제약을 문서처럼 드러내는 현대적 도구다.
 
 ### 2. 코드 예시
 
@@ -268,6 +271,18 @@ void PrintValue(const T& Value)
         std::cout << Value << "\n";
     }
 }
+
+template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+T AddOne(T Value)
+{
+    return Value + 1;
+}
+
+template <typename T>
+concept HasSize = requires(T Value)
+{
+    Value.size();
+};
 ```
 
 ### 3. 왜 중요한가 (게임/UE5 맥락)
@@ -293,6 +308,12 @@ void PrintValue(const T& Value)
 
 **Q6: 템플릿 남용의 위험은 무엇인가요?**
 > A: 에러 메시지가 복잡해지고 빌드 시간이 늘어나며, 실제로는 단순 함수면 되는 문제까지 과도하게 일반화할 수 있다. 일반화보다 명확성이 먼저다.
+
+**Q7: `enable_if`는 언제 써 봤다고 말할 수 있나요?**
+> A: concepts를 아직 쓸 수 없거나, 기존 코드베이스가 SFINAE 패턴에 맞춰져 있을 때 특정 오버로드를 조건부로 노출하는 용도로 썼다고 설명하면 된다. 예를 들어 정수형일 때만 활성화되는 함수, iterator category별 오버로드, 포인터 타입 전용 헬퍼 같은 경우가 전형적이다.
+
+**Q8: concepts를 사용하는 이유는 무엇인가요?**
+> A: 제약을 함수 본문이 아니라 선언부에서 명확히 보여 주고, 템플릿 에러 메시지를 훨씬 읽기 쉽게 만들기 위해서다. 팀 차원에서는 "이 템플릿이 기대하는 인터페이스"를 코드에 직접 문서화하는 효과도 크다.
 
 ### 5. 흔한 실수
 
