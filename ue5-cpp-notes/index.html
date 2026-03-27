@@ -4,15 +4,65 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UE5 C++ 학습 노트</title>
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/RIDIBatang.css">
+
   <style>
     :root {
-      --base-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --base-font-size: 15px;
-      --base-line-height: 1.8;
+      --base-font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --base-font-size: 16px;
+      --base-line-height: 1.75;
       --sidebar-width: 260px;
       --code-font-family: "D2Coding", "Consolas", monospace;
     }
+
+    /* 본문은 읽기용 바탕체 */
+    .markdown-section {
+      font-family: "RIDIBatang", "Noto Serif KR", serif;
+      font-size: 1rem;
+      line-height: 1.8;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    /* 제목은 산세리프로 유지 */
+    .markdown-section h1,
+    .markdown-section h2,
+    .markdown-section h3,
+    .markdown-section h4,
+    .markdown-section h5,
+    .markdown-section h6 {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      line-height: 1.4;
+      word-break: keep-all;
+      letter-spacing: -0.01em;
+    }
+
+    /* 본문 텍스트 가독성 미세 조정 */
+    .markdown-section p,
+    .markdown-section li,
+    .markdown-section blockquote {
+      letter-spacing: -0.01em;
+    }
+
+    /* 사이드바와 UI는 산세리프 */
+    .sidebar,
+    .sidebar ul li a,
+    .app-name,
+    .search input {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    }
+
+    /* 코드 블록/인라인 코드는 고정폭 유지 */
+    .markdown-section pre,
+    .markdown-section pre > code,
+    .markdown-section code,
+    .markdown-section tt {
+      font-family: "D2Coding", "Consolas", monospace;
+    }
+
     .markdown-section pre > code {
       font-size: 13px;
     }
