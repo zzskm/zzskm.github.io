@@ -393,27 +393,41 @@
       min-height: 44px;
     }
 
+    /* sidebar-toggle 컨테이너를 세로 스택으로 확장 */
+    .sidebar-toggle {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0 !important;
+    }
+
+    .sidebar-toggle .sidebar-toggle-button {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
     .reader-settings-toggle {
-      position: fixed;
-      left: 18px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);
-      z-index: 40;
-      width: 44px;
-      height: 44px;
-      border: 1px solid var(--reader-border);
-      border-radius: 50%;
-      background: var(--reader-surface);
-      color: var(--reader-text);
-      box-shadow: 0 12px 28px rgba(15, 18, 24, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 0;
+      border: none;
+      border-top: 1px solid var(--reader-border);
+      border-radius: 0;
+      background: transparent;
+      color: var(--reader-muted);
       font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 700;
       cursor: pointer;
-      transition: transform 140ms ease, background-color 180ms ease, color 180ms ease;
+      transition: background-color 180ms ease, color 180ms ease;
     }
 
     .reader-settings-toggle:hover {
-      transform: translateY(-1px);
+      background: var(--reader-code-bg);
+      color: var(--reader-text);
     }
 
     .reader-settings-toggle:focus-visible,
@@ -424,8 +438,8 @@
 
     .reader-settings-panel {
       position: fixed;
-      left: 18px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
+      left: 0;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
       z-index: 40;
       width: min(360px, calc(100vw - 28px));
       max-height: min(72vh, 700px);
@@ -610,14 +624,7 @@
         padding: 18px 18px 32px;
       }
 
-      .reader-settings-toggle {
-        left: 14px;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);
-      }
-
       .reader-settings-panel {
-        left: 14px;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
         width: min(360px, calc(100vw - 20px));
       }
 
@@ -908,7 +915,12 @@
           '<button type="button" class="reader-reset-button" data-reader-reset>기본값 복원</button>' +
           "</section>";
 
-        document.body.appendChild(toggle);
+        var sidebarToggle = document.querySelector(".sidebar-toggle");
+        if (sidebarToggle) {
+          sidebarToggle.appendChild(toggle);
+        } else {
+          document.body.appendChild(toggle);
+        }
         document.body.appendChild(panel);
 
         let isOpen = false;
