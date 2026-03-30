@@ -393,40 +393,44 @@
       min-height: 44px;
     }
 
-    /* sidebar-toggle 컨테이너를 세로 스택으로 확장 */
-    .sidebar-toggle {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      padding: 0 !important;
-    }
-
-    .sidebar-toggle .sidebar-toggle-button {
-      width: 100%;
-      box-sizing: border-box;
-    }
-
+    /* reader-settings-toggle: sidebar-toggle 바로 아래, 동일 패턴 */
     .reader-settings-toggle {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      box-sizing: border-box;
-      padding: 8px 0;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      z-index: 20;
+      margin-bottom: 44px;
+      width: auto;
+      appearance: none;
+      outline: none;
+      cursor: pointer;
+      background: var(--reader-surface);
       border: none;
       border-top: 1px solid var(--reader-border);
-      border-radius: 0;
-      background: transparent;
-      color: var(--reader-muted);
-      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background-color 180ms ease, color 180ms ease;
+      border-right: 1px solid var(--reader-border);
+      border-radius: 0 4px 0 0;
+      padding: 10px 10px 6px;
+      transition: background-color 180ms ease;
     }
 
     .reader-settings-toggle:hover {
       background: var(--reader-code-bg);
+    }
+
+    .reader-settings-toggle-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--reader-muted);
+      line-height: 1;
+      pointer-events: none;
+      transition: color 180ms ease;
+    }
+
+    .reader-settings-toggle:hover .reader-settings-toggle-button {
       color: var(--reader-text);
     }
 
@@ -438,8 +442,8 @@
 
     .reader-settings-panel {
       position: fixed;
-      left: 0;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
+      left: 4px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
       z-index: 40;
       width: min(360px, calc(100vw - 28px));
       max-height: min(72vh, 700px);
@@ -874,7 +878,10 @@
         toggle.className = "reader-settings-toggle";
         toggle.setAttribute("aria-label", "리더 설정 열기");
         toggle.setAttribute("aria-expanded", "false");
-        toggle.textContent = "Aa";
+        var toggleInner = document.createElement("div");
+        toggleInner.className = "reader-settings-toggle-button";
+        toggleInner.textContent = "Aa";
+        toggle.appendChild(toggleInner);
 
         const panel = document.createElement("aside");
         panel.className = "reader-settings-panel";
@@ -916,8 +923,8 @@
           "</section>";
 
         var sidebarToggle = document.querySelector(".sidebar-toggle");
-        if (sidebarToggle) {
-          sidebarToggle.appendChild(toggle);
+        if (sidebarToggle && sidebarToggle.parentNode) {
+          sidebarToggle.parentNode.insertBefore(toggle, sidebarToggle);
         } else {
           document.body.appendChild(toggle);
         }
