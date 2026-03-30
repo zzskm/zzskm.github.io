@@ -233,12 +233,54 @@
       color: var(--reader-text);
     }
 
-    /* 사이드바와 UI는 산세리프 */
+    /* 사이드바와 UI는 산세리프 + 테마 적용 */
     .sidebar,
     .sidebar ul li a,
     .app-name,
     .search input {
       font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    }
+
+    .sidebar {
+      background: var(--reader-bg) !important;
+      color: var(--reader-text);
+      border-right: 1px solid var(--reader-border);
+      transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+
+    .sidebar .app-name {
+      color: var(--reader-text);
+    }
+
+    .sidebar ul li a {
+      color: var(--reader-muted);
+      transition: color 180ms ease;
+    }
+
+    .sidebar ul li a:hover {
+      color: var(--reader-link);
+    }
+
+    .sidebar ul li.active > a {
+      color: var(--reader-link);
+      font-weight: 700;
+    }
+
+    .sidebar .search input {
+      background: var(--reader-surface);
+      color: var(--reader-text);
+      border: 1px solid var(--reader-border);
+      transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+
+    .sidebar-toggle {
+      background-color: var(--reader-surface) !important;
+      border-top: 1px solid var(--reader-border) !important;
+      transition: background-color 180ms ease, border-color 180ms ease;
+    }
+
+    .sidebar-toggle .sidebar-toggle-button .icon path {
+      fill: var(--reader-muted);
     }
 
     /* 코드 블록/인라인 코드는 고정폭 유지 */
@@ -354,17 +396,17 @@
     .reader-settings-toggle {
       position: fixed;
       left: 18px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);
       z-index: 40;
-      width: 52px;
-      height: 52px;
+      width: 44px;
+      height: 44px;
       border: 1px solid var(--reader-border);
       border-radius: 50%;
       background: var(--reader-surface);
       color: var(--reader-text);
       box-shadow: 0 12px 28px rgba(15, 18, 24, 0.18);
       font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
       cursor: pointer;
       transition: transform 140ms ease, background-color 180ms ease, color 180ms ease;
@@ -383,7 +425,7 @@
     .reader-settings-panel {
       position: fixed;
       left: 18px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 142px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
       z-index: 40;
       width: min(360px, calc(100vw - 28px));
       max-height: min(72vh, 700px);
@@ -452,8 +494,10 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .reader-option-grid.size-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+    .reader-size-stepper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .reader-chip,
@@ -502,9 +546,8 @@
       color: var(--reader-muted);
     }
 
-    .reader-size-chip {
-      text-align: center;
-      padding: 10px 0;
+    .reader-size-stepper .reader-stepper-value {
+      font-size: 0.92rem;
     }
 
     .reader-theme-chip {
@@ -569,24 +612,20 @@
 
       .reader-settings-toggle {
         left: 14px;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);
       }
 
       .reader-settings-panel {
         left: 14px;
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
         width: min(360px, calc(100vw - 20px));
       }
 
-      .reader-option-grid.size-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
     }
 
     @media (max-width: 480px) {
       .reader-option-grid.font-grid,
-      .reader-option-grid.theme-grid,
-      .reader-option-grid.size-grid {
+      .reader-option-grid.theme-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
@@ -610,6 +649,15 @@
       },
       "/cpp_core/05_에러_핸들링": {
         src: "audio/cpp_core/05_에러_핸들링.m4a"
+      },
+      "/ue5_object_system/01_리플렉션_매크로": {
+        src: "audio/ue5_object_system/01_리플렉션_매크로.m4a"
+      },
+      "/ue5_object_system/02_메모리_GC": {
+        src: "audio/ue5_object_system/02_메모리_GC.m4a"
+      },
+      "/ue5_object_system/03_타입_컨테이너": {
+        src: "audio/ue5_object_system/03_타입_컨테이너.m4a"
       }
     };
 
@@ -780,18 +828,14 @@
           .join("");
       }
 
-      function renderSizeButtons() {
-        return state.FONT_SIZES
-          .map(function (size) {
-            return (
-              '<button type="button" class="reader-chip reader-size-chip" data-reader-size-option="' +
-              size +
-              '">' +
-              size +
-              "</button>"
-            );
-          })
-          .join("");
+      function renderSizeStepper() {
+        return (
+          '<div class="reader-size-stepper">' +
+          '<button type="button" class="reader-stepper-button" data-reader-size-step="-1" aria-label="글자 크기 줄이기">&minus;</button>' +
+          '<span class="reader-stepper-value" data-reader-font-size-value>' + state.current.fontSize + 'px</span>' +
+          '<button type="button" class="reader-stepper-button" data-reader-size-step="1" aria-label="글자 크기 늘리기">+</button>' +
+          '</div>'
+        );
       }
 
       function renderThemeButtons() {
@@ -844,9 +888,7 @@
           "</section>" +
           '<section class="reader-settings-section">' +
           '<span class="reader-settings-label">글자 크기</span>' +
-          '<div class="reader-option-grid size-grid">' +
-          renderSizeButtons() +
-          "</div>" +
+          renderSizeStepper() +
           "</section>" +
           '<section class="reader-settings-section">' +
           '<span class="reader-settings-label">줄간격</span>' +
@@ -905,9 +947,12 @@
             return;
           }
 
-          const sizeButton = event.target.closest("[data-reader-size-option]");
-          if (sizeButton) {
-            updatePrefs({ fontSize: sizeButton.getAttribute("data-reader-size-option") });
+          const sizeStepButton = event.target.closest("[data-reader-size-step]");
+          if (sizeStepButton && !sizeStepButton.disabled) {
+            var delta = Number(sizeStepButton.getAttribute("data-reader-size-step"));
+            var curIdx = state.FONT_SIZES.indexOf(String(state.current.fontSize));
+            var nxtIdx = Math.min(state.FONT_SIZES.length - 1, Math.max(0, curIdx + delta));
+            updatePrefs({ fontSize: state.FONT_SIZES[nxtIdx] });
             return;
           }
 
@@ -953,11 +998,15 @@
           button.setAttribute("aria-pressed", String(isActive));
         });
 
-        widget.panel.querySelectorAll("[data-reader-size-option]").forEach(function (button) {
-          const isActive = button.getAttribute("data-reader-size-option") === String(state.current.fontSize);
-          button.classList.toggle("is-active", isActive);
-          button.setAttribute("aria-pressed", String(isActive));
-        });
+        var fontSizeValue = widget.panel.querySelector("[data-reader-font-size-value]");
+        var sizeIndex = state.FONT_SIZES.indexOf(String(state.current.fontSize));
+        if (fontSizeValue) {
+          fontSizeValue.textContent = state.current.fontSize + "px";
+        }
+        var sizeDecBtn = widget.panel.querySelector('[data-reader-size-step="-1"]');
+        var sizeIncBtn = widget.panel.querySelector('[data-reader-size-step="1"]');
+        if (sizeDecBtn) { sizeDecBtn.disabled = sizeIndex <= 0; }
+        if (sizeIncBtn) { sizeIncBtn.disabled = sizeIndex >= state.FONT_SIZES.length - 1; }
 
         widget.panel.querySelectorAll("[data-reader-theme-option]").forEach(function (button) {
           const isActive = button.getAttribute("data-reader-theme-option") === state.current.theme;
