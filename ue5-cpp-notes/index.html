@@ -33,15 +33,6 @@
           border: "#ddd2c3",
           codeBg: "#f1eadf"
         },
-        cream: {
-          bg: "#fbf4e6",
-          surface: "#fff9ef",
-          text: "#30271e",
-          muted: "#75634a",
-          link: "#8b4f1f",
-          border: "#e2d5bc",
-          codeBg: "#f4ead7"
-        },
         sepia: {
           bg: "#efe4d5",
           surface: "#f8efe4",
@@ -68,22 +59,16 @@
           link: "#8fb4ff",
           border: "#3d4653",
           codeBg: "#1a1f27"
-        },
-        midnight: {
-          bg: "#0f1218",
-          surface: "#151924",
-          text: "#f4f7fb",
-          muted: "#afb9c7",
-          link: "#8ac6ff",
-          border: "#2d3748",
-          codeBg: "#0d1118"
         }
       };
 
       function getDefaultTheme() {
-        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        if (!window.matchMedia) {
+          return "sage";
+        }
+        return window.matchMedia("(prefers-color-scheme: dark)").matches
           ? "slate"
-          : "paper";
+          : "sage";
       }
 
       function getBasePath() {
@@ -732,11 +717,9 @@
       };
       const THEME_LABELS = {
         paper: "Paper",
-        cream: "Cream",
         sepia: "Sepia",
         sage: "Sage",
-        slate: "Slate",
-        midnight: "Midnight"
+        slate: "Slate"
       };
 
       function setCookie(prefs) {
