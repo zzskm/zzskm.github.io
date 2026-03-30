@@ -8,6 +8,176 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2107@1.1/RIDIBatang.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;500;700&display=swap">
+
+  <script>
+    (function () {
+      const COOKIE_NAME = "reader_prefs";
+      const FONT_FAMILIES = {
+        pretendard: '"Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
+        ridibatang: '"RIDIBatang", "Noto Serif KR", serif',
+        notoSans: '"Noto Sans KR", "Apple SD Gothic Neo", sans-serif',
+        notoSerif: '"Noto Serif KR", "RIDIBatang", serif'
+      };
+      const FONT_SIZES = ["15", "16", "18", "20", "22"];
+      const LINE_HEIGHT_STEPS = ["1.65", "1.8", "1.95", "2.1"];
+      const THEMES = {
+        paper: {
+          bg: "#f6f3ec",
+          surface: "#fffdf9",
+          text: "#2b241b",
+          muted: "#6d6457",
+          link: "#275cb5",
+          border: "#ddd2c3",
+          codeBg: "#f1eadf"
+        },
+        cream: {
+          bg: "#fbf4e6",
+          surface: "#fff9ef",
+          text: "#30271e",
+          muted: "#75634a",
+          link: "#8b4f1f",
+          border: "#e2d5bc",
+          codeBg: "#f4ead7"
+        },
+        sepia: {
+          bg: "#efe4d5",
+          surface: "#f8efe4",
+          text: "#3c2f22",
+          muted: "#6f5b46",
+          link: "#8c592b",
+          border: "#d2c0ab",
+          codeBg: "#e8d9c4"
+        },
+        sage: {
+          bg: "#edf2ec",
+          surface: "#f7faf6",
+          text: "#253227",
+          muted: "#5c6d60",
+          link: "#2d6c60",
+          border: "#cad7cc",
+          codeBg: "#e5ede6"
+        },
+        slate: {
+          bg: "#1d2128",
+          surface: "#242932",
+          text: "#e8edf3",
+          muted: "#aab5c3",
+          link: "#8fb4ff",
+          border: "#3d4653",
+          codeBg: "#1a1f27"
+        },
+        midnight: {
+          bg: "#0f1218",
+          surface: "#151924",
+          text: "#f4f7fb",
+          muted: "#afb9c7",
+          link: "#8ac6ff",
+          border: "#2d3748",
+          codeBg: "#0d1118"
+        }
+      };
+
+      function getDefaultTheme() {
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "slate"
+          : "paper";
+      }
+
+      function getBasePath() {
+        const pathname = window.location.pathname || "/";
+        if (pathname.endsWith("/")) {
+          return pathname || "/";
+        }
+        return pathname.replace(/[^/]*$/, "") || "/";
+      }
+
+      function getCookie(name) {
+        const escapedName = name.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&");
+        const match = document.cookie.match(new RegExp("(?:^|; )" + escapedName + "=([^;]*)"));
+        if (!match) {
+          return null;
+        }
+        try {
+          return JSON.parse(decodeURIComponent(match[1]));
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function getDefaults() {
+        return {
+          font: "ridibatang",
+          fontSize: "16",
+          lineHeight: "1.8",
+          theme: getDefaultTheme()
+        };
+      }
+
+      function sanitizePrefs(candidate) {
+        const defaults = getDefaults();
+        const prefs = Object.assign({}, defaults);
+        if (!candidate || typeof candidate !== "object") {
+          return prefs;
+        }
+
+        if (FONT_FAMILIES[candidate.font]) {
+          prefs.font = candidate.font;
+        }
+        if (FONT_SIZES.includes(String(candidate.fontSize))) {
+          prefs.fontSize = String(candidate.fontSize);
+        }
+        if (LINE_HEIGHT_STEPS.includes(String(candidate.lineHeight))) {
+          prefs.lineHeight = String(candidate.lineHeight);
+        }
+        if (THEMES[candidate.theme]) {
+          prefs.theme = candidate.theme;
+        }
+        return prefs;
+      }
+
+      function applyTheme(themeName) {
+        const theme = THEMES[themeName] || THEMES[getDefaultTheme()];
+        const root = document.documentElement;
+        root.style.setProperty("--reader-bg", theme.bg);
+        root.style.setProperty("--reader-surface", theme.surface);
+        root.style.setProperty("--reader-text", theme.text);
+        root.style.setProperty("--reader-muted", theme.muted);
+        root.style.setProperty("--reader-link", theme.link);
+        root.style.setProperty("--reader-border", theme.border);
+        root.style.setProperty("--reader-code-bg", theme.codeBg);
+      }
+
+      function applyPrefs(prefs) {
+        const root = document.documentElement;
+        root.dataset.readerFont = prefs.font;
+        root.dataset.readerTheme = prefs.theme;
+        root.style.setProperty("--reader-font-family", FONT_FAMILIES[prefs.font]);
+        root.style.setProperty("--reader-font-size", prefs.fontSize + "px");
+        root.style.setProperty("--reader-line-height", prefs.lineHeight);
+        applyTheme(prefs.theme);
+      }
+
+      const initialPrefs = sanitizePrefs(getCookie(COOKIE_NAME));
+      window.__readerPrefsState = {
+        COOKIE_NAME,
+        FONT_FAMILIES,
+        FONT_SIZES,
+        LINE_HEIGHT_STEPS,
+        THEMES,
+        getBasePath,
+        getCookie,
+        getDefaults,
+        sanitizePrefs,
+        applyPrefs,
+        current: initialPrefs
+      };
+
+      applyPrefs(initialPrefs);
+    })();
+  </script>
 
   <style>
     :root {
@@ -16,15 +186,42 @@
       --base-line-height: 1.75;
       --sidebar-width: 260px;
       --code-font-family: "D2Coding", "Consolas", monospace;
+      --reader-font-family: "RIDIBatang", "Noto Serif KR", serif;
+      --reader-font-size: 16px;
+      --reader-line-height: 1.8;
+      --reader-bg: #f6f3ec;
+      --reader-surface: #fffdf9;
+      --reader-text: #2b241b;
+      --reader-muted: #6d6457;
+      --reader-link: #275cb5;
+      --reader-border: #ddd2c3;
+      --reader-code-bg: #f1eadf;
     }
 
     /* 본문은 읽기용 바탕체 */
+    .content {
+      background: var(--reader-bg);
+      padding-bottom: 120px;
+      transition: background-color 180ms ease;
+    }
+
     .markdown-section {
-      font-family: "RIDIBatang", "Noto Serif KR", serif;
-      font-size: 1rem;
-      line-height: 1.8;
+      font-family: var(--reader-font-family);
+      font-size: var(--reader-font-size);
+      line-height: var(--reader-line-height);
+      color: var(--reader-text);
+      background: var(--reader-surface);
+      border: 1px solid var(--reader-border);
+      border-radius: 22px;
+      box-shadow: 0 18px 36px rgba(15, 18, 24, 0.06);
       word-break: keep-all;
       overflow-wrap: break-word;
+      padding: 20px 24px 40px;
+      transition:
+        background-color 180ms ease,
+        color 180ms ease,
+        border-color 180ms ease,
+        box-shadow 180ms ease;
     }
 
     /* 제목은 산세리프로 유지 */
@@ -34,17 +231,21 @@
     .markdown-section h4,
     .markdown-section h5,
     .markdown-section h6 {
-      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-family: var(--reader-font-family);
       line-height: 1.4;
       word-break: keep-all;
       letter-spacing: -0.01em;
+      color: var(--reader-text);
     }
 
     /* 본문 텍스트 가독성 미세 조정 */
     .markdown-section p,
     .markdown-section li,
-    .markdown-section blockquote {
+    .markdown-section blockquote,
+    .markdown-section td,
+    .markdown-section th {
       letter-spacing: -0.01em;
+      color: var(--reader-text);
     }
 
     /* 사이드바와 UI는 산세리프 */
@@ -67,15 +268,429 @@
       font-size: 13px;
     }
 
-    .markdown-section {
-      padding-left: 16px;
-      padding-right: 24px;
+    .markdown-section a {
+      color: var(--reader-link);
+    }
+
+    .markdown-section strong,
+    .markdown-section b {
+      color: var(--reader-text);
+    }
+
+    .markdown-section blockquote {
+      background: var(--reader-bg);
+      border-left: 4px solid var(--reader-border);
+      border-radius: 0 14px 14px 0;
+      padding: 12px 16px;
+      color: var(--reader-muted);
+    }
+
+    .markdown-section hr {
+      border-color: var(--reader-border);
+    }
+
+    .markdown-section table,
+    .markdown-section table tr,
+    .markdown-section table td,
+    .markdown-section table th {
+      border-color: var(--reader-border) !important;
+    }
+
+    .markdown-section thead {
+      background: var(--reader-bg);
+    }
+
+    .markdown-section pre {
+      background: var(--reader-code-bg) !important;
+      border: 1px solid var(--reader-border);
+      border-radius: 16px;
+    }
+
+    .markdown-section pre > code {
+      background: transparent !important;
+    }
+
+    .markdown-section :not(pre) > code {
+      background: var(--reader-code-bg);
+      border: 1px solid var(--reader-border);
+      border-radius: 6px;
+      color: var(--reader-text);
+      padding: 0.15em 0.35em;
+    }
+
+    .audio-overview {
+      margin: 18px 0 24px;
+      padding: 18px 20px;
+      border: 1px solid var(--reader-border);
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--reader-code-bg), var(--reader-surface));
+      box-shadow: 0 10px 24px rgba(15, 18, 24, 0.08);
+    }
+
+    .audio-overview-label,
+    .audio-overview-title,
+    .audio-overview-description {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    }
+
+    .audio-overview-label {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--reader-surface);
+      border: 1px solid var(--reader-border);
+      color: var(--reader-muted);
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .audio-overview-title {
+      margin: 0;
+      color: var(--reader-text);
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+
+    .audio-overview-description {
+      margin: 10px 0 14px;
+      color: var(--reader-muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    .audio-overview-player {
+      width: 100%;
+      min-height: 44px;
+    }
+
+    .reader-settings-toggle {
+      position: fixed;
+      left: 18px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
+      z-index: 40;
+      width: 52px;
+      height: 52px;
+      border: 1px solid var(--reader-border);
+      border-radius: 50%;
+      background: var(--reader-surface);
+      color: var(--reader-text);
+      box-shadow: 0 12px 28px rgba(15, 18, 24, 0.18);
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 140ms ease, background-color 180ms ease, color 180ms ease;
+    }
+
+    .reader-settings-toggle:hover {
+      transform: translateY(-1px);
+    }
+
+    .reader-settings-toggle:focus-visible,
+    .reader-settings-panel button:focus-visible {
+      outline: 2px solid var(--reader-link);
+      outline-offset: 2px;
+    }
+
+    .reader-settings-panel {
+      position: fixed;
+      left: 18px;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 142px);
+      z-index: 40;
+      width: min(360px, calc(100vw - 28px));
+      max-height: min(72vh, 700px);
+      overflow: auto;
+      padding: 18px;
+      border: 1px solid var(--reader-border);
+      border-radius: 20px;
+      background: var(--reader-surface);
+      color: var(--reader-text);
+      box-shadow: 0 18px 42px rgba(15, 18, 24, 0.2);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .reader-settings-panel.is-open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .reader-settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .reader-settings-title {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .reader-settings-subtitle {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-size: 0.82rem;
+      color: var(--reader-muted);
+      margin: 4px 0 0;
+    }
+
+    .reader-settings-section + .reader-settings-section {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--reader-border);
+    }
+
+    .reader-settings-label {
+      display: block;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .reader-option-grid {
+      display: grid;
+      gap: 8px;
+    }
+
+    .reader-option-grid.font-grid,
+    .reader-option-grid.theme-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .reader-option-grid.size-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .reader-chip,
+    .reader-theme-chip,
+    .reader-stepper-button,
+    .reader-reset-button {
+      appearance: none;
+      border: 1px solid var(--reader-border);
+      background: transparent;
+      color: var(--reader-text);
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 140ms ease;
+    }
+
+    .reader-chip,
+    .reader-theme-chip {
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    .reader-chip:hover,
+    .reader-theme-chip:hover,
+    .reader-stepper-button:hover,
+    .reader-reset-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .reader-chip.is-active,
+    .reader-theme-chip.is-active {
+      background: var(--reader-code-bg);
+      border-color: var(--reader-link);
+    }
+
+    .reader-chip-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .reader-chip-meta {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.74rem;
+      color: var(--reader-muted);
+    }
+
+    .reader-size-chip {
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    .reader-theme-chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .reader-theme-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      flex: 0 0 auto;
+    }
+
+    .reader-stepper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .reader-stepper-button {
+      width: 40px;
+      height: 40px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      text-align: center;
+      padding: 0;
+    }
+
+    .reader-stepper-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .reader-stepper-value {
+      min-width: 48px;
+      text-align: center;
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .reader-reset-button {
+      width: 100%;
+      padding: 12px 14px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .reader-reset-button:hover {
+      background: var(--reader-code-bg);
+    }
+
+    @media (max-width: 768px) {
+      .markdown-section {
+        border-radius: 18px;
+        padding: 18px 18px 32px;
+      }
+
+      .reader-settings-toggle {
+        left: 14px;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+      }
+
+      .reader-settings-panel {
+        left: 14px;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+        width: min(360px, calc(100vw - 20px));
+      }
+
+      .reader-option-grid.size-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 480px) {
+      .reader-option-grid.font-grid,
+      .reader-option-grid.theme-grid,
+      .reader-option-grid.size-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
 <body>
   <div id="app">로딩 중...</div>
   <script>
+    const AUDIO_OVERVIEWS = {
+      "/cpp_core/01_메모리_모델": {
+        src: "audio/cpp_core/01_메모리_모델.m4a"
+      },
+      "/cpp_core/02_타입_시스템": {
+        src: "audio/cpp_core/02_타입_시스템.m4a"
+      },
+      "/cpp_core/03_OOP": {
+        src: "audio/cpp_core/03_OOP.m4a"
+      },
+      "/cpp_core/04_모던_CPP": {
+        src: "audio/cpp_core/04_모던_CPP.m4a"
+      },
+      "/cpp_core/05_에러_핸들링": {
+        src: "audio/cpp_core/05_에러_핸들링.m4a"
+      }
+    };
+
+    function normalizeDocsifyPath(path) {
+      const decoded = decodeURIComponent(path || "/");
+      const withoutMd = decoded.replace(/\.md$/, "");
+      const withoutTrailingSlash = withoutMd.replace(/\/+$/, "");
+      return withoutTrailingSlash || "/";
+    }
+
+    function buildAudioOverviewCard(entry) {
+      const card = document.createElement("section");
+      card.className = "audio-overview";
+
+      const label = document.createElement("div");
+      label.className = "audio-overview-label";
+      label.textContent = "Audio Overview";
+
+      const title = document.createElement("div");
+      title.className = "audio-overview-title";
+      title.textContent = "NotebookLM 오디오 오버뷰";
+
+      const description = document.createElement("p");
+      description.className = "audio-overview-description";
+      description.textContent = "테크니컬 인터뷰 대비용 요약입니다. 핵심 개념, 자주 나오는 질문, 헷갈리는 포인트 중심으로 들으면 됩니다.";
+
+      const audio = document.createElement("audio");
+      audio.className = "audio-overview-player";
+      audio.controls = true;
+      audio.preload = "none";
+      audio.src = encodeURI(entry.src);
+
+      card.appendChild(label);
+      card.appendChild(title);
+      card.appendChild(description);
+      card.appendChild(audio);
+      return card;
+    }
+
+    function injectAudioOverview(routePath) {
+      const section = document.querySelector(".markdown-section");
+      if (!section) {
+        return;
+      }
+
+      section.querySelectorAll(".audio-overview").forEach(function (node) {
+        node.remove();
+      });
+
+      const entry = AUDIO_OVERVIEWS[normalizeDocsifyPath(routePath)];
+      if (!entry) {
+        return;
+      }
+
+      const card = buildAudioOverviewCard(entry);
+      const leadBlockquote = Array.from(section.children).find(function (node) {
+        return node.tagName === "BLOCKQUOTE";
+      });
+
+      if (leadBlockquote) {
+        leadBlockquote.insertAdjacentElement("afterend", card);
+      } else {
+        section.insertAdjacentElement("afterbegin", card);
+      }
+    }
+
     window.$docsify = {
       name: 'UE5 C++ 학습 노트',
       loadSidebar: true,
@@ -87,11 +702,313 @@
         depth: 3
       },
       relativePath: false,
-      homepage: 'README.md'
+      homepage: 'README.md',
+      plugins: [
+        function (hook, vm) {
+          hook.doneEach(function () {
+            window.requestAnimationFrame(function () {
+              injectAudioOverview(vm.route.path);
+            });
+          });
+        }
+      ]
     };
   </script>
   <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-cpp.min.js"></script>
+  <script>
+    (function () {
+      const state = window.__readerPrefsState;
+      if (!state) {
+        return;
+      }
+
+      const FONT_LABELS = {
+        pretendard: { label: "Pretendard", meta: "산세리프" },
+        ridibatang: { label: "RIDIBatang", meta: "바탕체" },
+        notoSans: { label: "Noto Sans KR", meta: "산세리프" },
+        notoSerif: { label: "Noto Serif KR", meta: "세리프" }
+      };
+      const THEME_LABELS = {
+        paper: "Paper",
+        cream: "Cream",
+        sepia: "Sepia",
+        sage: "Sage",
+        slate: "Slate",
+        midnight: "Midnight"
+      };
+
+      function setCookie(prefs) {
+        document.cookie =
+          state.COOKIE_NAME +
+          "=" +
+          encodeURIComponent(JSON.stringify(prefs)) +
+          "; Max-Age=31536000; Path=" +
+          state.getBasePath() +
+          "; SameSite=Lax";
+      }
+
+      function clearCookie() {
+        document.cookie =
+          state.COOKIE_NAME +
+          "=; Max-Age=0; Path=" +
+          state.getBasePath() +
+          "; SameSite=Lax";
+      }
+
+      function updatePrefs(partial, persist = true) {
+        state.current = state.sanitizePrefs(Object.assign({}, state.current, partial));
+        state.applyPrefs(state.current);
+        if (persist) {
+          setCookie(state.current);
+        }
+        syncUI();
+      }
+
+      function resetPrefs() {
+        state.current = state.getDefaults();
+        state.applyPrefs(state.current);
+        clearCookie();
+        syncUI();
+      }
+
+      function themeSwatchStyle(theme) {
+        const palette = state.THEMES[theme];
+        return "background:" + palette.bg + "; box-shadow: inset 0 0 0 5px " + palette.surface + ";";
+      }
+
+      function renderFontButtons() {
+        return Object.keys(FONT_LABELS)
+          .map(function (fontKey) {
+            return (
+              '<button type="button" class="reader-chip" data-reader-font-option="' +
+              fontKey +
+              '">' +
+              '<span class="reader-chip-label">' +
+              FONT_LABELS[fontKey].label +
+              "</span>" +
+              '<span class="reader-chip-meta">' +
+              FONT_LABELS[fontKey].meta +
+              "</span>" +
+              "</button>"
+            );
+          })
+          .join("");
+      }
+
+      function renderSizeButtons() {
+        return state.FONT_SIZES
+          .map(function (size) {
+            return (
+              '<button type="button" class="reader-chip reader-size-chip" data-reader-size-option="' +
+              size +
+              '">' +
+              size +
+              "</button>"
+            );
+          })
+          .join("");
+      }
+
+      function renderThemeButtons() {
+        return Object.keys(THEME_LABELS)
+          .map(function (themeKey) {
+            return (
+              '<button type="button" class="reader-theme-chip" data-reader-theme-option="' +
+              themeKey +
+              '">' +
+              '<span class="reader-theme-swatch" style="' +
+              themeSwatchStyle(themeKey) +
+              '"></span>' +
+              '<span class="reader-chip-label">' +
+              THEME_LABELS[themeKey] +
+              "</span>" +
+              "</button>"
+            );
+          })
+          .join("");
+      }
+
+      function buildWidget() {
+        if (document.querySelector(".reader-settings-toggle")) {
+          return;
+        }
+
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "reader-settings-toggle";
+        toggle.setAttribute("aria-label", "리더 설정 열기");
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.textContent = "Aa";
+
+        const panel = document.createElement("aside");
+        panel.className = "reader-settings-panel";
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-label", "리더 설정");
+        panel.innerHTML =
+          '<div class="reader-settings-header">' +
+          "<div>" +
+          '<h2 class="reader-settings-title">리더 설정</h2>' +
+          '<p class="reader-settings-subtitle">본문 읽기 환경을 바로 바꿀 수 있습니다.</p>' +
+          "</div>" +
+          "</div>" +
+          '<section class="reader-settings-section">' +
+          '<span class="reader-settings-label">폰트</span>' +
+          '<div class="reader-option-grid font-grid">' +
+          renderFontButtons() +
+          "</div>" +
+          "</section>" +
+          '<section class="reader-settings-section">' +
+          '<span class="reader-settings-label">글자 크기</span>' +
+          '<div class="reader-option-grid size-grid">' +
+          renderSizeButtons() +
+          "</div>" +
+          "</section>" +
+          '<section class="reader-settings-section">' +
+          '<span class="reader-settings-label">줄간격</span>' +
+          '<div class="reader-stepper">' +
+          '<button type="button" class="reader-stepper-button" data-reader-line-step="-1" aria-label="줄간격 줄이기">-</button>' +
+          '<span class="reader-stepper-value" data-reader-line-height-value>1.8</span>' +
+          '<button type="button" class="reader-stepper-button" data-reader-line-step="1" aria-label="줄간격 늘리기">+</button>' +
+          "</div>" +
+          "</section>" +
+          '<section class="reader-settings-section">' +
+          '<span class="reader-settings-label">컬러 테마</span>' +
+          '<div class="reader-option-grid theme-grid">' +
+          renderThemeButtons() +
+          "</div>" +
+          "</section>" +
+          '<section class="reader-settings-section">' +
+          '<button type="button" class="reader-reset-button" data-reader-reset>기본값 복원</button>' +
+          "</section>";
+
+        document.body.appendChild(toggle);
+        document.body.appendChild(panel);
+
+        let isOpen = false;
+
+        function setOpen(next) {
+          isOpen = next;
+          panel.classList.toggle("is-open", next);
+          toggle.setAttribute("aria-expanded", String(next));
+        }
+
+        toggle.addEventListener("click", function (event) {
+          event.stopPropagation();
+          setOpen(!isOpen);
+        });
+
+        panel.addEventListener("click", function (event) {
+          event.stopPropagation();
+        });
+
+        document.addEventListener("click", function () {
+          if (isOpen) {
+            setOpen(false);
+          }
+        });
+
+        document.addEventListener("keydown", function (event) {
+          if (event.key === "Escape" && isOpen) {
+            setOpen(false);
+          }
+        });
+
+        panel.addEventListener("click", function (event) {
+          const fontButton = event.target.closest("[data-reader-font-option]");
+          if (fontButton) {
+            updatePrefs({ font: fontButton.getAttribute("data-reader-font-option") });
+            return;
+          }
+
+          const sizeButton = event.target.closest("[data-reader-size-option]");
+          if (sizeButton) {
+            updatePrefs({ fontSize: sizeButton.getAttribute("data-reader-size-option") });
+            return;
+          }
+
+          const themeButton = event.target.closest("[data-reader-theme-option]");
+          if (themeButton) {
+            updatePrefs({ theme: themeButton.getAttribute("data-reader-theme-option") });
+            return;
+          }
+
+          const lineStepButton = event.target.closest("[data-reader-line-step]");
+          if (lineStepButton && !lineStepButton.disabled) {
+            const delta = Number(lineStepButton.getAttribute("data-reader-line-step"));
+            const currentIndex = state.LINE_HEIGHT_STEPS.indexOf(String(state.current.lineHeight));
+            const nextIndex = Math.min(
+              state.LINE_HEIGHT_STEPS.length - 1,
+              Math.max(0, currentIndex + delta)
+            );
+            updatePrefs({ lineHeight: state.LINE_HEIGHT_STEPS[nextIndex] });
+            return;
+          }
+
+          const resetButton = event.target.closest("[data-reader-reset]");
+          if (resetButton) {
+            resetPrefs();
+          }
+        });
+
+        window.__readerWidget = {
+          toggle: toggle,
+          panel: panel
+        };
+      }
+
+      function syncUI() {
+        const widget = window.__readerWidget;
+        if (!widget) {
+          return;
+        }
+
+        widget.panel.querySelectorAll("[data-reader-font-option]").forEach(function (button) {
+          const isActive = button.getAttribute("data-reader-font-option") === state.current.font;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", String(isActive));
+        });
+
+        widget.panel.querySelectorAll("[data-reader-size-option]").forEach(function (button) {
+          const isActive = button.getAttribute("data-reader-size-option") === String(state.current.fontSize);
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", String(isActive));
+        });
+
+        widget.panel.querySelectorAll("[data-reader-theme-option]").forEach(function (button) {
+          const isActive = button.getAttribute("data-reader-theme-option") === state.current.theme;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", String(isActive));
+        });
+
+        const lineHeightValue = widget.panel.querySelector("[data-reader-line-height-value]");
+        const currentIndex = state.LINE_HEIGHT_STEPS.indexOf(String(state.current.lineHeight));
+        if (lineHeightValue) {
+          lineHeightValue.textContent = state.current.lineHeight;
+        }
+
+        const decreaseButton = widget.panel.querySelector('[data-reader-line-step="-1"]');
+        const increaseButton = widget.panel.querySelector('[data-reader-line-step="1"]');
+        if (decreaseButton) {
+          decreaseButton.disabled = currentIndex <= 0;
+        }
+        if (increaseButton) {
+          increaseButton.disabled = currentIndex >= state.LINE_HEIGHT_STEPS.length - 1;
+        }
+      }
+
+      function init() {
+        buildWidget();
+        syncUI();
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init, { once: true });
+      } else {
+        init();
+      }
+    })();
+  </script>
 </body>
 </html>
