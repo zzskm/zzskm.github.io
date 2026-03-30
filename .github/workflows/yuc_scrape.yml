@@ -37,9 +37,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install httpx
-          # 변경: 설치된 패키지로 requirements.txt 생성 (캐싱 최적화)
-          pip freeze > requirements.txt
+          pip install -r requirements.txt
 
       - name: Make folders
         run: |
@@ -56,23 +54,16 @@ jobs:
       - name: Add jitter
         run: sleep $((RANDOM % 60))
 
-      - name: Run scraper with retry
-        uses: nick-invision/retry@v3
-        with:
-          timeout_minutes: 2
-          max_attempts: 3
-          retry_wait_seconds: 30
-          retry_on_timeout: true  # 변경: 타임아웃 시 재시도
-          command: |
-            echo "Starting scrape at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> yuc/artifacts/scrape.log
-            python yuc/scripts/scrape.py --log-level DEBUG >> yuc/artifacts/scrape.log 2>&1
-            echo "Duration: $SECONDS s" >> yuc/artifacts/scrape.log  # 변경: 실행 시간 로깅
+      - name: Run scraper
+        run: |
+          echo "Starting scrape at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> yuc/artifacts/scrape.log
+          python yuc/scripts/scrape.py --log-level DEBUG >> yuc/artifacts/scrape.log 2>&1
+          echo "Duration: $SECONDS s" >> yuc/artifacts/scrape.log
         env:
           YUC_SOURCE_URL: https://park.yuc.co.kr/usersite/userSiteParkingLotInfo
           YUC_FRONTEND_URL: https://park.yuc.co.kr/views/parkinglot/info/info.html
           YUC_OUTPUT_CSV: yuc/parking_log.csv
           YUC_TARGET_NAME: 수지노외 공영주차장
-          LOG_LEVEL: DEBUG
 
       - name: Upload artifacts
         if: always()
@@ -82,13 +73,25 @@ jobs:
           path: |
             yuc/parking_log.csv
             yuc/artifacts/scrape.log
-            requirements.txt  # 변경: requirements.txt 업로드
           if-no-files-found: warn
 
+      - name: Check for meaningful change
+        if: success()
+        id: check
+        run: |
+          LAST_VAL=$(tail -1 yuc/parking_log.csv | cut -d',' -f3)
+          PREV=$(git show HEAD:yuc/parking_log.csv | tail -1 | cut -d',' -f3)
+          if [ "$LAST_VAL" = "$PREV" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            git checkout -- yuc/parking_log.csv
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Commit and push updated CSV
-        if: success() || failure()
+        if: success() && steps.check.outputs.skip != 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update parking_log.csv"
-          file_pattern: "yuc/parking_log.csv requirements.txt"  # 변경: requirements.txt 포함
+          file_pattern: "yuc/parking_log.csv"
           branch: ${{ github.ref_name }}
