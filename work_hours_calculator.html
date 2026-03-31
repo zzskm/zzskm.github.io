@@ -446,6 +446,108 @@
             font-weight: 600;
         }
 
+        .result-elapsed {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: -0.2px;
+        }
+
+        .progress-container {
+            position: relative;
+            width: 100%;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 14px;
+            margin: 16px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 14px;
+            transition: width 1s linear;
+            min-width: 0;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 13px;
+            font-weight: 800;
+            color: white;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        @media (max-width: 520px) {
+            .container {
+                padding: 24px 16px;
+                border-radius: 20px;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+                margin-bottom: 24px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .result-time {
+                font-size: 42px;
+            }
+
+            .result-countdown {
+                font-size: 20px;
+            }
+
+            .time-input {
+                padding: 12px;
+                font-size: 18px;
+            }
+
+            .now-btn {
+                padding: 12px 18px;
+                font-size: 14px;
+            }
+
+            .quick-actions {
+                flex-wrap: wrap;
+            }
+
+            .quick-btn {
+                min-width: calc(33% - 6px);
+                flex: unset;
+            }
+
+            .break-section {
+                padding: 16px;
+            }
+
+            .result-card {
+                padding: 24px 20px;
+            }
+
+            .progress-container {
+                height: 22px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .quick-btn {
+                min-width: calc(50% - 4px);
+                font-size: 12px;
+                padding: 8px 10px;
+            }
+        }
+
         .dropdown::-webkit-scrollbar {
             width: 10px;
         }
@@ -559,6 +661,11 @@
 
         <div class="result-card" id="result">
             <div class="result-countdown" id="resultCountdown"></div>
+            <div class="result-elapsed" id="resultElapsed"></div>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+                <span class="progress-text" id="progressText">0%</span>
+            </div>
             <div class="result-time" id="resultTime"></div>
             <div class="result-subtitle" id="resultSubtitle"></div>
             <div class="result-details" id="resultDetails"></div>
@@ -580,7 +687,7 @@
 
             document.getElementById('startHour').value = '09';
             document.getElementById('startMinute').value = '00';
-            document.getElementById('targetHour').value = '10';
+            document.getElementById('targetHour').value = '8';
             document.getElementById('targetMinute').value = '0';
 
             const savedNotification = localStorage.getItem('notificationEnabled');
@@ -834,37 +941,59 @@
                 clearInterval(window.countdownInterval);
             }
 
-            updateCountdown(endH, endM);
-            window.countdownInterval = setInterval(() => updateCountdown(endH, endM), 1000);
+            updateCountdown(endH, endM, startH, startM);
+            window.countdownInterval = setInterval(() => updateCountdown(endH, endM, startH, startM), 1000);
         }
 
-        function updateCountdown(endH, endM) {
+        function updateCountdown(endH, endM, startH, startM) {
             const now = new Date();
-            const currentH = now.getHours();
-            const currentM = now.getMinutes();
-            const currentS = now.getSeconds();
+            const currentTotalS = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+            const endTotalS = endH * 3600 + endM * 60;
+            const startTotalS = startH * 3600 + startM * 60;
 
-            let endMinutesToday = endH * 60 + endM;
-            let currentMinutes = currentH * 60 + currentM;
+            // 남은 시간 (초 단위)
+            let remainingTotalS = endTotalS - currentTotalS;
 
-            if (endMinutesToday < currentMinutes) {
-                endMinutesToday += 24 * 60;
+            // 음수이고 12시간 이내면 초과근무, 그 이상이면 다음날
+            if (remainingTotalS < 0 && remainingTotalS > -12 * 3600) {
+                remainingTotalS = 0;
+            } else if (remainingTotalS < 0) {
+                remainingTotalS += 24 * 3600;
             }
 
-            let remainingMinutes = endMinutesToday - currentMinutes;
-            remainingMinutes = Math.max(0, remainingMinutes);
+            const remainingH = Math.floor(remainingTotalS / 3600);
+            const remainingM = Math.floor((remainingTotalS % 3600) / 60);
+            const remainingS = remainingTotalS % 60;
 
-            const remainingH = Math.floor(remainingMinutes / 60);
-            const remainingM = remainingMinutes % 60;
-            const remainingS = remainingM === 0 && remainingH === 0 ? 0 : 60 - currentS;
+            // 경과 시간
+            let elapsedTotalS = currentTotalS - startTotalS;
+            if (elapsedTotalS < 0) elapsedTotalS += 24 * 3600;
+
+            const elapsedH = Math.floor(elapsedTotalS / 3600);
+            const elapsedM = Math.floor((elapsedTotalS % 3600) / 60);
+            const elapsedS = elapsedTotalS % 60;
+
+            document.getElementById('resultElapsed').textContent =
+                `경과시간: ${String(elapsedH).padStart(2, '0')}:${String(elapsedM).padStart(2, '0')}:${String(elapsedS).padStart(2, '0')}`;
+
+            // 진행률
+            let totalWorkS = endTotalS - startTotalS;
+            if (totalWorkS <= 0) totalWorkS += 24 * 3600;
+
+            const progressPercent = Math.min(100, Math.max(0, (elapsedTotalS / totalWorkS) * 100));
+            document.getElementById('progressBar').style.width = progressPercent.toFixed(1) + '%';
+            document.getElementById('progressText').textContent = Math.round(progressPercent) + '%';
 
             const resultCard = document.getElementById('result');
             resultCard.classList.remove('warning-5min', 'warning-1min', 'overtime');
 
-            if (remainingMinutes === 0 && remainingS === 0) {
+            if (remainingTotalS <= 0) {
                 document.getElementById('resultCountdown').textContent = '퇴근 시간 지남! 🎉';
                 resultCard.classList.add('overtime');
                 document.title = '🎉 퇴근!!';
+
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressText').textContent = '100%';
 
                 if (!notifiedNow) {
                     if (notificationEnabled) {
@@ -881,7 +1010,7 @@
             let countdownText = `퇴근까지 ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}:${String(remainingS).padStart(2, '0')}`;
             document.getElementById('resultCountdown').textContent = countdownText;
 
-            if (remainingMinutes <= 1) {
+            if (remainingTotalS <= 60) {
                 resultCard.classList.add('warning-1min');
                 document.title = `🔴 ${String(remainingM).padStart(2, '0')}:${String(remainingS).padStart(2, '0')}`;
 
@@ -891,7 +1020,7 @@
                     }
                     notified1min = true;
                 }
-            } else if (remainingMinutes <= 5) {
+            } else if (remainingTotalS <= 300) {
                 resultCard.classList.add('warning-5min');
                 document.title = `⏰ ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}`;
 
@@ -901,7 +1030,7 @@
                     }
                     notified5min = true;
                 }
-            } else if (remainingMinutes <= 10) {
+            } else if (remainingTotalS <= 600) {
                 document.title = `⏰ ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}`;
             } else {
                 document.title = '⏰ 근무시간 계산기';
@@ -911,7 +1040,7 @@
         function reset() {
             document.getElementById('startHour').value = '09';
             document.getElementById('startMinute').value = '00';
-            document.getElementById('targetHour').value = '10';
+            document.getElementById('targetHour').value = '8';
             document.getElementById('targetMinute').value = '0';
             document.getElementById('breakHour').value = '1';
             document.getElementById('breakMinute').value = '0';
