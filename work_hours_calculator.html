@@ -621,22 +621,21 @@
             <label class="section-label">목표 근무시간</label>
             <div class="input-row">
                 <div class="input-wrapper">
-                    <input type="text" class="time-input" id="targetHour" readonly placeholder="0"
+                    <input type="text" class="time-input" id="targetHour" readonly placeholder="hh"
                         onclick="toggleDropdown('targetHour')">
                     <div class="dropdown hour-grid" id="targetHourDropdown"></div>
                 </div>
-                <span class="unit-label">시간</span>
+                <span class="separator">:</span>
                 <div class="input-wrapper">
-                    <input type="text" class="time-input" id="targetMinute" readonly placeholder="0"
+                    <input type="text" class="time-input" id="targetMinute" readonly placeholder="mm"
                         onclick="toggleDropdown('targetMinute')">
                     <div class="dropdown minute-grid" id="targetMinuteDropdown"></div>
                 </div>
-                <span class="unit-label">분</span>
             </div>
             <div class="quick-actions">
-                <button class="quick-btn" onclick="setTargetTime(4, 0)">4시간</button>
-                <button class="quick-btn" onclick="setTargetTime(8, 0)">8시간</button>
-                <button class="quick-btn" onclick="setTargetTime(10, 0)">10시간</button>
+                <button class="quick-btn" onclick="setTargetTime(4, 0)">04:00</button>
+                <button class="quick-btn" onclick="setTargetTime(8, 0)">08:00</button>
+                <button class="quick-btn" onclick="setTargetTime(10, 0)">10:00</button>
             </div>
             <div class="quick-actions">
                 <button class="quick-btn" onclick="incrementTargetHour(1)">+1시간</button>
@@ -682,13 +681,13 @@
         function init() {
             createDropdown('startHour', 0, 23, true);
             createDropdown('startMinute', 0, 59, true);
-            createDropdown('targetHour', 0, 24, false);
-            createDropdown('targetMinute', 0, 59, false);
+            createDropdown('targetHour', 0, 24, true);
+            createDropdown('targetMinute', 0, 59, true);
 
             document.getElementById('startHour').value = '09';
             document.getElementById('startMinute').value = '00';
-            document.getElementById('targetHour').value = '8';
-            document.getElementById('targetMinute').value = '0';
+            document.getElementById('targetHour').value = '08';
+            document.getElementById('targetMinute').value = '00';
 
             const savedNotification = localStorage.getItem('notificationEnabled');
             if (savedNotification === 'true') {
@@ -755,8 +754,8 @@
         }
 
         function setTargetTime(hour, minute) {
-            document.getElementById('targetHour').value = hour;
-            document.getElementById('targetMinute').value = minute;
+            document.getElementById('targetHour').value = String(hour).padStart(2, '0');
+            document.getElementById('targetMinute').value = String(minute).padStart(2, '0');
             calculate();
         }
 
@@ -791,7 +790,7 @@
         function incrementTargetHour(amount) {
             let hour = parseInt(document.getElementById('targetHour').value) || 0;
             hour = Math.max(0, hour + amount);
-            document.getElementById('targetHour').value = hour;
+            document.getElementById('targetHour').value = String(hour).padStart(2, '0');
             calculate();
         }
 
@@ -813,8 +812,8 @@
 
             minute = Math.max(0, minute);
 
-            document.getElementById('targetHour').value = hour;
-            document.getElementById('targetMinute').value = minute;
+            document.getElementById('targetHour').value = String(hour).padStart(2, '0');
+            document.getElementById('targetMinute').value = String(minute).padStart(2, '0');
             calculate();
         }
 
@@ -941,11 +940,13 @@
                 clearInterval(window.countdownInterval);
             }
 
-            updateCountdown(endH, endM, startH, startM);
-            window.countdownInterval = setInterval(() => updateCountdown(endH, endM, startH, startM), 1000);
+            const breakS = breakMinutes * 60;
+            const targetS = targetMinutes * 60;
+            updateCountdown(endH, endM, startH, startM, breakS, targetS);
+            window.countdownInterval = setInterval(() => updateCountdown(endH, endM, startH, startM, breakS, targetS), 1000);
         }
 
-        function updateCountdown(endH, endM, startH, startM) {
+        function updateCountdown(endH, endM, startH, startM, breakS, targetS) {
             const now = new Date();
             const currentTotalS = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
             const endTotalS = endH * 3600 + endM * 60;
@@ -965,22 +966,21 @@
             const remainingM = Math.floor((remainingTotalS % 3600) / 60);
             const remainingS = remainingTotalS % 60;
 
-            // 경과 시간
+            // 경과 시간 (총)
             let elapsedTotalS = currentTotalS - startTotalS;
             if (elapsedTotalS < 0) elapsedTotalS += 24 * 3600;
 
-            const elapsedH = Math.floor(elapsedTotalS / 3600);
-            const elapsedM = Math.floor((elapsedTotalS % 3600) / 60);
-            const elapsedS = elapsedTotalS % 60;
+            // 실 근로시간 (휴게시간 제외)
+            const actualWorkS = Math.max(0, elapsedTotalS - breakS);
+            const actualH = Math.floor(actualWorkS / 3600);
+            const actualM = Math.floor((actualWorkS % 3600) / 60);
+            const actualS = actualWorkS % 60;
 
             document.getElementById('resultElapsed').textContent =
-                `경과시간: ${String(elapsedH).padStart(2, '0')}:${String(elapsedM).padStart(2, '0')}:${String(elapsedS).padStart(2, '0')}`;
+                `실 근로시간: ${String(actualH).padStart(2, '0')}:${String(actualM).padStart(2, '0')}:${String(actualS).padStart(2, '0')}`;
 
-            // 진행률
-            let totalWorkS = endTotalS - startTotalS;
-            if (totalWorkS <= 0) totalWorkS += 24 * 3600;
-
-            const progressPercent = Math.min(100, Math.max(0, (elapsedTotalS / totalWorkS) * 100));
+            // 진행률 (실 근로시간 / 목표 근무시간)
+            const progressPercent = targetS > 0 ? Math.min(100, Math.max(0, (actualWorkS / targetS) * 100)) : 0;
             document.getElementById('progressBar').style.width = progressPercent.toFixed(1) + '%';
             document.getElementById('progressText').textContent = Math.round(progressPercent) + '%';
 
@@ -1040,8 +1040,8 @@
         function reset() {
             document.getElementById('startHour').value = '09';
             document.getElementById('startMinute').value = '00';
-            document.getElementById('targetHour').value = '8';
-            document.getElementById('targetMinute').value = '0';
+            document.getElementById('targetHour').value = '08';
+            document.getElementById('targetMinute').value = '00';
             document.getElementById('breakHour').value = '1';
             document.getElementById('breakMinute').value = '0';
             calculate();
