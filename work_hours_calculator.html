@@ -618,7 +618,7 @@
         </div>
 
         <div class="section">
-            <label class="section-label">목표 근무시간</label>
+            <label class="section-label">퇴근 시간</label>
             <div class="input-row">
                 <div class="input-wrapper">
                     <input type="text" class="time-input" id="targetHour" readonly placeholder="hh"
@@ -633,12 +633,13 @@
                 </div>
             </div>
             <div class="quick-actions">
-                <button class="quick-btn" onclick="setTargetTime(4, 0)">04:00</button>
-                <button class="quick-btn" onclick="setTargetTime(8, 0)">08:00</button>
-                <button class="quick-btn" onclick="setTargetTime(10, 0)">10:00</button>
+                <button class="quick-btn" onclick="setTargetTime(17, 0)">17:00</button>
+                <button class="quick-btn" onclick="setTargetTime(18, 0)">18:00</button>
+                <button class="quick-btn" onclick="setTargetTime(19, 0)">19:00</button>
+                <button class="quick-btn" onclick="setTargetTime(20, 0)">20:00</button>
             </div>
             <div class="quick-actions">
-                <button class="quick-btn" onclick="incrementTargetHour(1)">+1시간</button>
+                <button class="quick-btn" onclick="incrementTargetMinute(30)">+30분</button>
                 <button class="quick-btn" onclick="incrementTargetMinute(10)">+10분</button>
                 <button class="quick-btn" onclick="incrementTargetMinute(5)">+5분</button>
                 <button class="quick-btn" onclick="incrementTargetMinute(1)">+1분</button>
@@ -681,12 +682,12 @@
         function init() {
             createDropdown('startHour', 0, 23, true);
             createDropdown('startMinute', 0, 59, true);
-            createDropdown('targetHour', 0, 24, true);
+            createDropdown('targetHour', 0, 23, true);
             createDropdown('targetMinute', 0, 59, true);
 
             document.getElementById('startHour').value = '09';
             document.getElementById('startMinute').value = '00';
-            document.getElementById('targetHour').value = '08';
+            document.getElementById('targetHour').value = '18';
             document.getElementById('targetMinute').value = '00';
 
             const savedNotification = localStorage.getItem('notificationEnabled');
@@ -789,7 +790,7 @@
 
         function incrementTargetHour(amount) {
             let hour = parseInt(document.getElementById('targetHour').value) || 0;
-            hour = Math.max(0, hour + amount);
+            hour = (hour + amount + 24) % 24;
             document.getElementById('targetHour').value = String(hour).padStart(2, '0');
             calculate();
         }
@@ -800,17 +801,15 @@
 
             minute += amount;
 
-            while (minute < 0 && hour > 0) {
+            while (minute < 0) {
                 minute += 60;
-                hour--;
+                hour = (hour - 1 + 24) % 24;
             }
 
             while (minute >= 60) {
                 minute -= 60;
-                hour++;
+                hour = (hour + 1) % 24;
             }
-
-            minute = Math.max(0, minute);
 
             document.getElementById('targetHour').value = String(hour).padStart(2, '0');
             document.getElementById('targetMinute').value = String(minute).padStart(2, '0');
@@ -910,25 +909,28 @@
             }
 
             const startMinutes = startH * 60 + startM;
-            const targetMinutes = targetH * 60 + targetM;
+            const endMinutes = targetH * 60 + targetM;
             const breakMinutes = breakH * 60 + breakM;
-            const endMinutes = startMinutes + targetMinutes + breakMinutes;
 
-            let endH = Math.floor(endMinutes / 60) % 24;
-            let endM = endMinutes % 60;
-            const workH = Math.floor(targetMinutes / 60);
-            const workM = targetMinutes % 60;
+            // 퇴근시각 - 출근시각 - 휴게시간 = 실 근로시간
+            let workMinutes = endMinutes - startMinutes - breakMinutes;
+            if (endMinutes < startMinutes) workMinutes += 24 * 60; // 자정 넘김
+
+            const endH = targetH;
+            const endM = targetM;
+            const workH = Math.floor(workMinutes / 60);
+            const workM = workMinutes % 60;
 
             document.getElementById('resultTime').textContent =
                 `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 
             document.getElementById('resultSubtitle').textContent =
-                `총 근무시간: ${workH}시간 ${workM}분`;
+                `실 근무시간: ${workH}시간 ${workM}분`;
 
             document.getElementById('resultDetails').innerHTML =
                 `출근: ${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}<br>` +
-                `휴게시간: ${breakH}시간 ${breakM}분<br>` +
-                `퇴근: ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+                `퇴근: ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}<br>` +
+                `휴게시간: ${breakH}시간 ${breakM}분`;
 
             document.getElementById('result').classList.add('show');
 
@@ -941,9 +943,9 @@
             }
 
             const breakS = breakMinutes * 60;
-            const targetS = targetMinutes * 60;
-            updateCountdown(endH, endM, startH, startM, breakS, targetS);
-            window.countdownInterval = setInterval(() => updateCountdown(endH, endM, startH, startM, breakS, targetS), 1000);
+            const workTotalS = workMinutes * 60;
+            updateCountdown(endH, endM, startH, startM, breakS, workTotalS);
+            window.countdownInterval = setInterval(() => updateCountdown(endH, endM, startH, startM, breakS, workTotalS), 1000);
         }
 
         function updateCountdown(endH, endM, startH, startM, breakS, targetS) {
@@ -1040,7 +1042,7 @@
         function reset() {
             document.getElementById('startHour').value = '09';
             document.getElementById('startMinute').value = '00';
-            document.getElementById('targetHour').value = '08';
+            document.getElementById('targetHour').value = '18';
             document.getElementById('targetMinute').value = '00';
             document.getElementById('breakHour').value = '1';
             document.getElementById('breakMinute').value = '0';
