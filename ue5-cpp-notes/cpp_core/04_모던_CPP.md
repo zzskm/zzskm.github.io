@@ -11,64 +11,73 @@
 
 ### 1. 문제 상황
 
-핵심 용어: `valid but unspecified`, `perfect forwarding`, `rvalue`, `값 카테고리`.
+핵심 용어: `valid but unspecified`, `perfect forwarding`, `rvalue`, `값 카테고리(value category)`.
 
-문자열, 동적 버퍼, 컨테이너처럼 내부 자원이 큰 타입을 값으로 주고받는 코드는 modern C++에서 흔하다. 이때 개발자가 '복사는 비싸니 일단 `std::move`부터 붙이자'고 접근하면 성능 문제보다 더 위험한 소유권 버그를 만들기 쉽다.
+문자열, 동적 버퍼, 컨테이너처럼 내부 자원을 소유한 타입을 값으로 주고받는 일은 modern C++에서 매우 흔하다. 이때 개발자가 '복사는 비싸니까 일단 `std::move`를 붙이면 되겠지'라고 생각하면, 단순한 성능 문제가 아니라 더 위험한 소유권 버그와 상태 불변식 붕괴를 만들기 쉽다.
 
-실무에서 자주 보이는 사고는 두 가지다. forwarding reference를 받는 래퍼가 `std::move`를 남발해 호출자의 lvalue를 망가뜨리거나, moved-from 객체를 비어 있을 것이라고 가정하고 다시 읽는 것이다. 둘 다 value category와 이동 후 상태를 정확히 이해하지 못해서 생긴다.
+실무에서 자주 보이는 사고는 대체로 두 가지다. 첫째, forwarding reference를 받는 래퍼가 `std::move`를 남발해 호출자의 lvalue까지 강제로 rvalue처럼 취급하면서, 호출자 입장에서는 아직 써야 하는 객체를 뜻밖에 moved-from 상태로 만들어 버린다. 둘째, 이동이 끝난 객체를 비어 있거나 `nullptr`에 가까운 상태라고 멋대로 가정하고 다시 읽는다. 하지만 표준이 보장하는 것은 '유효하지만 값은 특정되지 않은 상태(valid but unspecified)'일 뿐이며, 구체적인 내용까지 기대하는 순간 코드 의미가 흐려진다.
+
+결국 move semantics를 제대로 이해하려면 단순히 '복사보다 빠른 기법'으로 볼 것이 아니라, **표현식의 value category가 무엇인지**, **어떤 상황에서 이동 생성자나 이동 대입 연산자가 선택되는지**, **이동 후 객체를 어떤 규칙으로 다뤄야 하는지**를 함께 이해해야 한다.
 
 ### 2. 핵심 개념
 
-move semantics는 복사 대신 자원의 소유권을 옮겨 불필요한 깊은 복사 비용을 줄이는 규칙이다. 핵심은 표현식이 `lvalue`, `xvalue`, `prvalue` 중 어떤 value category에 속하는지 구분하고, rvalue 계열에서 move constructor와 move assignment가 자원을 가져간다는 점을 이해하는 것이다.
+move semantics는 복사 대신 자원의 소유권이나 내부 표현을 이전하여, 불필요한 깊은 복사 비용을 줄이는 규칙이다. 여기서 핵심은 객체 자체보다 **표현식이 어떤 value category에 속하는가**를 구분하는 데 있다. C++ 표현식은 크게 `lvalue`, `xvalue`, `prvalue`로 나뉘며, 이 중 `xvalue`와 `prvalue`를 포함하는 rvalue 계열 표현식은 대체로 '자원을 가져가도 되는 대상'으로 취급된다.
 
-`std::move`는 이동 자체를 수행하지 않는다. 단지 '이 표현식을 rvalue로 취급해도 된다'고 표시하는 캐스트이며, 실제 자원 이전은 이를 받는 move constructor나 move assignment가 담당한다. `std::forward`는 forwarding reference 문맥에서 원래 value category를 보존할 때 쓰인다.
+이동은 `std::move`가 수행하는 것이 아니다. `std::move`는 단지 주어진 표현식을 **rvalue, 더 정확히는 xvalue로 캐스팅**하여 '이 객체는 이제 이동 대상으로 취급해도 된다'고 표시할 뿐이다. 실제 자원 이전은 그 결과를 받은 이동 생성자(move constructor)나 이동 대입 연산자(move assignment)가 수행한다. 반대로 `std::forward`는 forwarding reference 문맥에서 호출자가 넘긴 원래의 value category를 보존해 전달할 때 사용한다.
 
-이동 후 객체는 보통 valid but unspecified 상태로 남는다. 즉 파괴하거나 새 값을 대입하는 것은 안전해야 하지만, 어떤 값을 가지고 있는지는 가정할 수 없다. 따라서 move는 단순한 성능 팁이 아니라 소유권과 후속 사용 규칙까지 포함한 설계 도구다.
+또한 이동 후 객체는 보통 valid but unspecified 상태로 남는다. 즉 객체는 여전히 파괴 가능하고, 새 값을 대입할 수도 있으며, 클래스 불변식도 유지되어야 한다. 다만 어떤 값을 가지고 있는지, 비어 있는지, 기존 자원이 완전히 사라졌는지까지는 일반적으로 가정할 수 없다. 따라서 move semantics는 단순한 성능 최적화 문법이 아니라, **소유권 이전과 후속 사용 규칙을 타입 차원에서 명확히 드러내는 설계 수단**이다.
 
 ### 3. 내부 동작 / 메커니즘
 
 #### 값 카테고리와 오버로드 선택
 
-컴파일러는 표현식의 value category를 보고 복사 생성자와 이동 생성자 중 어떤 후보를 사용할지 고른다. 이름이 있는 변수는 기본적으로 lvalue이므로, 이동을 원하면 `std::move`로 xvalue 문맥을 만들어 줘야 한다. 반대로 forwarding reference는 호출자가 넘긴 lvalue와 rvalue를 모두 받을 수 있으므로, 래퍼 내부에서는 `std::forward<T>`로 원래 성격을 그대로 전달해야 한다.
+컴파일러는 표현식의 value category를 바탕으로 복사 생성자와 이동 생성자 중 어떤 후보를 사용할지 결정한다. 중요한 점은 **이름이 있는 변수는 타입과 무관하게 표현식으로 쓰이는 순간 기본적으로 lvalue**라는 것이다. 예를 들어 `T&&` 타입의 지역 변수라도 이름을 붙여 다시 사용하면 그 표현식은 lvalue로 간주된다. 그래서 실제로 이동을 유도하고 싶다면 `std::move`를 통해 xvalue 문맥을 만들어 주어야 한다.
+
+반대로 forwarding reference는 호출자가 넘긴 lvalue와 rvalue를 모두 받을 수 있다. 이 문맥에서 래퍼 함수가 무턱대고 `std::move`를 사용하면, 원래는 lvalue로 전달된 인자까지 강제로 이동 대상으로 바꿔 버린다. 이런 래퍼는 호출자의 의도를 왜곡한다. 따라서 forwarding reference에서는 `std::forward<T>`를 사용해 원래의 value category를 보존해야 한다. move semantics를 제대로 쓰는 핵심은 '무조건 이동시키는 것'이 아니라, **어떤 표현식이 실제로 이동 가능한 문맥인지 정확히 구분하는 것**이다.
 
 #### const와 `noexcept`가 개입하는 이유
 
-`const` 객체에 `std::move`를 적용하면 `const T&&`가 된다. 대부분의 move constructor는 자원을 훔치기 위해 대상 객체를 수정해야 하므로 `T&&`를 받고, `const T&&`에는 바인딩되지 않는다. 그래서 이런 경우에는 이동이 아니라 복사가 선택될 수 있다.
+`const` 객체에 `std::move`를 적용하면 타입은 `const T&&`가 된다. 하지만 대부분의 이동 생성자와 이동 대입 연산자는 내부 자원을 훔쳐 오기 위해 원본 객체를 수정해야 하므로 `T&&`를 받는다. 따라서 `const T&&`는 일반적인 이동 연산의 대상이 되지 못하고, 결과적으로 복사 생성자나 복사 대입 연산자가 선택되는 경우가 많다. 즉 `std::move`를 썼다는 사실만으로 이동이 보장되지는 않는다.
 
-또한 표준 컨테이너는 재배치 중 강한 예외 안전성을 유지해야 한다. 이 때문에 move constructor가 `noexcept`가 아니면 `vector` 같은 컨테이너가 재할당 시 복사를 택하는 경우가 많다. 즉 move가 빠른지 여부는 문법보다도 타입의 예외 보장과 오버로드 조건에 달려 있다.
+또한 표준 컨테이너는 재배치 중 예외가 발생하더라도 기존 상태를 보존해야 하는 경우가 많다. 이 때문에 `std::vector` 같은 컨테이너는 원소를 재배치할 때, 이동 생성자가 `noexcept`가 아니면 복사를 선택할 수 있다. 이동 연산이 문법상 존재하더라도 예외 보장이 약하면 컨테이너는 더 안전한 경로를 택하는 것이다. 결국 move semantics의 성능 이점은 단순히 `&&` 문법을 썼는지가 아니라, **타입의 예외 보장, 오버로드 조건, moved-from 상태 설계**까지 포함한 전체 품질에 달려 있다.
 
 ### 4. 자주 틀리는 포인트
 
-- `std::move`를 호출하면 즉시 이동이 완료된다고 생각한다. 실제 이동은 move constructor나 move assignment가 수행한다.
-- moved-from 객체가 항상 비어 있거나 `nullptr` 비슷한 상태일 것이라고 가정한다. 표준이 보장하는 것은 valid but unspecified 상태뿐이다.
-- const 객체에 `std::move`를 붙이면 무조건 이동된다고 생각한다. 실제로는 복사 생성자가 선택될 수 있다.
-- 작은 trivially copyable 타입까지 기계적으로 move하려 든다. 이런 경우는 복사가 더 단순하고 최적화도 잘 되는 경우가 많다.
+* `std::move`를 호출하면 즉시 이동이 끝난다고 생각한다. 실제 이동은 move constructor나 move assignment가 선택되어 실행될 때 일어난다.
+* 이름이 `T&&` 타입이면 그 표현식도 rvalue라고 생각한다. 하지만 이름이 있는 변수 표현식은 기본적으로 lvalue다.
+* moved-from 객체가 항상 비어 있거나 `nullptr` 비슷한 상태일 것이라고 가정한다. 표준이 보장하는 것은 valid but unspecified 상태뿐이다.
+* const 객체에 `std::move`를 붙이면 무조건 이동된다고 생각한다. 실제로는 복사 경로가 선택되는 경우가 많다.
+* 반환문에서 습관적으로 `return std::move(local);`를 쓴다. 이런 코드는 불필요할 뿐 아니라 반환값 최적화(NRVO, copy elision)에 방해가 될 수 있다.
+* 작은 trivially copyable 타입까지 기계적으로 move하려 든다. 이런 경우는 복사가 더 단순하고, 최적화 관점에서도 이득이 거의 없을 수 있다.
 
 ### 5. 언제 쓰는가 / 언제 쓰지 않는가
 
 #### 써야 하는 경우
 
-- 함수가 더 이상 사용하지 않을 지역 자원 객체를 반환하거나 컨테이너에 넘길 때
-- 큰 버퍼, 문자열, 핸들처럼 소유권 이전이 복사보다 훨씬 저렴한 타입일 때
-- forwarding reference 문맥에서 호출자의 value category를 그대로 전달해야 할 때
+* 함수가 더 이상 사용하지 않을 지역 자원 객체를 다른 객체나 컨테이너에 넘길 때
+* 큰 버퍼, 문자열, 핸들처럼 소유권 이전 비용이 복사보다 훨씬 저렴한 타입일 때
+* `std::unique_ptr`처럼 복사 자체가 불가능하고, 소유권 이전만 의미 있는 타입을 다룰 때
+* forwarding reference 문맥에서 호출자의 value category를 왜곡하지 않고 그대로 전달해야 할 때
+* setter나 factory 함수처럼 값 전달 후 내부에 저장하면서 move를 활용할 수 있는 인터페이스를 설계할 때
 
 #### 안 쓰는 편이 나은 경우
 
-- 이후에도 같은 객체를 계속 읽거나 쓸 계획이 있을 때
-- const 객체라서 실제 이동이 일어나지 않을 때
-- 작은 POD나 trivially copyable 타입처럼 복사가 충분히 싼 경우
-- 함수 인자를 단순 읽기 전용으로만 볼 뿐 소유권 이전 의도가 없을 때
+* 이후에도 같은 객체를 계속 읽거나 쓸 계획이 있을 때
+* const 객체라서 실제 이동이 일어나지 않을 가능성이 클 때
+* 작은 POD나 trivially copyable 타입처럼 복사가 충분히 싸고 의미도 단순할 때
+* 함수 인자를 단순 읽기 전용으로만 다루고, 소유권 이전 의도가 전혀 없을 때
+* 지역 변수를 반환하면서 굳이 `std::move`를 붙여 반환값 최적화를 방해할 수 있을 때
 
 ### 6. 대안 비교
 
-move 관련 판단은 결국 호출자와 피호출자 사이에 '누가 이후에도 이 값을 의미 있게 사용할 것인가'를 정하는 문제다. 값 전달 방식은 성능보다 소유권 의도를 먼저 드러내야 한다.
+move 관련 판단은 결국 호출자와 피호출자 사이에 **누가 이 값을 이후에도 의미 있게 사용할 것인가**를 결정하는 문제다. 따라서 전달 방식은 성능 미세 조정보다 먼저 소유권 의도를 분명히 드러내야 한다.
 
-- 복사: 원본을 보존해야 하고 타입이 작거나 공유 비용이 크지 않을 때 기본 선택이다.
-- move: 호출 뒤 원본을 더 이상 의미 있게 쓰지 않을 때 적합하다.
-- perfect forwarding: 래퍼 함수가 호출자의 lvalue/rvalue 의도를 왜곡하지 않고 그대로 전달해야 할 때 쓴다.
-- `const T&`: 읽기 전용 입력에 가장 무난하다.
-- `T&&`: 명시적으로 소유권 이전을 받는 인터페이스에서 신중하게 쓴다.
-- `T` 값 전달: 복사본이 어차피 필요하고, 내부에서 move로 보관할 수 있을 때 단순한 선택이 된다.
+* 복사: 원본을 그대로 유지해야 하고, 타입이 작거나 복사 비용이 충분히 감당 가능할 때 기본 선택이다.
+* move: 호출 뒤 원본을 더 이상 의미 있게 사용하지 않을 때 적합하다. 자원 소유 타입에서 특히 중요하다.
+* perfect forwarding: 래퍼 함수가 호출자의 lvalue/rvalue 의도를 바꾸지 않고 그대로 전달해야 할 때 쓴다.
+* `const T&`: 읽기 전용 입력에 가장 무난하고 오해가 적다.
+* `T&&`: 명시적으로 소유권 이전을 받는 인터페이스에서 사용한다. 의미가 강한 만큼 남용하면 오히려 API 의도가 흐려진다.
+* `T` 값 전달: 함수 내부에서 어차피 복사본이 필요하고, 받은 값을 멤버에 저장하면서 move할 수 있을 때 단순하고 실용적인 선택이 된다.
 
 ### 7. 코드 예시 (bad → good)
 
@@ -112,8 +121,10 @@ Good: 기존 자원을 먼저 정리한 뒤 소유권을 이전한다. `noexcept
 Buffer& operator=(Buffer&& other) noexcept {
     if (this != &other) {
         delete[] data_;
+
         data_ = other.data_;
         size_ = other.size_;
+
         other.data_ = nullptr;
         other.size_ = 0;
     }
@@ -121,13 +132,68 @@ Buffer& operator=(Buffer&& other) noexcept {
 }
 ```
 
+#### 사례 3: 반환값에 습관적으로 `std::move`를 붙인 경우
+
+Bad: 지역 변수를 반환하면서 무조건 `std::move`를 붙이면, 코드 의도는 더 나빠지고 반환값 최적화에 불리할 수 있다.
+
+```cpp
+std::string MakeName() {
+    std::string name = "player";
+    return std::move(name);
+}
+```
+
+Good: 지역 변수 반환에서는 우선 자연스럽게 그대로 반환한다. 컴파일러는 copy elision이나 move를 적절히 선택할 수 있다.
+
+```cpp
+std::string MakeName() {
+    std::string name = "player";
+    return name;
+}
+```
+
+#### 사례 4: move 후 객체를 계속 의미 있게 사용한 경우
+
+Bad: move한 뒤에도 원래 값이 남아 있을 것이라고 기대하며 다시 읽는다. 이런 코드는 타입 구현 세부사항에 기대게 되어 의미가 불분명하다.
+
+```cpp
+std::string s = "boss";
+names.push_back(std::move(s));
+
+if (s == "boss") {
+    StartFight();
+}
+```
+
+Good: move 후 객체는 파괴하거나 새 값을 대입하는 용도로만 다루는 편이 안전하다. 계속 써야 한다면 애초에 move하지 않는다.
+
+```cpp
+std::string s = "boss";
+names.push_back(s);
+
+if (s == "boss") {
+    StartFight();
+}
+```
+
+또는
+
+```cpp
+std::string s = "boss";
+names.push_back(std::move(s));
+s = "next_boss";
+```
+
 ### 8. 판단 기준 요약
 
-- `std::move`는 이동 실행이 아니라 rvalue 캐스트라는 점부터 기억한다.
-- 이후에도 값을 써야 하면 move하지 않고, 더 이상 의미 있게 쓰지 않을 때만 move한다.
-- forwarding reference에서는 기본값이 `std::forward<T>`다.
-- moved-from 객체는 읽지 말고 파괴하거나 새 값을 대입하는 용도로만 다룬다.
-- 성능 이득을 기대한다면 move constructor의 `noexcept`와 타입 특성까지 함께 확인한다.
+* `std::move`는 이동 실행이 아니라 xvalue 캐스트라는 점부터 기억한다.
+* 이동 여부는 타입, 오버로드 선택, 예외 보장에 의해 최종 결정된다.
+* 이름이 있는 변수 표현식은 `T&&` 타입이어도 기본적으로 lvalue다.
+* 이후에도 값을 의미 있게 써야 하면 move하지 않고, 더 이상 쓰지 않을 때만 move한다.
+* forwarding reference에서는 기본값이 `std::forward<T>`다.
+* moved-from 객체는 읽어서 의미를 기대하지 말고, 파괴하거나 새 값을 대입하는 용도로만 다룬다.
+* 성능 이득을 기대한다면 move constructor의 `noexcept`, 타입 크기, 자원 소유 구조까지 함께 확인한다.
+* 가능하면 직접 자원 관리를 늘리기보다 표준 라이브러리 타입을 조합해 Rule of Zero에 가깝게 설계하는 편이 안전하다.
 
 ---
 
@@ -262,76 +328,251 @@ public:
 
 ## 토픽 18: std::function & std::bind(에스티디 펑션 / 에스티디 바인드, 호출 래퍼와 인자 바인딩)
 
+## 토픽 18: std::function & std::bind
+
 > 난이도: ★★☆ | 예상 시간: 1시간 | 선행: 토픽 17
+
+---
 
 ### 1. 문제 상황
 
-핵심 용어: `타입 소거(type erasure)`, `placeholder`, `타입 소거`, `람다`.
+콜백을 저장해야 하는 상황에서는,  
+현재 시점에서는 어떤 callable이 들어올지 알 수 없지만  
+나중에는 동일한 방식으로 호출해야 하는 요구가 발생한다.
 
-콜백 등록 지점에서는 '지금은 어떤 callable이 들어올지 모르지만, 나중에는 같은 시그니처로 호출하고 싶다'는 요구가 자주 생긴다. 이때 `std::function`은 인터페이스를 단순하게 만들어 주고, `std::bind`는 일부 인자를 미리 묶어 새 호출 객체를 만들 수 있게 한다.
+예를 들어:
 
-문제는 편리함만 보고 두 도구를 기본값으로 삼기 쉽다는 점이다. 핫패스까지 `std::function`으로 감싸면 간접 호출과 잠재적 할당 비용이 누적되고, `std::bind`는 placeholder 문법 때문에 호출 흐름을 숨겨 디버깅과 리뷰를 어렵게 만든다.
+* 이벤트 시스템
+* 작업 큐
+* UI 콜백
+
+이러한 구조에서는 함수 포인터, 람다, functor 등 서로 다른 형태의 callable을  
+하나의 타입으로 통일하여 저장할 필요가 있다.
+
+이 문제를 해결하기 위해 `std::function`이 사용된다.
+
+---
 
 ### 2. 핵심 개념
 
-`std::function`은 함수 포인터, 람다, functor처럼 서로 다른 callable을 하나의 타입으로 감싸는 범용 호출 래퍼다. 핵심은 type erasure다. 즉 실제 타입은 숨기고 '이 시그니처로 호출할 수 있다'는 인터페이스만 남겨 서로 다른 대상을 동일 타입으로 저장한다.
+#### std::function의 역할
 
-`std::bind`는 함수와 일부 인자를 미리 묶어 새로운 호출 객체를 만드는 도구다. 기능 자체는 유용하지만 `std::placeholders::_1` 같은 표기 때문에 어떤 인자가 언제 어디로 들어가는지 한눈에 읽기 어렵다. modern C++에서는 같은 의도를 보통 람다로 더 직접적으로 표현한다.
+`std::function`은 서로 다른 callable을  
+하나의 공통 인터페이스로 감싸는 호출 래퍼이다.
 
-### 3. 내부 동작 / 메커니즘
+핵심은 **type erasure(타입 소거)**이다.
 
-#### type erasure가 만드는 비용
+즉, 실제 타입은 숨기고  
+“이 시그니처로 호출할 수 있다”는 정보만 남긴다.
 
-`std::function`은 내부에 구체 callable을 숨기고 공통 호출 인터페이스를 제공한다. 이 과정에서 직접 호출 대신 간접 호출 경계가 생기고, callable 크기가 내부 버퍼를 넘으면 힙 할당이 붙을 수 있다. 즉 `std::function`의 비용은 문법보다 저장 방식과 호출 빈도에서 드러난다.
+```cpp
+std::function<void(int)> f;
+````
 
-#### `std::bind`가 읽기 어려운 이유
+이 변수에는 다음이 모두 들어갈 수 있다:
 
-`std::bind`는 인자를 미리 고정하고 나머지 위치를 placeholder로 표현한다. 하지만 이 표현은 호출 순서와 데이터 흐름을 코드 바깥으로 밀어내기 때문에, 람다처럼 캡처와 전달 관계를 바로 보여 주지 못한다. 그래서 기능이 같더라도 유지보수 관점에서는 람다가 더 유리한 경우가 많다.
+* 함수 포인터
+* 람다
+* functor
 
-UE5 맥락에서는 여기에 엔진의 수명 모델과 리플렉션까지 붙는다. UObject 기반 이벤트는 표준 callable보다 엔진 델리게이트가 더 잘 맞는 경우가 많으므로, `std::function`은 '범용 저장 래퍼'로, UE delegate는 '엔진 이벤트 연결 수단'으로 분리해 생각해야 한다.
+---
 
-### 4. 자주 틀리는 포인트
+#### std::bind의 역할
 
-- 모든 콜백을 습관적으로 `std::function`으로 감싼다. 저장이 필요 없는 호출 경로라면 구체 타입이나 람다가 더 가볍다.
-- `std::bind` 체인을 늘려 놓고도 가독성 문제가 없다고 생각한다. placeholder가 늘수록 호출 흐름이 급격히 불투명해진다.
-- 핫패스에서 간접 호출 비용과 인라인 손실을 무시한다. 짧은 루프일수록 이런 비용이 누적된다.
-- UE 객체 수명과 리플렉션이 중요한 경로에서도 표준 라이브러리 callable만으로 해결하려 한다.
-
-### 5. 언제 쓰는가 / 언제 쓰지 않는가
-
-#### 써야 하는 경우
-
-- 저장 시점에 다양한 callable을 하나의 시그니처로 보관해야 할 때
-- 호출 빈도는 낮지만 인터페이스 단순화가 더 중요한 콜백 등록 지점일 때
-- 람다의 구체 타입을 외부 API에 직접 노출하고 싶지 않을 때
-
-#### 안 쓰는 편이 나은 경우
-
-- 매 프레임 반복되는 hot path처럼 호출 비용이 누적되는 곳
-- 상태 없는 자유 함수를 단순 호출하면 충분한 곳
-- UE 객체 수명과 바인딩 해제가 중요한 엔진 이벤트 경로
-- `std::bind` 표현이 람다보다 더 읽기 어려운 경우 대부분
-
-### 6. 대안 비교
-
-- lambda: 의도와 캡처가 가장 직접적으로 보이고 인라인 최적화 가능성이 높다.
-- `std::function`: 타입 통일과 저장이 쉬우나 type erasure 비용과 잠재적 할당 비용을 감수해야 한다.
-- function pointer: 가장 가볍고 빠르지만 상태를 가질 수 없다.
-- UE delegate: 엔진 수명 모델과 바인딩/해제 흐름에 잘 맞지만 표준 C++ callable과 목적이 다르다.
-
-기본 순서는 보통 람다, 필요하면 함수 포인터, 저장이 필요하면 `std::function`이다. UObject 수명과 엔진 시스템에 묶이면 UE delegate를 먼저 검토하는 편이 자연스럽다.
-
-### 7. 코드 예시 (bad → good)
-
-#### 사례 1: `std::bind`로 의도를 숨긴 경우
-
-Bad: 기능은 수행하지만, 어떤 객체를 잡았는지와 인자가 어떻게 들어가는지를 한눈에 보여 주지 못한다. placeholder가 늘수록 읽기 비용이 더 커진다.
+`std::bind`는 함수와 일부 인자를 미리 결합하여
+새로운 callable을 생성한다.
 
 ```cpp
 auto f = std::bind(&Player::SetHP, &player, std::placeholders::_1);
 ```
 
-Good: 람다는 캡처 대상과 호출 흐름을 코드에 직접 드러낸다. modern C++에서 `std::bind`보다 람다가 기본 선택이 되는 이유가 여기에 있다.
+이 코드는 “hp 하나를 받아 SetHP를 호출하는 함수”를 만든다.
+
+그러나 modern C++에서는 동일한 기능을
+람다로 더 명확하게 표현할 수 있다.
+
+---
+
+### 3. 동작 원리 (핵심)
+
+#### std::function 내부 구조
+
+`std::function`은 내부적으로 다음과 같은 구조를 가진다:
+
+```text
+[ std::function 객체 ]
+
++----------------------+
+| small buffer         |  ← 작은 객체는 여기에 저장
++----------------------+
+| callable pointer ----|----+
++----------------------+    |
+                            v
+                      실제 callable (힙 or 내부)
+```
+
+핵심 구성:
+
+* **type-erased wrapper**
+
+  * 실제 타입을 숨긴 인터페이스
+
+* **function pointer (dispatcher)**
+
+  * 실제 호출을 수행하는 함수
+
+---
+
+#### 호출 과정
+
+```cpp
+f(10);
+```
+
+실제 동작:
+
+```text
+1. std::function 내부 dispatcher 호출
+2. 저장된 callable에 간접 접근
+3. 실제 함수 실행
+```
+
+즉, 호출은 항상:
+
+> **간접 호출 (indirect call)**
+
+---
+
+#### small object optimization (SOO)
+
+작은 callable은 힙 할당 없이 내부 버퍼에 저장된다.
+큰 객체는 힙에 할당된다.
+
+→ 따라서 비용은 다음에 따라 달라진다:
+
+* callable 크기
+* 복사 여부
+* 호출 빈도
+
+---
+
+### 4. 이 구조의 의미
+
+type erasure는 강력하지만, 반드시 비용을 만든다.
+
+#### 얻는 것
+
+* 타입 통일
+* 인터페이스 단순화
+* 유연성
+
+#### 잃는 것
+
+* 인라인 최적화 불가
+* 간접 호출 비용
+* 힙 할당 가능성
+
+즉:
+
+> **유연성과 성능의 트레이드오프**
+
+---
+
+### 5. std::bind의 구조적 한계
+
+`std::bind`는 인자 일부를 고정하고
+나머지를 placeholder로 표현한다.
+
+```cpp
+std::bind(f, _1, 10, _2);
+```
+
+이 표현은 다음 문제를 만든다:
+
+* 인자 흐름이 코드에 드러나지 않음
+* 실행 시점이 아닌 “정의 시점”에 묶임
+* 디버깅이 어려움
+
+같은 동작을 람다로 표현하면:
+
+```cpp
+auto f = [&obj](int x) {
+    obj.Func(x);
+};
+```
+
+→ 캡처, 인자 흐름, 호출이 모두 드러난다
+
+따라서 modern C++에서는:
+
+> **std::bind보다 람다가 기본 선택이다**
+
+---
+
+### 6. 자주 틀리는 포인트
+
+* 모든 콜백을 `std::function`으로 감싼다
+  → 불필요한 간접 호출 + 성능 손실
+
+* hot path에서 `std::function`을 사용한다
+  → 인라인 불가 + 비용 누적
+
+* `std::bind`를 가독성 없이 사용한다
+  → 코드 흐름이 숨겨짐
+
+* callable 저장이 필요 없는 상황에서도 사용한다
+  → 과한 추상화
+
+---
+
+### 7. 언제 쓰는가 / 언제 쓰지 않는가
+
+#### std::function을 사용하는 경우
+
+* 다양한 callable을 하나로 저장해야 할 때
+* 인터페이스 단순화가 중요한 API 경계
+* 호출 빈도가 낮은 경우
+
+---
+
+#### 사용하지 않는 것이 좋은 경우
+
+* hot path (매 프레임, 루프 내부)
+* 인라인이 중요한 계산 코드
+* 단순 함수 호출이면 충분한 경우
+
+---
+
+#### std::bind 대신
+
+* 거의 항상 람다 사용
+
+---
+
+### 8. 대안 비교
+
+| 방법               | 특징             |
+| ---------------- | -------------- |
+| lambda           | 가장 직관적, 인라인 가능 |
+| std::function    | 타입 통일, 비용 존재   |
+| function pointer | 가장 가볍지만 상태 없음  |
+| template         | 최고 성능, 타입 고정   |
+
+---
+
+### 9. 코드 예시
+
+#### bad: bind 사용
+
+```cpp
+auto f = std::bind(&Player::SetHP, &player, std::placeholders::_1);
+```
+
+→ 인자 흐름이 숨겨짐
+
+---
+
+#### good: lambda
 
 ```cpp
 auto f = [&player](int hp) {
@@ -339,44 +580,41 @@ auto f = [&player](int hp) {
 };
 ```
 
-#### 사례 2: hot path에 `std::function`을 둔 경우
+---
 
-Bad: 매 호출마다 간접 호출 비용을 감수하게 만들고, 인라인 최적화 기회도 줄인다. 호출 횟수가 매우 많은 경로에서는 이런 추상화 비용이 누적된다.
-
-```cpp
-class ParticleSystem {
-    std::function<float(float, float)> distanceFunc_;
-public:
-    void update() {
-        for (auto& p : particles_) {
-            float d = distanceFunc_(p.x, p.y);
-        }
-    }
-};
-```
-
-Good: 구체 callable 타입을 유지하면 인라인 최적화 가능성이 높아지고 type erasure 비용도 피할 수 있다. 저장이 정말 필요한가를 먼저 묻는 것이 핵심이다.
+#### bad: hot path + std::function
 
 ```cpp
-template<typename DistFunc>
-class ParticleSystem {
-    DistFunc distanceFunc_;
-public:
-    void update() {
-        for (auto& p : particles_) {
-            float d = distanceFunc_(p.x, p.y);
-        }
-    }
-};
+std::function<float(float, float)> dist;
 ```
 
-### 8. 판단 기준 요약
+---
 
-- callable을 오래 저장해야 할 때만 `std::function`을 검토한다.
-- 캡처와 인자 흐름을 직접 드러낼 수 있으면 `std::bind`보다 람다가 우선이다.
-- 핫패스에서는 간접 호출과 할당 가능성을 먼저 의심한다.
-- 상태 없는 단순 호출이면 함수 포인터나 구체 callable 타입이 더 단순하다.
-- UE 객체 수명과 이벤트 시스템이 걸린 경로는 표준 callable과 엔진 델리게이트를 구분해 선택한다.
+#### good: template
+
+```cpp
+template<typename Func>
+void update(Func f) {
+    f(1.0f, 2.0f);
+}
+```
+
+---
+
+### 10. 판단 기준 요약
+
+* callable을 저장해야 하는가? → std::function
+* 단순 전달/호출인가? → lambda 또는 함수 포인터
+* 성능이 중요한가? → template 또는 구체 타입
+* bind를 쓰려는가? → 대부분 lambda로 대체 가능
+
+---
+
+### 11. 한 줄 정리
+
+> std::function은 “유연성”,
+> lambda는 “기본 선택”,
+> bind는 “거의 필요 없다”
 
 ---
 
