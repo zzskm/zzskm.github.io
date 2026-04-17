@@ -1,57 +1,78 @@
 'use strict';
-// app.js — GitHub Pages/서버용 (자동 ./parking_log.csv 로드 + 리트라이 + 모바일 최적화)
 (() => {
   const LOT_NAME = "수지노외 공영주차장";
-  const AUTO_REFRESH_MS = 1 * 60 * 1000;
+  const AUTO_REFRESH_MS = 60 * 1000;
   const DEFAULT_CSV = "./parking_log.csv";
   const KST_TZ = "Asia/Seoul";
 
+  // ---------- utils ----------
   const fmtTimeLabel = new Intl.DateTimeFormat("ko-KR", {
-    timeZone: KST_TZ, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: 'h23'
-  });
-
-  const fmtTimeOnly = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: KST_TZ, month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: 'h23'
+  });
+  const fmtTimeOnly = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: KST_TZ, hour: "2-digit", minute: "2-digit", hourCycle: 'h23'
+  });
+  const fmtHourKST = new Intl.DateTimeFormat("en-GB", {
+    timeZone: KST_TZ, hour: "2-digit", hourCycle: 'h23'
+  });
+  const fmtYmdKST = new Intl.DateTimeFormat("en-CA", {
+    timeZone: KST_TZ, year: "numeric", month: "2-digit", day: "2-digit"
   });
 
   function ymdKST(date) {
-    const p = new Intl.DateTimeFormat("en-CA", { timeZone: KST_TZ, year: "numeric", month: "2-digit", day: "2-digit" })
-      .formatToParts(date).reduce((acc, cur) => (acc[cur.type] = cur.value, acc), {});
-    return `${p.year}-${p.month}-${p.day}`;
+    return fmtYmdKST.format(date);
+  }
+  function hourKST(date) {
+    return parseInt(fmtHourKST.format(date), 10);
   }
   function ymdDaysAgo(n) {
-    const now = new Date();
-    const kstDate = new Intl.DateTimeFormat("en-CA", { timeZone: KST_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-    const kstMidnight = new Date(`${kstDate}T00:00:00+09:00`);
-    const d = new Date(kstMidnight.getTime() - n * 24 * 60 * 60 * 1000);
-    return ymdKST(d);
+    const kstToday = ymdKST(new Date());
+    const kstMidnight = new Date(`${kstToday}T00:00:00+09:00`);
+    return ymdKST(new Date(kstMidnight.getTime() - n * 86400000));
+  }
+  function projectToBaseDate(baseDate, originalDate) {
+    return new Date(
+      baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(),
+      originalDate.getHours(), originalDate.getMinutes(),
+      originalDate.getSeconds(), originalDate.getMilliseconds()
+    );
+  }
+  function debounce(fn, wait) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
   }
 
+  // ---------- parse ----------
   function downsample(data, intervalMs = 5 * 60 * 1000) {
     if (data.length <= 100) return data;
-    const result = [];
-    let lastTime = null;
+    const out = [];
+    let last = null;
     for (const d of data) {
-      if (!lastTime || (d.t - lastTime) >= intervalMs) {
-        result.push(d);
-        lastTime = d.t;
+      if (!last || (d.t - last) >= intervalMs) {
+        out.push(d);
+        last = d.t;
       }
     }
-    return result;
+    return out;
   }
 
   function parseCSV(text) {
-    const rows = text.trim().split(/\r?\n/).map((r) => r.split(","));
+    const rows = text.trim().split(/\r?\n/).map(r => r.split(","));
     const header = rows.shift();
     const tsIdx = header.indexOf("timestamp_kst");
     const nameIdx = header.indexOf("lot_name");
     const avIdx = header.indexOf("available");
-    if (tsIdx < 0 || nameIdx < 0 || avIdx < 0)
+    if (tsIdx < 0 || nameIdx < 0 || avIdx < 0) {
       throw new Error("CSV 헤더 오류: timestamp_kst, lot_name, available 필요");
+    }
 
     const all = rows
-      .map((r) => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
-      .filter((r) => r.name === LOT_NAME && !Number.isNaN(r.v))
+      .map(r => ({ t: new Date(r[tsIdx]), name: r[nameIdx], v: Number(r[avIdx]) }))
+      .filter(r => r.name === LOT_NAME && !Number.isNaN(r.v) && !Number.isNaN(r.t.getTime()))
       .sort((a, b) => a.t - b.t);
 
     const t0 = ymdDaysAgo(0);
@@ -60,405 +81,327 @@
 
     const todayArr = [];
     const yestArr = [];
-    const minMaxByHour = Array.from({length: 24}, () => []);
+    const bucketsByHour = Array.from({ length: 24 }, () => []);
 
     for (const d of all) {
       const ymd = ymdKST(d.t);
       if (ymd === t0) todayArr.push(d);
       if (ymd === t1) yestArr.push(d);
       if (ymd >= t7start && ymd < t0) {
-        const hour = d.t.getHours();
-        minMaxByHour[hour].push(d.v);
+        bucketsByHour[hourKST(d.t)].push(d.v);
       }
     }
 
     const d7MinMax = [];
-    let lastMin = null;
-    let lastMax = null;
+    let lastMin = null, lastMax = null;
     for (let hour = 0; hour < 24; hour++) {
-      const vals = minMaxByHour[hour];
+      const vals = bucketsByHour[hour];
       let minV, maxV;
       if (vals.length > 0) {
         minV = Math.min(...vals);
         maxV = Math.max(...vals);
-        lastMin = minV;
-        lastMax = maxV;
+        lastMin = minV; lastMax = maxV;
+      } else if (lastMin === null) {
+        minV = 0; maxV = 0;
       } else {
-        if (lastMin === null) {
-          minV = 0;
-          maxV = 0;
-        } else {
-          minV = lastMin;
-          maxV = lastMax;
-        }
+        minV = lastMin; maxV = lastMax;
       }
-      const dummyT = new Date(1970, 0, 1, hour, 0, 0, 0);
-      d7MinMax.push({ t: dummyT, min: minV, max: maxV });
+      d7MinMax.push({ t: new Date(1970, 0, 1, hour, 0, 0, 0), min: minV, max: maxV });
     }
-
-    todayArr.sort((a, b) => a.t - b.t);
-    yestArr.sort((a, b) => a.t - b.t);
 
     if (todayArr.length > 0) {
       const last = todayArr[todayArr.length - 1];
       todayArr.push({ t: new Date(), name: last.name, v: last.v });
     }
 
+    const latestT = todayArr.length ? todayArr[todayArr.length - 1].t
+      : yestArr.length ? yestArr[yestArr.length - 1].t : null;
+
     return {
       todayArr: downsample(todayArr),
       yestArr: downsample(yestArr),
-      d7MinMax: d7MinMax // 24개 포인트이므로 downsample 불필요
+      d7MinMax,
+      latestT
     };
   }
 
-  function projectToBaseDate(baseDate, originalDate) {
-    return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(),
-      originalDate.getHours(), originalDate.getMinutes(), originalDate.getSeconds(), originalDate.getMilliseconds());
+  // ---------- chart ----------
+  function fmtXTick(d, endDate) {
+    if (d.getTime() === endDate.getTime()) return "24:00";
+    return d3.timeFormat("%H:%M")(d);
   }
 
-  function updateChart(todayArr, yestArr, d7MinMax, isInitial = false) {
-    const $ = (sel) => document.querySelector(sel);
-    if (!$('#chart')) {
-      const div = document.createElement('div');
-      div.id = 'chart';
-      div.setAttribute('role', 'img');
-      document.body.appendChild(div);
-    }
-    if (!$('#status')) {
-      const div = document.createElement('div');
-      div.id = 'status';
-      div.textContent = '상태 표시';
-      document.body.prepend(div);
-    }
+  function initChart(container) {
+    d3.select(container).selectAll("*").remove();
+    const svg = d3.select(container).append("svg")
+      .attr("class", "chart-svg chart-root")
+      .attr("role", "img")
+      .attr("aria-label", `${LOT_NAME} 주차 가능 대수 추이 차트`);
+    const g = svg.append("g").attr("class", "plot");
 
-    const status = $('#status');
-    const latest = todayArr.length ? todayArr[todayArr.length - 1].t
-      : yestArr.length ? yestArr[yestArr.length - 1].t
-      : d7MinMax.length ? d7MinMax[d7MinMax.length - 1].t : null;
-    const latestStr = latest ? fmtTimeLabel.format(latest) : "N/A";
-    status.textContent = `${LOT_NAME} · 오늘 ${todayArr.length}개 · 어제 ${yestArr.length}개 · 7일 min-max ${d7MinMax.length}개 · 최신: ${latestStr}`;
+    g.append("g").attr("class", "grid x-grid");
+    g.append("g").attr("class", "grid y-grid");
+    g.append("g").attr("class", "axis x-axis");
+    g.append("g").attr("class", "axis y-axis");
+    g.append("g").attr("class", "areas");
+    g.append("g").attr("class", "lines");
+    g.append("g").attr("class", "end-marks");
+    g.append("g").attr("class", "legend");
 
-    const container = document.getElementById('chart');
+    d3.select("body").selectAll(".tooltip").remove();
+    const tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .attr("id", "chart-tooltip")
+      .attr("role", "tooltip")
+      .attr("aria-live", "polite")
+      .style("position", "absolute")
+      .style("opacity", 0)
+      .style("pointer-events", "none");
+
+    return { container, svg, g, tooltip };
+  }
+
+  function renderChart(ctx, data) {
+    const { container, svg, g, tooltip } = ctx;
+    const { todayArr, yestArr, d7MinMax } = data;
+
     const W = container.clientWidth || window.innerWidth || 1000;
     const H = Math.max(200, W * 0.6);
-
-    if (isInitial) d3.select("#chart").selectAll("*").remove();
-
     const isSmall = W < 480;
-    const margin = { top: 16, right: (isSmall ? 48 : 200), bottom: 44, left: (isSmall ? 32 : 48) };
+    const margin = { top: 16, right: isSmall ? 48 : 200, bottom: 44, left: isSmall ? 32 : 48 };
     const width = Math.max(300, W - margin.left - margin.right);
     const height = Math.max(200, H - margin.top - margin.bottom);
+    const fullW = width + margin.left + margin.right;
+    const fullH = height + margin.top + margin.bottom;
 
-    const svg = isInitial ? d3.select("#chart").append("svg")
-      .attr("class", "chart-svg")
-      .attr("width", width + margin.left + margin.right)
-      .attr("height", height + margin.top + margin.bottom)
-      .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
-      .attr("role", "img")
-      .attr("aria-label", `${LOT_NAME} 주차 가능 대수 추이 차트`)
-      .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`)
-      : d3.select("#chart").select("svg").select("g");
+    svg.attr("width", fullW).attr("height", fullH)
+      .attr("viewBox", `0 0 ${fullW} ${fullH}`);
+    g.attr("transform", `translate(${margin.left},${margin.top})`);
 
     const baseDate = new Date(`${ymdKST(new Date())}T00:00:00+09:00`);
-    const endDate = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000);
+    const endDate = new Date(baseDate.getTime() + 86400000);
 
     const pToday = todayArr.map(d => ({ t: projectToBaseDate(baseDate, d.t), v: d.v }));
     const pYest = yestArr.map(d => ({ t: projectToBaseDate(baseDate, d.t), v: d.v }));
-    const pD7MinMax = d7MinMax.map(d => ({
-      t: projectToBaseDate(baseDate, d.t),
-      min: d.min,
-      max: d.max
+    const pD7 = d7MinMax.map(d => ({
+      t: projectToBaseDate(baseDate, d.t), min: d.min, max: d.max
     }));
 
-    const maxY = Math.max(10, 
-      ...pToday.map(d => d.v), 
-      ...pYest.map(d => d.v), 
-      ...pD7MinMax.map(d => d.max)
+    const maxY = Math.max(10,
+      ...pToday.map(d => d.v),
+      ...pYest.map(d => d.v),
+      ...pD7.map(d => d.max)
     );
     const x = d3.scaleTime().domain([baseDate, endDate]).range([0, width]);
     const y = d3.scaleLinear().domain([0, maxY]).nice().range([height, 0]);
 
     const hourStep = 4;
+    const tickFormat = d => fmtXTick(d, endDate);
 
-    if (isInitial) {
-      const xGrid = d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat("");
-      const yGrid = d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat("");
-      svg.append("g").attr("class", "grid x-grid").attr("transform", `translate(0,${height})`).call(xGrid);
-      svg.append("g").attr("class", "grid y-grid").call(yGrid);
-
-      const fmtTick = (d) => {
-        const endT = endDate.getTime();
-        const t = d.getTime();
-        if (t === endT) return "24:00";
-        return d3.timeFormat("%H:%M")(d);
-      };
-      svg.append("g").attr("class", "axis x-axis")
-        .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(fmtTick));
-      svg.append("g").attr("class", "axis y-axis").call(d3.axisLeft(y).ticks(6));
-    } else {
-      svg.select(".grid.x-grid").call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat(""));
-      svg.select(".grid.y-grid").call(d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat(""));
-      svg.select(".axis.x-axis")
-        .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(fmtTick));
-      svg.select(".axis.y-axis").call(d3.axisLeft(y).ticks(6));
-    }
-
-    if (isInitial) {
-      d3.select("body").selectAll(".tooltip").remove();
-      d3.select("body").append("div")
-        .attr("class", "tooltip")
-        .style("position", "absolute")
-        .style("background", "white")
-        .style("border", "1px solid #ccc")
-        .style("padding", "5px")
-        .style("opacity", 0)
-        .attr("role", "tooltip")
-        .attr("id", "chart-tooltip")
-        .attr("aria-live", "polite");
-    }
-    const tooltip = d3.select(".tooltip");
+    g.select(".x-grid").attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickSize(-height).tickFormat(""));
+    g.select(".y-grid")
+      .call(d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat(""));
+    g.select(".x-axis").attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x).ticks(d3.timeHour.every(hourStep)).tickFormat(tickFormat));
+    g.select(".y-axis").call(d3.axisLeft(y).ticks(6));
 
     const line = d3.line().curve(d3.curveMonotoneX).x(d => x(d.t)).y(d => y(d.v));
-    
-    const area = d3.area()
-      .curve(d3.curveMonotoneX)
-      .x(d => x(d.t))
-      .y0(d => y(d.min))
-      .y1(d => y(d.max));
+    const area = d3.area().curve(d3.curveMonotoneX)
+      .x(d => x(d.t)).y0(d => y(d.min)).y1(d => y(d.max));
 
-    let groups = [
-      { key: "오늘", data: pToday, cls: "today", colorVar: "var(--orange)" },
-      { key: "어제", data: pYest, cls: "yesterday", colorVar: "var(--blue)" },
-      { key: "7일 범위", data: pD7MinMax, cls: "d7range", colorVar: "var(--green)", isArea: true }
-    ].filter(g => g.data.length);
-    groups.sort((a,b) => (a.cls==="today") - (b.cls==="today"));
+    // 7-day range area
+    const areaSel = g.select(".areas").selectAll("path.area.d7range")
+      .data(pD7.length ? [pD7] : []);
+    areaSel.exit().remove();
+    areaSel.enter().append("path")
+      .attr("class", "area d7range")
+      .attr("fill", "var(--green)")
+      .attr("opacity", 0.15)
+      .attr("aria-describedby", "chart-tooltip")
+      .merge(areaSel)
+      .attr("d", area);
 
-    groups.forEach(g => {
-      if (g.isArea) {
-        const path = svg.selectAll(`.area.${g.cls}`)
-          .data([g.data])
-          .join("path")
-          .attr("class", `area ${g.cls}`)
-          .attr("fill", g.colorVar)
-          .attr("opacity", 0.15)
-          .attr("aria-describedby", "chart-tooltip");
+    // Lines: yesterday (bg) then today (fg)
+    const lineGroups = [
+      { key: "어제", data: pYest, cls: "yesterday", colorVar: "var(--blue)", width: 1.5, opacity: 0.8 },
+      { key: "오늘", data: pToday, cls: "today", colorVar: "var(--orange)", width: 4, opacity: 1 }
+    ];
 
-        path.transition().duration(1000)
-          .attrTween("d", function(d) {
-            const l = this.getTotalLength ? this.getTotalLength() : 100;
-            return t => {
-              const p = l * t;
-              return area(d.slice(0, Math.floor(d.length * t)));
-            };
-          });
-      } else {
-        const path = svg.selectAll(`.line.${g.cls}`)
-          .data([g.data])
-          .join("path")
-          .attr("class", `line ${g.cls}`)
-          .attr("stroke", g.colorVar)
-          .attr("stroke-width", g.cls === "today" ? 4 : 1.5)
-          .attr("fill", "none")
-          .attr("opacity", g.cls === "today" ? 1 : 0.8)
-          .attr("aria-describedby", "chart-tooltip");
-
-        path.transition().duration(1000)
-          .attrTween("d", function(d) {
-            const l = this.getTotalLength();
-            return t => {
-              const p = l * t;
-              return line(d.slice(0, Math.floor(d.length * t)));
-            };
-          });
-
-        if (g.cls === "today") {
-          svg.selectAll(`.dot-${g.cls}`)
-            .data(g.data)
-            .join("circle")
-            .attr("class", `dot-${g.cls}`)
-            .attr("cx", d => x(d.t))
-            .attr("cy", d => y(d.v))
-            .attr("r", 0)
-            .attr("fill", g.colorVar)
-            .style("opacity", 0);
-
-          path.on("mouseover touchstart", function(event, data) {
-            event.preventDefault();
-            const [mouseX] = d3.pointer(event);
-            const x0 = x.invert(mouseX);
-            const i = d3.bisectLeft(data.map(d => d.t), x0, 1);
-            const d0 = data[i - 1];
-            const d1 = data[i] || d0;
-            const d = x0 - d0.t > d1.t - x0 ? d1 : d0;
-
-            tooltip.transition().duration(200).style("opacity", .9);
-            tooltip.html(`${g.key}<br>시간: ${fmtTimeOnly.format(d.t)}<br>대수: ${d.v}`)
-              .style("left", (event.pageX + 10) + "px")
-              .style("top", (event.pageY - 28) + "px");
-          })
-          .on("mousemove touchmove", function(event) {
-            event.preventDefault();
-            tooltip.style("left", (event.pageX + 10) + "px")
-              .style("top", (event.pageY - 28) + "px");
-          })
-          .on("mouseout touchend", function() {
-            tooltip.transition().duration(500).style("opacity", 0);
-          });
-        }
-
-        const last = g.data[g.data.length - 1];
-        if (last && g.cls === "today") {
-          svg.selectAll(`.end-label.${g.cls}`)
-            .data([last])
-            .join("text")
-            .attr("class", `end-label ${g.cls}`)
-            .attr("x", Math.min(x(last.t) + 8, width - 80))
-            .attr("y", y(last.v))
-            .text(`${g.key} ${last.v} (${fmtTimeOnly.format(last.t)})`)
-            .attr("opacity", 0.95)
-            .attr("aria-hidden", "true");
-
-          svg.selectAll(`.end-dot.${g.cls}`)
-            .data([last])
-            .join("circle")
-            .attr("class", `end-dot ${g.cls}`)
-            .attr("cx", x(last.t))
-            .attr("cy", y(last.v))
-            .attr("r", 4)
-            .attr("fill", g.colorVar)
-            .attr("tabindex", "0")
-            .attr("aria-label", `오늘 마지막 값: ${last.v} 대, 시간: ${fmtTimeOnly.format(last.t)}`)
-            .transition().duration(1000)
-            .attr("opacity", 0.95);
-        }
-      }
+    const linesG = g.select(".lines");
+    lineGroups.forEach(grp => {
+      const sel = linesG.selectAll(`path.line.${grp.cls}`)
+        .data(grp.data.length ? [grp.data] : []);
+      sel.exit().remove();
+      sel.enter().append("path")
+        .attr("class", `line ${grp.cls}`)
+        .attr("fill", "none")
+        .attr("aria-describedby", "chart-tooltip")
+        .merge(sel)
+        .attr("stroke", grp.colorVar)
+        .attr("stroke-width", grp.width)
+        .attr("opacity", grp.opacity)
+        .attr("d", line);
     });
 
-    d3.selectAll('.line.today').raise();
-    d3.selectAll('.end-label.today').raise();
-    d3.selectAll('.end-dot.today').raise();
+    // Today hover tooltip
+    const todayPath = linesG.select("path.line.today");
+    if (!todayPath.empty() && pToday.length) {
+      const showAt = (event, d) => {
+        tooltip.transition().duration(150).style("opacity", 0.95);
+        tooltip.html(`오늘<br>시간: ${fmtTimeOnly.format(d.t)}<br>대수: ${d.v}`)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      };
+      const moveAt = (event) => {
+        tooltip.style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      };
+      const hide = () => tooltip.transition().duration(300).style("opacity", 0);
 
-    const legendData = groups.map(g => ({ key: g.key, cls: g.cls, colorVar: g.colorVar }));
-    const legend = svg.selectAll(".legend")
-      .data([null])
-      .join("g")
-      .attr("class", "legend")
-      .attr("transform", isSmall ? `translate(${width / 2 - 60}, -8)` : `translate(${width + 16}, ${8})`);
-    const legendItem = legend.selectAll(".legend-item")
-      .data(legendData)
-      .join("g")
-      .attr("class", d => `legend-item ${d.cls}`)
-      .attr("transform", (d,i) => isSmall ? `translate(${i * 80}, 0)` : `translate(0, ${i * 20})`);
-    legendItem.selectAll("line")
-      .data(d => [d])
-      .join("line")
-      .attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
-      .attr("stroke", d => d.colorVar)
-      .attr("stroke-width", d => d.cls === "today" ? 3 : d.cls === "d7range" ? 1.5 : 1.5)
-      .attr("fill", d => d.cls === "d7range" ? d.colorVar : "none")
-      .attr("opacity", d => d.cls === "d7range" ? 0.6 : 1);
-    legendItem.selectAll("text")
-      .data(d => [d])
-      .join("text")
+      todayPath
+        .on("mouseover touchstart", function(event) {
+          const [mx] = d3.pointer(event, this);
+          const x0 = x.invert(mx);
+          const i = d3.bisectLeft(pToday.map(d => d.t), x0, 1);
+          const d0 = pToday[i - 1];
+          const d1 = pToday[i] || d0;
+          const d = (x0 - d0.t > d1.t - x0) ? d1 : d0;
+          showAt(event, d);
+        })
+        .on("mousemove touchmove", moveAt)
+        .on("mouseout touchend", hide);
+    }
+
+    // End label/dot for today
+    const endG = g.select(".end-marks");
+    const last = pToday.length ? pToday[pToday.length - 1] : null;
+    const endLabelSel = endG.selectAll("text.end-label.today").data(last ? [last] : []);
+    endLabelSel.exit().remove();
+    endLabelSel.enter().append("text")
+      .attr("class", "end-label today")
+      .attr("aria-hidden", "true")
+      .merge(endLabelSel)
+      .attr("x", d => Math.min(x(d.t) + 8, width - 80))
+      .attr("y", d => y(d.v))
+      .attr("opacity", 0.95)
+      .text(d => `오늘 ${d.v} (${fmtTimeOnly.format(d.t)})`);
+
+    const endDotSel = endG.selectAll("circle.end-dot.today").data(last ? [last] : []);
+    endDotSel.exit().remove();
+    endDotSel.enter().append("circle")
+      .attr("class", "end-dot today")
+      .attr("r", 4)
+      .attr("fill", "var(--orange)")
+      .attr("tabindex", "0")
+      .merge(endDotSel)
+      .attr("cx", d => x(d.t))
+      .attr("cy", d => y(d.v))
+      .attr("aria-label", d => `오늘 마지막 값: ${d.v} 대, 시간: ${fmtTimeOnly.format(d.t)}`)
+      .attr("opacity", 0.95);
+
+    // Legend
+    const legendItems = [
+      { key: "오늘", cls: "today", colorVar: "var(--orange)", sw: 3, fill: "none", op: 1 },
+      { key: "어제", cls: "yesterday", colorVar: "var(--blue)", sw: 1.5, fill: "none", op: 1 },
+      { key: "7일 범위", cls: "d7range", colorVar: "var(--green)", sw: 1.5, fill: "var(--green)", op: 0.6 }
+    ];
+    const legendG = g.select(".legend")
+      .attr("transform", isSmall ? `translate(${width / 2 - 60}, -8)` : `translate(${width + 16}, 8)`);
+
+    const itemSel = legendG.selectAll(".legend-item").data(legendItems, d => d.cls);
+    itemSel.exit().remove();
+    const itemEnter = itemSel.enter().append("g")
+      .attr("class", d => `legend-item ${d.cls}`);
+    itemEnter.append("line")
+      .attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6);
+    itemEnter.append("text")
       .attr("x", 24).attr("y", 9)
-      .attr("dominant-baseline", "middle")
-      .text(d => d.key);
+      .attr("dominant-baseline", "middle");
+
+    const itemAll = itemEnter.merge(itemSel)
+      .attr("transform", (d, i) => isSmall ? `translate(${i * 80}, 0)` : `translate(0, ${i * 20})`);
+    itemAll.select("line")
+      .attr("stroke", d => d.colorVar)
+      .attr("stroke-width", d => d.sw)
+      .attr("fill", d => d.fill)
+      .attr("opacity", d => d.op);
+    itemAll.select("text").text(d => d.key);
+
+    // raise today on top
+    linesG.select("path.line.today").raise();
+    endG.selectAll(".end-label.today, .end-dot.today").raise();
   }
 
-  let currentPath = DEFAULT_CSV;
+  // ---------- loader + app ----------
+  let chartCtx = null;
+  let cachedData = null;
+  let failCount = 0;
+  let retryTimer = null;
 
-  async function loadAndRender(path) {
-    const statusEl = document.getElementById("status") || { textContent: "" };
+  function setStatus(text) {
+    const el = document.getElementById("status");
+    if (el) el.textContent = text;
+  }
+
+  function buildStatusLine(data) {
+    const latest = data.latestT ? fmtTimeLabel.format(data.latestT) : "N/A";
+    return `${LOT_NAME} · 오늘 ${data.todayArr.length}개 · 어제 ${data.yestArr.length}개 · 7일 min-max ${data.d7MinMax.length}개 · 최신: ${latest}`;
+  }
+
+  async function loadAndRender(path = DEFAULT_CSV) {
     try {
-      statusEl.textContent = "데이터 불러오는 중…";
-      const csvPath = path || currentPath || DEFAULT_CSV;
-      currentPath = csvPath;
-
-      const resp = await fetch(csvPath, { cache: "no-store" });
+      if (!cachedData) setStatus("데이터 불러오는 중…");
+      const resp = await fetch(path, { cache: "no-store" });
       if (!resp.ok) throw new Error(`CSV 로딩 실패: ${resp.status}`);
       const text = await resp.text();
 
-      const { todayArr, yestArr, d7MinMax } = parseCSV(text);
-      updateChart(todayArr, yestArr, d7MinMax, true);
-    } catch (e) {
-      statusEl.textContent = "로딩 실패: " + e.message;
-      console.error(e);
-      if (currentPath) {
-        setTimeout(() => loadAndRender(currentPath), 5000);
-      }
-    }
-  }
+      const data = parseCSV(text);
+      cachedData = data;
+      failCount = 0;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
 
-  function debounce(fn, wait) {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => fn(...args), wait);
-    };
+      renderChart(chartCtx, data);
+      setStatus(buildStatusLine(data));
+    } catch (e) {
+      failCount += 1;
+      console.error(e);
+      setStatus(`로딩 실패(${failCount}): ${e.message} · 5초 후 재시도`);
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => loadAndRender(path), 5000);
+    }
   }
 
   function bindUI() {
-    const $ = (sel) => document.querySelector(sel);
-    if (!$('#chart')) {
-      const div = document.createElement('div');
-      div.id = 'chart';
-      div.setAttribute('role', 'img');
-      document.body.appendChild(div);
-    }
-    if (!$('#status')) {
-      const div = document.createElement('div');
-      div.id = 'status';
-      div.textContent = '상태 표시';
-      document.body.prepend(div);
-    }
+    const chartEl = document.getElementById("chart");
+    chartCtx = initChart(chartEl);
 
-    const openBtn = $("#openBtn");
-    const reloadBtn = $("#reloadBtn");
+    const reloadBtn = document.getElementById("reloadBtn");
+    reloadBtn && reloadBtn.addEventListener("click", () => loadAndRender());
 
-    const dropZone = document.body;
-    const fileInput = document.getElementById("fileInput");
+    // polling that respects tab visibility
+    setInterval(() => {
+      if (document.visibilityState === "visible") loadAndRender();
+    }, AUTO_REFRESH_MS);
 
-    dropZone.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      dropZone.classList.add("dragover");
-    });
-    dropZone.addEventListener("dragleave", () => {
-      dropZone.classList.remove("dragover");
-    });
-    dropZone.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      const file = e.dataTransfer.files?.[0];
-      if (!file) return;
-      if (!file.name.endsWith(".csv")) return alert("CSV 파일만 가능합니다.");
-      const text = await file.text();
-      const { todayArr, yestArr, d7MinMax } = parseCSV(text);
-      updateChart(todayArr, yestArr, d7MinMax, true);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") loadAndRender();
     });
 
-    fileInput && fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      const { todayArr, yestArr, d7MinMax } = parseCSV(text);
-      updateChart(todayArr, yestArr, d7MinMax, true);
-    });
-
-    reloadBtn && reloadBtn.addEventListener("click", () => loadAndRender(currentPath));
-
-    setInterval(() => loadAndRender(currentPath), AUTO_REFRESH_MS);
-
+    // resize re-renders from cache (no re-parse)
     window.addEventListener("resize", debounce(() => {
-      const { todayArr, yestArr, d7MinMax } = parseCSV(lastText || "");
-      updateChart(todayArr, yestArr, d7MinMax, false);
+      if (cachedData) renderChart(chartCtx, cachedData);
     }, 200));
 
-    loadAndRender(DEFAULT_CSV);
+    // dismiss tooltip on outside tap (mobile)
+    document.addEventListener("touchstart", (e) => {
+      if (!chartEl.contains(e.target)) {
+        chartCtx.tooltip.style("opacity", 0);
+      }
+    }, { passive: true });
+
+    loadAndRender();
   }
 
-  let lastText = "";
   window.addEventListener("load", bindUI);
 })();
