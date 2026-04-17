@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="ko" data-theme="auto">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Markdown Editor</title>
+
+<link id="hljs-light" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" />
+<link id="hljs-dark" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" disabled />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+
+<script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --panel: #fafafa;
+    --accent: #2563eb;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
+    --font-serif: "Noto Serif KR", Georgia, "Times New Roman", serif;
+    --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-body: var(--font-sans);
+    --font-size: 15px;
+    --line-height: 1.7;
+    --content-max: 820px;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --panel: #161b22;
+    --accent: #58a6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d; --panel: #161b22; --accent: #58a6ff;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--font-size);
+    line-height: var(--line-height);
+    display: flex;
+    flex-direction: column;
+  }
+  .toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+  .toolbar button, .toolbar label.btn {
+    background: transparent; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 10px; font-size: 13px; cursor: pointer;
+    font-family: inherit;
+  }
+  .toolbar button:hover, .toolbar label.btn:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar .filename {
+    font-size: 13px; color: var(--muted);
+    margin-left: 4px; font-family: var(--font-mono);
+    max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .toolbar .filename.dirty::after { content: " •"; color: var(--accent); font-weight: bold; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .toast {
+    font-size: 12px; color: var(--muted); opacity: 0;
+    transition: opacity .2s;
+  }
+  .toolbar .toast.show { opacity: 1; }
+
+  .layout {
+    flex: 1; display: flex;
+    min-height: 0;
+  }
+  .layout > section, .layout > aside { overflow: auto; min-width: 0; }
+  #editor-pane { flex: 0 0 var(--editor-w, 42%); display: flex; }
+  #toc { flex: 0 0 220px; }
+  #preview-pane { flex: 1 1 0; }
+  .resizer {
+    flex: 0 0 5px; cursor: col-resize;
+    background: var(--border);
+    transition: background-color .15s;
+  }
+  .resizer:hover, .resizer.dragging { background: var(--accent); }
+  .layout.no-editor #editor-pane,
+  .layout.no-toc #toc,
+  .layout.no-preview #preview-pane,
+  .layout.no-editor .resizer,
+  .layout.no-preview .resizer { display: none; }
+  .layout.no-preview #editor-pane { flex: 1 1 auto; }
+  .layout.no-editor #toc { flex: 0 0 260px; }
+
+  #toc {
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 14px 12px;
+    background: var(--panel);
+    font-size: 13px;
+  }
+  #toc h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .08em; }
+  #toc ul { list-style: none; padding: 0; margin: 0; }
+  #toc li { margin: 2px 0; }
+  #toc a { color: var(--fg); text-decoration: none; display: block; padding: 2px 4px; border-radius: 4px; }
+  #toc a:hover { background: var(--bg); color: var(--accent); }
+  #toc li.lvl-2 { padding-left: 12px; }
+  #toc li.lvl-3 { padding-left: 24px; font-size: 12px; color: var(--muted); }
+  #toc li.lvl-4 { padding-left: 36px; font-size: 12px; color: var(--muted); }
+
+  #editor-pane { display: flex; }
+  #editor {
+    flex: 1; width: 100%; height: 100%;
+    border: 0; outline: 0; resize: none;
+    background: var(--bg); color: var(--fg);
+    padding: 20px;
+    font-family: var(--font-mono);
+    font-size: calc(var(--font-size) - 1px);
+    line-height: 1.6;
+    tab-size: 2;
+  }
+
+  #preview-pane { position: relative; }
+  #preview {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: 28px 32px 80px;
+  }
+  #preview h1, #preview h2, #preview h3, #preview h4 { line-height: 1.3; }
+  #preview h1 { font-size: 1.9em; border-bottom: 1px solid var(--border); padding-bottom: .2em; margin-top: .4em; }
+  #preview h2 { font-size: 1.45em; border-bottom: 1px solid var(--border); padding-bottom: .2em; margin-top: 1.5em; }
+  #preview h3 { font-size: 1.2em; margin-top: 1.3em; }
+  #preview h4 { font-size: 1.05em; margin-top: 1.1em; }
+  #preview a { color: var(--accent); }
+  #preview code { font-family: var(--font-mono); font-size: .9em; background: var(--panel); padding: 2px 5px; border-radius: 4px; }
+  #preview pre { background: var(--panel); padding: 14px 16px; border-radius: 8px; overflow: auto; border: 1px solid var(--border); }
+  #preview pre code { background: transparent; padding: 0; }
+  #preview blockquote { border-left: 3px solid var(--border); color: var(--muted); padding: 2px 14px; margin: 1em 0; }
+  #preview table { border-collapse: collapse; margin: 1em 0; }
+  #preview th, #preview td { border: 1px solid var(--border); padding: 6px 12px; }
+  #preview th { background: var(--panel); }
+  #preview hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+  #preview img { max-width: 100%; }
+  #preview input[type="checkbox"] { margin-right: 4px; }
+
+  #drop-overlay {
+    position: fixed; inset: 0; display: none;
+    background: rgba(37, 99, 235, 0.08);
+    border: 3px dashed var(--accent);
+    pointer-events: none;
+    z-index: 1000;
+    align-items: center; justify-content: center;
+    font-size: 18px; color: var(--accent);
+  }
+  #drop-overlay.show { display: flex; }
+
+  dialog#settings {
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--bg);
+    color: var(--fg);
+    padding: 18px;
+    width: min(420px, calc(100vw - 28px));
+    max-height: min(86vh, 760px);
+    box-shadow: 0 18px 42px rgba(15, 18, 24, 0.2);
+  }
+  dialog#settings::backdrop { background: rgba(0,0,0,.4); }
+  .s-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+  .s-title { margin: 0; font-size: 1rem; font-weight: 700; }
+  .s-subtitle { margin: 4px 0 0; font-size: .82rem; color: var(--muted); }
+  .s-close { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0; }
+  .s-section + .s-section { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .s-label { display: block; font-size: .82rem; font-weight: 700; margin-bottom: 10px; }
+  .chip-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chip-grid.col-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .chip {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg);
+    border-radius: 12px;
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color .15s, border-color .15s, transform .14s;
+  }
+  .chip:hover { transform: translateY(-1px); }
+  .chip.is-active { background: var(--panel); border-color: var(--accent); }
+  .chip-label { display: block; font-size: .85rem; font-weight: 700; }
+  .chip-meta { display: block; margin-top: 4px; font-size: .74rem; color: var(--muted); }
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .step-btn {
+    appearance: none;
+    width: 40px; height: 40px;
+    border: 1px solid var(--border);
+    background: transparent; color: var(--fg);
+    border-radius: 12px;
+    font-size: 1.1rem; font-weight: 700;
+    cursor: pointer;
+    transition: transform .14s, background-color .15s;
+  }
+  .step-btn:hover { transform: translateY(-1px); }
+  .step-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+  .step-value { min-width: 60px; text-align: center; font-size: .9rem; font-weight: 700; }
+  .reset-btn {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--border);
+    background: transparent; color: var(--fg);
+    border-radius: 12px;
+    font-family: inherit; font-weight: 700;
+    cursor: pointer;
+    transition: background-color .15s;
+  }
+  .reset-btn:hover { background: var(--panel); }
+
+  @media (max-width: 780px) {
+    .layout { flex-direction: column; }
+    #editor-pane, #toc, #preview-pane { flex: 1 1 auto !important; width: 100%; }
+    #toc { border-left: 0; border-right: 0; border-bottom: 1px solid var(--border); max-height: 160px; }
+    #editor-pane { border-bottom: 1px solid var(--border); min-height: 40vh; }
+    .resizer { display: none !important; }
+    #preview { padding: 20px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="toolbar">
+  <button id="btn-open" title="Open (Ctrl+O)">📄 Open</button>
+  <button id="btn-save" title="Save (Ctrl+S)">💾 Save</button>
+  <button id="btn-saveas" title="Save As (Ctrl+Shift+S)">Save As</button>
+  <span class="filename" id="filename">untitled.md</span>
+  <span class="spacer"></span>
+  <span class="toast" id="toast"></span>
+  <button id="btn-toggle-editor" title="Toggle editor" aria-pressed="true">Editor</button>
+  <button id="btn-toggle-toc" title="Toggle TOC" aria-pressed="true">TOC</button>
+  <button id="btn-toggle-preview" title="Toggle preview" aria-pressed="true">Preview</button>
+  <button id="btn-theme" title="Light / Dark">🌓</button>
+  <button id="btn-settings" title="Settings">⚙</button>
+</header>
+
+<main class="layout" id="layout">
+  <section id="editor-pane"><textarea id="editor" spellcheck="false" placeholder="Write markdown here..."></textarea></section>
+  <div class="resizer" id="resizer" title="Drag to resize editor"></div>
+  <aside id="toc"><h3>Contents</h3><ul id="toc-list"></ul></aside>
+  <section id="preview-pane"><article id="preview"></article></section>
+</main>
+
+<div id="drop-overlay">Drop .md file to open</div>
+
+<dialog id="settings" aria-label="Editor settings">
+  <div class="s-header">
+    <div>
+      <h2 class="s-title">Settings</h2>
+      <p class="s-subtitle">에디터 보기 환경을 바로 바꿀 수 있습니다.</p>
+    </div>
+    <button class="s-close" id="settings-close" aria-label="Close">✕</button>
+  </div>
+
+  <section class="s-section">
+    <span class="s-label">Theme</span>
+    <div class="chip-grid" data-group="theme">
+      <button type="button" class="chip" data-value="auto"><span class="chip-label">Auto</span><span class="chip-meta">follow system</span></button>
+      <button type="button" class="chip" data-value="light"><span class="chip-label">Light</span><span class="chip-meta">밝은 테마</span></button>
+      <button type="button" class="chip" data-value="dark"><span class="chip-label">Dark</span><span class="chip-meta">어두운 테마</span></button>
+    </div>
+  </section>
+
+  <section class="s-section">
+    <span class="s-label">Font</span>
+    <div class="chip-grid" data-group="font">
+      <button type="button" class="chip" data-value="sans"><span class="chip-label">Sans</span><span class="chip-meta">system</span></button>
+      <button type="button" class="chip" data-value="serif"><span class="chip-label">Serif</span><span class="chip-meta">Noto Serif</span></button>
+      <button type="button" class="chip" data-value="mono"><span class="chip-label">Mono</span><span class="chip-meta">JetBrains Mono</span></button>
+    </div>
+  </section>
+
+  <section class="s-section">
+    <span class="s-label">Font size</span>
+    <div class="stepper">
+      <button type="button" class="step-btn" data-step="size" data-delta="-1" aria-label="Decrease">-</button>
+      <span class="step-value" id="v-size">15px</span>
+      <button type="button" class="step-btn" data-step="size" data-delta="1" aria-label="Increase">+</button>
+    </div>
+  </section>
+
+  <section class="s-section">
+    <span class="s-label">Line height</span>
+    <div class="stepper">
+      <button type="button" class="step-btn" data-step="lh" data-delta="-1" aria-label="Decrease">-</button>
+      <span class="step-value" id="v-lh">1.70</span>
+      <button type="button" class="step-btn" data-step="lh" data-delta="1" aria-label="Increase">+</button>
+    </div>
+  </section>
+
+  <section class="s-section">
+    <span class="s-label">Preview width</span>
+    <div class="chip-grid col-4" data-group="width">
+      <button type="button" class="chip" data-value="640px"><span class="chip-label">Narrow</span></button>
+      <button type="button" class="chip" data-value="820px"><span class="chip-label">Medium</span></button>
+      <button type="button" class="chip" data-value="980px"><span class="chip-label">Wide</span></button>
+      <button type="button" class="chip" data-value="100%"><span class="chip-label">Full</span></button>
+    </div>
+  </section>
+
+  <section class="s-section">
+    <span class="s-label">Editor width</span>
+    <div class="stepper">
+      <button type="button" class="step-btn" data-step="ew" data-delta="-1" aria-label="Decrease">-</button>
+      <span class="step-value" id="v-ew">42%</span>
+      <button type="button" class="step-btn" data-step="ew" data-delta="1" aria-label="Increase">+</button>
+    </div>
+    <p class="s-subtitle" style="margin-top:8px">패널 사이 구분선을 드래그해서도 조절할 수 있어요.</p>
+  </section>
+
+  <section class="s-section">
+    <button type="button" class="reset-btn" id="settings-reset">기본값 복원</button>
+  </section>
+</dialog>
+
+<script>
+(function(){
+  const SAMPLE = `# Markdown Editor
+
+환영합니다. 이 페이지는 **미니멀 마크다운 에디터**입니다.
+
+## 기능
+- 실시간 프리뷰
+- GFM 지원 (표, ~~취소선~~, 체크박스)
+- 코드 하이라이팅
+- 수식 (KaTeX)
+- 다크모드 / 폰트 / 폭 조절
+- 로컬 파일 \`Ctrl+S\` 저장 (Chromium 계열)
+
+### 체크리스트
+- [x] marked 로드
+- [x] KaTeX 로드
+- [ ] 당신의 멋진 글
+
+### 코드
+\`\`\`js
+function hello(name) {
+  return \`Hello, \${name}!\`;
+}
+\`\`\`
+
+### 표
+| 항목 | 값 |
+|------|----|
+| 속도 | 빠름 |
+| 무게 | 가벼움 |
+
+### 수식
+인라인: $E = mc^2$
+
+블록:
+$$\\int_0^1 x^2\\, dx = \\frac{1}{3}$$
+
+> 시작하려면 좌측 에디터에 입력하거나 **Open** 버튼으로 \`.md\` 파일을 여세요.
+`;
+
+  const DRAFT_KEY = 'mdeditor.draft.v1';
+  const SETTINGS_KEY = 'mdeditor.settings.v1';
+
+  const $ = (id) => document.getElementById(id);
+  const editor = $('editor');
+  const preview = $('preview');
+  const tocList = $('toc-list');
+  const filenameEl = $('filename');
+  const toastEl = $('toast');
+  const layout = $('layout');
+
+  let fileHandle = null;
+  let fileName = 'untitled.md';
+  let dirty = false;
+  const fsAccess = 'showOpenFilePicker' in window;
+
+  // ---------- rendering ----------
+  let rafId = 0;
+  function scheduleRender() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      render();
+    });
+  }
+
+  function render() {
+    const src = editor.value;
+    if (window.marked) {
+      marked.setOptions({ gfm: true, breaks: true });
+    }
+    let html = window.marked ? marked.parse(src) : src;
+    if (window.DOMPurify) {
+      html = DOMPurify.sanitize(html, { ADD_ATTR: ['target'] });
+    }
+    preview.innerHTML = html;
+
+    if (window.hljs) {
+      preview.querySelectorAll('pre code').forEach(el => {
+        try { hljs.highlightElement(el); } catch(e) {}
+      });
+    }
+    if (window.renderMathInElement) {
+      try {
+        renderMathInElement(preview, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$',  right: '$',  display: false },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '\\(', right: '\\)', display: false },
+          ],
+          throwOnError: false,
+        });
+      } catch(e) {}
+    }
+    buildTOC();
+  }
+
+  function slugify(s) {
+    return s.toLowerCase().trim()
+      .replace(/[^\w\s\-가-힣]/g, '')
+      .replace(/\s+/g, '-')
+      .slice(0, 80) || 'h';
+  }
+
+  function buildTOC() {
+    const heads = preview.querySelectorAll('h1, h2, h3, h4');
+    const used = new Set();
+    const frag = document.createDocumentFragment();
+    heads.forEach(h => {
+      let id = slugify(h.textContent);
+      let n = 1;
+      while (used.has(id)) id = slugify(h.textContent) + '-' + (++n);
+      used.add(id);
+      h.id = id;
+      const li = document.createElement('li');
+      li.className = 'lvl-' + h.tagName[1];
+      const a = document.createElement('a');
+      a.href = '#' + id;
+      a.textContent = h.textContent;
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      li.appendChild(a);
+      frag.appendChild(li);
+    });
+    tocList.replaceChildren(frag);
+  }
+
+  // ---------- file i/o ----------
+  function setFilename(name) {
+    fileName = name || 'untitled.md';
+    filenameEl.textContent = fileName;
+    updateDirty(dirty);
+    document.title = fileName + ' — Markdown Editor';
+  }
+  function updateDirty(v) {
+    dirty = v;
+    filenameEl.classList.toggle('dirty', dirty);
+  }
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('show'), 1600);
+  }
+
+  async function openFile() {
+    if (fsAccess) {
+      try {
+        const [h] = await window.showOpenFilePicker({
+          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'] } }],
+        });
+        await loadHandle(h);
+      } catch(e) { /* cancelled */ }
+    } else {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.md,.markdown,text/markdown,text/plain';
+      inp.onchange = async () => {
+        const f = inp.files[0];
+        if (f) await loadFile(f);
+      };
+      inp.click();
+    }
+  }
+
+  async function loadHandle(h) {
+    fileHandle = h;
+    const f = await h.getFile();
+    setFilename(f.name);
+    editor.value = await f.text();
+    updateDirty(false);
+    scheduleRender();
+    toast('Opened');
+  }
+
+  async function loadFile(f) {
+    fileHandle = null;
+    setFilename(f.name);
+    editor.value = await f.text();
+    updateDirty(false);
+    scheduleRender();
+    toast('Opened');
+  }
+
+  async function saveFile() {
+    const text = editor.value;
+    if (fileHandle && fileHandle.createWritable) {
+      try {
+        const w = await fileHandle.createWritable();
+        await w.write(text);
+        await w.close();
+        updateDirty(false);
+        toast('Saved ' + new Date().toLocaleTimeString());
+        return;
+      } catch(e) {
+        toast('Save failed: ' + e.message);
+        return;
+      }
+    }
+    downloadFile(text, fileName);
+    updateDirty(false);
+    toast('Downloaded');
+  }
+
+  async function saveAs() {
+    const text = editor.value;
+    if (fsAccess) {
+      try {
+        const h = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+        });
+        fileHandle = h;
+        const w = await h.createWritable();
+        await w.write(text);
+        await w.close();
+        setFilename(h.name || fileName);
+        updateDirty(false);
+        toast('Saved');
+        return;
+      } catch(e) { if (e.name !== 'AbortError') toast('Save failed'); return; }
+    }
+    const name = prompt('Save as filename:', fileName) || fileName;
+    downloadFile(text, name);
+  }
+
+  function downloadFile(text, name) {
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ---------- drag & drop ----------
+  const overlay = $('drop-overlay');
+  let dragDepth = 0;
+  window.addEventListener('dragenter', e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+    dragDepth++; overlay.classList.add('show');
+  });
+  window.addEventListener('dragleave', e => {
+    dragDepth--; if (dragDepth <= 0) { dragDepth = 0; overlay.classList.remove('show'); }
+  });
+  window.addEventListener('dragover', e => { e.preventDefault(); });
+  window.addEventListener('drop', async e => {
+    e.preventDefault();
+    dragDepth = 0; overlay.classList.remove('show');
+    const items = e.dataTransfer.items;
+    if (items && items.length) {
+      const item = items[0];
+      if (item.getAsFileSystemHandle) {
+        try {
+          const h = await item.getAsFileSystemHandle();
+          if (h && h.kind === 'file') { await loadHandle(h); return; }
+        } catch(err) {}
+      }
+    }
+    const f = e.dataTransfer.files[0];
+    if (f) await loadFile(f);
+  });
+
+  // ---------- settings ----------
+  const defaults = {
+    theme: 'auto', font: 'sans', size: 15, lh: 1.7, width: '820px', ew: 42,
+  };
+  const SIZE_STEPS = [12,13,14,15,16,17,18,20,22];
+  const LH_STEPS   = [1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1];
+  const EW_STEPS   = [20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80];
+  let settings = Object.assign({}, defaults);
+
+  function nearestIdx(arr, v) {
+    let best = 0, bd = Infinity;
+    arr.forEach((x, i) => { const d = Math.abs(x - v); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+
+  function applySettings() {
+    const root = document.documentElement.style;
+    document.documentElement.dataset.theme = settings.theme;
+    const fontMap = { sans: 'var(--font-sans)', serif: 'var(--font-serif)', mono: 'var(--font-mono)' };
+    root.setProperty('--font-body', fontMap[settings.font] || 'var(--font-sans)');
+    root.setProperty('--font-size', settings.size + 'px');
+    root.setProperty('--line-height', settings.lh);
+    root.setProperty('--content-max', settings.width);
+    root.setProperty('--editor-w', settings.ew + '%');
+    syncHljsTheme();
+    syncSettingsUI();
+  }
+
+  function syncSettingsUI() {
+    document.querySelectorAll('[data-group]').forEach(grid => {
+      const key = grid.dataset.group;
+      grid.querySelectorAll('.chip').forEach(c => {
+        const active = String(c.dataset.value) === String(settings[key]);
+        c.classList.toggle('is-active', active);
+        c.setAttribute('aria-pressed', String(active));
+      });
+    });
+    const sizeIdx = nearestIdx(SIZE_STEPS, settings.size);
+    const lhIdx   = nearestIdx(LH_STEPS,   settings.lh);
+    const ewIdx   = nearestIdx(EW_STEPS,   settings.ew);
+    $('v-size').textContent = settings.size + 'px';
+    $('v-lh').textContent = (+settings.lh).toFixed(2);
+    $('v-ew').textContent = settings.ew + '%';
+    const setDis = (sel, dis) => { const b = document.querySelector(sel); if (b) b.disabled = dis; };
+    setDis('[data-step="size"][data-delta="-1"]', sizeIdx <= 0);
+    setDis('[data-step="size"][data-delta="1"]',  sizeIdx >= SIZE_STEPS.length - 1);
+    setDis('[data-step="lh"][data-delta="-1"]',   lhIdx <= 0);
+    setDis('[data-step="lh"][data-delta="1"]',    lhIdx >= LH_STEPS.length - 1);
+    setDis('[data-step="ew"][data-delta="-1"]',   ewIdx <= 0);
+    setDis('[data-step="ew"][data-delta="1"]',    ewIdx >= EW_STEPS.length - 1);
+  }
+
+  function effectiveDark() {
+    if (settings.theme === 'dark') return true;
+    if (settings.theme === 'light') return false;
+    return matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function syncHljsTheme() {
+    const dark = effectiveDark();
+    const l = $('hljs-light'), d = $('hljs-dark');
+    if (l) l.disabled = dark;
+    if (d) d.disabled = !dark;
+  }
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (settings.theme === 'auto') syncHljsTheme();
+  });
+
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch(e) {}
+  }
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+      if (s) settings = Object.assign({}, defaults, s);
+    } catch(e) {}
+  }
+
+  const dlg = $('settings');
+  $('btn-settings').addEventListener('click', () => dlg.showModal());
+  $('settings-close').addEventListener('click', () => dlg.close());
+  $('settings-reset').addEventListener('click', () => {
+    settings = Object.assign({}, defaults);
+    applySettings(); saveSettings();
+  });
+
+  dlg.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (chip) {
+      const key = chip.parentElement.dataset.group;
+      settings[key] = chip.dataset.value;
+      applySettings(); saveSettings();
+      return;
+    }
+    const step = e.target.closest('.step-btn');
+    if (step && !step.disabled) {
+      const key = step.dataset.step;
+      const delta = Number(step.dataset.delta);
+      if (key === 'size') {
+        const i = nearestIdx(SIZE_STEPS, settings.size);
+        settings.size = SIZE_STEPS[Math.min(SIZE_STEPS.length - 1, Math.max(0, i + delta))];
+      } else if (key === 'lh') {
+        const i = nearestIdx(LH_STEPS, settings.lh);
+        settings.lh = LH_STEPS[Math.min(LH_STEPS.length - 1, Math.max(0, i + delta))];
+      } else if (key === 'ew') {
+        const i = nearestIdx(EW_STEPS, settings.ew);
+        settings.ew = EW_STEPS[Math.min(EW_STEPS.length - 1, Math.max(0, i + delta))];
+      }
+      applySettings(); saveSettings();
+    }
+  });
+
+  // resizer drag
+  (function initResizer(){
+    const rz = $('resizer');
+    if (!rz) return;
+    let dragging = false;
+    rz.addEventListener('pointerdown', (e) => {
+      if (layout.classList.contains('no-editor') || layout.classList.contains('no-preview')) return;
+      dragging = true;
+      rz.setPointerCapture(e.pointerId);
+      rz.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    });
+    rz.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rect = layout.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.min(80, Math.max(15, pct));
+      settings.ew = Math.round(clamped);
+      document.documentElement.style.setProperty('--editor-w', settings.ew + '%');
+      $('v-ew').textContent = settings.ew + '%';
+    });
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      rz.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      try { rz.releasePointerCapture(e.pointerId); } catch(_) {}
+      saveSettings();
+      syncSettingsUI();
+    };
+    rz.addEventListener('pointerup', end);
+    rz.addEventListener('pointercancel', end);
+  })();
+
+  $('btn-theme').addEventListener('click', () => {
+    const order = ['auto','light','dark'];
+    settings.theme = order[(order.indexOf(settings.theme) + 1) % order.length];
+    applySettings(); saveSettings();
+    toast('Theme: ' + settings.theme);
+  });
+
+  function paneToggle(btnId, cls) {
+    const btn = $(btnId);
+    btn.addEventListener('click', () => {
+      const off = layout.classList.toggle(cls);
+      btn.setAttribute('aria-pressed', String(!off));
+      btn.style.opacity = off ? '0.45' : '';
+    });
+  }
+  paneToggle('btn-toggle-editor', 'no-editor');
+  paneToggle('btn-toggle-toc', 'no-toc');
+  paneToggle('btn-toggle-preview', 'no-preview');
+
+  // ---------- editor events ----------
+  editor.addEventListener('input', () => {
+    if (!dirty) updateDirty(true);
+    scheduleRender();
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ name: fileName, text: editor.value, ts: Date.now() })); } catch(e) {}
+  });
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      const s = editor.selectionStart, ee = editor.selectionEnd;
+      editor.setRangeText('  ', s, ee, 'end');
+      editor.dispatchEvent(new Event('input'));
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    if (e.key === 's' || e.key === 'S') {
+      e.preventDefault();
+      if (e.shiftKey) saveAs(); else saveFile();
+    } else if (e.key === 'o' || e.key === 'O') {
+      e.preventDefault(); openFile();
+    }
+  });
+
+  window.addEventListener('beforeunload', (e) => {
+    if (dirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  $('btn-open').addEventListener('click', openFile);
+  $('btn-save').addEventListener('click', saveFile);
+  $('btn-saveas').addEventListener('click', saveAs);
+
+  // ---------- init ----------
+  loadSettings();
+  applySettings();
+
+  let initial = SAMPLE;
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    if (d && d.text && d.text !== SAMPLE) {
+      if (confirm('이전에 편집 중이던 내용(' + (d.name || 'untitled.md') + ')이 있습니다. 복원할까요?')) {
+        initial = d.text;
+        setFilename(d.name || 'untitled.md');
+      }
+    }
+  } catch(e) {}
+
+  function start() {
+    editor.value = initial;
+    if (!fileName || fileName === 'untitled.md') setFilename(fileName);
+    render();
+  }
+
+  if (document.readyState === 'complete') start();
+  else window.addEventListener('load', start);
+})();
+</script>
+</body>
+</html>
