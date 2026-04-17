@@ -133,8 +133,7 @@ def parse_available(xml_text: str, target_name: str) -> tuple[int, str]:
         if nm and target_name and target_name in nm:
             logging.warning(f"부분 일치: {nm!r}")
             return avail_of(it), nm
-    logging.error(f"타깃 미발견: {target_name!r}")
-    return -2, target_name
+    raise ValueError(f"타깃 미발견: {target_name!r}")
 
 def compress_csv(path: str) -> None:
     """CSV 파일을 읽어서 3개 이상 연속되는 available 값은 첫 번째와 마지막만 남기고 압축"""
@@ -213,8 +212,11 @@ def main() -> int:
     try:
         xml_text = fetch_with_session(args.url, args.frontend_url)
         avail, matched = parse_available(xml_text, args.target_name)
-        append_legacy_line(args.output_csv, kst_iso_now(), matched, avail)
-        logging.info(f"완료: ts={kst_iso_now()}, name={matched}, available={avail}")
+        ts = kst_iso_now()
+        append_legacy_line(args.output_csv, ts, matched, avail)
+        logging.info(f"완료: ts={ts}, name={matched}, available={avail}")
+        if args.output_csv:
+            compress_csv(args.output_csv)
         return 0
     except Exception as e:
         logging.error(f"실패: {e}")
