@@ -1,827 +1,1419 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>근무시간 계산기</title>
-    <style>
-        :root {
-            --accent: #4f46e5;
-            --accent-soft: rgba(79, 70, 229, 0.12);
-            --bg: #0f0f11;
-            --card: #ffffff;
-            --card-elev: #f5f5f7;
-            --border: #e5e5ea;
-            --border-strong: #c7c7cc;
-            --text: #1a1a1a;
-            --text-muted: #6b7280;
-            --warn-5: #f59e0b;
-            --warn-1: #ef4444;
-            --success: #10b981;
-        }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>근무시간 계산기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css" rel="stylesheet">
+<style>
+  :root{
+    /* paper / e-ink palette — desaturated gray */
+    --bg:          #e8e8e8;
+    --surface:     #dcdcdc;
+    --surface-2:   #cfcfcf;
+    --line:        rgba(38,38,38,0.14);
+    --line-strong: rgba(38,38,38,0.28);
+    --line-hair:   rgba(38,38,38,0.06);
+    --ink:         #262626;
+    --ink-mute:    rgba(38,38,38,0.62);
+    --ink-faint:   rgba(38,38,38,0.38);
+    --ink-ghost:   rgba(38,38,38,0.16);
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    --sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 40px 16px;
-            font-weight: 400;
-            -webkit-font-smoothing: antialiased;
-        }
+    --pad: 24px;
+  }
 
-        .container {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            padding: 28px 24px;
-            max-width: 440px;
-            width: 100%;
-        }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:var(--bg); color:var(--ink);}
+  body{
+    font-family:var(--sans);
+    font-weight:400;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    min-height:100dvh;
+    overflow-x:hidden;
+    letter-spacing:-0.005em;
+    font-size: 20.4px;
+    position:relative;
+  }
+  /* paper grain — very subtle fibrous noise */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:9999;
+    opacity:0.55;
+    mix-blend-mode:multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.15  0 0 0 0 0.15  0 0 0 0.09 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-size: 220px 220px;
+  }
+  /* vignette hint — warms the edges like aged paper */
+  body::after{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:9998;
+    background: radial-gradient(ellipse 120% 80% at 50% 40%, transparent 55%, rgba(38,38,38,0.06) 100%);
+  }
+  .shell{ position:relative; z-index:1; }
+  button{
+    font-family:inherit; color:inherit; background:none; border:0;
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  input{font-family:inherit; color:inherit;}
 
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
+  /* ───────── shell ───────── */
+  .shell{
+    max-width:460px;
+    margin:0 auto;
+    padding: max(28px, env(safe-area-inset-top)) var(--pad) calc(40px + env(safe-area-inset-bottom));
+    position:relative;
+    z-index:1;
+  }
 
-        h1 {
-            color: var(--text);
-            font-size: 18px;
-            font-weight: 600;
-            letter-spacing: -0.2px;
-        }
+  /* ───────── topbar (editorial) ───────── */
+  .topbar{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    align-items:end;
+    padding-bottom:14px;
+    border-bottom:1px solid var(--line);
+    margin-bottom:28px;
+  }
+  .mast{
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .mast .num{
+    font-family:var(--mono);
+    font-size: 12px; font-weight:400;
+    letter-spacing:0.14em;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+  }
+  .mast h1{
+    font-size: 16.8px;
+    font-weight:500;
+    letter-spacing:-0.01em;
+  }
+  .topbar .ctrls{ display:flex; gap:6px; }
+  .icon-btn{
+    width:32px; height:32px;
+    display:grid; place-items:center;
+    border:1px solid var(--line);
+    border-radius:999px;
+    color:var(--ink-mute);
+    transition: border-color .2s ease, color .2s ease, background .2s ease;
+  }
+  .icon-btn:hover{ border-color:var(--line-strong); color:var(--ink);}
+  .icon-btn.active{ color:var(--ink); border-color:var(--line-strong); background:rgba(255,255,255,0.04);}
+  .icon-btn svg{ width:13px; height:13px;}
 
-        .controls {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
+  /* ───────── HERO — remaining time ───────── */
+  .hero{
+    padding: 8px 0 30px;
+    border-bottom:1px solid var(--line);
+    margin-bottom:44px;
+  }
+  .hero-meta{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-family:var(--mono);
+    font-size: 12px; font-weight:400;
+    letter-spacing:0.14em;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+    margin-bottom:18px;
+  }
+  .hero-meta .state{
+    display:inline-flex; gap:6px; align-items:center;
+  }
+  .hero-meta .dot{
+    width:5px; height:5px; border-radius:50%;
+    background:var(--ink-faint);
+    transition: background .3s ease, box-shadow .3s ease;
+  }
+  .hero-meta .dot.active{
+    background:var(--ink);
+    box-shadow:0 0 0 3px rgba(245,245,245,0.06);
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  .hero-meta .dot.warn{
+    background:var(--ink);
+    animation:pulse-fast 1.2s ease-in-out infinite;
+  }
+  .hero-meta .dot.done{ background:var(--ink);}
+  @keyframes pulse{
+    0%,100%{ opacity:1; }
+    50%{ opacity:0.35; }
+  }
+  @keyframes pulse-fast{
+    0%,100%{ opacity:1;}
+    50%{ opacity:0.2;}
+  }
 
-        .notification-toggle {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 10px;
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: border-color 0.15s ease;
-        }
+  /* remaining time — hero numeric */
+  .hero-eyebrow{
+    font-family:var(--mono);
+    font-size: 12px;
+    letter-spacing:0.2em;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+    margin-bottom:10px;
+  }
+  .remain-num{
+    display:flex; align-items:baseline;
+    font-family:var(--mono);
+    line-height:1;
+    margin-bottom:10px;
+    font-variant-numeric:tabular-nums;
+  }
+  .remain-num .hh,
+  .remain-num .mm{
+    font-size: 86.4px;
+    font-weight:200;
+    letter-spacing:-0.05em;
+    color:var(--ink);
+  }
+  .remain-num .ss{
+    font-size: 36px;
+    font-weight:300;
+    color:var(--ink-mute);
+    letter-spacing:-0.02em;
+    margin-left:4px;
+  }
+  .remain-num .sep{
+    font-size: 72px;
+    font-weight:200;
+    color:var(--ink-faint);
+    padding: 0 4px;
+  }
+  .remain-num .unit{
+    font-size: 13.2px;
+    font-weight:400;
+    color:var(--ink-faint);
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    margin-left:8px;
+    align-self:flex-end;
+    padding-bottom:12px;
+  }
 
-        .notification-toggle:hover {
-            border-color: var(--border-strong);
-        }
+  .hero-sub{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-top:6px;
+    font-family:var(--mono);
+    font-size: 13.2px;
+    letter-spacing:0.04em;
+    color:var(--ink-mute);
+  }
+  .hero-sub .pct-chip{
+    display:inline-flex; align-items:baseline; gap:4px;
+    color:var(--ink);
+  }
+  .hero-sub .pct-chip .pct{
+    font-size: 15.6px;
+    font-weight:400;
+    font-variant-numeric:tabular-nums;
+  }
+  .hero-sub .pct-chip .pct-sym{
+    color:var(--ink-faint);
+    font-size: 12px;
+  }
+  .hero-sub .elapsed{ color:var(--ink-mute);}
 
-        .toggle-label {
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-muted);
-            user-select: none;
-        }
+  /* ───────── timeline — modern segment bar ───────── */
+  .timeline{
+    margin-top:36px;
+    position:relative;
+  }
 
-        .toggle-switch {
-            position: relative;
-            width: 28px;
-            height: 16px;
-            background: #d1d1d6;
-            border-radius: 8px;
-            transition: background 0.15s ease;
-        }
+  /* floating NOW caption above the bar */
+  .tl-caption{
+    position:relative;
+    height:22px;
+    margin-bottom:8px;
+  }
+  .tl-caption .cap{
+    position:absolute;
+    top:0;
+    transform:translateX(-50%);
+    display:inline-flex; align-items:center; gap:6px;
+    padding: 3px 10px;
+    background:var(--ink);
+    color:var(--bg);
+    border-radius:999px;
+    font-family:var(--mono);
+    font-size: 12px;
+    font-weight:500;
+    letter-spacing:0.06em;
+    font-variant-numeric:tabular-nums;
+    white-space:nowrap;
+    transition: left .8s linear;
+    z-index:3;
+  }
+  .tl-caption .cap::after{
+    content:"";
+    position:absolute;
+    left:50%; bottom:-4px;
+    width:6px; height:6px;
+    background:var(--ink);
+    transform:translateX(-50%) rotate(45deg);
+    border-radius:1px;
+  }
+  .tl-caption .cap.hidden{ opacity:0; }
 
-        .toggle-switch.active {
-            background: var(--accent);
-        }
+  /* the bar itself */
+  .tl-bar{
+    position:relative;
+    height:14px;
+    background:var(--surface);
+    border-radius:999px;
+    overflow:hidden;
+    box-shadow: inset 0 1px 0 rgba(30,30,32,0.06);
+  }
+  .tl-fill{
+    position:absolute; top:0; bottom:0; left:0;
+    background:linear-gradient(90deg, var(--ink) 0%, #3a3a3c 100%);
+    border-radius:999px 0 0 999px;
+    transition: width .8s linear;
+    width:0;
+  }
+  .tl-fill.full{ border-radius:999px;}
+  .tl-tick{
+    position:absolute; top:3px; bottom:3px;
+    width:1px;
+    background:var(--line-strong);
+    opacity:.5;
+    z-index:1;
+  }
+  .tl-now{
+    position:absolute; top:50%;
+    width:22px; height:22px;
+    border-radius:50%;
+    background:var(--bg);
+    border:2px solid var(--ink);
+    transform:translate(-50%, -50%);
+    transition: left .8s linear;
+    z-index:2;
+    box-shadow: 0 1px 3px rgba(30,30,32,0.16);
+  }
+  .tl-now::after{
+    content:""; position:absolute; inset:4px;
+    border-radius:50%;
+    background:var(--ink);
+  }
+  .tl-now.pulse{ animation: nowpulse 2.4s ease-out infinite; }
+  @keyframes nowpulse{
+    0%{ box-shadow: 0 1px 3px rgba(30,30,32,0.16), 0 0 0 0 rgba(42,42,44,0.28);}
+    80%,100%{ box-shadow: 0 1px 3px rgba(30,30,32,0.16), 0 0 0 14px rgba(42,42,44,0);}
+  }
 
-        .toggle-slider {
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 12px;
-            height: 12px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.15s ease;
-        }
+  /* anchors under the bar — only IN / OUT */
+  .tl-anchors{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    font-family:var(--mono);
+    margin-top:14px;
+  }
+  .tl-anchors > div{
+    display:flex; flex-direction:column; gap:3px;
+  }
+  .tl-anchors > div:nth-child(2){ align-items:flex-end; }
+  .tl-anchors .lbl{
+    font-size: 10.8px;
+    letter-spacing:0.22em;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+  }
+  .tl-anchors .val{
+    font-size: 16.8px;
+    color:var(--ink);
+    font-weight:500;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:0.01em;
+  }
+  .tl-anchors .val.muted{ color:var(--ink-mute);}
 
-        .toggle-switch.active .toggle-slider {
-            transform: translateX(12px);
-        }
+  /* ───────── sections ───────── */
+  .block{
+    padding: 28px 0 28px;
+    border-bottom:1px solid var(--line);
+  }
+  .block + .block{ padding-top: 28px; }
+  .block:last-of-type{ border-bottom:0;}
+  .block-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:18px;
+  }
+  .block-head .eyebrow{
+    font-family:var(--mono);
+    font-size: 12px;
+    letter-spacing:0.18em;
+    color:var(--ink-faint);
+    text-transform:uppercase;
+  }
+  .block-head .num{
+    font-family:var(--mono);
+    font-size: 12px;
+    color:var(--ink-ghost);
+    letter-spacing:0.1em;
+  }
 
-        .reset-icon {
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            color: var(--text-muted);
-            transition: all 0.15s ease;
-        }
+  /* ───────── wheel spinner (compact) ───────── */
+  .wheels{
+    display:grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items:center;
+    gap:0;
+    padding: 2px 0;
+  }
+  .wheels .colon{
+    font-family:var(--mono);
+    font-size: 33.6px;
+    font-weight:200;
+    color:var(--ink-faint);
+    text-align:center;
+    line-height:1;
+    padding-bottom:2px;
+    user-select:none;
+  }
 
-        .reset-icon:hover {
-            border-color: var(--border-strong);
-            color: var(--text);
-        }
+  .wheel{
+    --row-h: 41px;
+    position:relative;
+    height: calc(var(--row-h) * 3);
+    overflow:hidden;
+    touch-action:none;
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 35%, #000 65%, transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0%, #000 35%, #000 65%, transparent 100%);
+  }
+  .wheel::before, .wheel::after{ display:none; }
+  .wheel-rail{
+    position:absolute; left:0; right:0; top:0;
+    padding: var(--row-h) 0;
+    will-change: transform;
+  }
+  .wheel-item{
+    height:var(--row-h);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono);
+    font-size: 33.6px;
+    font-weight:200;
+    font-variant-numeric:tabular-nums;
+    color:var(--ink-faint);
+    letter-spacing:-0.02em;
+    line-height:1;
+    transition: color .25s ease, opacity .25s ease, font-weight .25s ease;
+  }
+  .wheel-item[data-dist="0"]{
+    color:var(--ink);
+    font-weight:300;
+  }
+  .wheel-item[data-dist="1"]{ opacity:.6;}
+  .wheel-item[data-dist="2"]{ opacity:.22;}
+  .wheel-center{
+    position:absolute; left:8px; right:8px;
+    top: calc(var(--row-h));
+    height: var(--row-h);
+    pointer-events:none;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    z-index:1;
+  }
 
-        .reset-icon svg {
-            width: 14px;
-            height: 14px;
-        }
+  .wheel-label{
+    display:grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap:0;
+    font-family:var(--mono);
+    font-size: 10.8px;
+    letter-spacing:0.2em;
+    color:var(--ink-ghost);
+    text-transform:uppercase;
+    margin-top:10px;
+  }
+  .wheel-label span:first-child{ text-align:center;}
+  .wheel-label span:last-child{ text-align:center;}
 
-        .permission-msg {
-            display: none;
-            margin-bottom: 16px;
-            padding: 10px 12px;
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: 8px;
-            font-size: 12px;
-            color: #b91c1c;
-            text-align: center;
-        }
+  .quicks{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:0;
+    margin-top:16px;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .quicks button{
+    padding:12px 0;
+    font-family:var(--mono);
+    font-size: 13.2px;
+    letter-spacing:0.04em;
+    color:var(--ink-mute);
+    border-right:1px solid var(--line);
+    font-variant-numeric:tabular-nums;
+    transition: color .2s ease, background .2s ease;
+  }
+  .quicks button:last-child{ border-right:0;}
+  .quicks button:hover{ color:var(--ink); background:rgba(255,255,255,0.02);}
+  .quicks button:active{ background:rgba(255,255,255,0.05);}
 
-        .permission-msg.show {
-            display: block;
-        }
+  .nudge{
+    display:grid;
+    grid-template-columns:repeat(5, 1fr);
+    margin-top:-1px;
+    border-bottom:1px solid var(--line);
+  }
+  .nudge button{
+    padding:11px 0;
+    font-family:var(--mono);
+    font-size: 12px;
+    letter-spacing:0.04em;
+    color:var(--ink-faint);
+    border-right:1px solid var(--line);
+    transition: color .2s ease, background .2s ease;
+  }
+  .nudge button:last-child{ border-right:0;}
+  .nudge button:hover{ color:var(--ink); background:rgba(255,255,255,0.02);}
 
-        .section {
-            margin-bottom: 20px;
-        }
+  /* ───────── settings ───────── */
+  details.settings{ margin-top: 4px;}
+  details.settings summary{
+    list-style:none;
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 14px 0;
+    font-family:var(--mono);
+    font-size: 13.2px;
+    letter-spacing:0.1em;
+    color:var(--ink-mute);
+    cursor:pointer;
+    border-top:1px solid var(--line);
+  }
+  details.settings summary::-webkit-details-marker{display:none;}
+  details.settings summary .chev{
+    width:8px; height:8px;
+    border-right:1px solid var(--ink-mute);
+    border-bottom:1px solid var(--ink-mute);
+    transform:rotate(45deg);
+    transition:transform .25s ease;
+  }
+  details.settings[open] summary .chev{ transform:rotate(-135deg);}
+  .setbody{
+    padding: 6px 0 18px;
+    display:grid; gap: 14px;
+  }
+  .setrow{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    align-items:center;
+    gap:12px;
+    padding: 10px 0;
+    border-top:1px solid var(--line-hair);
+  }
+  .setrow:first-child{ border-top:0;}
+  .setrow .lbl{
+    font-family:var(--mono);
+    font-size: 13.2px;
+    letter-spacing:0.08em;
+    color:var(--ink-mute);
+    text-transform:uppercase;
+  }
+  .setrow .vals{
+    display:flex; align-items:baseline; gap:6px;
+  }
+  .num-input{
+    width:40px;
+    padding: 6px 0;
+    text-align:center;
+    background:transparent;
+    border:0;
+    border-bottom:1px solid var(--line);
+    font-family:var(--mono);
+    font-size: 18px;
+    font-weight:300;
+    color:var(--ink);
+    font-variant-numeric:tabular-nums;
+    transition: border-color .2s ease;
+  }
+  .num-input:focus{ outline:0; border-bottom-color:var(--ink);}
+  .unit{
+    font-family:var(--mono);
+    font-size: 12px;
+    color:var(--ink-faint);
+    letter-spacing:0.1em;
+  }
 
-        .section-label {
-            display: block;
-            color: var(--text-muted);
-            font-weight: 500;
-            margin-bottom: 8px;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+  /* ───────── summary footer ───────── */
+  .summary{
+    padding: 26px 0 4px;
+    display:grid;
+    gap:8px;
+    border-top:1px solid var(--line);
+  }
+  .srow{
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding: 6px 0;
+    font-family:var(--mono);
+    font-size: 13.2px;
+    letter-spacing:0.06em;
+  }
+  .srow .k{ color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.16em; font-size: 12px;}
+  .srow .v{ color:var(--ink); font-weight:300; font-variant-numeric:tabular-nums;}
+  .srow .v em{ font-style:normal; color:var(--ink-mute); font-size: 12px; letter-spacing:0.1em;}
+  .srow.hero-row .v{ font-size: 18px; font-weight:300;}
+  .srow.positive .v{ color:var(--ink);}
+  .srow.negative .v{ color:var(--ink-mute);}
 
-        .time-input {
-            width: 100%;
-            padding: 12px 14px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 22px;
-            font-weight: 600;
-            font-variant-numeric: tabular-nums;
-            text-align: center;
-            background: var(--card-elev);
-            color: var(--text);
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
-            font-family: inherit;
-            color-scheme: light;
-        }
+  /* ───────── toast ───────── */
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translate(-50%, 20px);
+    background:var(--ink); color:var(--bg);
+    font-family:var(--mono);
+    font-size: 13.2px;
+    letter-spacing:0.08em;
+    padding:10px 16px;
+    border-radius:999px;
+    opacity:0; pointer-events:none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index:10;
+    text-transform:uppercase;
+  }
+  .toast.show{ opacity:1; transform:translate(-50%, 0);}
 
-        .time-input:hover {
-            border-color: var(--border-strong);
-        }
+  .perm-msg{
+    font-family:var(--mono);
+    font-size: 12px;
+    letter-spacing:0.08em;
+    color:var(--ink-mute);
+    padding:10px 0;
+    display:none;
+    border-top:1px solid var(--line);
+    text-transform:uppercase;
+    text-align:center;
+  }
+  .perm-msg.show{display:block;}
 
-        .time-input:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-soft);
-        }
+  /* ───────── state modifiers ───────── */
+  body.state-warn .remain-num .hh,
+  body.state-warn .remain-num .mm{
+    animation: breathe 2s ease-in-out infinite;
+  }
+  body.state-done .remain-num .hh,
+  body.state-done .remain-num .mm{
+    color:var(--ink-mute);
+  }
+  @keyframes breathe{
+    0%,100%{ opacity:1;}
+    50%{ opacity:0.72;}
+  }
 
-        .quick-actions {
-            display: flex;
-            gap: 6px;
-            margin-top: 8px;
-        }
+  /* colophon */
+  .colophon{
+    margin-top:28px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+    display:flex; justify-content:space-between;
+    font-family:var(--mono);
+    font-size: 10.8px;
+    letter-spacing:0.2em;
+    color:var(--ink-ghost);
+    text-transform:uppercase;
+  }
 
-        .quick-btn {
-            flex: 1;
-            padding: 8px;
-            background: var(--card-elev);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-muted);
-            font-family: inherit;
-            transition: all 0.15s ease;
-        }
-
-        .quick-btn:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-
-        .quick-btn.increment {
-            font-variant-numeric: tabular-nums;
-        }
-
-        .quick-btn.increment-minus {
-            color: #dc2626;
-        }
-
-        .quick-btn.increment-minus:hover {
-            border-color: #dc2626;
-            color: #dc2626;
-        }
-
-        details.settings {
-            margin-bottom: 20px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: var(--card-elev);
-        }
-
-        details.settings[open] {
-            padding-bottom: 4px;
-        }
-
-        details.settings summary {
-            padding: 12px 14px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-muted);
-            user-select: none;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            list-style: none;
-        }
-
-        details.settings summary::-webkit-details-marker {
-            display: none;
-        }
-
-        details.settings summary::after {
-            content: '＋';
-            color: var(--text-muted);
-            font-size: 14px;
-        }
-
-        details.settings[open] summary::after {
-            content: '−';
-        }
-
-        .settings-body {
-            padding: 4px 14px 12px;
-            display: grid;
-            gap: 12px;
-        }
-
-        .settings-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .settings-row-label {
-            flex: 1;
-            font-size: 13px;
-            color: var(--text);
-        }
-
-        .num-input {
-            width: 56px;
-            padding: 6px 8px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 500;
-            font-variant-numeric: tabular-nums;
-            text-align: center;
-            background: var(--card);
-            color: var(--text);
-            font-family: inherit;
-            color-scheme: light;
-        }
-
-        .num-input:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-soft);
-        }
-
-        .unit-label {
-            color: var(--text-muted);
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .result-card {
-            background: var(--accent);
-            padding: 24px 20px;
-            border-radius: 12px;
-            text-align: center;
-            display: none;
-            margin-top: 20px;
-        }
-
-        .result-card.show {
-            display: block;
-            animation: resultFadeIn 0.2s ease;
-        }
-
-        .result-card.warning-5min {
-            background: var(--warn-5);
-        }
-
-        .result-card.warning-1min {
-            background: var(--warn-1);
-            animation: resultFadeIn 0.2s ease, urgentPulse 2s infinite;
-        }
-
-        .result-card.overtime {
-            background: var(--success);
-        }
-
-        @keyframes resultFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(6px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes urgentPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.015); }
-        }
-
-        .result-countdown {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 8px;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
-        }
-
-        .result-time {
-            color: white;
-            font-size: 40px;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            margin-bottom: 6px;
-            letter-spacing: -1px;
-        }
-
-        .result-subtitle {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 14px;
-        }
-
-        .result-details {
-            color: rgba(255, 255, 255, 0.82);
-            font-size: 11px;
-            line-height: 1.7;
-            font-weight: 400;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            padding-top: 10px;
-            margin-top: 4px;
-        }
-
-        .progress-container {
-            position: relative;
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.25);
-            border-radius: 3px;
-            margin: 10px 0 16px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 3px;
-            transition: width 1s linear;
-        }
-
-        .progress-text {
-            margin-top: 4px;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.8);
-            font-variant-numeric: tabular-nums;
-        }
-
-        @media (max-width: 420px) {
-            .container {
-                padding: 20px 16px;
-            }
-
-            .header {
-                margin-bottom: 20px;
-            }
-
-            .result-time {
-                font-size: 34px;
-            }
-
-            .time-input {
-                font-size: 20px;
-            }
-        }
-    </style>
+  @media (max-width:380px){
+    :root{ --pad: 18px; }
+    .remain-num .hh, .remain-num .mm{ font-size: 72px;}
+    .remain-num .sep{ font-size: 60px;}
+    .remain-num .ss{ font-size: 31.2px;}
+    .wheel-item{ font-size: 28.8px;}
+    .wheels .colon{ font-size: 28.8px;}
+    .wheel{ --row-h: 36px; }
+  }
+</style>
 </head>
-
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>근무시간 계산기</h1>
-            <div class="controls">
-                <div class="notification-toggle" onclick="toggleNotification()">
-                    <span class="toggle-label">알림</span>
-                    <div class="toggle-switch" id="notificationToggle">
-                        <div class="toggle-slider"></div>
-                    </div>
-                </div>
-                <div class="reset-icon" onclick="reset()" title="초기화" aria-label="초기화">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 12a9 9 0 1 0 3-6.7"/>
-                        <path d="M3 4v5h5"/>
-                    </svg>
-                </div>
-            </div>
-        </div>
+<div class="shell" id="shell">
 
-        <div class="permission-msg" id="permissionMsg">
-            브라우저 설정에서 알림 권한을 허용해주세요
-        </div>
+  <!-- topbar -->
+  <header class="topbar">
+    <div class="mast">
+      <span class="num" id="todayDate">—</span>
+      <h1>근무시간 계산기</h1>
+    </div>
+    <div class="ctrls">
+      <button class="icon-btn" id="notifBtn" title="알림" aria-label="알림">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M6 8a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/>
+          <path d="M10 18a2 2 0 0 0 4 0"/>
+        </svg>
+      </button>
+      <button class="icon-btn" id="resetBtn" title="초기화" aria-label="초기화">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 1 0 3-6.7"/>
+          <path d="M3 4v5h5"/>
+        </svg>
+      </button>
+    </div>
+  </header>
 
-        <div class="section">
-            <label class="section-label" for="startTime">출근</label>
-            <input type="time" class="time-input" id="startTime" value="09:00" oninput="calculate()">
-            <div class="quick-actions">
-                <button class="quick-btn" onclick="setStartTime('09:00')">09:00</button>
-                <button class="quick-btn" onclick="setStartTime('10:00')">10:00</button>
-                <button class="quick-btn" onclick="setStartTime('11:00')">11:00</button>
-            </div>
-            <div class="quick-actions">
-                <button class="quick-btn increment increment-minus" onclick="incrementStart(-1)">−1분</button>
-                <button class="quick-btn increment" onclick="incrementStart(1)">+1분</button>
-                <button class="quick-btn increment" onclick="incrementStart(5)">+5분</button>
-                <button class="quick-btn increment" onclick="incrementStart(10)">+10분</button>
-                <button class="quick-btn increment" onclick="incrementStart(30)">+30분</button>
-            </div>
-        </div>
-
-        <div class="section">
-            <label class="section-label" for="targetTime">퇴근</label>
-            <input type="time" class="time-input" id="targetTime" value="18:00" oninput="calculate()">
-            <div class="quick-actions">
-                <button class="quick-btn" onclick="setTargetTime('18:00')">18:00</button>
-                <button class="quick-btn" onclick="setTargetTime('19:00')">19:00</button>
-                <button class="quick-btn" onclick="setTargetTime('20:00')">20:00</button>
-            </div>
-            <div class="quick-actions">
-                <button class="quick-btn increment increment-minus" onclick="incrementTarget(-1)">−1분</button>
-                <button class="quick-btn increment" onclick="incrementTarget(1)">+1분</button>
-                <button class="quick-btn increment" onclick="incrementTarget(5)">+5분</button>
-                <button class="quick-btn increment" onclick="incrementTarget(10)">+10분</button>
-                <button class="quick-btn increment" onclick="incrementTarget(30)">+30분</button>
-            </div>
-        </div>
-
-        <details class="settings">
-            <summary id="settingsSummary">설정 · 기본 8시간 · 휴게 1시간</summary>
-            <div class="settings-body">
-                <div class="settings-row">
-                    <span class="settings-row-label">기본 근로</span>
-                    <input type="number" class="num-input" id="baseHour" min="0" max="23" value="8" oninput="calculate()">
-                    <span class="unit-label">시간</span>
-                    <input type="number" class="num-input" id="baseMinute" min="0" max="59" value="0" oninput="calculate()">
-                    <span class="unit-label">분</span>
-                </div>
-                <div class="settings-row">
-                    <span class="settings-row-label">휴게시간</span>
-                    <input type="number" class="num-input" id="breakHour" min="0" max="23" value="1" oninput="calculate()">
-                    <span class="unit-label">시간</span>
-                    <input type="number" class="num-input" id="breakMinute" min="0" max="59" value="0" oninput="calculate()">
-                    <span class="unit-label">분</span>
-                </div>
-            </div>
-        </details>
-
-        <div class="result-card" id="result">
-            <div class="result-countdown" id="resultCountdown"></div>
-            <div class="result-time" id="resultTime"></div>
-            <div class="result-subtitle" id="resultSubtitle"></div>
-            <div class="progress-container">
-                <div class="progress-bar" id="progressBar"></div>
-            </div>
-            <div class="progress-text" id="progressText">0%</div>
-            <div class="result-details" id="resultDetails"></div>
-        </div>
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <div class="hero-eyebrow">
+      <span class="state" style="display:inline-flex; gap:8px; align-items:center;">
+        <span class="dot" id="stateDot" style="width:5px; height:5px; border-radius:50%; background:var(--ink-faint); display:inline-block;"></span>
+        <span id="stateLabel">대기 중</span>
+      </span>
+       ·  잔여 근무
     </div>
 
-    <script>
-        let notificationEnabled = false;
-        let notified5min = false;
-        let notified1min = false;
-        let notifiedNow = false;
+    <div class="remain-num">
+      <span class="hh" id="remainH">09</span>
+      <span class="sep">:</span>
+      <span class="mm" id="remainM">00</span>
+      <span class="ss" id="remainS">00</span>
+    </div>
 
-        function init() {
-            const savedNotification = localStorage.getItem('notificationEnabled');
-            if (savedNotification === 'true') {
-                checkNotificationPermission();
-            }
-            updateSettingsSummary();
-            calculate();
+    <div class="hero-sub">
+      <span class="elapsed">경과 <span id="elapsedTxt">0h 00m</span></span>
+      <span class="pct-chip">
+        <span class="pct" id="pctTxt">0.0</span><span class="pct-sym">%</span>
+      </span>
+    </div>
+
+    <div class="timeline">
+      <div class="tl-caption">
+        <span class="cap hidden" id="tlCap" style="left:0%"><span id="capTime">—:—</span></span>
+      </div>
+      <div class="tl-bar" id="tlBar">
+        <div class="tl-fill" id="tlFill"></div>
+        <div class="tl-tick" style="left:25%"></div>
+        <div class="tl-tick" style="left:50%"></div>
+        <div class="tl-tick" style="left:75%"></div>
+        <div class="tl-now" id="tlNow" style="left:0%; display:none;"></div>
+      </div>
+
+      <div class="tl-anchors">
+        <div>
+          <span class="lbl">출근</span>
+          <span class="val" id="annIn">09:00</span>
+        </div>
+        <div>
+          <span class="lbl">퇴근</span>
+          <span class="val" id="annOut">18:00</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- START TIME -->
+  <section class="block">
+    <div class="block-head">
+      <span class="eyebrow">출근</span>
+      <span class="num">§01</span>
+    </div>
+    <div class="wheels">
+      <div class="wheel" id="startHourWheel" data-kind="hour" data-target="start"></div>
+      <div class="colon">:</div>
+      <div class="wheel" id="startMinWheel" data-kind="min" data-target="start"></div>
+      <div class="wheel-center"></div>
+    </div>
+    <div class="wheel-label"><span>HOUR</span><span></span><span>MIN</span></div>
+    <div class="quicks">
+      <button data-start="09:00">09:00</button>
+      <button data-start="10:00">10:00</button>
+      <button data-start="11:00">11:00</button>
+    </div>
+    <div class="nudge">
+      <button data-start-nudge="-5">−5</button>
+      <button data-start-nudge="-1">−1</button>
+      <button data-start-nudge="1">+1</button>
+      <button data-start-nudge="5">+5</button>
+      <button data-start-nudge="10">+10</button>
+    </div>
+  </section>
+
+  <!-- END TIME -->
+  <section class="block">
+    <div class="block-head">
+      <span class="eyebrow">퇴근</span>
+      <span class="num">§02</span>
+    </div>
+    <div class="wheels">
+      <div class="wheel" id="endHourWheel" data-kind="hour" data-target="end"></div>
+      <div class="colon">:</div>
+      <div class="wheel" id="endMinWheel" data-kind="min" data-target="end"></div>
+      <div class="wheel-center"></div>
+    </div>
+    <div class="wheel-label"><span>HOUR</span><span></span><span>MIN</span></div>
+    <div class="quicks">
+      <button data-end="18:00">18:00</button>
+      <button data-end="19:00">19:00</button>
+      <button data-end="20:00">20:00</button>
+    </div>
+    <div class="nudge">
+      <button data-end-nudge="-5">−5</button>
+      <button data-end-nudge="-1">−1</button>
+      <button data-end-nudge="1">+1</button>
+      <button data-end-nudge="5">+5</button>
+      <button data-end-nudge="10">+10</button>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <details class="settings" id="settings">
+    <summary>
+      <span>설정 · <span id="setSummary">기본 8시간 · 휴게 1시간</span></span>
+      <span class="chev"></span>
+    </summary>
+    <div class="setbody">
+      <div class="setrow">
+        <span class="lbl">기본 근로</span>
+        <span class="vals">
+          <input type="number" class="num-input" id="baseHour" min="0" max="23" value="8">
+          <span class="unit">H</span>
+          <input type="number" class="num-input" id="baseMinute" min="0" max="59" value="0">
+          <span class="unit">M</span>
+        </span>
+      </div>
+      <div class="setrow">
+        <span class="lbl">휴게</span>
+        <span class="vals">
+          <input type="number" class="num-input" id="breakHour" min="0" max="23" value="1">
+          <span class="unit">H</span>
+          <input type="number" class="num-input" id="breakMinute" min="0" max="59" value="0">
+          <span class="unit">M</span>
+        </span>
+      </div>
+    </div>
+  </details>
+
+  <div class="perm-msg" id="permMsg">알림 권한이 차단되어 있습니다</div>
+
+  <!-- SUMMARY -->
+  <section class="summary">
+    <div class="srow hero-row">
+      <span class="k">퇴근 시각</span>
+      <span class="v" id="sumOut">18:00</span>
+    </div>
+    <div class="srow">
+      <span class="k">실 근무</span>
+      <span class="v" id="sumWork">8h 00m</span>
+    </div>
+    <div class="srow" id="sumOTRow">
+      <span class="k">추가 근로</span>
+      <span class="v" id="sumOT">±0h 00m</span>
+    </div>
+    <div class="srow">
+      <span class="k">휴게</span>
+      <span class="v" id="sumBreak">1h 00m</span>
+    </div>
+  </section>
+
+  <div class="colophon">
+    <span>MM · Mono</span>
+    <span>v2.0</span>
+  </div>
+</div>
+
+<div class="toast" id="toast">초기화 완료</div>
+
+<script>
+/* ========= state ========= */
+const S = {
+  start: { h: 9, m: 0 },
+  end:   { h: 18, m: 0 },
+  baseH: 8, baseM: 0,
+  breakH: 1, breakM: 0,
+  notifyEnabled: false,
+  notified5: false, notified1: false, notifiedEnd: false,
+};
+
+/* ========= utils ========= */
+const $ = (s) => document.querySelector(s);
+const pad2 = (n) => String(n).padStart(2, "0");
+const clampMod = (n, mod) => ((n % mod) + mod) % mod;
+const fmtHM = (mins) => {
+  const sign = mins < 0 ? "−" : "";
+  const a = Math.abs(mins);
+  return `${sign}${Math.floor(a/60)}h ${pad2(a%60)}m`;
+};
+const fmtHMplus = (mins) => {
+  const sign = mins < 0 ? "−" : "+";
+  const a = Math.abs(mins);
+  return `${sign}${Math.floor(a/60)}h ${pad2(a%60)}m`;
+};
+const timeStr = (h, m) => `${pad2(h)}:${pad2(m)}`;
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem("wht.state.v2");
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    Object.assign(S, d);
+  }catch(e){}
+}
+function saveState(){
+  const {start,end,baseH,baseM,breakH,breakM,notifyEnabled} = S;
+  try{ localStorage.setItem("wht.state.v2", JSON.stringify({start,end,baseH,baseM,breakH,breakM,notifyEnabled}));}catch(e){}
+}
+
+/* ========= wheel component =========
+   - renders 3 visible rows (center + 1 above + 1 below)
+   - touch/mouse drag with momentum snapping
+   - wheel events for desktop
+*/
+class Wheel{
+  constructor(el, {min, max, value, onChange, label}){
+    this.el = el;
+    this.min = min; this.max = max;
+    this.value = value;
+    this.range = max - min + 1;
+    this.onChange = onChange;
+    el.setAttribute("role", "spinbutton");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("aria-valuemin", String(min));
+    el.setAttribute("aria-valuemax", String(max));
+    if (label) el.setAttribute("aria-label", label);
+    el.setAttribute("aria-valuenow", String(value));
+    // derive rowH from CSS so JS stays in sync with CSS changes
+    const cssRowH = parseFloat(getComputedStyle(el).getPropertyValue('--row-h')) || 41;
+    this.rowH = cssRowH;
+    this.offset = 0; // px offset; positive = rail moves down (show earlier items)
+    this.velocity = 0;
+    this.dragging = false;
+    this.lastY = 0; this.lastT = 0;
+    this.rafId = null;
+    this._build();
+    this._bind();
+    this._render();
+  }
+  _build(){
+    this.el.innerHTML = "";
+    const rail = document.createElement("div");
+    rail.className = "wheel-rail";
+    this.rail = rail;
+    // render 5 items: -2,-1,0,1,2 relative. We'll update innerText on render.
+    for (let i=0;i<5;i++){
+      const it = document.createElement("div");
+      it.className = "wheel-item";
+      it.dataset.rel = i - 2;
+      rail.appendChild(it);
+    }
+    // the rail top is initially at -rowH (so item[-2] is off-screen top)
+    // actually height of wheel = 3*rowH, container padding pushes rail so center item sits at middle.
+    // Simpler: wrap rail absolutely and translate Y.
+    this.el.appendChild(rail);
+    // rail contains 5 items * rowH = 5*rowH tall
+    // We want the center (index 2) item to sit at middle row
+    // middle row top = rowH (since container 3 rows)
+    // rail is positioned at top:0 with padding: rowH top (CSS). So item[0] starts at rowH.
+    // With items rendered relative, center(data-rel=0) = items[2], top in rail = 2*rowH + rowH(padding) = 3*rowH.
+    // container visible top = 0, middle row = rowH..2*rowH. We want item[2] center at 1.5*rowH (middle of visible).
+    // Item[2] currently sits at top rowH(padding)+2*rowH = 3*rowH. So we need translateY = -(3*rowH - rowH) = -2*rowH.
+    this.baseTy = -2 * this.rowH;
+    rail.style.transform = `translateY(${this.baseTy}px)`;
+  }
+  _bind(){
+    const el = this.el;
+    const onDown = (y) => {
+      this.dragging = true;
+      this.lastY = y;
+      this.lastT = performance.now();
+      this.velocity = 0;
+      this._cancelAnim();
+      el.setPointerCapture?.(this._pid);
+    };
+    const onMove = (y) => {
+      if (!this.dragging) return;
+      const dy = y - this.lastY;
+      const now = performance.now();
+      const dt = Math.max(1, now - this.lastT);
+      this.velocity = dy / dt * 16; // per frame
+      this.lastY = y; this.lastT = now;
+      this.offset += dy;
+      this._applyOffset();
+    };
+    const onUp = () => {
+      if (!this.dragging) return;
+      this.dragging = false;
+      this._momentum();
+    };
+    el.addEventListener("pointerdown", (e) => {
+      this._pid = e.pointerId;
+      onDown(e.clientY);
+      e.preventDefault();
+    });
+    el.addEventListener("pointermove", (e) => onMove(e.clientY));
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+    el.addEventListener("pointerleave", onUp);
+
+    // click to nudge
+    el.addEventListener("click", (e) => {
+      if (Math.abs(this.velocity) > 0.3) return;
+      const rect = el.getBoundingClientRect();
+      const rel = e.clientY - rect.top;
+      if (rel < this.rowH) this._step(-1);
+      else if (rel > this.rowH*2) this._step(1);
+    });
+
+    // desktop wheel
+    el.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const dir = Math.sign(e.deltaY);
+      this._step(dir);
+    }, {passive:false});
+
+    // keyboard
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft"){
+        e.preventDefault(); this._step(-1);
+      } else if (e.key === "ArrowDown" || e.key === "ArrowRight"){
+        e.preventDefault(); this._step(1);
+      } else if (e.key === "PageUp"){
+        e.preventDefault(); this._step(-5);
+      } else if (e.key === "PageDown"){
+        e.preventDefault(); this._step(5);
+      }
+    });
+  }
+  _applyOffset(){
+    const half = this.rowH / 2;
+    while (this.offset > half){
+      this.offset -= this.rowH;
+      this._changeValue(-1);
+    }
+    while (this.offset < -half){
+      this.offset += this.rowH;
+      this._changeValue(1);
+    }
+    this.rail.style.transform = `translateY(${this.baseTy + this.offset}px)`;
+    this._renderItems();
+  }
+  _changeValue(delta){
+    this.value = clampMod(this.value - this.min + delta, this.range) + this.min;
+    this.el.setAttribute("aria-valuenow", String(this.value));
+    this.onChange?.(this.value, { silent: false });
+  }
+  _step(delta){
+    this.value = clampMod(this.value - this.min + delta, this.range) + this.min;
+    this.el.setAttribute("aria-valuenow", String(this.value));
+    this.onChange?.(this.value);
+    this._render();
+  }
+  _momentum(){
+    const decel = 0.92;
+    const tick = () => {
+      if (Math.abs(this.velocity) < 0.4){
+        // snap
+        const target = Math.round(this.offset / this.rowH) * this.rowH;
+        const snapStep = (target - this.offset) * 0.25;
+        if (Math.abs(target - this.offset) < 0.4){
+          this.offset = target;
+          this._applyOffset();
+          this._render();
+          this.rafId = null;
+          return;
         }
+        this.offset += snapStep;
+        this._applyOffset();
+        this.rafId = requestAnimationFrame(tick);
+        return;
+      }
+      this.offset += this.velocity;
+      this.velocity *= decel;
+      this._applyOffset();
+      this.rafId = requestAnimationFrame(tick);
+    };
+    this.rafId = requestAnimationFrame(tick);
+  }
+  _cancelAnim(){
+    if (this.rafId){ cancelAnimationFrame(this.rafId); this.rafId = null;}
+  }
+  _renderItems(){
+    const items = this.rail.children;
+    for (let i=0;i<items.length;i++){
+      const rel = parseInt(items[i].dataset.rel, 10);
+      const raw = clampMod(this.value - this.min + rel, this.range) + this.min;
+      items[i].textContent = pad2(raw);
+      items[i].dataset.dist = Math.abs(rel);
+    }
+  }
+  _render(){
+    this.offset = 0;
+    this.rail.style.transform = `translateY(${this.baseTy}px)`;
+    this._renderItems();
+  }
+  setValue(v, {silent=false} = {}){
+    this.value = clampMod(v - this.min, this.range) + this.min;
+    this.el.setAttribute("aria-valuenow", String(this.value));
+    if (!silent) this.onChange?.(this.value);
+    this._render();
+  }
+}
 
-        function parseTime(value) {
-            if (!value) return null;
-            const [h, m] = value.split(':').map(Number);
-            if (isNaN(h) || isNaN(m)) return null;
-            return { h, m };
-        }
+/* ========= wheels ========= */
+let startHourW, startMinW, endHourW, endMinW;
 
-        function setStartTime(value) {
-            document.getElementById('startTime').value = value;
-            calculate();
-        }
+function buildWheels(){
+  startHourW = new Wheel($("#startHourWheel"), {
+    min:0, max:23, value:S.start.h, label:"출근 시",
+    onChange: (v) => { S.start.h = v; onTimesChanged(); }
+  });
+  startMinW = new Wheel($("#startMinWheel"), {
+    min:0, max:59, value:S.start.m, label:"출근 분",
+    onChange: (v) => { S.start.m = v; onTimesChanged(); }
+  });
+  endHourW = new Wheel($("#endHourWheel"), {
+    min:0, max:23, value:S.end.h, label:"퇴근 시",
+    onChange: (v) => { S.end.h = v; onTimesChanged(); }
+  });
+  endMinW = new Wheel($("#endMinWheel"), {
+    min:0, max:59, value:S.end.m, label:"퇴근 분",
+    onChange: (v) => { S.end.m = v; onTimesChanged(); }
+  });
+}
 
-        function setTargetTime(value) {
-            document.getElementById('targetTime').value = value;
-            calculate();
-        }
+/* ========= calc & render ========= */
+function totals(){
+  const startM = S.start.h*60 + S.start.m;
+  let endM = S.end.h*60 + S.end.m;
+  if (endM <= startM) endM += 24*60;
+  const breakM = S.breakH*60 + S.breakM;
+  const baseM = S.baseH*60 + S.baseM;
+  const workM = endM - startM - breakM;
+  return { startM, endM: endM % (24*60), endAbs: endM, breakM, baseM, workM };
+}
 
-        function addMinutes(value, amount) {
-            const parsed = parseTime(value);
-            if (!parsed) return value;
-            let total = parsed.h * 60 + parsed.m + amount;
-            total = ((total % 1440) + 1440) % 1440;
-            const h = Math.floor(total / 60);
-            const m = total % 60;
-            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        }
+function render(){
+  const t = totals();
+  // summary
+  $("#sumOut").textContent = timeStr(S.end.h, S.end.m);
+  $("#sumWork").textContent = fmtHM(t.workM);
+  $("#sumBreak").textContent = fmtHM(t.breakM);
+  const ot = t.workM - t.baseM;
+  $("#sumOT").textContent = fmtHMplus(ot);
+  $("#sumOTRow").classList.toggle("positive", ot > 0);
+  $("#sumOTRow").classList.toggle("negative", ot < 0);
 
-        function incrementStart(amount) {
-            const el = document.getElementById('startTime');
-            el.value = addMinutes(el.value || '09:00', amount);
-            calculate();
-        }
+  // set summary text
+  const baseLabel = S.baseM ? `${S.baseH}시간 ${S.baseM}분` : `${S.baseH}시간`;
+  const breakLabel = S.breakM ? `${S.breakH}시간 ${S.breakM}분` : `${S.breakH}시간`;
+  $("#setSummary").textContent = `기본 ${baseLabel} · 휴게 ${breakLabel}`;
 
-        function incrementTarget(amount) {
-            const el = document.getElementById('targetTime');
-            el.value = addMinutes(el.value || '18:00', amount);
-            calculate();
-        }
+  // hero anchors (in / out)
+  $("#annIn").textContent = timeStr(S.start.h, S.start.m);
+  $("#annOut").textContent = timeStr(S.end.h, S.end.m);
+}
 
-        function updateSettingsSummary() {
-            const baseH = parseInt(document.getElementById('baseHour').value) || 0;
-            const baseM = parseInt(document.getElementById('baseMinute').value) || 0;
-            const breakH = parseInt(document.getElementById('breakHour').value) || 0;
-            const breakM = parseInt(document.getElementById('breakMinute').value) || 0;
-            const baseLabel = baseM ? `${baseH}시간 ${baseM}분` : `${baseH}시간`;
-            const breakLabel = breakM ? `${breakH}시간 ${breakM}분` : `${breakH}시간`;
-            document.getElementById('settingsSummary').textContent =
-                `설정 · 기본 ${baseLabel} · 휴게 ${breakLabel}`;
-        }
+/* ========= live countdown ========= */
+let tickHandle = null;
+let lastTickDay = null;
 
-        function toggleNotification() {
-            if (!notificationEnabled) {
-                checkNotificationPermission();
-            } else {
-                notificationEnabled = false;
-                document.getElementById('notificationToggle').classList.remove('active');
-                localStorage.setItem('notificationEnabled', 'false');
-                document.getElementById('permissionMsg').classList.remove('show');
-            }
-        }
+function tick(){
+  const t = totals();
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  if (lastTickDay && lastTickDay !== todayKey){
+    renderTodayDate();
+    S.notified5 = S.notified1 = S.notifiedEnd = false;
+  }
+  lastTickDay = todayKey;
+  const nowS = now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds();
+  const startS = S.start.h*3600 + S.start.m*60;
+  const endS = (S.end.h*3600 + S.end.m*60);
+  let endAbsS = endS;
+  if (endAbsS <= startS) endAbsS += 24*3600;
 
-        async function checkNotificationPermission() {
-            if (!('Notification' in window)) {
-                alert('이 브라우저는 알림을 지원하지 않습니다.');
-                return;
-            }
+  // elapsed based on real clock. If now < start, elapsed = 0 (상태: 대기).
+  let elapsed;
+  let state = "waiting"; // waiting | working | done
+  let remain = 0;
 
-            const permission = Notification.permission;
+  if (nowS < startS){
+    elapsed = 0;
+    state = "waiting";
+    remain = endAbsS - startS;
+  } else {
+    // normalize
+    let nowAbs = nowS;
+    // if now < endAbs and now >= start => working
+    if (nowAbs >= endAbsS){
+      // consider "done" for the remainder of the day if past end
+      state = "done";
+      elapsed = endAbsS - startS;
+      remain = 0;
+    } else {
+      state = "working";
+      elapsed = nowAbs - startS;
+      remain = endAbsS - nowAbs;
+    }
+  }
 
-            if (permission === 'granted') {
-                notificationEnabled = true;
-                document.getElementById('notificationToggle').classList.add('active');
-                localStorage.setItem('notificationEnabled', 'true');
-                document.getElementById('permissionMsg').classList.remove('show');
-            } else if (permission === 'denied') {
-                notificationEnabled = false;
-                document.getElementById('notificationToggle').classList.remove('active');
-                document.getElementById('permissionMsg').classList.add('show');
-            } else {
-                const result = await Notification.requestPermission();
-                if (result === 'granted') {
-                    notificationEnabled = true;
-                    document.getElementById('notificationToggle').classList.add('active');
-                    localStorage.setItem('notificationEnabled', 'true');
-                    document.getElementById('permissionMsg').classList.remove('show');
-                } else {
-                    notificationEnabled = false;
-                    document.getElementById('notificationToggle').classList.remove('active');
-                    document.getElementById('permissionMsg').classList.add('show');
-                }
-            }
-        }
+  const total = endAbsS - startS;
+  const pct = total > 0 ? Math.max(0, Math.min(100, (elapsed / total) * 100)) : 0;
 
-        function showNotification(title, body) {
-            if (!notificationEnabled || Notification.permission !== 'granted') return;
-            new Notification(title, {
-                body: body,
-                tag: 'work-timer',
-                requireInteraction: false
-            });
-            playBeep(0.3, 800);
-        }
+  // remaining time — HERO (HH:MM ss)
+  const rH = Math.floor(remain / 3600);
+  const rM = Math.floor((remain % 3600) / 60);
+  const rS = Math.floor(remain % 60);
+  $("#remainH").textContent = pad2(rH);
+  $("#remainM").textContent = pad2(rM);
+  $("#remainS").textContent = pad2(rS);
 
-        function playBeep(duration, frequency) {
-            try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                oscillator.frequency.value = frequency;
-                oscillator.type = 'sine';
-                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + duration);
-            } catch (e) {
-                console.log('오디오 재생 실패:', e);
-            }
-        }
+  // pct chip + elapsed
+  $("#pctTxt").textContent = pct.toFixed(1);
+  $("#elapsedTxt").textContent = fmtHM(Math.floor(elapsed/60));
 
-        function calculate() {
-            updateSettingsSummary();
+  // timeline — modern segment bar
+  const fillEl = $("#tlFill");
+  const nowEl = $("#tlNow");
+  const capEl = $("#tlCap");
+  const capTime = $("#capTime");
+  fillEl.classList.remove("full");
+  if (state === "waiting"){
+    nowEl.style.display = "none";
+    fillEl.style.width = "0";
+    capEl.classList.add("hidden");
+  } else if (state === "done"){
+    nowEl.style.display = "block";
+    nowEl.style.left = "100%";
+    fillEl.style.width = "100%";
+    fillEl.classList.add("full");
+    capEl.style.left = "100%";
+    capEl.classList.remove("hidden");
+    capTime.textContent = "퇴근";
+  } else {
+    nowEl.style.display = "block";
+    const capPos = Math.max(10, Math.min(90, pct));
+    nowEl.style.left = pct + "%";
+    fillEl.style.width = pct + "%";
+    capEl.style.left = capPos + "%";
+    capEl.classList.remove("hidden");
+    capTime.textContent = `지금 ${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  }
+  nowEl.classList.toggle("pulse", state === "working");
 
-            const start = parseTime(document.getElementById('startTime').value);
-            const target = parseTime(document.getElementById('targetTime').value);
-            const baseH = parseInt(document.getElementById('baseHour').value) || 0;
-            const baseM = parseInt(document.getElementById('baseMinute').value) || 0;
-            const breakH = parseInt(document.getElementById('breakHour').value) || 0;
-            const breakM = parseInt(document.getElementById('breakMinute').value) || 0;
+  // state label + dot
+  const dot = $("#stateDot");
+  const lbl = $("#stateLabel");
+  dot.classList.remove("active","warn","done");
+  document.body.classList.remove("state-work","state-warn","state-done");
+  if (state === "waiting"){
+    lbl.textContent = "대기 중";
+    document.title = "근무시간 계산기";
+  } else if (state === "done"){
+    lbl.textContent = "퇴근 완료";
+    dot.classList.add("done");
+    document.body.classList.add("state-done");
+    document.title = "퇴근 · 근무시간 계산기";
+  } else {
+    if (remain <= 60){
+      lbl.textContent = "퇴근 1분 전";
+      dot.classList.add("warn");
+      document.body.classList.add("state-warn");
+    } else if (remain <= 300){
+      lbl.textContent = "퇴근 5분 전";
+      dot.classList.add("warn");
+      document.body.classList.add("state-warn");
+    } else {
+      lbl.textContent = "근무 중";
+      dot.classList.add("active");
+      document.body.classList.add("state-work");
+    }
+    // document title countdown
+    const rH = Math.floor(remain/3600);
+    const rM = Math.floor((remain%3600)/60);
+    document.title = `${pad2(rH)}:${pad2(rM)} · 근무시간`;
+  }
 
-            if (!start || !target) {
-                document.getElementById('result').classList.remove('show');
-                return;
-            }
+  // notifications
+  if (state === "working"){
+    if (remain <= 300 && !S.notified5){ doNotify("5분 뒤 퇴근", "잠시 숨을 고르세요"); S.notified5 = true;}
+    if (remain <= 60 && !S.notified1){ doNotify("1분 뒤 퇴근", "오늘도 수고하셨습니다"); S.notified1 = true;}
+  }
+  if (state === "done" && !S.notifiedEnd){
+    doNotify("퇴근 시각", "오늘 하루 수고 많으셨습니다");
+    S.notifiedEnd = true;
+  }
+}
 
-            const startMinutes = start.h * 60 + start.m;
-            const endMinutes = target.h * 60 + target.m;
-            const breakMinutes = breakH * 60 + breakM;
-            const baseMinutes = baseH * 60 + baseM;
+/* ========= input handlers ========= */
+function onTimesChanged(){
+  // reset notification triggers when user changes times
+  S.notified5 = S.notified1 = S.notifiedEnd = false;
+  render();
+  tick();
+  saveState();
+}
 
-            let workMinutes = endMinutes - startMinutes - breakMinutes;
-            if (endMinutes < startMinutes) workMinutes += 24 * 60;
+/* ========= notifications ========= */
+async function requestNotify(){
+  if (!("Notification" in window)){
+    toast("알림을 지원하지 않습니다");
+    return;
+  }
+  if (Notification.permission === "granted"){
+    S.notifyEnabled = !S.notifyEnabled;
+    updateNotifUI();
+    saveState();
+    return;
+  }
+  if (Notification.permission === "denied"){
+    $("#permMsg").classList.add("show");
+    return;
+  }
+  const res = await Notification.requestPermission();
+  if (res === "granted"){
+    S.notifyEnabled = true;
+    $("#permMsg").classList.remove("show");
+  } else {
+    S.notifyEnabled = false;
+    $("#permMsg").classList.add("show");
+  }
+  updateNotifUI();
+  saveState();
+}
+function updateNotifUI(){
+  $("#notifBtn").classList.toggle("active", S.notifyEnabled);
+}
+function doNotify(title, body){
+  if (!S.notifyEnabled) return;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try{
+    new Notification(title, { body, tag:"wht" });
+    beep();
+  }catch(e){}
+}
+let _ac = null;
+function getAC(){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!_ac) _ac = new AC();
+  return _ac;
+}
+function beep(){
+  try{
+    const ctx = getAC();
+    if (!ctx) return;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880;
+    o.type = "sine";
+    g.gain.setValueAtTime(0.001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    o.start(); o.stop(ctx.currentTime + 0.42);
+  }catch(e){}
+}
 
-            const overtimeMinutes = workMinutes - baseMinutes;
-            const overtimeAbs = Math.abs(overtimeMinutes);
-            const overtimeSign = overtimeMinutes < 0 ? '-' : '+';
-            const overtimeH = Math.floor(overtimeAbs / 60);
-            const overtimeM = overtimeAbs % 60;
+/* ========= toast ========= */
+let toastTimer = null;
+function toast(msg){
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 1600);
+}
 
-            const workH = Math.floor(workMinutes / 60);
-            const workM = workMinutes % 60;
+/* ========= quicks / nudges / settings ========= */
+function bindControls(){
+  document.querySelectorAll("[data-start]").forEach(b => {
+    b.addEventListener("click", () => {
+      const [h,m] = b.dataset.start.split(":").map(Number);
+      S.start.h = h; S.start.m = m;
+      startHourW.setValue(h, {silent:true}); startMinW.setValue(m, {silent:true});
+      onTimesChanged();
+    });
+  });
+  document.querySelectorAll("[data-end]").forEach(b => {
+    b.addEventListener("click", () => {
+      const [h,m] = b.dataset.end.split(":").map(Number);
+      S.end.h = h; S.end.m = m;
+      endHourW.setValue(h, {silent:true}); endMinW.setValue(m, {silent:true});
+      onTimesChanged();
+    });
+  });
+  document.querySelectorAll("[data-start-nudge]").forEach(b => {
+    b.addEventListener("click", () => {
+      const d = parseInt(b.dataset.startNudge, 10);
+      let total = clampMod(S.start.h*60 + S.start.m + d, 24*60);
+      S.start.h = Math.floor(total/60); S.start.m = total%60;
+      startHourW.setValue(S.start.h, {silent:true});
+      startMinW.setValue(S.start.m, {silent:true});
+      onTimesChanged();
+    });
+  });
+  document.querySelectorAll("[data-end-nudge]").forEach(b => {
+    b.addEventListener("click", () => {
+      const d = parseInt(b.dataset.endNudge, 10);
+      let total = clampMod(S.end.h*60 + S.end.m + d, 24*60);
+      S.end.h = Math.floor(total/60); S.end.m = total%60;
+      endHourW.setValue(S.end.h, {silent:true});
+      endMinW.setValue(S.end.m, {silent:true});
+      onTimesChanged();
+    });
+  });
 
-            document.getElementById('resultTime').textContent =
-                `${String(target.h).padStart(2, '0')}:${String(target.m).padStart(2, '0')}`;
+  const bindNum = (id, key) => {
+    const el = $("#"+id);
+    el.value = S[key];
+    el.addEventListener("input", () => {
+      const v = parseInt(el.value, 10);
+      if (Number.isNaN(v)) return;
+      S[key] = Math.max(parseInt(el.min,10)||0, Math.min(parseInt(el.max,10)||59, v));
+      onTimesChanged();
+    });
+  };
+  bindNum("baseHour", "baseH");
+  bindNum("baseMinute", "baseM");
+  bindNum("breakHour", "breakH");
+  bindNum("breakMinute", "breakM");
 
-            document.getElementById('resultSubtitle').textContent =
-                `추가 근로 ${overtimeSign}${overtimeH}시간 ${overtimeM}분`;
+  $("#notifBtn").addEventListener("click", requestNotify);
+  $("#resetBtn").addEventListener("click", () => {
+    S.start = {h:9, m:0};
+    S.end = {h:18, m:0};
+    S.baseH = 8; S.baseM = 0;
+    S.breakH = 1; S.breakM = 0;
+    startHourW.setValue(9, {silent:true}); startMinW.setValue(0, {silent:true});
+    endHourW.setValue(18, {silent:true}); endMinW.setValue(0, {silent:true});
+    $("#baseHour").value = 8; $("#baseMinute").value = 0;
+    $("#breakHour").value = 1; $("#breakMinute").value = 0;
+    onTimesChanged();
+    toast("초기화 완료");
+  });
+}
 
-            document.getElementById('resultDetails').innerHTML =
-                `출근 ${String(start.h).padStart(2, '0')}:${String(start.m).padStart(2, '0')} · ` +
-                `퇴근 ${String(target.h).padStart(2, '0')}:${String(target.m).padStart(2, '0')}<br>` +
-                `실 근무 ${workH}시간 ${workM}분 · 휴게 ${breakH}시간 ${breakM}분`;
+/* ========= date ========= */
+function renderTodayDate(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = pad2(d.getMonth()+1);
+  const da = pad2(d.getDate());
+  const w = ["SUN","MON","TUE","WED","THU","FRI","SAT"][d.getDay()];
+  $("#todayDate").textContent = `${y}.${mo}.${da} · ${w}`;
+}
 
-            document.getElementById('result').classList.add('show');
-
-            notified5min = false;
-            notified1min = false;
-            notifiedNow = false;
-
-            if (window.countdownInterval) {
-                clearInterval(window.countdownInterval);
-            }
-
-            updateCountdown(target.h, target.m, start.h, start.m);
-            window.countdownInterval = setInterval(
-                () => updateCountdown(target.h, target.m, start.h, start.m), 1000);
-        }
-
-        function updateCountdown(endH, endM, startH, startM) {
-            const now = new Date();
-            const currentTotalS = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-            const endTotalS = endH * 3600 + endM * 60;
-            const startTotalS = startH * 3600 + startM * 60;
-
-            let remainingTotalS = endTotalS - currentTotalS;
-
-            if (remainingTotalS < 0 && remainingTotalS > -12 * 3600) {
-                remainingTotalS = 0;
-            } else if (remainingTotalS < 0) {
-                remainingTotalS += 24 * 3600;
-            }
-
-            const remainingH = Math.floor(remainingTotalS / 3600);
-            const remainingM = Math.floor((remainingTotalS % 3600) / 60);
-            const remainingS = remainingTotalS % 60;
-
-            let elapsedTotalS = currentTotalS - startTotalS;
-            if (elapsedTotalS < 0) elapsedTotalS += 24 * 3600;
-
-            let totalSpanS = endTotalS - startTotalS;
-            if (totalSpanS <= 0) totalSpanS += 24 * 3600;
-            const progressPercent = Math.min(100, Math.max(0, (elapsedTotalS / totalSpanS) * 100));
-            document.getElementById('progressBar').style.width = progressPercent.toFixed(1) + '%';
-            document.getElementById('progressText').textContent = Math.round(progressPercent) + '%';
-
-            const resultCard = document.getElementById('result');
-            resultCard.classList.remove('warning-5min', 'warning-1min', 'overtime');
-
-            if (remainingTotalS <= 0) {
-                document.getElementById('resultCountdown').textContent = '퇴근 완료';
-                resultCard.classList.add('overtime');
-                document.title = '🎉 퇴근!';
-
-                document.getElementById('progressBar').style.width = '100%';
-                document.getElementById('progressText').textContent = '100%';
-
-                if (!notifiedNow) {
-                    if (notificationEnabled) {
-                        showNotification('퇴근 시간', '수고하셨습니다!');
-                    }
-                    playBeep(0.5, 1000);
-                    notifiedNow = true;
-                }
-
-                clearInterval(window.countdownInterval);
-                return;
-            }
-
-            const countdownText = `퇴근까지 ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}:${String(remainingS).padStart(2, '0')}`;
-            document.getElementById('resultCountdown').textContent = countdownText;
-
-            if (remainingTotalS <= 60) {
-                resultCard.classList.add('warning-1min');
-                document.title = `🔴 ${String(remainingM).padStart(2, '0')}:${String(remainingS).padStart(2, '0')}`;
-
-                if (!notified1min) {
-                    if (notificationEnabled) {
-                        showNotification('근무시간 알림', '퇴근까지 1분 남았습니다');
-                    }
-                    notified1min = true;
-                }
-            } else if (remainingTotalS <= 300) {
-                resultCard.classList.add('warning-5min');
-                document.title = `⏰ ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}`;
-
-                if (!notified5min) {
-                    if (notificationEnabled) {
-                        showNotification('근무시간 알림', `퇴근까지 5분 남았습니다`);
-                    }
-                    notified5min = true;
-                }
-            } else if (remainingTotalS <= 600) {
-                document.title = `⏰ ${String(remainingH).padStart(2, '0')}:${String(remainingM).padStart(2, '0')}`;
-            } else {
-                document.title = '근무시간 계산기';
-            }
-        }
-
-        function reset() {
-            document.getElementById('startTime').value = '09:00';
-            document.getElementById('targetTime').value = '18:00';
-            document.getElementById('baseHour').value = '8';
-            document.getElementById('baseMinute').value = '0';
-            document.getElementById('breakHour').value = '1';
-            document.getElementById('breakMinute').value = '0';
-            calculate();
-        }
-
-        init();
-    </script>
+/* ========= init ========= */
+function init(){
+  loadState();
+  renderTodayDate();
+  buildWheels();
+  bindControls();
+  updateNotifUI();
+  render();
+  tick();
+  tickHandle = setInterval(tick, 1000);
+}
+init();
+</script>
 </body>
-
 </html>
