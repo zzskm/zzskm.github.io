@@ -160,7 +160,7 @@
     const logged = last30.filter(p => Number.isFinite(p.valueKg)).length;
     const pct = last30.length ? Math.round((logged / last30.length) * 100) : 0;
     setText('logCoverage', `${pct}%`);
-    setText('coverageHint', `${last30.length}일 중 ${logged}일 기록 · 공백일 ${last30.length - logged}일`);
+    setText('coverageHint', `■ ${logged}일 측정  □ ${last30.length - logged}일 없음 · 각 칸 = 하루`);
     drawCoverageDots('coverageDots', last30);
 
     // Activity summary
@@ -525,7 +525,7 @@
     const predDataset = state.chart.data.datasets.find(d => d.label === '예측');
     if (!predDataset) return;
     predDataset.data = newData;
-    state.chart.update();
+    state.chart.update('none');
   }
 
   // ---------- interactions ----------
@@ -588,7 +588,7 @@
       renderActivityChart();
 
       const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
-      el('lastSync').textContent = gen
+      el('lastSync').querySelector('.sync-text').textContent = gen
         ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
         : '데이터 로드됨';
       setText('statusLine',
@@ -597,7 +597,7 @@
       appRoot.dataset.state = 'ready';
     } catch (err) {
       appRoot.dataset.state = 'error';
-      el('lastSync').textContent = '로드 실패';
+      el('lastSync').querySelector('.sync-text').textContent = '로드 실패';
       setText('statusLine', `데이터를 불러오지 못했습니다: ${err.message}`);
       console.error(err);
     } finally {
