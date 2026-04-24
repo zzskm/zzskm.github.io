@@ -3,326 +3,609 @@
 (() => {
   const SUMMARY_URL = './data/summary.json';
   const CONFIG_URL = './config.json';
-  const statusEl = document.getElementById('status');
-  const reloadBtn = document.getElementById('reloadBtn');
-  let chart;
-  let activityChart;
 
-  function fmtKg(value) {
-    return Number.isFinite(value) ? `${value.toFixed(1)} kg` : '-';
-  }
+  const state = {
+    summary: null,
+    config: null,
+    range: 60,
+    scenario: 'base',
+    visible: { ma7: true, ma14: false, prediction: true },
+    chart: null,
+    activityChart: null,
+  };
 
-  function fmtRate(value) {
-    return Number.isFinite(value) ? `${value.toFixed(2)} kg/주` : '-';
-  }
+  const el = (id) => document.getElementById(id);
+  const appRoot = document.querySelector('.app');
 
-  function fmtSteps(value) {
-    return Number.isFinite(value) ? `${Math.round(value).toLocaleString('ko-KR')} 걸음` : '-';
-  }
-
-  function fmtMinutes(value) {
-    return Number.isFinite(value) ? `${Math.round(value).toLocaleString('ko-KR')} 분` : '-';
-  }
-
-  function fmtKcal(value) {
-    return Number.isFinite(value) ? `${Math.round(value).toLocaleString('ko-KR')} kcal` : '-';
-  }
-
-  function fmtDays(value) {
-    return Number.isFinite(value) ? `${value} / 7일` : '-';
-  }
+  const fmtKg = (v, d=1) => Number.isFinite(v) ? `${v.toFixed(d)} kg` : '–';
+  const fmtKgBare = (v, d=1) => Number.isFinite(v) ? v.toFixed(d) : '–';
+  const fmtSteps = (v) => Number.isFinite(v) ? Math.round(v).toLocaleString('ko-KR') : '–';
+  const fmtDate = (iso) => {
+    if (!iso) return '–';
+    const d = new Date(iso + 'T00:00:00');
+    return `${d.getMonth()+1}월 ${d.getDate()}일`;
+  };
+  const fmtDateShort = (iso) => {
+    const d = new Date(iso + 'T00:00:00');
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  };
 
   function fmtEta(goal) {
-    if (!goal || !Number.isFinite(goal.etaDays)) {
-      return '현 추세로 계산 불가';
-    }
-    if (goal.etaDays <= 0) {
-      return '목표 도달';
-    }
+    if (!goal || !Number.isFinite(goal.etaDays)) return '계산 불가';
+    if (goal.etaDays <= 0) return '도달';
     const weeks = Math.floor(goal.etaDays / 7);
     const days = goal.etaDays % 7;
-    if (weeks > 0 && days > 0) {
-      return `${weeks}주 ${days}일`;
-    }
-    if (weeks > 0) {
-      return `${weeks}주`;
-    }
+    if (weeks > 0 && days > 0) return `${weeks}주 ${days}일`;
+    if (weeks > 0) return `${weeks}주`;
     return `${days}일`;
   }
 
-  function setText(id, value) {
-    const node = document.getElementById(id);
-    if (node) {
-      node.textContent = value;
+  function setText(id, v) { const n = el(id); if (n) n.textContent = v; }
+
+  function firstValidDaily(points) {
+    for (const p of points) if (Number.isFinite(p.valueKg)) return p;
+    return null;
+  }
+  function lastValidDaily(points) {
+    for (let i = points.length - 1; i >= 0; i--) if (Number.isFinite(points[i].valueKg)) return points[i];
+    return null;
+  }
+
+  function sliceByRange(points, rangeDays) {
+    if (rangeDays === 'all' || !Array.isArray(points)) return points || [];
+    const lastDate = points.length ? new Date(points[points.length - 1].date + 'T00:00:00') : new Date();
+    const cutoff = new Date(lastDate);
+    cutoff.setDate(cutoff.getDate() - rangeDays);
+    return points.filter((p) => new Date(p.date + 'T00:00:00') >= cutoff);
+  }
+
+  function buildPredictionFromScenario(summary, scenario) {
+    const base = summary.series?.prediction || [];
+    if (!base.length) return [];
+    const mult = summary.predictions?.scenarios?.[scenario]?.multiplier ?? 1;
+    const baseMult = summary.predictions?.scenarios?.base?.multiplier ?? 0.8;
+    const start = base[0].valueKg;
+    const factor = baseMult > 0 ? mult / baseMult : 1;
+    return base.map((p) => ({
+      date: p.date,
+      valueKg: start + (p.valueKg - start) * factor,
+    }));
+  }
+
+  function weekdayAverages(points) {
+    const sums = Array(7).fill(0);
+    const counts = Array(7).fill(0);
+    for (const p of points) {
+      if (!Number.isFinite(p.valueKg)) continue;
+      const d = new Date(p.date + 'T00:00:00');
+      const w = d.getDay();
+      sums[w] += p.valueKg;
+      counts[w] += 1;
+    }
+    return sums.map((s, i) => counts[i] ? s / counts[i] : null);
+  }
+
+  // ---------- hero ----------
+  function renderHero() {
+    const s = state.summary;
+    const cfg = state.config;
+    const daily = s.series?.daily || [];
+    const start = firstValidDaily(daily);
+    const last = lastValidDaily(daily);
+    const target = cfg?.targetWeightKg ?? 80;
+
+    setText('currentWeight', fmtKgBare(s.current?.weightKg));
+    setText('currentDate', s.current?.weightDate ? fmtDate(s.current.weightDate) + ' 측정' : '–');
+
+    if (start && last) {
+      const delta = last.valueKg - start.valueKg;
+      const de = el('currentDelta');
+      de.textContent = `${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)} kg 시작 대비`;
+      de.className = 'delta ' + (delta > 0 ? 'up' : delta < 0 ? 'down' : '');
+    }
+
+    setText('ma7Weight', fmtKgBare(s.current?.weightMa7Kg));
+    const ma7Diff = (s.current?.weightKg ?? 0) - (s.current?.weightMa7Kg ?? 0);
+    if (Number.isFinite(ma7Diff)) {
+      setText('ma7Delta', `현재 ${ma7Diff >= 0 ? '+' : '−'}${Math.abs(ma7Diff).toFixed(1)} kg`);
+    }
+
+    const rate = s.rolling?.weeklyLossRateKg;
+    setText('weeklyLossRate', Number.isFinite(rate) ? `${rate >= 0 ? '−' : '+'}${Math.abs(rate).toFixed(2)}` : '–');
+    setText('rateContext', Number.isFinite(rate)
+      ? (rate > 0.05 ? '감량 중' : rate < -0.05 ? '증가 중' : '정체') + ' · kg/주'
+      : 'kg/주');
+
+    setText('goalEta', fmtEta(s.goal));
+    setText('goalEtaDate', s.goal?.etaDate ? `${fmtDate(s.goal.etaDate)} 예상` : '–');
+
+    if (start && last) {
+      const total = start.valueKg - target;
+      const done = start.valueKg - last.valueKg;
+      const pct = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
+      setText('goalProgressPct', pct.toFixed(0));
+      el('progressFill').style.width = pct + '%';
+      el('progressMarker').style.left = pct + '%';
+
+      setText('startWeight', fmtKg(start.valueKg));
+      setText('targetWeight', fmtKg(target));
+
+      const remaining = s.goal?.remainingKg ?? (last.valueKg - target);
+      setText('goalSubtitle', remaining > 0
+        ? `목표까지 ${remaining.toFixed(1)} kg · 현 속도로 ${fmtEta(s.goal)} 소요`
+        : `목표 도달 — 현재 ${last.valueKg.toFixed(1)} kg`);
+    }
+
+    // Scenarios
+    const sc = s.predictions?.scenarios || {};
+    setText('scenarioOpt', sc.optimistic ? fmtKg(sc.optimistic.threeMonthWeightKg) : '–');
+    setText('scenarioBase', sc.base ? fmtKg(sc.base.threeMonthWeightKg) : '–');
+    setText('scenarioCon', sc.conservative ? fmtKg(sc.conservative.threeMonthWeightKg) : '–');
+  }
+
+  // ---------- bottom: variability + coverage ----------
+  function renderBottom() {
+    const s = state.summary;
+
+    const range = s.rolling?.last7WeightRangeKg;
+    setText('weightRange', Number.isFinite(range) ? `${range.toFixed(1)} kg` : '–');
+    setText('weightRangeHint',
+      Number.isFinite(range)
+        ? range < 1 ? '매우 안정적 — 수분/식사 변동 범위' : range < 2 ? '정상 범위 내' : '변동이 큼 — 측정 시각 확인 권장'
+        : '–');
+    const validDaily = (s.series?.daily || []).filter(p => Number.isFinite(p.valueKg)).slice(-14);
+    drawSparkline('sparkRange', validDaily.map(d => d.valueKg));
+
+    const last30 = (s.series?.daily || []).slice(-30);
+    const logged = last30.filter(p => Number.isFinite(p.valueKg)).length;
+    const pct = last30.length ? Math.round((logged / last30.length) * 100) : 0;
+    setText('logCoverage', `${pct}%`);
+    setText('coverageHint', `${last30.length}일 중 ${logged}일 기록 · 공백일 ${last30.length - logged}일`);
+    drawCoverageDots('coverageDots', last30);
+
+    // Activity summary
+    const minutes = s.rolling?.last7ExerciseMinutes ?? 0;
+    setText('exerciseMinutes', fmtSteps(minutes));
+    setText('activeDays', `${s.rolling?.last7ActiveDays ?? 0}`);
+    setText('stepsAvg', fmtSteps(s.rolling?.last7StepsAvg));
+    setText('stepsTotal', `총 ${fmtSteps(s.rolling?.last7StepsTotal)} 걸음`);
+  }
+
+  function drawSparkline(id, values) {
+    const host = el(id);
+    if (!host || !values.length) { if (host) host.innerHTML = ''; return; }
+    const w = 100, h = 32, pad = 2;
+    const min = Math.min(...values), max = Math.max(...values);
+    const range = max - min || 1;
+    const pts = values.map((v, i) => {
+      const x = pad + (i / (values.length - 1 || 1)) * (w - pad * 2);
+      const y = pad + (1 - (v - min) / range) * (h - pad * 2);
+      return [x, y];
+    });
+    const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    const area = d + ` L${w - pad},${h - pad} L${pad},${h - pad} Z`;
+    const last = pts[pts.length - 1];
+    host.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <path d="${area}" fill="rgba(17,17,17,0.05)" />
+        <path d="${d}" fill="none" stroke="#2b2b2b" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${last[0]}" cy="${last[1]}" r="2" fill="#c25a31"/>
+      </svg>`;
+  }
+
+  function drawCoverageDots(id, last30) {
+    const host = el(id);
+    if (!host) return;
+    const todayIso = last30.length ? last30[last30.length - 1].date : null;
+    host.innerHTML = last30.map((p) => {
+      const has = Number.isFinite(p.valueKg);
+      const cls = has ? (p.date === todayIso ? 'dot-cell has-today' : 'dot-cell has') : 'dot-cell';
+      return `<span class="${cls}" title="${p.date}${has ? ' · ' + p.valueKg.toFixed(1) + 'kg' : ' · 기록 없음'}"></span>`;
+    }).join('');
+  }
+
+  // ---------- weekday ----------
+  function renderWeekday() {
+    const host = el('weekdayChart');
+    if (!host) return;
+    const daily = state.summary.series?.daily || [];
+    const avgs = weekdayAverages(daily);
+    const valid = avgs.filter(v => v !== null);
+    if (!valid.length) { host.innerHTML = '<p class="insight-text" style="margin:auto">데이터 없음</p>'; return; }
+    const min = Math.min(...valid);
+    const max = Math.max(...valid);
+    const r = max - min || 1;
+    const labels = ['일', '월', '화', '수', '목', '금', '토'];
+
+    host.innerHTML = avgs.map((v, i) => {
+      if (v === null) return `
+        <div class="weekday-col">
+          <div class="weekday-bar" style="height:2%; opacity:0.3"></div>
+          <span class="weekday-label">${labels[i]}</span>
+        </div>`;
+      const heightPct = 20 + ((v - min) / r) * 80;
+      const isHi = v === max;
+      return `
+        <div class="weekday-col">
+          <span class="weekday-val">${v.toFixed(1)}</span>
+          <div class="weekday-bar ${isHi ? 'is-hi' : ''}" style="height:${heightPct}%"></div>
+          <span class="weekday-label">${labels[i]}</span>
+        </div>`;
+    }).join('');
+
+    const hiIdx = avgs.indexOf(max);
+    const loIdx = avgs.indexOf(min);
+    if (hiIdx >= 0 && loIdx >= 0) {
+      const diff = (max - min).toFixed(1);
+      setText('insightText',
+        `${labels[hiIdx]}요일이 평균 ${fmtKgBare(max)} kg로 가장 무겁고, ${labels[loIdx]}요일이 ${fmtKgBare(min)} kg로 가장 가볍습니다. 요일 간 차이 ${diff} kg.`);
     }
   }
 
-  function valueSeries(points) {
-    return Array.isArray(points) ? points.map((point) => point.valueKg) : [];
-  }
+  // ---------- weight chart ----------
+  function renderChart() {
+    const canvas = el('weightChart');
+    if (!canvas || !window.Chart) return;
 
-  function labelsForSummary(summary) {
-    const seen = new Set();
-    const labels = [];
-    for (const group of ['daily', 'ma7', 'ma14', 'prediction']) {
-      for (const point of summary.series?.[group] || []) {
-        if (!seen.has(point.date)) {
-          seen.add(point.date);
-          labels.push(point.date);
-        }
-      }
+    const s = state.summary;
+    const daily = sliceByRange(s.series?.daily || [], state.range);
+    const ma7 = sliceByRange(s.series?.ma7 || [], state.range);
+    const ma14 = sliceByRange(s.series?.ma14 || [], state.range);
+    const prediction = buildPredictionFromScenario(s, state.scenario);
+
+    const labelSet = new Set();
+    [daily, ma7, ma14, prediction].forEach(arr => arr.forEach(p => labelSet.add(p.date)));
+    const labels = Array.from(labelSet).sort();
+
+    const align = (arr) => {
+      const m = new Map(arr.map(p => [p.date, p.valueKg]));
+      return labels.map(d => m.has(d) ? m.get(d) : null);
+    };
+
+    if (state.chart) state.chart.destroy();
+
+    const datasets = [];
+
+    // Background: MA14 (softest)
+    if (state.visible.ma14) {
+      datasets.push({
+        label: '14일 평균',
+        data: align(ma14),
+        borderColor: '#d8d8d4',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        tension: 0.35,
+        spanGaps: true,
+        fill: false,
+        order: 3,
+      });
     }
-    return labels;
-  }
 
-  function alignPoints(labels, points) {
-    const map = new Map((points || []).map((point) => [point.date, point.valueKg]));
-    return labels.map((label) => map.has(label) ? map.get(label) : null);
-  }
-
-  function renderChart(summary) {
-    const ctx = document.getElementById('weightChart');
-    const labels = labelsForSummary(summary);
-
-    if (chart) {
-      chart.destroy();
+    // MA7 (soft)
+    if (state.visible.ma7) {
+      datasets.push({
+        label: '7일 평균',
+        data: align(ma7),
+        borderColor: '#b8b8b4',
+        borderWidth: 1.75,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        tension: 0.35,
+        spanGaps: true,
+        fill: false,
+        order: 2,
+      });
     }
 
-    chart = new Chart(ctx, {
+    // Prediction (accent, dashed)
+    if (state.visible.prediction) {
+      datasets.push({
+        label: '예측',
+        data: align(prediction),
+        borderColor: '#c25a31',
+        borderWidth: 1.75,
+        borderDash: [5, 4],
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: '#c25a31',
+        tension: 0.25,
+        spanGaps: true,
+        fill: false,
+        order: 1,
+      });
+    }
+
+    // Actual (TOP, boldest) — always on
+    datasets.push({
+      label: '실제',
+      data: align(daily),
+      borderColor: '#111111',
+      backgroundColor: 'rgba(17,17,17,0.04)',
+      borderWidth: 2.5,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      pointBackgroundColor: '#111111',
+      pointBorderColor: '#ffffff',
+      pointBorderWidth: 1.5,
+      tension: 0.3,
+      spanGaps: true,
+      fill: true,
+      order: 0,
+    });
+
+    state.chart = new Chart(canvas, {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: '실제 체중',
-            data: alignPoints(labels, summary.series?.daily),
-            borderColor: '#b14d24',
-            backgroundColor: 'rgba(177, 77, 36, 0.12)',
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            spanGaps: true,
-            tension: 0.25
-          },
-          {
-            label: '7일 이동평균',
-            data: alignPoints(labels, summary.series?.ma7),
-            borderColor: '#285f79',
-            borderWidth: 3,
-            pointRadius: 0,
-            spanGaps: true,
-            tension: 0.25
-          },
-          {
-            label: '14일 이동평균',
-            data: alignPoints(labels, summary.series?.ma14),
-            borderColor: '#90b9cd',
-            borderWidth: 2,
-            pointRadius: 0,
-            spanGaps: true,
-            tension: 0.2
-          },
-          {
-            label: '기본 예측',
-            data: alignPoints(labels, summary.series?.prediction),
-            borderColor: '#5e4f42',
-            borderDash: [8, 6],
-            borderWidth: 2,
-            pointRadius: 0,
-            spanGaps: true,
-            tension: 0.15
-          }
-        ]
-      },
+      data: { labels, datasets },
       options: {
+        responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false
-        },
+        animation: { duration: 650, easing: 'easeOutCubic' },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: {
-            labels: {
-              color: '#1b130e',
-              usePointStyle: true,
-              boxWidth: 10
-            }
-          },
+          legend: { display: false },
           tooltip: {
+            backgroundColor: '#111111',
+            titleColor: '#ffffff',
+            bodyColor: '#e6e6e4',
+            padding: 10,
+            cornerRadius: 6,
+            titleFont: { family: 'Inter Tight', weight: '600', size: 12 },
+            bodyFont: { family: 'JetBrains Mono', size: 11.5 },
+            boxPadding: 4,
+            itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
             callbacks: {
-              label(context) {
-                return `${context.dataset.label}: ${fmtKg(context.parsed.y)}`;
-              }
-            }
-          }
+              title: (items) => items[0] ? fmtDateShort(items[0].label) : '',
+              label: (ctx) => ` ${ctx.dataset.label}: ${fmtKg(ctx.parsed.y)}`,
+            },
+          },
         },
         scales: {
           x: {
-            grid: {
-              color: 'rgba(92, 73, 57, 0.08)'
-            },
+            grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
+            border: { display: false },
             ticks: {
-              color: '#6f6256',
+              color: '#9a9a96',
+              font: { family: 'JetBrains Mono', size: 10.5 },
               maxRotation: 0,
               autoSkip: true,
-              maxTicksLimit: 8
-            }
+              maxTicksLimit: 8,
+              callback(val) { return fmtDateShort(this.getLabelForValue(val)); },
+            },
           },
           y: {
-            grid: {
-              color: 'rgba(92, 73, 57, 0.08)'
-            },
+            grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
+            border: { display: false },
             ticks: {
-              color: '#6f6256',
-              callback(value) {
-                return `${value} kg`;
-              }
-            }
-          }
-        }
-      }
+              color: '#9a9a96',
+              font: { family: 'JetBrains Mono', size: 10.5 },
+              callback: (v) => `${v}`,
+              padding: 8,
+            },
+          },
+        },
+      },
     });
   }
 
-  function renderActivityChart(summary) {
-    const ctx = document.getElementById('activityChart');
-    if (!ctx) return;
+  // ---------- activity chart: MINUTES primary, STEPS secondary ----------
+  function renderActivityChart() {
+    const canvas = el('activityChart');
+    if (!canvas || !window.Chart) return;
 
-    const stepsSeries = summary.series?.steps || [];
-    const minutesSeries = summary.series?.exerciseMinutes || [];
-    const labels = stepsSeries.map((p) => p.date);
-    const minutesByDate = new Map(minutesSeries.map((p) => [p.date, p.value]));
+    const s = state.summary;
+    const stepsSeries = s.series?.steps || [];
+    const minutesSeries = s.series?.exerciseMinutes || [];
+    const labels = stepsSeries.map(p => p.date);
+    const minutesByDate = new Map(minutesSeries.map(p => [p.date, p.value]));
+    const minutesArr = labels.map(d => minutesByDate.get(d) ?? 0);
+    const stepsArr = stepsSeries.map(p => p.value ?? 0);
+    const hasMinutes = minutesArr.some(v => v > 0);
 
-    if (activityChart) {
-      activityChart.destroy();
-    }
+    setText('activityRange', labels.length ? `${fmtDateShort(labels[0])} – ${fmtDateShort(labels[labels.length-1])}` : '–');
 
-    activityChart = new Chart(ctx, {
-      data: {
-        labels,
-        datasets: [
-          {
-            type: 'bar',
-            label: '걸음 수',
-            data: stepsSeries.map((p) => p.value ?? 0),
-            backgroundColor: 'rgba(40, 95, 121, 0.55)',
-            borderColor: '#285f79',
-            borderWidth: 1,
-            yAxisID: 'ySteps'
-          },
-          {
-            type: 'line',
-            label: '운동 시간 (분)',
-            data: labels.map((d) => minutesByDate.get(d) ?? 0),
-            borderColor: '#b14d24',
-            backgroundColor: 'rgba(177, 77, 36, 0.15)',
-            pointRadius: 3,
-            tension: 0.25,
-            yAxisID: 'yMinutes'
-          }
-        ]
+    if (state.activityChart) state.activityChart.destroy();
+
+    const datasets = [
+      {
+        type: 'bar',
+        label: '운동 시간',
+        data: minutesArr,
+        backgroundColor: '#111111',
+        borderColor: '#111111',
+        borderWidth: 0,
+        borderRadius: 2,
+        barPercentage: 0.7,
+        categoryPercentage: 0.9,
+        yAxisID: 'yMinutes',
+        order: 1,
       },
+      {
+        type: 'line',
+        label: '걸음 수',
+        data: stepsArr,
+        borderColor: '#c8c8c4',
+        backgroundColor: 'transparent',
+        borderWidth: 1.25,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        tension: 0.35,
+        yAxisID: 'ySteps',
+        order: 2,
+      },
+    ];
+
+    state.activityChart = new Chart(canvas, {
+      data: { labels, datasets },
       options: {
+        responsive: true,
         maintainAspectRatio: false,
+        animation: { duration: 600 },
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
-            labels: { color: '#1b130e', usePointStyle: true, boxWidth: 10 }
-          }
+            position: 'top',
+            align: 'end',
+            labels: {
+              color: '#6b6b68',
+              usePointStyle: true,
+              boxWidth: 8,
+              font: { family: 'Inter Tight', size: 11.5 },
+            },
+          },
+          tooltip: {
+            backgroundColor: '#111111',
+            titleColor: '#ffffff',
+            bodyColor: '#e6e6e4',
+            padding: 10,
+            cornerRadius: 6,
+            callbacks: {
+              title: (items) => items[0] ? fmtDateShort(items[0].label) : '',
+              label: (ctx) => {
+                if (ctx.dataset.label === '운동 시간') return ` 운동: ${ctx.parsed.y}분`;
+                return ` 걸음: ${Math.round(ctx.parsed.y).toLocaleString('ko-KR')}`;
+              },
+            },
+          },
         },
         scales: {
           x: {
-            grid: { color: 'rgba(92, 73, 57, 0.08)' },
-            ticks: { color: '#6f6256', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
-          },
-          ySteps: {
-            position: 'left',
-            beginAtZero: true,
-            grid: { color: 'rgba(92, 73, 57, 0.08)' },
+            grid: { display: false },
+            border: { display: false },
             ticks: {
-              color: '#285f79',
-              callback(value) { return `${(value / 1000).toFixed(0)}k`; }
+              color: '#9a9a96',
+              font: { family: 'JetBrains Mono', size: 10 },
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 6,
+              callback(val) { return fmtDateShort(this.getLabelForValue(val)); },
             },
-            title: { display: true, text: '걸음 수', color: '#285f79' }
           },
           yMinutes: {
+            position: 'left',
+            beginAtZero: true,
+            suggestedMax: hasMinutes ? undefined : 10,
+            grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
+            border: { display: false },
+            ticks: {
+              color: '#6b6b68',
+              font: { family: 'JetBrains Mono', size: 10 },
+              stepSize: hasMinutes ? undefined : 2,
+              precision: 0,
+              callback: (v) => Number.isInteger(v) ? `${v}분` : '',
+              padding: 6,
+            },
+            title: { display: false },
+          },
+          ySteps: {
             position: 'right',
             beginAtZero: true,
-            grid: { drawOnChartArea: false },
+            grid: { display: false },
+            border: { display: false },
             ticks: {
-              color: '#b14d24',
-              callback(value) { return `${value}분`; }
+              color: '#c8c8c4',
+              font: { family: 'JetBrains Mono', size: 10 },
+              callback: (v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v,
+              padding: 6,
             },
-            title: { display: true, text: '운동 시간', color: '#b14d24' }
-          }
-        }
-      }
+            title: { display: false },
+          },
+        },
+      },
     });
   }
 
-  function renderSummary(summary, config) {
-    setText('currentWeight', fmtKg(summary.current?.weightKg));
-    setText('ma7Weight', fmtKg(summary.current?.weightMa7Kg));
-    setText('weeklyLossRate', fmtRate(summary.rolling?.weeklyLossRateKg));
-    setText('predicted1m', fmtKg(summary.predictions?.oneMonthWeightKg));
-    setText('predicted3m', fmtKg(summary.predictions?.threeMonthWeightKg));
-    setText('goalEta', fmtEta(summary.goal));
+  // ---------- prediction-only update (scenario switch) ----------
+  function updatePrediction() {
+    if (!state.chart) return;
+    const prediction = buildPredictionFromScenario(state.summary, state.scenario);
+    const labels = state.chart.data.labels;
+    const m = new Map(prediction.map(p => [p.date, p.valueKg]));
+    const newData = labels.map(d => m.has(d) ? m.get(d) : null);
+    const predDataset = state.chart.data.datasets.find(d => d.label === '예측');
+    if (!predDataset) return;
+    predDataset.data = newData;
+    state.chart.update();
+  }
 
-    setText('stepsTotal', fmtSteps(summary.rolling?.last7StepsTotal));
-    setText('stepsAvg', fmtSteps(summary.rolling?.last7StepsAvg));
-    setText('exerciseMinutes', fmtMinutes(summary.rolling?.last7ExerciseMinutes));
-    setText('exerciseCalories', fmtKcal(summary.rolling?.last7ExerciseCalories));
-    setText('activeDays', fmtDays(summary.rolling?.last7ActiveDays));
-    setText('weightRange', fmtKg(summary.rolling?.last7WeightRangeKg));
+  // ---------- interactions ----------
+  function bindControls() {
+    document.querySelectorAll('.seg-btn[data-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const r = btn.dataset.range;
+        state.range = r === 'all' ? 'all' : parseInt(r, 10);
+        document.querySelectorAll('.seg-btn[data-range]').forEach(b => b.classList.toggle('is-active', b === btn));
+        renderChart();
+      });
+    });
 
-    const generatedAt = summary.generatedAt ? new Date(summary.generatedAt) : null;
-    const targetText = Number.isFinite(config?.targetWeightKg)
-      ? `목표 ${config.targetWeightKg.toFixed(1)} kg`
-      : '목표 체중 미설정';
+    document.querySelectorAll('.chip[data-series]').forEach(chip => {
+      const key = chip.dataset.series;
+      const input = chip.querySelector('input');
+      input.checked = !!state.visible[key];
+      input.addEventListener('change', () => {
+        state.visible[key] = input.checked;
+        renderChart();
+      });
+    });
 
-    if (generatedAt && !Number.isNaN(generatedAt.getTime())) {
-      statusEl.textContent = `${targetText} · 마지막 생성 ${generatedAt.toLocaleString('ko-KR')}`;
-    } else if ((summary.series?.daily || []).length > 0) {
-      statusEl.textContent = `${targetText} · 요약 데이터는 로드됐지만 생성 시각은 없습니다.`;
-    } else {
-      statusEl.textContent = `${targetText} · 데이터가 없습니다. Garmin 동기화가 아직 실행되지 않았거나 인증에 실패했을 수 있습니다.`;
-    }
+    document.querySelectorAll('.scenario[data-scenario]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.scenario = btn.dataset.scenario;
+        document.querySelectorAll('.scenario').forEach(b => b.classList.toggle('is-active', b === btn));
+        updatePrediction();
+      });
+    });
 
-    renderChart(summary);
-    renderActivityChart(summary);
+    el('reloadBtn').addEventListener('click', () => load());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target.matches('input, textarea')) return;
+      if (e.key === 'r' || e.key === 'R') load();
+      if (e.key === '1') document.querySelector('.seg-btn[data-range="30"]').click();
+      if (e.key === '2') document.querySelector('.seg-btn[data-range="60"]').click();
+      if (e.key === '3') document.querySelector('.seg-btn[data-range="all"]').click();
+    });
   }
 
   async function load() {
-    reloadBtn.disabled = true;
-    statusEl.textContent = '요약 데이터를 불러오는 중입니다.';
+    const reload = el('reloadBtn');
+    reload.classList.add('is-spinning');
+    reload.disabled = true;
     try {
       const [summaryRes, configRes] = await Promise.all([
         fetch(`${SUMMARY_URL}?ts=${Date.now()}`, { cache: 'no-store' }),
-        fetch(`${CONFIG_URL}?ts=${Date.now()}`, { cache: 'no-store' })
+        fetch(`${CONFIG_URL}?ts=${Date.now()}`, { cache: 'no-store' }),
       ]);
-      if (!summaryRes.ok) {
-        throw new Error(`summary.json 로드 실패 (${summaryRes.status})`);
-      }
-      if (!configRes.ok) {
-        throw new Error(`config.json 로드 실패 (${configRes.status})`);
-      }
-      const summary = await summaryRes.json();
-      const config = await configRes.json();
-      renderSummary(summary, config);
-    } catch (error) {
-      statusEl.textContent = `데이터를 불러오지 못했습니다: ${error.message}`;
-      if (chart) {
-        chart.destroy();
-        chart = null;
-      }
-      if (activityChart) {
-        activityChart.destroy();
-        activityChart = null;
-      }
+      if (!summaryRes.ok) throw new Error(`summary.json (${summaryRes.status})`);
+      if (!configRes.ok) throw new Error(`config.json (${configRes.status})`);
+      state.summary = await summaryRes.json();
+      state.config = await configRes.json();
+
+      renderHero();
+      renderBottom();
+      renderChart();
+      renderActivityChart();
+
+      const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
+      el('lastSync').textContent = gen
+        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+        : '데이터 로드됨';
+      setText('statusLine',
+        `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);
+
+      appRoot.dataset.state = 'ready';
+    } catch (err) {
+      appRoot.dataset.state = 'error';
+      el('lastSync').textContent = '로드 실패';
+      setText('statusLine', `데이터를 불러오지 못했습니다: ${err.message}`);
+      console.error(err);
     } finally {
-      reloadBtn.disabled = false;
+      reload.classList.remove('is-spinning');
+      reload.disabled = false;
     }
   }
 
-  reloadBtn.addEventListener('click', load);
+  bindControls();
   load();
 })();
