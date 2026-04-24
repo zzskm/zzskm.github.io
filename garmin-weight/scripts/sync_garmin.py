@@ -161,7 +161,7 @@ def get_nested(data: Any, *keys: str) -> Any:
 def safe_call(client: Any, method_name: str, *args: Any, default: Any = None, **kwargs: Any) -> Any:
     method = getattr(client, method_name, None)
     if not callable(method):
-        LOGGER.debug("%s not available on client", method_name)
+        LOGGER.warning("%s not available on client", method_name)
         return default
     try:
         return method(*args, **kwargs)
@@ -215,8 +215,18 @@ def build_client() -> Any:
 
 
 def fetch_activities_for_date(client: Any, day: str) -> list[dict[str, Any]]:
-    result = safe_call(client, "get_activities_for_date", day, default=[])
-    return result if isinstance(result, list) else []
+    # python-garminconnect: get_activities_fordate (언더스코어 없음)
+    result = safe_call(client, "get_activities_fordate", day, default=None)
+    if isinstance(result, dict):
+        payload = result.get("ActivitiesForDay")
+        if isinstance(payload, dict):
+            payload = payload.get("payload")
+        if isinstance(payload, list):
+            return payload
+    if isinstance(result, list):
+        return result
+    fallback = safe_call(client, "get_activities_by_date", day, day, default=[])
+    return fallback if isinstance(fallback, list) else []
 
 
 def _safe_metabolic_age(value: Any) -> int | None:
@@ -317,6 +327,18 @@ def fetch_day_row(client: Any, day: str) -> dict[str, Any]:
     body_metrics = extract_body_metrics(body)
     activity_totals = extract_activity_totals(activities)
 
+    # 활동(activities)이 비어 있으면 일일 요약(stats)의 강도별 분/활동 칼로리로 보강.
+    if not activity_totals["exercise_minutes"] and isinstance(stats, dict):
+        mod = parse_int(stats.get("moderateIntensityMinutes")) or 0
+        vig = parse_int(stats.get("vigorousIntensityMinutes")) or 0
+        intensity_minutes = mod + 2 * vig
+        if intensity_minutes > 0:
+            activity_totals["exercise_minutes"] = float(intensity_minutes)
+    if not activity_totals["exercise_calories"] and isinstance(stats, dict):
+        active_kcal = parse_int(stats.get("activeKilocalories"))
+        if active_kcal:
+            activity_totals["exercise_calories"] = float(active_kcal)
+
     return {
         "date": day,
         "weight_kg": body_metrics["weight_kg"],
@@ -387,8 +409,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "weeklyLossRateKg": None,
                 "last7ExerciseMinutes": 0,
                 "last7ExerciseCalories": 0,
-                "last7SleepHoursAvg": None,
-                "last7RestingHrAvg": None,
+                "last7StepsTotal": 0,
+                "last7StepsAvg": None,
+                "last7ActiveDays": 0,
                 "last7WeightRangeKg": None,
             },
             "predictions": {"oneMonthWeightKg": None, "threeMonthWeightKg": None, "scenarios": {}},
@@ -398,7 +421,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "etaDays": None,
                 "etaDate": None,
             },
-            "series": {"daily": [], "ma7": [], "ma14": [], "prediction": []},
+            "series": {"daily": [], "ma7": [], "ma14": [], "prediction": [], "steps": [], "exerciseMinutes": []},
         }
 
     all_dates = [row["date"] for row in rows]
@@ -437,16 +460,17 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             weekly_loss_rate = round_or_none((previous_ma7 - current_ma7) / 2, 2)
 
     last7 = rows[-7:]
-    sleep_values = [row.get("sleep_hours") for row in last7 if row.get("sleep_hours") is not None]
-    rhr_values = [row.get("resting_hr") for row in last7 if row.get("resting_hr") is not None]
     weight_values = [row.get("weight_kg") for row in last7 if row.get("weight_kg") is not None]
+    steps_values = [row.get("steps") for row in last7 if row.get("steps") is not None]
+    active_days = sum(1 for row in last7 if (row.get("exercise_minutes") or 0) > 0)
 
     rolling = {
         "weeklyLossRateKg": weekly_loss_rate if weekly_loss_rate and weekly_loss_rate > 0 else None,
         "last7ExerciseMinutes": round(sum((row.get("exercise_minutes") or 0) for row in last7), 1),
         "last7ExerciseCalories": round(sum((row.get("exercise_calories") or 0) for row in last7), 0),
-        "last7SleepHoursAvg": round_or_none(mean(sleep_values), 2),
-        "last7RestingHrAvg": round_or_none(mean(rhr_values), 1),
+        "last7StepsTotal": sum(steps_values) if steps_values else 0,
+        "last7StepsAvg": round_or_none(mean(steps_values), 0),
+        "last7ActiveDays": active_days,
         "last7WeightRangeKg": round_or_none((max(weight_values) - min(weight_values)) if len(weight_values) >= 2 else None, 2),
     }
 
@@ -515,6 +539,14 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "ma7": ma7_series,
             "ma14": ma14_series,
             "prediction": build_prediction_series(latest_date, current_ma7, weekly_loss_rate, base_multiplier),
+            "steps": [
+                {"date": row["date"], "value": row.get("steps")}
+                for row in rows[-30:]
+            ],
+            "exerciseMinutes": [
+                {"date": row["date"], "value": row.get("exercise_minutes") or 0}
+                for row in rows[-30:]
+            ],
         },
     }
 

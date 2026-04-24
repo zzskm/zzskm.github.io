@@ -6,6 +6,7 @@
   const statusEl = document.getElementById('status');
   const reloadBtn = document.getElementById('reloadBtn');
   let chart;
+  let activityChart;
 
   function fmtKg(value) {
     return Number.isFinite(value) ? `${value.toFixed(1)} kg` : '-';
@@ -15,12 +16,20 @@
     return Number.isFinite(value) ? `${value.toFixed(2)} kg/주` : '-';
   }
 
-  function fmtHours(value) {
-    return Number.isFinite(value) ? `${value.toFixed(1)}시간` : '-';
+  function fmtSteps(value) {
+    return Number.isFinite(value) ? `${Math.round(value).toLocaleString('ko-KR')} 걸음` : '-';
   }
 
-  function fmtBpm(value) {
-    return Number.isFinite(value) ? `${value.toFixed(0)} bpm` : '-';
+  function fmtMinutes(value) {
+    return Number.isFinite(value) ? `${Math.round(value).toLocaleString('ko-KR')} 분` : '-';
+  }
+
+  function fmtKcal(value) {
+    return Number.isFinite(value) ? `${Math.round(value).toLocaleString('ko-KR')} kcal` : '-';
+  }
+
+  function fmtDays(value) {
+    return Number.isFinite(value) ? `${value} / 7일` : '-';
   }
 
   function fmtEta(goal) {
@@ -174,6 +183,82 @@
     });
   }
 
+  function renderActivityChart(summary) {
+    const ctx = document.getElementById('activityChart');
+    if (!ctx) return;
+
+    const stepsSeries = summary.series?.steps || [];
+    const minutesSeries = summary.series?.exerciseMinutes || [];
+    const labels = stepsSeries.map((p) => p.date);
+    const minutesByDate = new Map(minutesSeries.map((p) => [p.date, p.value]));
+
+    if (activityChart) {
+      activityChart.destroy();
+    }
+
+    activityChart = new Chart(ctx, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: '걸음 수',
+            data: stepsSeries.map((p) => p.value ?? 0),
+            backgroundColor: 'rgba(40, 95, 121, 0.55)',
+            borderColor: '#285f79',
+            borderWidth: 1,
+            yAxisID: 'ySteps'
+          },
+          {
+            type: 'line',
+            label: '운동 시간 (분)',
+            data: labels.map((d) => minutesByDate.get(d) ?? 0),
+            borderColor: '#b14d24',
+            backgroundColor: 'rgba(177, 77, 36, 0.15)',
+            pointRadius: 3,
+            tension: 0.25,
+            yAxisID: 'yMinutes'
+          }
+        ]
+      },
+      options: {
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            labels: { color: '#1b130e', usePointStyle: true, boxWidth: 10 }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(92, 73, 57, 0.08)' },
+            ticks: { color: '#6f6256', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+          },
+          ySteps: {
+            position: 'left',
+            beginAtZero: true,
+            grid: { color: 'rgba(92, 73, 57, 0.08)' },
+            ticks: {
+              color: '#285f79',
+              callback(value) { return `${(value / 1000).toFixed(0)}k`; }
+            },
+            title: { display: true, text: '걸음 수', color: '#285f79' }
+          },
+          yMinutes: {
+            position: 'right',
+            beginAtZero: true,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: '#b14d24',
+              callback(value) { return `${value}분`; }
+            },
+            title: { display: true, text: '운동 시간', color: '#b14d24' }
+          }
+        }
+      }
+    });
+  }
+
   function renderSummary(summary, config) {
     setText('currentWeight', fmtKg(summary.current?.weightKg));
     setText('ma7Weight', fmtKg(summary.current?.weightMa7Kg));
@@ -182,20 +267,11 @@
     setText('predicted3m', fmtKg(summary.predictions?.threeMonthWeightKg));
     setText('goalEta', fmtEta(summary.goal));
 
-    setText(
-      'exerciseMinutes',
-      Number.isFinite(summary.rolling?.last7ExerciseMinutes)
-        ? `${summary.rolling.last7ExerciseMinutes.toFixed(0)}분`
-        : '-'
-    );
-    setText(
-      'exerciseCalories',
-      Number.isFinite(summary.rolling?.last7ExerciseCalories)
-        ? `${summary.rolling.last7ExerciseCalories.toFixed(0)} kcal`
-        : '-'
-    );
-    setText('sleepHours', fmtHours(summary.rolling?.last7SleepHoursAvg));
-    setText('restingHr', fmtBpm(summary.rolling?.last7RestingHrAvg));
+    setText('stepsTotal', fmtSteps(summary.rolling?.last7StepsTotal));
+    setText('stepsAvg', fmtSteps(summary.rolling?.last7StepsAvg));
+    setText('exerciseMinutes', fmtMinutes(summary.rolling?.last7ExerciseMinutes));
+    setText('exerciseCalories', fmtKcal(summary.rolling?.last7ExerciseCalories));
+    setText('activeDays', fmtDays(summary.rolling?.last7ActiveDays));
     setText('weightRange', fmtKg(summary.rolling?.last7WeightRangeKg));
 
     const generatedAt = summary.generatedAt ? new Date(summary.generatedAt) : null;
@@ -212,6 +288,7 @@
     }
 
     renderChart(summary);
+    renderActivityChart(summary);
   }
 
   async function load() {
@@ -236,6 +313,10 @@
       if (chart) {
         chart.destroy();
         chart = null;
+      }
+      if (activityChart) {
+        activityChart.destroy();
+        activityChart = null;
       }
     } finally {
       reloadBtn.disabled = false;
