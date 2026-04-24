@@ -69,6 +69,10 @@ jobs:
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
 
+      - name: Rebuild summary from CSV
+        if: always()
+        run: python garmin-weight/scripts/sync_garmin.py --skip-garmin
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -84,6 +88,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update garmin weight data"
-          file_pattern: |
-            garmin-weight/data/daily_metrics.csv
-            garmin-weight/data/summary.json
+          file_pattern: "garmin-weight/data/daily_metrics.csv garmin-weight/data/summary.json"

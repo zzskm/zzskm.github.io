@@ -219,6 +219,11 @@ def fetch_activities_for_date(client: Any, day: str) -> list[dict[str, Any]]:
     return result if isinstance(result, list) else []
 
 
+def _safe_metabolic_age(value: Any) -> int | None:
+    age = parse_int(value)
+    return age if age is not None and 10 <= age <= 120 else None
+
+
 def extract_body_metrics(body: Any) -> dict[str, Any]:
     total_average = body.get("totalAverage") if isinstance(body, dict) else None
     payload = total_average if isinstance(total_average, dict) else (body if isinstance(body, dict) else {})
@@ -253,7 +258,7 @@ def extract_body_metrics(body: Any) -> dict[str, Any]:
             first_number(payload, "visceralFat", "visceralFatRating", "visceralFatMass"),
             2,
         ),
-        "metabolic_age": parse_int(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge")),
+        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge")),
     }
 
 
