@@ -1,0 +1,201 @@
+:root {
+  color-scheme: light;
+  --bg: #f4efe6;
+  --panel: rgba(255, 252, 247, 0.88);
+  --text: #1b130e;
+  --muted: #6f6256;
+  --line: rgba(92, 73, 57, 0.14);
+  --accent: #b14d24;
+  --accent-cool: #285f79;
+  --accent-cool-soft: #90b9cd;
+  --shadow: 0 20px 50px rgba(67, 40, 19, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  background:
+    radial-gradient(circle at top left, rgba(222, 159, 113, 0.28), transparent 32%),
+    radial-gradient(circle at top right, rgba(40, 95, 121, 0.16), transparent 28%),
+    linear-gradient(180deg, #f7f1e8 0%, #f2ebdf 45%, #efe7db 100%);
+  color: var(--text);
+}
+
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 18px 48px;
+}
+
+.hero,
+.chart-card,
+.support-card,
+.card {
+  backdrop-filter: blur(10px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.hero {
+  border-radius: 28px;
+  padding: 28px;
+  margin-bottom: 22px;
+}
+
+.eyebrow,
+.label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hero-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hero h1,
+.section-head h2 {
+  margin: 10px 0 0;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.04;
+  font-weight: 700;
+}
+
+.section-head h2 {
+  font-size: clamp(20px, 3vw, 28px);
+}
+
+.status {
+  margin: 12px 0 0;
+  max-width: 720px;
+  color: var(--muted);
+}
+
+.button {
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent) 0%, #ca7643 100%);
+  color: #fff9f4;
+  padding: 12px 18px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(177, 77, 36, 0.22);
+}
+
+.button:hover {
+  filter: brightness(1.05);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.card {
+  border-radius: 22px;
+  padding: 18px;
+  min-height: 128px;
+}
+
+.card .value,
+.support-card strong {
+  margin: 18px 0 0;
+  display: block;
+  font-size: clamp(22px, 2.7vw, 32px);
+  line-height: 1.05;
+}
+
+.chart-card {
+  border-radius: 28px;
+  padding: 24px;
+}
+
+.section-head {
+  margin-bottom: 18px;
+}
+
+.chart-wrap {
+  position: relative;
+  min-height: 360px;
+}
+
+#weightChart {
+  width: 100%;
+  height: 360px;
+}
+
+.support-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.support-card {
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+}
+
+.metric-row span {
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .support-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 14px 12px 28px;
+  }
+
+  .hero,
+  .chart-card,
+  .support-card,
+  .card {
+    border-radius: 20px;
+  }
+
+  .hero-copy {
+    flex-direction: column;
+  }
+
+  .cards,
+  .support-grid {
+    grid-template-columns: 1fr;
+  }
+}

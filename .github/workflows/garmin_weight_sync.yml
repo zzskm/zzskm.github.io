@@ -1,0 +1,89 @@
+name: garmin weight sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      backfill_days:
+        description: Days to resync, ending today
+        required: false
+        default: "3"
+  schedule:
+    - cron: "0 15 * * *"
+    - cron: "0 23 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}-garmin-weight
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ensure directories
+        run: mkdir -p garmin-weight/data garmin-weight/scripts
+
+      - name: Check auth secrets
+        run: |
+          if [[ -z "${GARMIN_TOKENS}" && ( -z "${GARMIN_EMAIL}" || -z "${GARMIN_PASSWORD}" ) ]]; then
+            echo "::error::No Garmin auth configured. Set GARMIN_TOKENS secret (preferred) or both GARMIN_EMAIL + GARMIN_PASSWORD."
+            exit 1
+          fi
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+
+      - name: Sync Garmin aggregates
+        run: |
+          python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}"
+        env:
+          BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '3' }}
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GARMIN_TOKENS_JSON: ${{ secrets.GARMIN_TOKENS_JSON }}
+          GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: garmin-weight-data
+          path: |
+            garmin-weight/data/daily_metrics.csv
+            garmin-weight/data/summary.json
+          if-no-files-found: warn
+
+      - name: Commit and push data
+        if: success()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update garmin weight data"
+          file_pattern: |
+            garmin-weight/data/daily_metrics.csv
+            garmin-weight/data/summary.json

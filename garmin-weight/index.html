@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Garmin 체중 추세</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">GARMIN WEIGHT TRACKER</p>
+      <div class="hero-copy">
+        <div>
+          <h1>체중 추세와 감량 예측</h1>
+          <p id="status" class="status">요약 데이터를 불러오는 중입니다.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="reloadBtn" class="button" type="button">다시 불러오기</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="cards" aria-label="요약 카드">
+      <article class="card">
+        <p class="label">현재 체중</p>
+        <p id="currentWeight" class="value">-</p>
+      </article>
+      <article class="card">
+        <p class="label">7일 평균 체중</p>
+        <p id="ma7Weight" class="value">-</p>
+      </article>
+      <article class="card">
+        <p class="label">주당 감량 속도</p>
+        <p id="weeklyLossRate" class="value">-</p>
+      </article>
+      <article class="card">
+        <p class="label">1개월 예상 체중</p>
+        <p id="predicted1m" class="value">-</p>
+      </article>
+      <article class="card">
+        <p class="label">3개월 예상 체중</p>
+        <p id="predicted3m" class="value">-</p>
+      </article>
+      <article class="card">
+        <p class="label">목표 체중 ETA</p>
+        <p id="goalEta" class="value">-</p>
+      </article>
+    </section>
+
+    <section class="chart-card">
+      <div class="section-head">
+        <div>
+          <p class="label">체중 추이</p>
+          <h2>실제 체중, 이동평균, 12주 기본 예측</h2>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="weightChart" aria-label="체중 추세 차트" role="img"></canvas>
+      </div>
+    </section>
+
+    <section class="support-grid" aria-label="보조 지표">
+      <article class="support-card">
+        <p class="label">최근 7일 운동 총량</p>
+        <div class="metric-row">
+          <span>총 운동분</span>
+          <strong id="exerciseMinutes">-</strong>
+        </div>
+        <div class="metric-row">
+          <span>총 운동 칼로리</span>
+          <strong id="exerciseCalories">-</strong>
+        </div>
+      </article>
+      <article class="support-card">
+        <p class="label">최근 7일 수면</p>
+        <div class="metric-row">
+          <span>평균 수면시간</span>
+          <strong id="sleepHours">-</strong>
+        </div>
+      </article>
+      <article class="support-card">
+        <p class="label">최근 7일 회복 신호</p>
+        <div class="metric-row">
+          <span>평균 안정시 심박</span>
+          <strong id="restingHr">-</strong>
+        </div>
+      </article>
+      <article class="support-card">
+        <p class="label">최근 7일 변동성</p>
+        <div class="metric-row">
+          <span>체중 변동폭</span>
+          <strong id="weightRange">-</strong>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script defer src="./app.js"></script>
+</body>
+</html>
