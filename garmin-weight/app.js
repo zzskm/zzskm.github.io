@@ -248,6 +248,11 @@
     if (!canvas || !window.Chart) return;
 
     const s = state.summary;
+    const cfg = state.config; // config 데이터 참조
+    
+    const target = cfg?.targetWeightKg ?? 80; 
+    const yMin = Math.floor(target - 2);
+
     const daily = sliceByRange(s.series?.daily || [], state.range);
     const ma7 = sliceByRange(s.series?.ma7 || [], state.range);
     const ma14 = sliceByRange(s.series?.ma14 || [], state.range);
@@ -320,8 +325,8 @@
     datasets.push({
       label: '실제',
       data: align(daily),
-      borderColor: '#111111',
-      backgroundColor: 'rgba(17,17,17,0.04)',
+      borderColor: '#c25a31',
+      backgroundColor: 'rgba(194,90,49,0.06)',
       borderWidth: 2.5,
       pointRadius: 3,
       pointHoverRadius: 5,
@@ -374,6 +379,7 @@
             },
           },
           y: {
+            min: yMin,
             grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
             border: { display: false },
             ticks: {
@@ -411,8 +417,8 @@
         type: 'bar',
         label: '운동 시간',
         data: minutesArr,
-        backgroundColor: '#111111',
-        borderColor: '#111111',
+        backgroundColor: 'rgba(31, 90, 116, 0.45)',
+        borderColor: '#1f5a74',
         borderWidth: 0,
         borderRadius: 2,
         barPercentage: 0.7,
