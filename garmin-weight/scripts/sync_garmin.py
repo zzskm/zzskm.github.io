@@ -204,11 +204,14 @@ def build_client() -> Any:
         raise RuntimeError(f"Garmin login failed: {exc}") from exc
 
     LOGGER.info("auth: password login succeeded")
-    new_token = client.garth.dumps()
-    LOGGER.info(
-        "New GARMIN_TOKENS value (update your secret):\n%s",
-        new_token,
-    )
+    try:
+        if hasattr(client, "garth") and hasattr(client.garth, "dumps"):
+            new_token = client.garth.dumps()
+            LOGGER.info("New GARMIN_TOKENS value (update your secret):\n%s", new_token)
+        else:
+            LOGGER.warning("garth.dumps() not available — token cannot be saved automatically")
+    except Exception as exc:
+        LOGGER.warning("Could not retrieve token: %s", exc)
     return client
 
 
