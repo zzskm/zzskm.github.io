@@ -93,10 +93,24 @@ body {
   gap: 10px;
 }
 
-.sync-text {
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
   font-size: 12px;
-  color: var(--muted-2);
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.sync-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #79b089;
+  box-shadow: 0 0 0 3px rgba(121,176,137,0.15);
+  flex: none;
 }
 
 .icon-button {
@@ -687,6 +701,19 @@ body {
 }
 .dot-cell.has { background: var(--ink-soft); }
 .dot-cell.has-today { background: var(--accent); box-shadow: 0 0 0 1.5px rgba(194,90,49,0.15); }
+
+/* Coverage card — full-width dots in 10-col grid */
+.bottom-card--coverage {
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 10px;
+}
+.bottom-card--coverage .dots {
+  grid-column: 1;
+  max-width: none;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 5px;
+}
 
 /* ====================== FOOT ====================== */
 .foot {
