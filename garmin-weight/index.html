@@ -61,30 +61,43 @@
       </div>
     </section>
 
+    <section class="chart-card">
+      <div class="section-head">
+        <div>
+          <p class="label">활동 추이</p>
+          <h2>일별 걸음 수와 운동 시간 (최근 30일)</h2>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="activityChart" aria-label="활동 추세 차트" role="img"></canvas>
+      </div>
+    </section>
+
     <section class="support-grid" aria-label="보조 지표">
       <article class="support-card">
-        <p class="label">최근 7일 운동 총량</p>
+        <p class="label">최근 7일 걸음 수</p>
         <div class="metric-row">
-          <span>총 운동분</span>
+          <span>총 걸음 수</span>
+          <strong id="stepsTotal">-</strong>
+        </div>
+        <div class="metric-row">
+          <span>일평균</span>
+          <strong id="stepsAvg">-</strong>
+        </div>
+      </article>
+      <article class="support-card">
+        <p class="label">최근 7일 운동</p>
+        <div class="metric-row">
+          <span>총 운동 시간</span>
           <strong id="exerciseMinutes">-</strong>
         </div>
         <div class="metric-row">
           <span>총 운동 칼로리</span>
           <strong id="exerciseCalories">-</strong>
         </div>
-      </article>
-      <article class="support-card">
-        <p class="label">최근 7일 수면</p>
         <div class="metric-row">
-          <span>평균 수면시간</span>
-          <strong id="sleepHours">-</strong>
-        </div>
-      </article>
-      <article class="support-card">
-        <p class="label">최근 7일 회복 신호</p>
-        <div class="metric-row">
-          <span>평균 안정시 심박</span>
-          <strong id="restingHr">-</strong>
+          <span>운동한 날</span>
+          <strong id="activeDays">-</strong>
         </div>
       </article>
       <article class="support-card">
