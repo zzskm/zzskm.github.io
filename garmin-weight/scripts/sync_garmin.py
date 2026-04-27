@@ -9,12 +9,14 @@ import json
 import logging
 import math
 import os
+import statistics
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 LOGGER = logging.getLogger("garmin_weight")
+EWMA_LAMBDA = 0.1
 
 CSV_HEADERS = [
     "date",
@@ -400,11 +402,133 @@ def build_prediction_series(
     return series
 
 
+def compute_ewma(weight_values: list[float | None], lambda_: float = EWMA_LAMBDA) -> list[float | None]:
+    """Z_t = λ·X_t + (1-λ)·Z_{t-1}. None은 건너뛰고 직전 Z 유지."""
+    z: float | None = None
+    out: list[float | None] = []
+    for x in weight_values:
+        if x is not None:
+            z = x if z is None else lambda_ * x + (1 - lambda_) * z
+        out.append(round(z, 2) if z is not None else None)
+    return out
+
+
+def compute_prediction_ci(
+    ewma_series: list[dict[str, Any]],
+    weight_series: list[dict[str, Any]],
+    weekly_loss_rate: float,
+    prediction_weeks: int = 12,
+) -> dict[str, Any]:
+    """잔차(실측 - EWMA) std 기반 80% 예측 구간. sqrt(t)로 시간에 따라 확장."""
+    ew_map = {p["date"]: p["valueKg"] for p in ewma_series if p["valueKg"] is not None}
+    residuals = [
+        p["valueKg"] - ew_map[p["date"]]
+        for p in weight_series[-30:]
+        if p["valueKg"] is not None and p["date"] in ew_map
+    ]
+    std = statistics.stdev(residuals) if len(residuals) >= 5 else 0.5
+
+    last_valid = next((p for p in reversed(ewma_series) if p["valueKg"] is not None), None)
+    if last_valid is None:
+        return {"stdResidual": None, "series": []}
+
+    start = last_valid["valueKg"]
+    last_date = date.fromisoformat(last_valid["date"])
+    series = []
+    for week in range(1, prediction_weeks + 1):
+        central = round(start - weekly_loss_rate * week, 2)
+        spread80 = round(1.28 * std * (week ** 0.5), 2)
+        series.append({
+            "date": (last_date + timedelta(weeks=week)).isoformat(),
+            "central": central,
+            "lower80": round(central - spread80, 2),
+            "upper80": round(central + spread80, 2),
+        })
+    return {"stdResidual": round(std, 3), "series": series}
+
+
+def classify_loss_intensity(weekly_loss_kg: float | None, current_weight_kg: float | None) -> dict[str, Any] | None:
+    """주당 체중 대비 감량 % 기준으로 강도 분류 (CDC/WHO 기준)."""
+    if current_weight_kg is None or current_weight_kg <= 0 or weekly_loss_kg is None:
+        return None
+    weekly_pct = (weekly_loss_kg / current_weight_kg) * 100
+    daily_deficit = weekly_loss_kg * 7700 / 7
+
+    if weekly_loss_kg <= 0.05:
+        level = "maintaining"
+    elif weekly_pct < 0.3:
+        level = "conservative"
+    elif weekly_pct < 0.7:
+        level = "standard"
+    else:
+        level = "aggressive"
+
+    return {
+        "level": level,
+        "weeklyKg": round(weekly_loss_kg, 3),
+        "weeklyPct": round(weekly_pct, 2),
+        "dailyDeficitKcal": round(daily_deficit, 0),
+    }
+
+
+def detect_plateau(
+    ewma_series: list[dict[str, Any]],
+    threshold_kg_per_week: float = 0.05,
+    min_days: int = 14,
+) -> dict[str, Any]:
+    """EWMA 기준 최근 min_days 동안 변화량이 threshold 미만이면 정체기."""
+    recent = [p for p in ewma_series[-min_days:] if p.get("valueKg") is not None]
+    if len(recent) < min_days:
+        return {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None}
+
+    days = (date.fromisoformat(recent[-1]["date"]) - date.fromisoformat(recent[0]["date"])).days
+    weekly_change = (recent[0]["valueKg"] - recent[-1]["valueKg"]) / (days / 7) if days > 0 else 0.0
+    detected = abs(weekly_change) < threshold_kg_per_week
+    return {
+        "detected": detected,
+        "startDate": recent[0]["date"] if detected else None,
+        "durationDays": days if detected else 0,
+        "weeklyChangeDelta": round(weekly_change, 3),
+    }
+
+
+def build_insight(
+    current_kg: float | None,
+    ewma_kg: float | None,
+    intensity: dict[str, Any] | None,
+    plateau: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """자연어 코칭 메시지 생성. 프론트는 단순 표시만 담당."""
+    lines: list[str] = []
+    if ewma_kg is not None and current_kg is not None:
+        diff = round(current_kg - ewma_kg, 2)
+        if abs(diff) >= 0.3:
+            direction = "수분 증가로 일시적 상승" if diff > 0 else "수분 감소로 일시적 하락"
+            lines.append(f"오늘 {current_kg}kg이지만 추세는 {ewma_kg}kg — {direction}일 수 있어요.")
+
+    if plateau and plateau.get("detected"):
+        dur = plateau.get("durationDays", 0)
+        lines.append(
+            f"{dur}일째 정체 중이지만 대사 적응 과정의 정상 패턴입니다. "
+            "운동량 10% ↑ 또는 식단 변화로 돌파해 보세요."
+        )
+    elif intensity:
+        level = intensity.get("level")
+        if level == "aggressive":
+            lines.append("감량 속도가 빠릅니다. 단백질 충분 섭취로 근손실을 막아 주세요.")
+        elif level == "standard":
+            lines.append("CDC 권장 범위(주 0.5%) 안의 건강한 페이스입니다.")
+        elif level == "conservative":
+            lines.append("느리지만 지속 가능한 페이스 — 장기 유지에 유리합니다.")
+
+    return {"headline": lines[0] if lines else None, "lines": lines}
+
+
 def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
     if not rows:
         return {
             "generatedAt": datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z",
-            "current": {"weightKg": None, "weightDate": None, "weightMa7Kg": None, "weightMa14Kg": None},
+            "current": {"weightKg": None, "weightDate": None, "weightMa7Kg": None, "weightMa14Kg": None, "weightEwmaKg": None},
             "rolling": {
                 "weeklyLossRateKg": None,
                 "last7ExerciseMinutes": 0,
@@ -421,7 +545,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "etaDays": None,
                 "etaDate": None,
             },
-            "series": {"daily": [], "ma7": [], "ma14": [], "prediction": [], "steps": [], "exerciseMinutes": []},
+            "lossIntensity": None,
+            "plateau": {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None},
+            "predictionCI": {"stdResidual": None, "series": []},
+            "insight": {"headline": None, "lines": []},
+            "series": {"daily": [], "ma7": [], "ma14": [], "ewma": [], "prediction": [], "predictionCI": [], "steps": [], "exerciseMinutes": []},
         }
 
     all_dates = [row["date"] for row in rows]
@@ -446,11 +574,17 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         if weight is not None:
             latest_weight_row = row
 
+    # EWMA 계산
+    all_weights = [row.get("weight_kg") for row in rows]
+    ewma_values = compute_ewma(all_weights)
+    ewma_series = [{"date": all_dates[i], "valueKg": ewma_values[i]} for i in range(len(rows))]
+
     latest_date = rows[-1]["date"]
     current_weight = latest_weight_row.get("weight_kg") if latest_weight_row else None
     weight_date = latest_weight_row.get("date") if latest_weight_row else None
     current_ma7 = ma7_by_date.get(latest_date)
     current_ma14 = ma14_by_date.get(latest_date)
+    current_ewma = ewma_values[-1] if ewma_values else None
 
     weekly_loss_rate = None
     if len(rows) >= 14:
@@ -514,6 +648,21 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "threeMonthWeightKg": round_or_none(current_ma7 - weekly_loss_rate * 12 * multiplier, 2),
             }
 
+    # 고도화 계산
+    effective_loss_for_ci = weekly_loss_rate if weekly_loss_rate and weekly_loss_rate > 0 else 0.0
+    prediction_ci = compute_prediction_ci(ewma_series, daily_series, effective_loss_for_ci)
+    loss_intensity = classify_loss_intensity(
+        weekly_loss_rate if weekly_loss_rate and weekly_loss_rate > 0 else None,
+        current_ewma,
+    )
+    plateau = detect_plateau(ewma_series)
+    insight = build_insight(current_weight, current_ewma, loss_intensity, plateau)
+
+    # 측정 커버리지 (최근 30일)
+    last30 = rows[-30:]
+    measured_count = sum(1 for r in last30 if r.get("weight_kg") is not None)
+    coverage_pct = round(measured_count / len(last30) * 100, 0) if last30 else 0
+
     return {
         "generatedAt": datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z",
         "current": {
@@ -521,6 +670,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "weightDate": weight_date,
             "weightMa7Kg": current_ma7,
             "weightMa14Kg": current_ma14,
+            "weightEwmaKg": current_ewma,
         },
         "rolling": rolling,
         "predictions": {
@@ -534,11 +684,22 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "etaDays": eta_days,
             "etaDate": eta_date,
         },
+        "lossIntensity": loss_intensity,
+        "plateau": plateau,
+        "predictionCI": prediction_ci,
+        "insight": insight,
+        "coverage": {
+            "last30Measured": measured_count,
+            "last30Total": len(last30),
+            "last30Pct": coverage_pct,
+        },
         "series": {
             "daily": daily_series,
             "ma7": ma7_series,
             "ma14": ma14_series,
-            "prediction": build_prediction_series(latest_date, current_ma7, weekly_loss_rate, base_multiplier),
+            "ewma": ewma_series,
+            "prediction": build_prediction_series(latest_date, current_ewma, weekly_loss_rate, base_multiplier),
+            "predictionCI": prediction_ci["series"],
             "steps": [
                 {"date": row["date"], "value": row.get("steps")}
                 for row in rows[-30:]

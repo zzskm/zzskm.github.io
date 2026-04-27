@@ -30,6 +30,17 @@
   --ma14: #d8d8d4;          /* lighter gray */
   --predict: #c25a31;       /* accent only for forecast */
 
+  /* Intensity levels */
+  --intensity-maintaining: #9a9a96;
+  --intensity-conservative: #6a8caf;
+  --intensity-standard: #79b089;
+  --intensity-aggressive: #c25a31;
+
+  /* Amber — plateau warning */
+  --amber: #d97706;
+  --amber-tint: #fffbeb;
+  --amber-line: #fde68a;
+
   /* Motion */
   --ease: cubic-bezier(.2,.7,.2,1);
   --shadow-sm: 0 1px 0 rgba(17,17,17,0.03);
@@ -713,6 +724,117 @@ body {
   max-width: none;
   grid-template-columns: repeat(10, 1fr);
   gap: 5px;
+}
+
+/* ====================== TREND WEIGHT ====================== */
+.trend-label {
+  color: var(--muted-2);
+  font-size: 11.5px;
+}
+.trend-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ====================== INTENSITY GAUGE ====================== */
+.intensity-gauge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.intensity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  transition: background 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.intensity-dot.is-active[data-level="maintaining"] { background: var(--intensity-maintaining); transform: scale(1.2); }
+.intensity-dot.is-active[data-level="conservative"] { background: var(--intensity-conservative); transform: scale(1.2); }
+.intensity-dot.is-active[data-level="standard"] { background: var(--intensity-standard); transform: scale(1.2); }
+.intensity-dot.is-active[data-level="aggressive"] { background: var(--intensity-aggressive); transform: scale(1.2); }
+.intensity-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* ====================== PLATEAU CARD ====================== */
+.plateau-card {
+  margin: 0 0 16px;
+  padding: 16px 20px;
+  background: var(--amber-tint);
+  border: 1px solid var(--amber-line);
+  border-left: 4px solid var(--amber);
+  border-radius: 10px;
+}
+.plateau-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.plateau-tag {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--amber);
+  background: rgba(217,119,6,0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.plateau-duration {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--amber);
+}
+.plateau-msg {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.plateau-actions {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+/* ====================== INSIGHT CARD ====================== */
+.insight-card {
+  margin: 0 0 16px;
+  padding: 14px 20px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+}
+.insight-headline {
+  margin: 0;
+  font-family: "Instrument Serif", serif;
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+/* ====================== SCENARIO TAGS (강도별 색상) ====================== */
+.scenario-tag--conservative { color: var(--intensity-conservative); }
+.scenario-tag--standard     { color: var(--intensity-standard); }
+.scenario-tag--aggressive   { color: var(--intensity-aggressive); }
+
+/* 선택된 시나리오 강도 vs 현재 강도 비교 라벨 */
+.scenarios-current {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: center;
 }
 
 /* ====================== FOOT ====================== */
