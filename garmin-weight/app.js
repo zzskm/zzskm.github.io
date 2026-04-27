@@ -104,17 +104,20 @@
       de.className = 'delta ' + (delta > 0 ? 'up' : delta < 0 ? 'down' : '');
     }
 
+    // EWMA 추세 체중
+    const ewmaKg = s.current?.weightEwmaKg;
+    setText('trendWeight', Number.isFinite(ewmaKg) ? `${ewmaKg.toFixed(1)} kg` : '–');
+
     setText('ma7Weight', fmtKgBare(s.current?.weightMa7Kg));
     const ma7Diff = (s.current?.weightKg ?? 0) - (s.current?.weightMa7Kg ?? 0);
     if (Number.isFinite(ma7Diff)) {
       setText('ma7Delta', `현재 ${ma7Diff >= 0 ? '+' : '−'}${Math.abs(ma7Diff).toFixed(1)} kg`);
     }
 
+    // 감량 강도 게이지
     const rate = s.rolling?.weeklyLossRateKg;
-    setText('weeklyLossRate', Number.isFinite(rate) ? `${rate >= 0 ? '−' : '+'}${Math.abs(rate).toFixed(2)}` : '–');
-    setText('rateContext', Number.isFinite(rate)
-      ? (rate > 0.05 ? '감량 중' : rate < -0.05 ? '증가 중' : '정체') + ' · kg/주'
-      : 'kg/주');
+    setText('weeklyLossRate', Number.isFinite(rate) ? `−${rate.toFixed(2)} kg/주` : '–');
+    renderIntensityGauge(s.lossIntensity);
 
     setText('goalEta', fmtEta(s.goal));
     setText('goalEtaDate', s.goal?.etaDate ? `${fmtDate(s.goal.etaDate)} 예상` : '–');
@@ -141,6 +144,68 @@
     setText('scenarioOpt', sc.optimistic ? fmtKg(sc.optimistic.threeMonthWeightKg) : '–');
     setText('scenarioBase', sc.base ? fmtKg(sc.base.threeMonthWeightKg) : '–');
     setText('scenarioCon', sc.conservative ? fmtKg(sc.conservative.threeMonthWeightKg) : '–');
+    renderScenarioCompare(s.lossIntensity, state.scenario);
+  }
+
+  // ---------- intensity gauge ----------
+  const INTENSITY_LEVELS = ['maintaining', 'conservative', 'standard', 'aggressive'];
+  const INTENSITY_LABELS = {
+    maintaining: '유지 중',
+    conservative: '보수적',
+    standard: '표준',
+    aggressive: '공격적',
+  };
+
+  function renderIntensityGauge(intensity) {
+    const gauge = el('intensityGauge');
+    if (!gauge) return;
+    const level = intensity?.level ?? null;
+    gauge.querySelectorAll('.intensity-dot').forEach(dot => {
+      dot.classList.toggle('is-active', dot.dataset.level === level);
+    });
+    const pct = intensity?.weeklyPct;
+    const label = level ? `${INTENSITY_LABELS[level] ?? level}${Number.isFinite(pct) ? ` · ${pct.toFixed(2)}%/주` : ''}` : '–';
+    setText('intensityLabel', label);
+    const metric = el('intensityMetric');
+    if (metric && intensity) {
+      const deficit = intensity.dailyDeficitKcal;
+      metric.title = Number.isFinite(deficit) ? `일일 결핍 추정 약 ${deficit} kcal` : '';
+    }
+  }
+
+  // ---------- insight card ----------
+  function renderInsight(insight) {
+    const card = el('insightCard');
+    if (!card) return;
+    const headline = insight?.headline;
+    if (!headline) { card.hidden = true; return; }
+    setText('insightHeadline', headline);
+    card.hidden = false;
+  }
+
+  // ---------- plateau card ----------
+  function renderPlateau(plateau) {
+    const card = el('plateauCard');
+    if (!card) return;
+    if (!plateau?.detected) { card.hidden = true; return; }
+    setText('plateauDuration', `${plateau.durationDays}일째`);
+    card.hidden = false;
+  }
+
+  // ---------- scenario compare label ----------
+  function renderScenarioCompare(intensity, scenario) {
+    const label = el('scenariosCurrent');
+    if (!label) return;
+    if (!intensity) { label.hidden = true; return; }
+    const currentLabel = INTENSITY_LABELS[intensity.level] ?? intensity.level;
+    const scenarioMap = { optimistic: '공격적', base: '표준', conservative: '보수적' };
+    const selectedLabel = scenarioMap[scenario] ?? scenario;
+    if (currentLabel === selectedLabel) {
+      label.hidden = true;
+      return;
+    }
+    label.textContent = `현재 ${currentLabel} · 시나리오 ${selectedLabel}`;
+    label.hidden = false;
   }
 
   // ---------- bottom: variability + coverage ----------
@@ -243,6 +308,41 @@
   }
 
   // ---------- weight chart ----------
+  function buildCiBands(s, scenario) {
+    const ci = s.predictionCI?.series || [];
+    if (!ci.length) return { upper: [], lower: [] };
+    const mult = s.predictions?.scenarios?.[scenario]?.multiplier ?? 0.8;
+    const baseMult = s.predictions?.scenarios?.base?.multiplier ?? 0.8;
+    const factor = baseMult > 0 ? mult / baseMult : 1;
+    const ewmaLast = s.series?.ewma?.slice(-1)[0]?.valueKg ?? null;
+    return {
+      upper: ci.map(p => ({ date: p.date, valueKg: ewmaLast !== null ? ewmaLast + (p.upper80 - p.central) * factor : p.upper80 })),
+      lower: ci.map(p => ({ date: p.date, valueKg: ewmaLast !== null ? ewmaLast + (p.lower80 - p.central) * factor : p.lower80 })),
+    };
+  }
+
+  function makePlateauPlugin(s, labels) {
+    const plateau = s.plateau;
+    if (!plateau?.detected || !plateau.startDate) return null;
+    return {
+      id: 'plateauShade',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea, scales } = chart;
+        const xScale = scales.x;
+        if (!xScale) return;
+        const startIdx = labels.indexOf(plateau.startDate);
+        const endIdx = labels.length - 1;
+        if (startIdx < 0) return;
+        const x1 = xScale.getPixelForValue(startIdx);
+        const x2 = xScale.getPixelForValue(endIdx);
+        ctx.save();
+        ctx.fillStyle = 'rgba(217,119,6,0.06)';
+        ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
+        ctx.restore();
+      },
+    };
+  }
+
   function renderChart() {
     const canvas = el('weightChart');
     if (!canvas || !window.Chart) return;
@@ -254,16 +354,17 @@
     const yMin = Math.floor(target - 2);
 
     const daily = sliceByRange(s.series?.daily || [], state.range);
-    const ma7 = sliceByRange(s.series?.ma7 || [], state.range);
+    const ewma = sliceByRange(s.series?.ewma || [], state.range);
     const ma14 = sliceByRange(s.series?.ma14 || [], state.range);
     const prediction = buildPredictionFromScenario(s, state.scenario);
+    const ci = buildCiBands(s, state.scenario);
 
     const labelSet = new Set();
-    [daily, ma7, ma14, prediction].forEach(arr => arr.forEach(p => labelSet.add(p.date)));
+    [daily, ewma, ma14, prediction, ci.upper, ci.lower].forEach(arr => arr.forEach(p => labelSet.add(p.date)));
     const labels = Array.from(labelSet).sort();
 
-    const align = (arr) => {
-      const m = new Map(arr.map(p => [p.date, p.valueKg]));
+    const align = (arr, key = 'valueKg') => {
+      const m = new Map(arr.map(p => [p.date, p[key] ?? p.valueKg]));
       return labels.map(d => m.has(d) ? m.get(d) : null);
     };
 
@@ -271,7 +372,7 @@
 
     const datasets = [];
 
-    // Background: MA14 (softest)
+    // MA14 (softest, optional)
     if (state.visible.ma14) {
       datasets.push({
         label: '14일 평균',
@@ -283,15 +384,15 @@
         tension: 0.35,
         spanGaps: true,
         fill: false,
-        order: 3,
+        order: 4,
       });
     }
 
-    // MA7 (soft)
+    // EWMA 추세선 (MA7 칩으로 제어)
     if (state.visible.ma7) {
       datasets.push({
-        label: '7일 평균',
-        data: align(ma7),
+        label: '추세',
+        data: align(ewma),
         borderColor: '#b8b8b4',
         borderWidth: 1.75,
         pointRadius: 0,
@@ -299,12 +400,36 @@
         tension: 0.35,
         spanGaps: true,
         fill: false,
-        order: 2,
+        order: 3,
       });
     }
 
-    // Prediction (accent, dashed)
+    // 예측 CI 밴드 (upper80 → lower80 fill)
     if (state.visible.prediction) {
+      datasets.push({
+        label: '_ciUpper',
+        data: align(ci.upper),
+        borderColor: 'transparent',
+        borderWidth: 0,
+        pointRadius: 0,
+        spanGaps: true,
+        fill: '+1',
+        backgroundColor: 'rgba(194,90,49,0.10)',
+        tension: 0.25,
+        order: 2,
+      });
+      datasets.push({
+        label: '_ciLower',
+        data: align(ci.lower),
+        borderColor: 'transparent',
+        borderWidth: 0,
+        pointRadius: 0,
+        spanGaps: true,
+        fill: false,
+        tension: 0.25,
+        order: 2,
+      });
+      // 예측 중앙선 (accent, dashed)
       datasets.push({
         label: '예측',
         data: align(prediction),
@@ -321,7 +446,7 @@
       });
     }
 
-    // Actual (TOP, boldest) — always on
+    // 실제 측정값 (항상 표시)
     datasets.push({
       label: '실제',
       data: align(daily),
@@ -339,9 +464,15 @@
       order: 0,
     });
 
+    // 정체기 플러그인
+    const ewmaMap = new Map((s.series?.ewma || []).map(p => [p.date, p.valueKg]));
+    const plateauPlugin = makePlateauPlugin(s, labels);
+    const plugins = plateauPlugin ? [plateauPlugin] : [];
+
     state.chart = new Chart(canvas, {
       type: 'line',
       data: { labels, datasets },
+      plugins,
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -358,10 +489,37 @@
             titleFont: { family: 'Inter Tight', weight: '600', size: 12 },
             bodyFont: { family: 'JetBrains Mono', size: 11.5 },
             boxPadding: 4,
-            itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
+            filter: (item) => !item.dataset.label.startsWith('_'),
             callbacks: {
               title: (items) => items[0] ? fmtDateShort(items[0].label) : '',
-              label: (ctx) => ` ${ctx.dataset.label}: ${fmtKg(ctx.parsed.y)}`,
+              label: (ctx) => {
+                if (ctx.dataset.label === '실제') {
+                  const dateKey = ctx.label;
+                  const ewmaVal = ewmaMap.get(dateKey);
+                  const actualVal = ctx.parsed.y;
+                  if (Number.isFinite(ewmaVal) && Number.isFinite(actualVal)) {
+                    const diff = actualVal - ewmaVal;
+                    const sign = diff >= 0 ? '+' : '−';
+                    return [
+                      ` 실제  ${fmtKg(actualVal)}`,
+                      ` 추세  ${fmtKg(ewmaVal)}`,
+                      ` 편차  ${sign}${Math.abs(diff).toFixed(1)} kg`,
+                    ];
+                  }
+                  return ` 실제  ${fmtKg(ctx.parsed.y)}`;
+                }
+                if (ctx.dataset.label === '예측') {
+                  const dateKey = ctx.label;
+                  const ciPoint = (s.predictionCI?.series || []).find(p => p.date === dateKey);
+                  if (ciPoint) {
+                    return [
+                      ` 예측  ${fmtKg(ctx.parsed.y)}`,
+                      ` 80%  ${fmtKgBare(ciPoint.lower80)} – ${fmtKgBare(ciPoint.upper80)} kg`,
+                    ];
+                  }
+                }
+                return ` ${ctx.dataset.label}  ${fmtKg(ctx.parsed.y)}`;
+              },
             },
           },
         },
@@ -524,14 +682,25 @@
   // ---------- prediction-only update (scenario switch) ----------
   function updatePrediction() {
     if (!state.chart) return;
-    const prediction = buildPredictionFromScenario(state.summary, state.scenario);
+    const s = state.summary;
+    const prediction = buildPredictionFromScenario(s, state.scenario);
+    const ci = buildCiBands(s, state.scenario);
     const labels = state.chart.data.labels;
-    const m = new Map(prediction.map(p => [p.date, p.valueKg]));
-    const newData = labels.map(d => m.has(d) ? m.get(d) : null);
+
+    const toMap = (arr) => new Map(arr.map(p => [p.date, p.valueKg]));
+    const remap = (m) => labels.map(d => m.has(d) ? m.get(d) : null);
+
     const predDataset = state.chart.data.datasets.find(d => d.label === '예측');
-    if (!predDataset) return;
-    predDataset.data = newData;
+    if (predDataset) predDataset.data = remap(toMap(prediction));
+
+    const upper = state.chart.data.datasets.find(d => d.label === '_ciUpper');
+    if (upper) upper.data = remap(toMap(ci.upper));
+
+    const lower = state.chart.data.datasets.find(d => d.label === '_ciLower');
+    if (lower) lower.data = remap(toMap(ci.lower));
+
     state.chart.update('none');
+    renderScenarioCompare(s.lossIntensity, state.scenario);
   }
 
   // ---------- interactions ----------
@@ -590,12 +759,20 @@
 
       renderHero();
       renderBottom();
+      renderInsight(state.summary.insight);
+      renderPlateau(state.summary.plateau);
       renderChart();
       renderActivityChart();
 
       const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
-      el('lastSync').querySelector('.sync-text').textContent = gen
-        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+      const cov = state.summary.coverage;
+      const covText = cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '';
+      const lowCoverage = cov && cov.last30Pct < 70;
+      const syncPill = el('lastSync');
+      const syncDot = syncPill?.querySelector('.sync-dot');
+      if (syncDot) syncDot.style.background = lowCoverage ? '#d97706' : '';
+      syncPill.querySelector('.sync-text').textContent = gen
+        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${covText}`
         : '데이터 로드됨';
       setText('statusLine',
         `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);

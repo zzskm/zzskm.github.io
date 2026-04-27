@@ -68,6 +68,8 @@
               <span id="currentDelta" class="delta">–</span>
               <span class="big-weight-sep"> · </span>
               <span id="currentDate">–</span>
+              <span class="big-weight-sep"> · </span>
+              <span class="trend-label">추세</span> <span id="trendWeight" class="trend-val">–</span>
             </p>
           </div>
           <div class="hero-metrics">
@@ -76,10 +78,16 @@
               <p id="ma7Weight" class="hero-metric-val">–</p>
               <p id="ma7Delta" class="hero-metric-sub">–</p>
             </div>
-            <div class="hero-metric">
-              <p class="label">주당 변화</p>
+            <div class="hero-metric" id="intensityMetric" title="">
+              <p class="label">감량 강도</p>
               <p id="weeklyLossRate" class="hero-metric-val">–</p>
-              <p id="rateContext" class="hero-metric-sub">–</p>
+              <div class="intensity-gauge" id="intensityGauge">
+                <span class="intensity-dot" data-level="maintaining"></span>
+                <span class="intensity-dot" data-level="conservative"></span>
+                <span class="intensity-dot" data-level="standard"></span>
+                <span class="intensity-dot" data-level="aggressive"></span>
+                <span id="intensityLabel" class="intensity-text">–</span>
+              </div>
             </div>
             <div class="hero-metric">
               <p class="label">목표까지</p>
@@ -108,12 +116,31 @@
     </section>
     </div><!-- /main-grid -->
 
+    <!-- 정체기 코칭 카드 (plateau.detected 시에만 표시) -->
+    <aside class="plateau-card" id="plateauCard" hidden>
+      <div class="plateau-head">
+        <span class="plateau-tag">정체기 감지</span>
+        <span id="plateauDuration" class="plateau-duration">–</span>
+      </div>
+      <p class="plateau-msg">대사 적응 과정의 정상적인 현상입니다. 의지의 문제가 아니에요.</p>
+      <ul class="plateau-actions">
+        <li>운동 강도 또는 시간 10% 늘리기</li>
+        <li>탄수화물 비중 일시 조정 (재공급)</li>
+        <li>수면 7시간 이상 확보</li>
+      </ul>
+    </aside>
+
+    <!-- 인사이트 카드 (headline 있을 때만 표시) -->
+    <section class="insight-card" id="insightCard" hidden>
+      <p class="insight-headline" id="insightHeadline">–</p>
+    </section>
+
     <!-- Trend + scenarios (scenarios replace duplicate 1m/3m insight cards) -->
     <section class="panel">
       <div class="panel-head">
         <div>
           <p class="eyebrow">체중 추이</p>
-          <h2 class="panel-title">실제 · 이동평균 · 예측</h2>
+          <h2 class="panel-title">실제 · 추세 · 예측 + 신뢰 띠</h2>
         </div>
         <div class="panel-controls">
           <div class="seg" role="tablist" aria-label="기간">
@@ -122,20 +149,20 @@
             <button class="seg-btn" data-range="all" type="button">전체</button>
           </div>
           <div class="chips" role="group" aria-label="표시 항목">
-            <label class="chip" data-series="ma7">
+            <label class="chip" data-series="ma7" title="EWMA(지수 가중 이동평균) — 수분 변동 노이즈 제거">
               <input type="checkbox" checked />
               <span class="chip-swatch" style="--c:var(--ma7)"></span>
-              7일 평균
+              추세 (EWMA)
             </label>
             <label class="chip" data-series="ma14">
               <input type="checkbox" />
               <span class="chip-swatch" style="--c:var(--ma14)"></span>
               14일 평균
             </label>
-            <label class="chip" data-series="prediction">
+            <label class="chip" data-series="prediction" title="예측 중앙값 + 80% 신뢰 띠">
               <input type="checkbox" checked />
               <span class="chip-swatch" style="--c:var(--predict)"></span>
-              예측
+              예측 · 신뢰띠
             </label>
           </div>
         </div>
@@ -147,26 +174,27 @@
 
       <div class="scenarios">
         <div class="scenarios-head">
-          <p class="scenarios-label">3개월 시나리오</p>
-          <p class="scenarios-hint">선택한 시나리오가 차트 예측선에 반영됩니다</p>
+          <p class="scenarios-label">목표 강도 시나리오</p>
+          <p class="scenarios-hint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
         </div>
         <div class="scenarios-grid">
           <button class="scenario" data-scenario="optimistic" type="button">
-            <span class="scenario-tag">낙관적</span>
+            <span class="scenario-tag scenario-tag--aggressive">공격적</span>
             <span id="scenarioOpt" class="scenario-val">–</span>
-            <span class="scenario-sub">×1.0 속도</span>
+            <span class="scenario-sub">주 0.7%↑ · TDEE −25%</span>
           </button>
           <button class="scenario is-active" data-scenario="base" type="button">
-            <span class="scenario-tag">기본</span>
+            <span class="scenario-tag scenario-tag--standard">표준</span>
             <span id="scenarioBase" class="scenario-val">–</span>
-            <span class="scenario-sub">×0.8 속도</span>
+            <span class="scenario-sub">주 0.5% · CDC 권장</span>
           </button>
           <button class="scenario" data-scenario="conservative" type="button">
-            <span class="scenario-tag">보수적</span>
+            <span class="scenario-tag scenario-tag--conservative">보수적</span>
             <span id="scenarioCon" class="scenario-val">–</span>
-            <span class="scenario-sub">×0.6 속도</span>
+            <span class="scenario-sub">주 0.3% · 근육 보존</span>
           </button>
         </div>
+        <p class="scenarios-current" id="scenariosCurrent" hidden></p>
       </div>
     </section>
 
