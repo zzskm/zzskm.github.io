@@ -122,21 +122,26 @@
     setText('goalEta', fmtEta(s.goal));
     setText('goalEtaDate', s.goal?.etaDate ? `${fmtDate(s.goal.etaDate)} 예상` : '–');
 
-    if (start && last) {
-      const total = start.valueKg - target;
-      const done = start.valueKg - last.valueKg;
+    // 목표 진행률 계산: 노이즈가 있는 경우 EWMA 추세 체중 사용
+    const ewma = s.series?.ewma || [];
+    const startEwma = ewma.find(p => Number.isFinite(p.valueKg));
+    const lastEwma = [...ewma].reverse().find(p => Number.isFinite(p.valueKg));
+
+    if (startEwma && lastEwma) {
+      const total = startEwma.valueKg - target;
+      const done = startEwma.valueKg - lastEwma.valueKg;
       const pct = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
       setText('goalProgressPct', pct.toFixed(0));
       el('progressFill').style.width = pct + '%';
       el('progressMarker').style.left = pct + '%';
 
-      setText('startWeight', fmtKg(start.valueKg));
+      setText('startWeight', fmtKg(startEwma.valueKg));
       setText('targetWeight', fmtKg(target));
 
-      const remaining = s.goal?.remainingKg ?? (last.valueKg - target);
+      const remaining = s.goal?.remainingKg ?? (lastEwma.valueKg - target);
       setText('goalSubtitle', remaining > 0
         ? `목표까지 ${remaining.toFixed(1)} kg · 현 속도로 ${fmtEta(s.goal)} 소요`
-        : `목표 도달 — 현재 ${last.valueKg.toFixed(1)} kg`);
+        : `목표 도달 — 현재 ${lastEwma.valueKg.toFixed(1)} kg`);
     }
 
     // Scenarios
