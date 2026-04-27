@@ -872,22 +872,33 @@ kbd {
 @media (max-width: 720px) {
   .app { padding: 18px 16px 40px; }
   .main-grid { grid-template-columns: 1fr; }
-  .bottom-row { flex-direction: row; }
   .hero { padding: 24px; }
   .panel { padding: 22px; }
   .panel-head { align-items: flex-start; }
-  .hero-metrics { grid-template-columns: 1fr 1fr 1fr; }
+  .hero-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+  }
   .big-weight { font-size: 56px; }
   .scenarios-grid { grid-template-columns: 1fr; }
   .activity-secondary { margin-left: 0; width: 100%; }
   .chart-wrap { height: 280px; }
+  .bottom-card {
+    grid-template-columns: 1fr;
+  }
+  .bottom-card .spark,
+  .bottom-card .dots {
+    max-width: 100%;
+  }
   .foot { flex-direction: column; gap: 6px; align-items: flex-start; }
   .panel-controls { width: 100%; justify-content: flex-start; }
   .dots { grid-template-columns: repeat(10, 1fr); }
 }
 @media (max-width: 460px) {
-  .bottom-row { flex-direction: column; }
-  .hero-metrics { grid-template-columns: 1fr; }
+  .hero-metrics { 
+    display: grid;
+    grid-template-columns: 1fr; 
+  }
   .hero-metric { padding: 10px 0; border-left: 0; border-top: 1px solid var(--line); }
   .hero-metric:first-child { padding-top: 0; border-top: 0; }
   .activity-secondary { flex-direction: column; gap: 12px; }
