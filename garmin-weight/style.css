@@ -917,45 +917,62 @@ kbd {
   .chart-wrap { height: 240px; }
   .bottom-val { font-size: 26px; }
 
-  /* Bottom-row horizontal on small screens: show cards side-by-side with horizontal scroll */
+  /* Bottom-row: keep cards side-by-side but shrink to fit (no horizontal scroll) */
   .bottom-row {
     display: flex;
     flex-direction: row;
     gap: 12px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 6px;
+    flex-wrap: nowrap;
+    align-items: stretch;
   }
   .bottom-card {
-    flex: 0 0 320px;
-    min-width: 260px;
+    flex: 1 1 0;
+    min-width: 0; /* allow shrinking so both cards fit on one row */
     grid-template-columns: 1fr;
   }
   .bottom-card .spark,
   .bottom-card .dots { max-width: 100%; }
 
-  /* Make scenarios grid horizontal scrollable */
+  /* Scenarios: horizontal layout that shrinks items to fit (no scroll) */
   .scenarios-grid {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(220px, 1fr);
+    display: flex;
+    gap: 12px;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+  .scenarios-grid > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Hero metrics: make horizontally scrollable carousel where each metric fills viewport */
+  .hero-metrics {
+    display: flex;
     gap: 12px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 6px;
+    scroll-snap-type: x mandatory;
+  }
+  .hero-metric {
+    flex: 0 0 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    scroll-snap-align: center;
+    padding: 10px 0;
   }
 }
 
 @media (max-width: 412px) {
   .app { padding: 14px 12px 32px; }
-  .hero-metrics { display: grid; grid-template-columns: 1fr; gap: 12px; }
-  .hero-metric {
-    padding: 10px 0;
-    border-top: 1px solid var(--line);
-    text-align: left;
-    white-space: normal;
+  .hero-metrics { /* ensure hero-metric still occupies full screen */
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
   }
-  .hero-metric:first-child { padding-top: 0; border-top: 0; }
+  .hero-metric { flex: 0 0 100%; min-width: 100%; scroll-snap-align: center; }
+  .hero-metric:first-child { padding-top: 0; }
   .topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
   .sync-pill { font-size: 11px; padding: 5px 10px; }
   .hero-title { font-size: clamp(28px, 5vw, 40px); }
@@ -964,9 +981,9 @@ kbd {
   .bottom-val { font-size: 22px; }
   .dots { grid-template-columns: repeat(8, 1fr); gap: 2px; }
 
-  /* Narrower card widths for very small screens */
-  .bottom-card { flex: 0 0 260px; min-width: 220px; }
-  .scenarios-grid { grid-auto-columns: minmax(200px, 1fr); }
+  /* Ensure bottom cards still shrink to fit on very small screens */
+  .bottom-card { flex: 1 1 0; min-width: 0; }
+  .scenarios-grid > * { flex: 1 1 0; min-width: 0; }
 }
 
 @media (max-width: 460px) {
