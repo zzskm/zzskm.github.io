@@ -876,17 +876,22 @@ kbd {
   .panel { padding: 22px; }
   .panel-head { align-items: flex-start; }
 
-  /* Hero metrics: use grid for predictable wrapping */
+  /* Hero metrics: show horizontally and allow metrics to shrink to fit (no scroll) */
   .hero-metrics {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 18px;
+    display: flex;
+    gap: 12px;
     width: 100%;
     padding-top: 12px;
     border-top: 1px solid var(--line);
     margin-top: 4px;
+    flex-wrap: nowrap;
+    justify-content: space-between;
   }
-  .hero-metric { text-align: left; min-width: 0; }
+  .hero-metric {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: left;
+  }
 
   .big-weight { font-size: 56px; }
   .scenarios-grid { grid-template-columns: 1fr; }
@@ -945,33 +950,32 @@ kbd {
     min-width: 0;
   }
 
-  /* Hero metrics: make horizontally scrollable carousel where each metric fills viewport */
+  /* Hero metrics: horizontal row, shrink to fit so no horizontal scroll */
   .hero-metrics {
     display: flex;
     gap: 12px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory;
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: space-between;
   }
   .hero-metric {
-    flex: 0 0 100%;
-    min-width: 100%;
-    box-sizing: border-box;
-    scroll-snap-align: center;
+    flex: 1 1 0;
+    min-width: 0;
     padding: 10px 0;
+    box-sizing: border-box;
   }
 }
 
 @media (max-width: 412px) {
   .app { padding: 14px 12px 32px; }
-  .hero-metrics { /* ensure hero-metric still occupies full screen */
+  .hero-metrics { /* ensure hero metrics remain horizontal and fit */
     display: flex;
     gap: 10px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory;
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: space-between;
   }
-  .hero-metric { flex: 0 0 100%; min-width: 100%; scroll-snap-align: center; }
+  .hero-metric { flex: 1 1 0; min-width: 0; }
   .hero-metric:first-child { padding-top: 0; }
   .topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
   .sync-pill { font-size: 11px; padding: 5px 10px; }
