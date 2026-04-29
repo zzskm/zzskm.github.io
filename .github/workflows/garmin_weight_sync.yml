@@ -61,7 +61,7 @@ jobs:
 
       - name: Sync Garmin aggregates
         run: |
-          python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}" --date "$(date -u +%Y-%m-%d)"
+          python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}" --date "$(TZ=Asia/Seoul date +%Y-%m-%d)"
         env:
           BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '3' }}
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
