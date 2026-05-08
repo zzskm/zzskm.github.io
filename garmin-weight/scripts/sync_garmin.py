@@ -126,6 +126,103 @@ def write_rows(path: Path, rows: dict[str, dict[str, Any]]) -> None:
             writer.writerow({field: format_cell(rows[key].get(field), field) for field in CSV_HEADERS})
 
 
+def _linreg_slope(xy_pairs: list[tuple[float, float]]) -> float | None:
+    """단순 선형 회귀 slope. xy_pairs = [(x, y), ...]."""
+    n = len(xy_pairs)
+    if n < 3:
+        return None
+    xs = [p[0] for p in xy_pairs]
+    ys = [p[1] for p in xy_pairs]
+    xm = sum(xs) / n
+    ym = sum(ys) / n
+    num = sum((x - xm) * (y - ym) for x, y in zip(xs, ys))
+    den = sum((x - xm) ** 2 for x in xs)
+    return num / den if den != 0 else 0.0
+
+
+def compute_weekly_loss_rate(
+    ewma_series: list[dict[str, Any]],
+    ma7_by_date: dict[str, float | None],
+    rows: list[dict[str, Any]],
+    latest_date: str,
+    window: int = 28,
+    kcal_to_kg: float = 7700.0,
+    weights: tuple[float, float, float] = (0.5, 0.3, 0.2),
+) -> dict[str, Any]:
+    """EWMA slope, MA7 slope, 운동 칼로리 기대치를 가중 합성한 주간 감량률.
+
+    반환:
+      blended   - 최종 합성값 (kg/주, 양수=감소)
+      ewmaSlope - EWMA 선형 회귀 slope
+      ma7Slope  - MA7 선형 회귀 slope
+      kcalRate  - 운동 칼로리 기반 기대 감량률 (이중 계산 주의, 낮은 가중치 권장)
+      weights   - 실제 사용된 (ewma_w, ma7_w, kcal_w) 합계=1
+    """
+    end = date.fromisoformat(latest_date)
+
+    # EWMA slope — window일 선형 회귀
+    ewma_map = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    ewma_pts = []
+    for i in range(window + 1):
+        d = (end - timedelta(days=window - i)).isoformat()
+        v = ewma_map.get(d)
+        if v is not None:
+            ewma_pts.append((float(i), v))
+    raw_ewma_slope = _linreg_slope(ewma_pts)  # kg/day (음수=감소)
+    ewma_slope = round_or_none(-raw_ewma_slope * 7, 4) if raw_ewma_slope is not None else None  # kg/주 (양수=감소)
+
+    # MA7 slope — window일 선형 회귀 (단순 lookback 대신 회귀로 노이즈 감소)
+    ma7_pts = []
+    for i in range(window + 1):
+        d = (end - timedelta(days=window - i)).isoformat()
+        v = ma7_by_date.get(d)
+        if v is not None:
+            ma7_pts.append((float(i), v))
+    raw_ma7_slope = _linreg_slope(ma7_pts)
+    ma7_slope = round_or_none(-raw_ma7_slope * 7, 4) if raw_ma7_slope is not None else None
+
+    # 운동 칼로리 기대 감량률 (최근 14일 평균 kcal/day → kg/주)
+    # 주의: 체중 추세에 이미 운동 효과가 반영되어 있어 이중 계산 가능성 있음.
+    # 낮은 가중치(0.2)로 "보정자" 역할만 부여.
+    kcal_rows = rows[-14:] if len(rows) >= 14 else rows
+    kcal_vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in kcal_rows]
+    avg_daily_kcal = sum(kcal_vals) / len(kcal_vals) if kcal_vals else 0.0
+    kcal_rate = round_or_none(avg_daily_kcal * 7 / kcal_to_kg, 4)
+
+    # 가중 합성
+    w_ewma, w_ma7, w_kcal = weights
+    components: list[tuple[float, float]] = []
+    if ewma_slope is not None:
+        components.append((ewma_slope, w_ewma))
+    if ma7_slope is not None:
+        components.append((ma7_slope, w_ma7))
+    if kcal_rate is not None and kcal_rate > 0:
+        components.append((kcal_rate, w_kcal))
+
+    if not components:
+        blended = None
+        actual_weights = (0.0, 0.0, 0.0)
+    else:
+        total_w = sum(w for _, w in components)
+        blended = round(sum(v * w for v, w in components) / total_w, 4)
+        # 실제 사용 가중치 (정규화)
+        def _aw(target_w: float) -> float:
+            return round(target_w / total_w, 3) if any(w == target_w for _, w in components) else 0.0
+        actual_weights = (
+            round(w_ewma / total_w, 3) if ewma_slope is not None else 0.0,
+            round(w_ma7 / total_w, 3) if ma7_slope is not None else 0.0,
+            round(w_kcal / total_w, 3) if (kcal_rate is not None and kcal_rate > 0) else 0.0,
+        )
+
+    return {
+        "blended": blended,
+        "ewmaSlope": ewma_slope,
+        "ma7Slope": ma7_slope,
+        "kcalRate": kcal_rate,
+        "weights": {"ewma": actual_weights[0], "ma7": actual_weights[1], "kcal": actual_weights[2]},
+    }
+
+
 def build_exercise_trend(rows: list[dict[str, Any]], window: int = 28) -> dict[str, Any]:
     """최근 운동 칼로리 추이 계산 (recent7 vs prev21)."""
     if not rows:
@@ -637,12 +734,14 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     current_ma14 = ma14_by_date.get(latest_date)
     current_ewma = ewma_values[-1] if ewma_values else None
 
-    weekly_loss_rate = None
-    if len(rows) >= 14:
-        lookback_date = (datetime.strptime(latest_date, "%Y-%m-%d").date() - timedelta(days=14)).isoformat()
-        previous_ma7 = ma7_by_date.get(lookback_date)
-        if previous_ma7 is not None and current_ma7 is not None:
-            weekly_loss_rate = round_or_none((previous_ma7 - current_ma7) / 2, 2)
+    # EWMA slope + MA7 slope + 운동 칼로리 기대치 합성 감량률
+    trend_window = int(config.get("exerciseTrendWindow") or 28)
+    kcal_to_kg_pre = parse_float(config.get("kcalToKgFactor")) or 7700.0
+    loss_rate_detail = compute_weekly_loss_rate(
+        ewma_series, ma7_by_date, rows, latest_date,
+        window=trend_window, kcal_to_kg=kcal_to_kg_pre,
+    )
+    weekly_loss_rate = loss_rate_detail["blended"]
 
     last7 = rows[-7:]
     weight_values = [row.get("weight_kg") for row in last7 if row.get("weight_kg") is not None]
@@ -736,6 +835,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     # rolling에 exerciseTrend 추가
     rolling["exerciseTrend"] = exercise_trend
+    rolling["lossRateDetail"] = loss_rate_detail
 
     # 측정 커버리지 (최근 30일)
     last30 = rows[-30:]
