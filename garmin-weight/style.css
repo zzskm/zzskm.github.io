@@ -517,6 +517,21 @@ body {
   color: var(--muted-2);
   font-family: "JetBrains Mono", monospace;
 }
+.scenario-sparkline {
+  width: 100%;
+  height: 22px;
+  margin-top: 8px;
+  display: block;
+  overflow: visible;
+}
+.scenario-desc {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin: 4px 0 0;
+  line-height: 1.35;
+  font-family: "JetBrains Mono", monospace;
+  word-break: keep-all;
+}
 
 /* ====================== TWO COL ====================== */
 .two-col {
@@ -954,6 +969,8 @@ kbd {
   .panel-title { font-size: 17px; }
   .chart-wrap { height: 220px; }
   .bottom-val { font-size: 24px; }
+  .scenario-sparkline { height: 16px; margin-top: 6px; }
+  .scenario-desc { font-size: 9.5px; }
 
   /* Scenarios horizontal & shrink-to-fit */
   .scenarios-grid {
