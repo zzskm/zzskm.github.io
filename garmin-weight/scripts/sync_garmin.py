@@ -441,7 +441,7 @@ def build_prediction_series(
     weeks: int = 12,
 ) -> list[dict[str, Any]]:
     """예측 직선 생성. effective_weekly_loss는 실제 감량률(체중 추세 + 칼로리 보정)."""
-    if latest_date is None or start_weight is None or effective_weekly_loss is None or effective_weekly_loss <= 0:
+    if latest_date is None or start_weight is None or effective_weekly_loss is None:
         return []
 
     start_day = datetime.strptime(latest_date, "%Y-%m-%d").date()
@@ -668,7 +668,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     con_pct = parse_float(pct_deltas.get("conservative")) or -0.30
 
     recent7_avg_kcal = exercise_trend["recent7Avg"] or 0.0
-    base_trend_loss = max(weekly_loss_rate, 0.0) if weekly_loss_rate is not None else 0.0
+    base_trend_loss = weekly_loss_rate if weekly_loss_rate is not None else 0.0
 
     # --- 시나리오 계산 (운동 칼로리 ±% 보정) ---
     SCENARIO_DEFS = {
