@@ -668,7 +668,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     con_pct = parse_float(pct_deltas.get("conservative")) or -0.30
 
     recent7_avg_kcal = exercise_trend["recent7Avg"] or 0.0
-    base_trend_loss = weekly_loss_rate if weekly_loss_rate is not None else 0.0
+    # 체중 증가 추세(음수)는 0으로 클리핑 — 예측선이 현재 수준보다 위로 올라가지 않도록
+    base_trend_loss = max(weekly_loss_rate, 0.0) if weekly_loss_rate is not None else 0.0
 
     # --- 시나리오 계산 (운동 칼로리 ±% 보정) ---
     SCENARIO_DEFS = {
