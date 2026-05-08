@@ -179,19 +179,25 @@
         </div>
         <div class="scenarios-grid">
           <button class="scenario" data-scenario="optimistic" type="button">
-            <span class="scenario-tag scenario-tag--aggressive">공격적</span>
+            <span class="scenario-tag scenario-tag--aggressive">낙관</span>
             <span id="scenarioOpt" class="scenario-val">–</span>
-            <span class="scenario-sub">주 0.7%↑ · TDEE −25%</span>
+            <span class="scenario-sub">운동 +30%</span>
+            <svg class="scenario-sparkline" data-spark="optimistic" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <p class="scenario-desc" id="scenarioOptDesc"></p>
           </button>
           <button class="scenario is-active" data-scenario="base" type="button">
-            <span class="scenario-tag scenario-tag--standard">표준</span>
+            <span class="scenario-tag scenario-tag--standard">기준</span>
             <span id="scenarioBase" class="scenario-val">–</span>
-            <span class="scenario-sub">주 0.5% · CDC 권장</span>
+            <span class="scenario-sub">현재 유지</span>
+            <svg class="scenario-sparkline" data-spark="base" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <p class="scenario-desc" id="scenarioBaseDesc"></p>
           </button>
           <button class="scenario" data-scenario="conservative" type="button">
-            <span class="scenario-tag scenario-tag--conservative">보수적</span>
+            <span class="scenario-tag scenario-tag--conservative">보수</span>
             <span id="scenarioCon" class="scenario-val">–</span>
-            <span class="scenario-sub">주 0.3% · 근육 보존</span>
+            <span class="scenario-sub">운동 −30%</span>
+            <svg class="scenario-sparkline" data-spark="conservative" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <p class="scenario-desc" id="scenarioConDesc"></p>
           </button>
         </div>
         <p class="scenarios-current" id="scenariosCurrent" hidden></p>

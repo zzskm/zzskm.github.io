@@ -60,13 +60,27 @@
   }
 
   function buildPredictionFromScenario(summary, scenario) {
-    const base = summary.series?.prediction || [];
-    if (!base.length) return [];
-    const mult = summary.predictions?.scenarios?.[scenario]?.multiplier ?? 1;
-    const baseMult = summary.predictions?.scenarios?.base?.multiplier ?? 0.8;
-    const start = base[0].valueKg;
+    const baseSeries = summary.series?.prediction || [];
+    if (!baseSeries.length) return [];
+    const sc = summary.predictions?.scenarios?.[scenario];
+    const baseSc = summary.predictions?.scenarios?.base;
+    const scLoss = sc?.effectiveWeeklyLossKg;
+    const baseLoss = baseSc?.effectiveWeeklyLossKg;
+    // effectiveWeeklyLossKg 기반으로 시나리오별 예측선 스케일
+    if (Number.isFinite(scLoss) && Number.isFinite(baseLoss) && baseLoss !== 0) {
+      const ratio = scLoss / baseLoss;
+      const start = baseSeries[0].valueKg;
+      return baseSeries.map((p) => ({
+        date: p.date,
+        valueKg: +(start + (p.valueKg - start) * ratio).toFixed(2),
+      }));
+    }
+    // fallback: multiplier 방식 (base 시나리오이거나 새 필드 없을 때)
+    const mult = sc?.multiplier ?? 1;
+    const baseMult = baseSc?.multiplier ?? 0.8;
+    const start = baseSeries[0].valueKg;
     const factor = baseMult > 0 ? mult / baseMult : 1;
-    return base.map((p) => ({
+    return baseSeries.map((p) => ({
       date: p.date,
       valueKg: start + (p.valueKg - start) * factor,
     }));
@@ -149,6 +163,17 @@
     setText('scenarioOpt', sc.optimistic ? fmtKg(sc.optimistic.threeMonthWeightKg) : '–');
     setText('scenarioBase', sc.base ? fmtKg(sc.base.threeMonthWeightKg) : '–');
     setText('scenarioCon', sc.conservative ? fmtKg(sc.conservative.threeMonthWeightKg) : '–');
+
+    // Scenario description tooltips + desc text
+    [['optimistic','scenarioOptDesc'],['base','scenarioBaseDesc'],['conservative','scenarioConDesc']].forEach(([key, descId]) => {
+      const data = sc[key];
+      const card = document.querySelector(`.scenario[data-scenario="${key}"]`);
+      if (card && data?.description) card.setAttribute('title', data.description);
+      setText(descId, data?.description ?? '');
+    });
+
+    // Sparklines
+    renderScenarioSparklines(s);
     renderScenarioCompare(s.lossIntensity, state.scenario);
   }
 
@@ -195,6 +220,59 @@
     if (!plateau?.detected) { card.hidden = true; return; }
     setText('plateauDuration', `${plateau.durationDays}일째`);
     card.hidden = false;
+  }
+
+  // ---------- scenario sparklines ----------
+  function renderScenarioSparklines(s) {
+    const data = s.series?.exerciseCaloriesDaily || [];
+    if (!data.length) return;
+
+    const vals = data.map(p => p.value ?? 0);
+    const maxV = Math.max(...vals, 1);
+    const minV = Math.min(...vals, 0);
+    const range = maxV - minV || 1;
+
+    // pct deltas from scenarios
+    const optPct = s.predictions?.scenarios?.optimistic?.extraWeeklyLossKg != null
+      ? (s.predictions.scenarios.optimistic.weeklyKcalDelta / 7 / (s.rolling?.exerciseTrend?.recent7Avg || 1))
+      : 0.30;
+    const conPct = s.predictions?.scenarios?.conservative?.extraWeeklyLossKg != null
+      ? (s.predictions.scenarios.conservative.weeklyKcalDelta / 7 / (s.rolling?.exerciseTrend?.recent7Avg || 1))
+      : -0.30;
+
+    const scenarios = {
+      optimistic: { pct: optPct, color: 'var(--accent-ink)' },
+      base:       { pct: 0,      color: 'var(--ink-soft)' },
+      conservative: { pct: conPct, color: 'var(--muted)' },
+    };
+
+    const W = 100, H = 22, PAD = 1;
+
+    Object.entries(scenarios).forEach(([key, cfg]) => {
+      const svg = document.querySelector(`.scenario-sparkline[data-spark="${key}"]`);
+      if (!svg) return;
+
+      const n = vals.length;
+      // actual line
+      const toX = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - 2 * PAD);
+      const toY = (v) => H - PAD - ((v - minV) / range) * (H - 2 * PAD);
+
+      const actualPts = vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
+      let paths = `<polyline class="spark-actual" points="${actualPts}" stroke="${cfg.color}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+      // future projection (last 14 days dotted)
+      if (cfg.pct !== 0 && n > 0) {
+        const lastVal = vals[n - 1];
+        const projVal = Math.max(lastVal * (1 + cfg.pct), 0);
+        const projY = toY(Math.min(projVal, maxV + range * 0.2));
+        const x1 = toX(n - 1).toFixed(1);
+        const y1 = toY(lastVal).toFixed(1);
+        const x2 = W - PAD;
+        paths += `<line class="spark-future" x1="${x1}" y1="${y1}" x2="${x2}" y2="${projY.toFixed(1)}" stroke="${cfg.color}" stroke-width="1.5" stroke-dasharray="2 2" opacity="0.7"/>`;
+      }
+
+      svg.innerHTML = paths;
+    });
   }
 
   // ---------- scenario compare label ----------
@@ -316,9 +394,13 @@
   function buildCiBands(s, scenario) {
     const ci = s.predictionCI?.series || [];
     if (!ci.length) return { upper: [], lower: [] };
-    const mult = s.predictions?.scenarios?.[scenario]?.multiplier ?? 0.8;
-    const baseMult = s.predictions?.scenarios?.base?.multiplier ?? 0.8;
-    const factor = baseMult > 0 ? mult / baseMult : 1;
+    const sc = s.predictions?.scenarios?.[scenario];
+    const baseSc = s.predictions?.scenarios?.base;
+    const scLoss = sc?.effectiveWeeklyLossKg;
+    const baseLoss = baseSc?.effectiveWeeklyLossKg;
+    const factor = (Number.isFinite(scLoss) && Number.isFinite(baseLoss) && baseLoss !== 0)
+      ? scLoss / baseLoss
+      : ((sc?.multiplier ?? 0.8) / (baseSc?.multiplier ?? 0.8));
     const ewmaLast = s.series?.ewma?.slice(-1)[0]?.valueKg ?? null;
     return {
       upper: ci.map(p => ({ date: p.date, valueKg: ewmaLast !== null ? ewmaLast + (p.upper80 - p.central) * factor : p.upper80 })),

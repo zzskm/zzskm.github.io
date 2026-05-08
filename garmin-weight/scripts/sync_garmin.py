@@ -126,6 +126,57 @@ def write_rows(path: Path, rows: dict[str, dict[str, Any]]) -> None:
             writer.writerow({field: format_cell(rows[key].get(field), field) for field in CSV_HEADERS})
 
 
+def build_exercise_trend(rows: list[dict[str, Any]], window: int = 28) -> dict[str, Any]:
+    """최근 운동 칼로리 추이 계산 (recent7 vs prev21)."""
+    if not rows:
+        return {"recent7Avg": 0.0, "prev21Avg": 0.0, "deltaPct": 0.0, "slopePerDay": 0.0, "direction": "stable"}
+
+    def avg_kcal(segment: list[dict[str, Any]]) -> float:
+        vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in segment]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    last_n = rows[-window:] if len(rows) >= window else rows
+    recent7 = last_n[-7:] if len(last_n) >= 7 else last_n
+
+    if len(last_n) >= 14:
+        prev_segment = last_n[:-7]  # up to 21 days before recent7
+    elif len(last_n) > 7:
+        prev_segment = last_n[:-7]
+    else:
+        prev_segment = recent7  # fallback: same as recent
+
+    recent7_avg = avg_kcal(recent7)
+    prev_avg = avg_kcal(prev_segment)
+    delta_pct = (recent7_avg - prev_avg) / max(prev_avg, 1.0)
+
+    # Linear regression slope (kcal/day per day)
+    n = len(last_n)
+    if n >= 2:
+        ys = [parse_float(r.get("exercise_calories")) or 0.0 for r in last_n]
+        x_mean = (n - 1) / 2
+        y_mean = sum(ys) / n
+        num = sum((i - x_mean) * (y - y_mean) for i, y in enumerate(ys))
+        den = sum((i - x_mean) ** 2 for i in range(n))
+        slope = num / den if den != 0 else 0.0
+    else:
+        slope = 0.0
+
+    if delta_pct > 0.05:
+        direction = "increasing"
+    elif delta_pct < -0.05:
+        direction = "decreasing"
+    else:
+        direction = "stable"
+
+    return {
+        "recent7Avg": round_or_none(recent7_avg, 1),
+        "prev21Avg": round_or_none(prev_avg, 1),
+        "deltaPct": round_or_none(delta_pct, 3),
+        "slopePerDay": round_or_none(slope, 2),
+        "direction": direction,
+    }
+
+
 def daterange(end_day: date, days: int) -> list[str]:
     start = end_day - timedelta(days=max(days - 1, 0))
     return [(start + timedelta(days=offset)).isoformat() for offset in range((end_day - start).days + 1)]
@@ -386,18 +437,18 @@ def rolling_average(weights_by_date: dict[str, float | None], all_dates: list[st
 def build_prediction_series(
     latest_date: str | None,
     start_weight: float | None,
-    weekly_loss_rate: float | None,
-    multiplier: float,
+    effective_weekly_loss: float | None,
     weeks: int = 12,
 ) -> list[dict[str, Any]]:
-    if latest_date is None or start_weight is None or weekly_loss_rate is None or weekly_loss_rate <= 0:
+    """예측 직선 생성. effective_weekly_loss는 실제 감량률(체중 추세 + 칼로리 보정)."""
+    if latest_date is None or start_weight is None or effective_weekly_loss is None or effective_weekly_loss <= 0:
         return []
 
     start_day = datetime.strptime(latest_date, "%Y-%m-%d").date()
     series = [{"date": latest_date, "valueKg": round(start_weight, 2)}]
     for week in range(1, weeks + 1):
         future_date = start_day + timedelta(days=7 * week)
-        projected = start_weight - weekly_loss_rate * multiplier * week
+        projected = start_weight - effective_weekly_loss * week
         series.append({"date": future_date.isoformat(), "valueKg": round(projected, 2)})
     return series
 
@@ -416,7 +467,7 @@ def compute_ewma(weight_values: list[float | None], lambda_: float = EWMA_LAMBDA
 def compute_prediction_ci(
     ewma_series: list[dict[str, Any]],
     weight_series: list[dict[str, Any]],
-    weekly_loss_rate: float,
+    effective_weekly_loss: float,
     prediction_weeks: int = 12,
 ) -> dict[str, Any]:
     """잔차(실측 - EWMA) std 기반 80% 예측 구간. sqrt(t)로 시간에 따라 확장."""
@@ -436,7 +487,7 @@ def compute_prediction_ci(
     last_date = date.fromisoformat(last_valid["date"])
     series = []
     for week in range(1, prediction_weeks + 1):
-        central = round(start - weekly_loss_rate * week, 2)
+        central = round(start - effective_weekly_loss * week, 2)
         spread80 = round(1.28 * std * (week ** 0.5), 2)
         series.append({
             "date": (last_date + timedelta(weeks=week)).isoformat(),
@@ -608,20 +659,57 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "last7WeightRangeKg": round_or_none((max(weight_values) - min(weight_values)) if len(weight_values) >= 2 else None, 2),
     }
 
-    multipliers = config.get("scenarioMultipliers") or {}
-    base_multiplier = parse_float(multipliers.get("base")) or 0.8
-    optimistic_multiplier = parse_float(multipliers.get("optimistic")) or 1.0
-    conservative_multiplier = parse_float(multipliers.get("conservative")) or 0.6
+    # --- 운동 칼로리 추이 ---
+    kcal_to_kg = parse_float(config.get("kcalToKgFactor")) or 7700.0
+    trend_window = int(config.get("exerciseTrendWindow") or 28)
+    exercise_trend = build_exercise_trend(rows, window=trend_window)
+    pct_deltas = config.get("scenarioExercisePctDelta") or {}
+    opt_pct = parse_float(pct_deltas.get("optimistic")) or 0.30
+    con_pct = parse_float(pct_deltas.get("conservative")) or -0.30
 
-    effective_weekly_loss = None
-    if weekly_loss_rate is not None and weekly_loss_rate > 0:
-        effective_weekly_loss = weekly_loss_rate * base_multiplier
+    recent7_avg_kcal = exercise_trend["recent7Avg"] or 0.0
+    base_trend_loss = max(weekly_loss_rate, 0.0) if weekly_loss_rate is not None else 0.0
+
+    # --- 시나리오 계산 (운동 칼로리 ±% 보정) ---
+    SCENARIO_DEFS = {
+        "optimistic": {"pct_delta": opt_pct, "multiplier": 1.0, "label": "낙관"},
+        "base":       {"pct_delta": 0.0,     "multiplier": 0.8, "label": "기준"},
+        "conservative": {"pct_delta": con_pct, "multiplier": 0.6, "label": "보수적"},
+    }
+    scenarios: dict[str, Any] = {}
+    if current_ma7 is not None:
+        for name, sdef in SCENARIO_DEFS.items():
+            pct = sdef["pct_delta"]
+            extra_daily_kcal = recent7_avg_kcal * pct
+            extra_weekly_kcal = extra_daily_kcal * 7
+            extra_weekly_loss_kg = extra_weekly_kcal / kcal_to_kg
+            effective_loss = base_trend_loss + extra_weekly_loss_kg
+            assumed_daily = round_or_none(recent7_avg_kcal + extra_daily_kcal, 1)
+            if pct > 0:
+                desc = f"운동 +{pct*100:.0f}% 가정 · 추가 {round(abs(extra_weekly_loss_kg), 3)} kg/주 감량"
+            elif pct < 0:
+                desc = f"운동 {pct*100:.0f}% 가정 · {round(abs(extra_weekly_loss_kg), 3)} kg/주 감량 감소"
+            else:
+                desc = "현재 운동량 유지 기준 예측"
+            scenarios[name] = {
+                "multiplier": sdef["multiplier"],           # 호환용 유지
+                "threeMonthWeightKg": round_or_none(current_ma7 - effective_loss * 12, 2),
+                "assumedDailyKcal": assumed_daily,
+                "weeklyKcalDelta": round_or_none(extra_weekly_kcal, 1),
+                "extraWeeklyLossKg": round_or_none(extra_weekly_loss_kg, 4),
+                "effectiveWeeklyLossKg": round_or_none(effective_loss, 4),
+                "label": sdef["label"],
+                "description": desc,
+            }
+
+    # base 시나리오의 effective_weekly_loss 를 예측/ETA/CI 에 사용
+    base_effective_loss = scenarios.get("base", {}).get("effectiveWeeklyLossKg") or 0.0
 
     one_month_weight = None
     three_month_weight = None
-    if current_ma7 is not None and weekly_loss_rate is not None and weekly_loss_rate > 0:
-        one_month_weight = round_or_none(current_ma7 - weekly_loss_rate * 4, 2)
-        three_month_weight = round_or_none(current_ma7 - weekly_loss_rate * 12 * base_multiplier, 2)
+    if current_ma7 is not None and base_effective_loss > 0:
+        one_month_weight = round_or_none(current_ma7 - base_effective_loss * 4, 2)
+        three_month_weight = round_or_none(current_ma7 - base_effective_loss * 12, 2)
 
     target_weight = parse_float(config.get("targetWeightKg"))
     remaining_kg = None
@@ -632,31 +720,21 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         if remaining_kg <= 0:
             eta_days = 0
             eta_date = latest_date
-        elif effective_weekly_loss and effective_weekly_loss > 0:
-            eta_days = math.ceil((remaining_kg / effective_weekly_loss) * 7)
+        elif base_effective_loss > 0:
+            eta_days = math.ceil((remaining_kg / base_effective_loss) * 7)
             eta_date = (datetime.strptime(latest_date, "%Y-%m-%d").date() + timedelta(days=eta_days)).isoformat()
 
-    scenarios = {}
-    if current_ma7 is not None and weekly_loss_rate is not None and weekly_loss_rate > 0:
-        for name, multiplier in {
-            "optimistic": optimistic_multiplier,
-            "base": base_multiplier,
-            "conservative": conservative_multiplier,
-        }.items():
-            scenarios[name] = {
-                "multiplier": multiplier,
-                "threeMonthWeightKg": round_or_none(current_ma7 - weekly_loss_rate * 12 * multiplier, 2),
-            }
-
     # 고도화 계산
-    effective_loss_for_ci = weekly_loss_rate if weekly_loss_rate and weekly_loss_rate > 0 else 0.0
-    prediction_ci = compute_prediction_ci(ewma_series, daily_series, effective_loss_for_ci)
+    prediction_ci = compute_prediction_ci(ewma_series, daily_series, base_effective_loss)
     loss_intensity = classify_loss_intensity(
-        weekly_loss_rate if weekly_loss_rate and weekly_loss_rate > 0 else None,
+        base_effective_loss if base_effective_loss > 0 else None,
         current_ewma,
     )
     plateau = detect_plateau(ewma_series)
     insight = build_insight(current_weight, current_ewma, loss_intensity, plateau)
+
+    # rolling에 exerciseTrend 추가
+    rolling["exerciseTrend"] = exercise_trend
 
     # 측정 커버리지 (최근 30일)
     last30 = rows[-30:]
@@ -698,7 +776,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "ma7": ma7_series,
             "ma14": ma14_series,
             "ewma": ewma_series,
-            "prediction": build_prediction_series(latest_date, current_ewma, weekly_loss_rate, base_multiplier),
+            "prediction": build_prediction_series(latest_date, current_ewma, base_effective_loss),
             "predictionCI": prediction_ci["series"],
             "steps": [
                 {"date": row["date"], "value": row.get("steps")}
@@ -706,6 +784,10 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             ],
             "exerciseMinutes": [
                 {"date": row["date"], "value": row.get("exercise_minutes") or 0}
+                for row in rows[-30:]
+            ],
+            "exerciseCaloriesDaily": [
+                {"date": row["date"], "value": parse_float(row.get("exercise_calories")) or 0}
                 for row in rows[-30:]
             ],
         },
