@@ -4,7 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>체중 대시보드</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23c25a31'/%3E%3C/svg%3E" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/icon.svg" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#c25a31" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="체중" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -99,6 +105,11 @@
               <p id="goalEta" class="hero-metric-val">–</p>
               <p id="goalEtaDate" class="hero-metric-sub">–</p>
             </div>
+            <div class="hero-metric hero-metric--confidence">
+              <p class="label">예측 신뢰도</p>
+              <p id="predictionConfidence" class="hero-metric-val">–</p>
+              <p id="predictionError" class="hero-metric-sub">–</p>
+            </div>
           </div>
         </div>
       </div>
@@ -149,7 +160,7 @@
             <button class="seg-btn" data-range="all" type="button">전체</button>
           </div>
           <div class="chips" role="group" aria-label="표시 항목">
-            <label class="chip" data-series="ma7" title="EWMA(지수 가중 이동평균) — 수분 변동 노이즈 제거">
+            <label class="chip" data-series="ma7" title="EWMA(지수 가중 이동평균), 수분 변동 노이즈 제거">
               <input type="checkbox" checked />
               <span class="chip-swatch" style="--c:var(--ma7)"></span>
               추세 (EWMA)
@@ -170,6 +181,20 @@
 
       <div class="chart-wrap">
         <canvas id="weightChart" aria-label="체중 추세 차트" role="img"></canvas>
+      </div>
+      <div class="model-strip" id="modelStrip">
+        <div>
+          <p class="label">모델 기준</p>
+          <p id="modelSummary" class="model-strip-main">–</p>
+        </div>
+        <div>
+          <p class="label">검증</p>
+          <p id="modelBacktest" class="model-strip-sub">–</p>
+        </div>
+        <div>
+          <p class="label">데이터</p>
+          <p id="modelCoverage" class="model-strip-sub">–</p>
+        </div>
       </div>
 
       <div class="scenarios">
@@ -195,7 +220,7 @@
           <button class="scenario" data-scenario="conservative" type="button">
             <span class="scenario-tag scenario-tag--conservative">보수</span>
             <span id="scenarioCon" class="scenario-val">–</span>
-            <span class="scenario-sub">운동 −30%</span>
+            <span class="scenario-sub">운동 -30%</span>
             <svg class="scenario-sparkline" data-spark="conservative" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
             <p class="scenario-desc" id="scenarioConDesc"></p>
           </button>
@@ -247,5 +272,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script defer src="./app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.warn('SW registration failed:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>

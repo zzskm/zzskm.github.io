@@ -40,6 +40,21 @@
     return `${days}일`;
   }
 
+  function fmtEtaRange(goal) {
+    const range = goal?.etaRangeDays;
+    if (!range || !Number.isFinite(range.min) || !Number.isFinite(range.max)) return null;
+    if (range.min === range.max) return `${range.min}일`;
+    const minWeeks = Math.round(range.min / 7);
+    const maxWeeks = Math.round(range.max / 7);
+    return `약 ${minWeeks}~${maxWeeks}주 범위`;
+  }
+
+  function fmtMae(backtest) {
+    return backtest?.status === 'ok' && Number.isFinite(backtest.maeKg)
+      ? `MAE ${backtest.maeKg.toFixed(2)} kg`
+      : '표본 부족';
+  }
+
   function setText(id, v) { const n = el(id); if (n) n.textContent = v; }
 
   function firstValidDaily(points) {
@@ -86,19 +101,6 @@
     }));
   }
 
-  function weekdayAverages(points) {
-    const sums = Array(7).fill(0);
-    const counts = Array(7).fill(0);
-    for (const p of points) {
-      if (!Number.isFinite(p.valueKg)) continue;
-      const d = new Date(p.date + 'T00:00:00');
-      const w = d.getDay();
-      sums[w] += p.valueKg;
-      counts[w] += 1;
-    }
-    return sums.map((s, i) => counts[i] ? s / counts[i] : null);
-  }
-
   // ---------- hero ----------
   function renderHero() {
     const s = state.summary;
@@ -134,7 +136,14 @@
     renderIntensityGauge(s.lossIntensity);
 
     setText('goalEta', fmtEta(s.goal));
-    setText('goalEtaDate', s.goal?.etaDate ? `${fmtDate(s.goal.etaDate)} 예상` : '–');
+    const etaRange = fmtEtaRange(s.goal);
+    setText('goalEtaDate', etaRange || (s.goal?.etaDate ? `${fmtDate(s.goal.etaDate)} 예상` : '–'));
+
+    const diagnostics = s.modelDiagnostics || {};
+    const confidence = diagnostics.confidence || {};
+    setText('predictionConfidence', confidence.label || '–');
+    const bt14 = diagnostics.backtest?.['14d'];
+    setText('predictionError', bt14?.status === 'ok' ? `14일 ${fmtMae(bt14)}` : '검증 표본 부족');
 
     // 목표 진행률 계산: 노이즈가 있는 경우 EWMA 추세 체중 사용
     const ewma = s.series?.ewma || [];
@@ -155,7 +164,7 @@
       const remaining = s.goal?.remainingKg ?? (lastEwma.valueKg - target);
       setText('goalSubtitle', remaining > 0
         ? `목표까지 ${remaining.toFixed(1)} kg · 현 속도로 ${fmtEta(s.goal)} 소요`
-        : `목표 도달 — 현재 ${lastEwma.valueKg.toFixed(1)} kg`);
+        : `목표 도달, 현재 ${lastEwma.valueKg.toFixed(1)} kg`);
     }
 
     // Scenarios
@@ -175,6 +184,7 @@
     // Sparklines
     renderScenarioSparklines(s);
     renderScenarioCompare(s.lossIntensity, state.scenario);
+    renderModelDiagnostics(s);
   }
 
   // ---------- intensity gauge ----------
@@ -211,6 +221,38 @@
     if (!headline) { card.hidden = true; return; }
     setText('insightHeadline', headline);
     card.hidden = false;
+  }
+
+  function renderModelDiagnostics(s) {
+    const diagnostics = s.modelDiagnostics || {};
+    const confidence = diagnostics.confidence || {};
+    const bt7 = diagnostics.backtest?.['7d'];
+    const bt14 = diagnostics.backtest?.['14d'];
+    const bt28 = diagnostics.backtest?.['28d'];
+    const coverage = diagnostics.coverage || s.coverage;
+    const trend28 = diagnostics.trendWindows?.['28d']?.weeklyLossKg;
+
+    const confidenceText = confidence.label
+      ? `예측 신뢰도 ${confidence.label}`
+      : '예측 신뢰도 계산 전';
+    const trendText = Number.isFinite(trend28)
+      ? `EWMA 28일 추세 ${trend28 >= 0 ? '−' : '+'}${Math.abs(trend28).toFixed(2)} kg/주`
+      : 'EWMA 28일 추세 표본 부족';
+    setText('modelSummary', `${confidenceText} · ${trendText}`);
+
+    const btParts = [`7일 ${fmtMae(bt7)}`, `14일 ${fmtMae(bt14)}`];
+    if (bt28?.status === 'ok') btParts.push(`28일 ${fmtMae(bt28)}`);
+    else btParts.push('28일 표본 부족');
+    setText('modelBacktest', btParts.join(' · '));
+
+    if (coverage) {
+      const measured = coverage.measuredDays ?? coverage.last30Measured;
+      const total = coverage.totalDays ?? coverage.last30Total;
+      const pct = coverage.pct ?? coverage.last30Pct;
+      setText('modelCoverage', `최근 ${total}일 중 ${measured}일 측정 · ${pct}%`);
+    } else {
+      setText('modelCoverage', '측정 커버리지 없음');
+    }
   }
 
   // ---------- plateau card ----------
@@ -299,7 +341,7 @@
     setText('weightRange', Number.isFinite(range) ? `${range.toFixed(1)} kg` : '–');
     setText('weightRangeHint',
       Number.isFinite(range)
-        ? range < 1 ? '매우 안정적 — 수분/식사 변동 범위' : range < 2 ? '정상 범위 내' : '변동이 큼 — 측정 시각 확인 권장'
+        ? range < 1 ? '매우 안정적, 수분/식사 변동 범위' : range < 2 ? '정상 범위 내' : '변동이 큼, 측정 시각 확인 권장'
         : '–');
     const validDaily = (s.series?.daily || []).filter(p => Number.isFinite(p.valueKg)).slice(-14);
     drawSparkline('sparkRange', validDaily.map(d => d.valueKg));
@@ -352,59 +394,21 @@
     }).join('');
   }
 
-  // ---------- weekday ----------
-  function renderWeekday() {
-    const host = el('weekdayChart');
-    if (!host) return;
-    const daily = state.summary.series?.daily || [];
-    const avgs = weekdayAverages(daily);
-    const valid = avgs.filter(v => v !== null);
-    if (!valid.length) { host.innerHTML = '<p class="insight-text" style="margin:auto">데이터 없음</p>'; return; }
-    const min = Math.min(...valid);
-    const max = Math.max(...valid);
-    const r = max - min || 1;
-    const labels = ['일', '월', '화', '수', '목', '금', '토'];
-
-    host.innerHTML = avgs.map((v, i) => {
-      if (v === null) return `
-        <div class="weekday-col">
-          <div class="weekday-bar" style="height:2%; opacity:0.3"></div>
-          <span class="weekday-label">${labels[i]}</span>
-        </div>`;
-      const heightPct = 20 + ((v - min) / r) * 80;
-      const isHi = v === max;
-      return `
-        <div class="weekday-col">
-          <span class="weekday-val">${v.toFixed(1)}</span>
-          <div class="weekday-bar ${isHi ? 'is-hi' : ''}" style="height:${heightPct}%"></div>
-          <span class="weekday-label">${labels[i]}</span>
-        </div>`;
-    }).join('');
-
-    const hiIdx = avgs.indexOf(max);
-    const loIdx = avgs.indexOf(min);
-    if (hiIdx >= 0 && loIdx >= 0) {
-      const diff = (max - min).toFixed(1);
-      setText('insightText',
-        `${labels[hiIdx]}요일이 평균 ${fmtKgBare(max)} kg로 가장 무겁고, ${labels[loIdx]}요일이 ${fmtKgBare(min)} kg로 가장 가볍습니다. 요일 간 차이 ${diff} kg.`);
-    }
-  }
-
   // ---------- weight chart ----------
   function buildCiBands(s, scenario) {
     const ci = s.predictionCI?.series || [];
     if (!ci.length) return { upper: [], lower: [] };
-    const sc = s.predictions?.scenarios?.[scenario];
-    const baseSc = s.predictions?.scenarios?.base;
-    const scLoss = sc?.effectiveWeeklyLossKg;
-    const baseLoss = baseSc?.effectiveWeeklyLossKg;
-    const factor = (Number.isFinite(scLoss) && Number.isFinite(baseLoss) && baseLoss !== 0)
-      ? scLoss / baseLoss
-      : ((sc?.multiplier ?? 0.8) / (baseSc?.multiplier ?? 0.8));
-    const ewmaLast = s.series?.ewma?.slice(-1)[0]?.valueKg ?? null;
+    const prediction = buildPredictionFromScenario(s, scenario);
+    const predictionByDate = new Map(prediction.map(p => [p.date, p.valueKg]));
     return {
-      upper: ci.map(p => ({ date: p.date, valueKg: ewmaLast !== null ? ewmaLast + (p.upper80 - p.central) * factor : p.upper80 })),
-      lower: ci.map(p => ({ date: p.date, valueKg: ewmaLast !== null ? ewmaLast + (p.lower80 - p.central) * factor : p.lower80 })),
+      upper: ci.map((p) => {
+        const central = predictionByDate.get(p.date) ?? p.central;
+        return { date: p.date, valueKg: +(central + Math.abs(p.upper80 - p.central)).toFixed(2) };
+      }),
+      lower: ci.map((p) => {
+        const central = predictionByDate.get(p.date) ?? p.central;
+        return { date: p.date, valueKg: +(central - Math.abs(p.central - p.lower80)).toFixed(2) };
+      }),
     };
   }
 
@@ -553,6 +557,8 @@
 
     // 정체기 플러그인
     const ewmaMap = new Map((s.series?.ewma || []).map(p => [p.date, p.valueKg]));
+    const ciUpperMap = new Map(ci.upper.map(p => [p.date, p.valueKg]));
+    const ciLowerMap = new Map(ci.lower.map(p => [p.date, p.valueKg]));
     const plateauPlugin = makePlateauPlugin(s, labels);
     const plugins = plateauPlugin ? [plateauPlugin] : [];
 
@@ -597,11 +603,12 @@
                 }
                 if (ctx.dataset.label === '예측') {
                   const dateKey = ctx.label;
-                  const ciPoint = (s.predictionCI?.series || []).find(p => p.date === dateKey);
-                  if (ciPoint) {
+                  const lower = ciLowerMap.get(dateKey);
+                  const upper = ciUpperMap.get(dateKey);
+                  if (Number.isFinite(lower) && Number.isFinite(upper)) {
                     return [
                       ` 예측  ${fmtKg(ctx.parsed.y)}`,
-                      ` 80%  ${fmtKgBare(ciPoint.lower80)} – ${fmtKgBare(ciPoint.upper80)} kg`,
+                      ` 80%  ${fmtKgBare(lower)} – ${fmtKgBare(upper)} kg`,
                     ];
                   }
                 }
@@ -854,13 +861,21 @@
       const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
       const cov = state.summary.coverage;
       const covText = cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '';
+      const daysSince = cov?.daysSinceLastMeasurement;
+      const stale = Number.isFinite(daysSince) && daysSince >= 3;
       const lowCoverage = cov && cov.last30Pct < 70;
       const syncPill = el('lastSync');
       const syncDot = syncPill?.querySelector('.sync-dot');
-      if (syncDot) syncDot.style.background = lowCoverage ? '#d97706' : '';
+      if (syncDot) syncDot.style.background = stale ? '#b91c1c' : (lowCoverage ? '#d97706' : '');
+      const staleText = stale ? ` · 마지막 측정 ${daysSince}일 전` : '';
       syncPill.querySelector('.sync-text').textContent = gen
-        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${covText}`
+        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${covText}${staleText}`
         : '데이터 로드됨';
+      if (stale) {
+        syncPill.title = `Garmin 앱에서 최근 동기화 후 측정값이 ${daysSince}일째 갱신되지 않았습니다. 체중계 동기화를 확인해 주세요.`;
+      } else {
+        syncPill.removeAttribute('title');
+      }
       setText('statusLine',
         `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);
 

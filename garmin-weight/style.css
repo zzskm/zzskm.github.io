@@ -86,7 +86,7 @@ body {
   gap: 10px;
   font-family: "Instrument Serif", serif;
   font-size: 22px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -180,7 +180,7 @@ body {
   margin: 6px 0 4px;
   font-size: clamp(48px, 7vw, 80px);
   line-height: 0.95;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
@@ -271,7 +271,7 @@ body {
   font-weight: 400;
   font-size: 56px;
   line-height: 0.9;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   display: inline-flex;
@@ -297,7 +297,7 @@ body {
 
 .hero-metrics {
   display: flex;
-  gap: 18px;
+  gap: 16px;
   padding-top: 12px;
   margin-top: 4px;
   border-top: 1px solid var(--line);
@@ -309,6 +309,9 @@ body {
   min-width: 0;
   white-space: nowrap;
 }
+.hero-metric--confidence .hero-metric-val {
+  color: var(--accent-ink);
+}
 .hero-metric .label { font-size: 9.5px; }
 .hero-metric-val {
   font-family: "Inter Tight", sans-serif;
@@ -317,7 +320,7 @@ body {
   line-height: 1;
   margin: 5px 0 2px;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   color: var(--ink);
 }
 .hero-metric-sub {
@@ -350,7 +353,7 @@ body {
   font-weight: 400;
   margin: 4px 0 0;
   font-size: 22px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -445,6 +448,31 @@ body {
 .chart-wrap { position: relative; height: 300px; }
 .chart-wrap-short { height: 220px; }
 .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+.model-strip {
+  display: grid;
+  grid-template-columns: 1.4fr 1.2fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.model-strip > div {
+  min-width: 0;
+}
+.model-strip-main,
+.model-strip-sub {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.model-strip-sub {
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+}
 
 /* ====================== SCENARIOS ====================== */
 .scenarios {
@@ -560,7 +588,7 @@ body {
   font-family: "Instrument Serif", serif;
   font-size: 48px;
   line-height: 0.9;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
@@ -586,7 +614,7 @@ body {
   font-size: 20px;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 .activity-secondary-sub {
   margin: 2px 0 0;
@@ -594,54 +622,6 @@ body {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-
-/* Weekday chart */
-.weekday-chart {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-  height: 140px;
-  align-items: end;
-  padding: 8px 2px 28px;
-  position: relative;
-}
-.weekday-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  height: 100%;
-  justify-content: flex-end;
-  position: relative;
-}
-.weekday-bar {
-  width: 100%;
-  max-width: 28px;
-  background: var(--line-strong);
-  border-radius: 3px;
-  position: relative;
-  transition: height 1s var(--ease), background .2s;
-  min-height: 2px;
-}
-.weekday-bar.is-hi { background: var(--ink); }
-.weekday-label {
-  position: absolute;
-  bottom: -22px;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.weekday-val {
-  position: absolute;
-  top: -18px;
-  font-size: 10px;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
-  font-family: "JetBrains Mono", monospace;
-  opacity: 0;
-  transition: opacity .15s;
-}
-.weekday-col:hover .weekday-val { opacity: 1; }
 
 .insight-box {
   margin-top: 22px;
@@ -700,7 +680,7 @@ body {
   margin: 4px 0 0;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 .bottom-hint {
   margin: auto 0 0;
@@ -958,6 +938,10 @@ kbd {
   .foot { flex-direction: column; gap: 6px; align-items: flex-start; }
   .panel-controls { width: 100%; justify-content: flex-start; }
   .dots { grid-template-columns: repeat(10, 1fr); }
+  .model-strip {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 @media (max-width: 520px) {

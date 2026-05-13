@@ -147,20 +147,20 @@ def compute_weekly_loss_rate(
     latest_date: str,
     window: int = 28,
     kcal_to_kg: float = 7700.0,
-    weights: tuple[float, float, float] = (0.5, 0.3, 0.2),
+    weights: tuple[float, float, float] = (0.65, 0.35, 0.0),
 ) -> dict[str, Any]:
-    """EWMA slope, MA7 slope, 운동 칼로리 기대치를 가중 합성한 주간 감량률.
+    """EWMA slope 중심 주간 감량률.
 
     반환:
-      blended   - 최종 합성값 (kg/주, 양수=감소)
+      blended   - 최종 합성값 (kg/주, 양수=감소). 운동 kcal은 기본 예측에서 제외
       ewmaSlope - EWMA 선형 회귀 slope
       ma7Slope  - MA7 선형 회귀 slope
-      kcalRate  - 운동 칼로리 기반 기대 감량률 (이중 계산 주의, 낮은 가중치 권장)
+      kcalRate  - 운동 칼로리 기반 기대 감량률 참고값(시나리오 전용)
       weights   - 실제 사용된 (ewma_w, ma7_w, kcal_w) 합계=1
     """
     end = date.fromisoformat(latest_date)
 
-    # EWMA slope — window일 선형 회귀
+    # EWMA slope: window일 선형 회귀
     ewma_map = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
     ewma_pts = []
     for i in range(window + 1):
@@ -171,7 +171,7 @@ def compute_weekly_loss_rate(
     raw_ewma_slope = _linreg_slope(ewma_pts)  # kg/day (음수=감소)
     ewma_slope = round_or_none(-raw_ewma_slope * 7, 4) if raw_ewma_slope is not None else None  # kg/주 (양수=감소)
 
-    # MA7 slope — window일 선형 회귀 (단순 lookback 대신 회귀로 노이즈 감소)
+    # MA7 slope: window일 선형 회귀 (단순 lookback 대신 회귀로 노이즈 감소)
     ma7_pts = []
     for i in range(window + 1):
         d = (end - timedelta(days=window - i)).isoformat()
@@ -181,9 +181,9 @@ def compute_weekly_loss_rate(
     raw_ma7_slope = _linreg_slope(ma7_pts)
     ma7_slope = round_or_none(-raw_ma7_slope * 7, 4) if raw_ma7_slope is not None else None
 
-    # 운동 칼로리 기대 감량률 (최근 14일 평균 kcal/day → kg/주)
-    # 주의: 체중 추세에 이미 운동 효과가 반영되어 있어 이중 계산 가능성 있음.
-    # 낮은 가중치(0.2)로 "보정자" 역할만 부여.
+    # 운동 칼로리 기대 감량률 (최근 14일 평균 kcal/day → kg/주).
+    # 체중 추세에는 이미 운동 효과가 반영되어 있으므로 기본 예측에는 더하지 않고
+    # optimistic/conservative 시나리오 조정값으로만 사용한다.
     kcal_rows = rows[-14:] if len(rows) >= 14 else rows
     kcal_vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in kcal_rows]
     avg_daily_kcal = sum(kcal_vals) / len(kcal_vals) if kcal_vals else 0.0
@@ -196,7 +196,7 @@ def compute_weekly_loss_rate(
         components.append((ewma_slope, w_ewma))
     if ma7_slope is not None:
         components.append((ma7_slope, w_ma7))
-    if kcal_rate is not None and kcal_rate > 0:
+    if w_kcal > 0 and kcal_rate is not None and kcal_rate > 0:
         components.append((kcal_rate, w_kcal))
 
     if not components:
@@ -211,7 +211,7 @@ def compute_weekly_loss_rate(
         actual_weights = (
             round(w_ewma / total_w, 3) if ewma_slope is not None else 0.0,
             round(w_ma7 / total_w, 3) if ma7_slope is not None else 0.0,
-            round(w_kcal / total_w, 3) if (kcal_rate is not None and kcal_rate > 0) else 0.0,
+            round(w_kcal / total_w, 3) if (w_kcal > 0 and kcal_rate is not None and kcal_rate > 0) else 0.0,
         )
 
     return {
@@ -220,6 +220,7 @@ def compute_weekly_loss_rate(
         "ma7Slope": ma7_slope,
         "kcalRate": kcal_rate,
         "weights": {"ewma": actual_weights[0], "ma7": actual_weights[1], "kcal": actual_weights[2]},
+        "model": "ewma_ma7_trend",
     }
 
 
@@ -358,7 +359,7 @@ def build_client() -> Any:
         if hasattr(client, "garth") and hasattr(client.garth, "dumps"):
             LOGGER.info("Login succeeded. Update GARMIN_TOKENS secret with: client.garth.dumps()")
         else:
-            LOGGER.warning("garth.dumps() not available — set GARMIN_TOKENS manually")
+            LOGGER.warning("garth.dumps() not available, set GARMIN_TOKENS manually")
     except Exception as exc:
         LOGGER.warning("Could not check garth: %s", exc)
     return client
@@ -595,6 +596,141 @@ def compute_prediction_ci(
     return {"stdResidual": round(std, 3), "series": series}
 
 
+def compute_trend_windows(
+    ewma_series: list[dict[str, Any]],
+    latest_date: str,
+    windows: tuple[int, ...] = (7, 14, 28),
+) -> dict[str, Any]:
+    """최근 N일 EWMA 회귀 감량률(kg/주). 양수=감소."""
+    end = date.fromisoformat(latest_date)
+    ewma_map = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    out: dict[str, Any] = {}
+    for window in windows:
+        pts = []
+        for i in range(window + 1):
+            d = (end - timedelta(days=window - i)).isoformat()
+            v = ewma_map.get(d)
+            if v is not None:
+                pts.append((float(i), v))
+        raw = _linreg_slope(pts)
+        out[f"{window}d"] = {
+            "weeklyLossKg": round_or_none(-raw * 7, 4) if raw is not None else None,
+            "points": len(pts),
+        }
+    return out
+
+
+def backtest_predictions(
+    rows: list[dict[str, Any]],
+    ewma_series: list[dict[str, Any]],
+    ma7_by_date: dict[str, float | None],
+    horizons: tuple[int, ...] = (7, 14, 28),
+    train_window: int = 28,
+    min_samples: int = 3,
+) -> dict[str, Any]:
+    """과거 prefix 기준 단순 백테스트. 실제 측정값은 목표일 ±3일 내 가장 가까운 값."""
+    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    out: dict[str, Any] = {}
+    for horizon in horizons:
+        errors: list[float] = []
+        for idx in range(train_window, len(rows) - horizon):
+            latest = rows[idx - 1]["date"]
+            current_ewma = ewma_by_date.get(latest)
+            if current_ewma is None:
+                continue
+            detail = compute_weekly_loss_rate(
+                ewma_series[:idx],
+                ma7_by_date,
+                rows[:idx],
+                latest,
+                window=train_window,
+            )
+            rate = detail.get("blended")
+            if rate is None or rate <= 0:
+                continue
+            target_day = date.fromisoformat(latest) + timedelta(days=horizon)
+            candidates = []
+            for row in rows[idx:]:
+                actual = row.get("weight_kg")
+                if actual is None:
+                    continue
+                distance = abs((date.fromisoformat(row["date"]) - target_day).days)
+                if distance <= 3:
+                    candidates.append((distance, actual))
+            if not candidates:
+                continue
+            actual = min(candidates, key=lambda item: item[0])[1]
+            predicted = current_ewma - rate * (horizon / 7)
+            errors.append(predicted - actual)
+
+        key = f"{horizon}d"
+        if len(errors) < min_samples:
+            out[key] = {"sampleCount": len(errors), "status": "insufficient"}
+            continue
+        mae = sum(abs(e) for e in errors) / len(errors)
+        bias = sum(errors) / len(errors)
+        rmse = (sum(e * e for e in errors) / len(errors)) ** 0.5
+        out[key] = {
+            "sampleCount": len(errors),
+            "biasKg": round(bias, 3),
+            "maeKg": round(mae, 3),
+            "rmseKg": round(rmse, 3),
+            "status": "ok",
+        }
+    return out
+
+
+def classify_prediction_confidence(
+    coverage_pct: float,
+    measured_days: int,
+    std_residual: float | None,
+    backtests: dict[str, Any],
+) -> dict[str, Any]:
+    score = 0
+    reasons = []
+    if coverage_pct >= 80:
+        score += 2
+    elif coverage_pct >= 65:
+        score += 1
+    else:
+        reasons.append("최근 측정률이 낮음")
+
+    if measured_days >= 24:
+        score += 1
+    else:
+        reasons.append("최근 측정일 수 부족")
+
+    if std_residual is not None and std_residual <= 0.45:
+        score += 1
+    elif std_residual is not None and std_residual > 0.7:
+        reasons.append("일별 체중 변동이 큼")
+
+    bt14 = backtests.get("14d") or {}
+    if bt14.get("status") == "ok" and bt14.get("maeKg") is not None:
+        if bt14["maeKg"] <= 0.45:
+            score += 2
+        elif bt14["maeKg"] <= 0.7:
+            score += 1
+        else:
+            reasons.append("14일 예측 오차가 큼")
+    else:
+        reasons.append("14일 백테스트 표본 부족")
+
+    if score >= 5:
+        level, label = "high", "높음"
+    elif score >= 3:
+        level, label = "medium", "보통"
+    else:
+        level, label = "low", "낮음"
+
+    return {
+        "level": level,
+        "label": label,
+        "score": score,
+        "reasons": reasons,
+    }
+
+
 def classify_loss_intensity(weekly_loss_kg: float | None, current_weight_kg: float | None) -> dict[str, Any] | None:
     """주당 체중 대비 감량 % 기준으로 강도 분류 (CDC/WHO 기준)."""
     if current_weight_kg is None or current_weight_kg <= 0 or weekly_loss_kg is None:
@@ -652,7 +788,7 @@ def build_insight(
         diff = round(current_kg - ewma_kg, 2)
         if abs(diff) >= 0.3:
             direction = "수분 증가로 일시적 상승" if diff > 0 else "수분 감소로 일시적 하락"
-            lines.append(f"오늘 {current_kg}kg이지만 추세는 {ewma_kg}kg — {direction}일 수 있어요.")
+            lines.append(f"오늘 {current_kg}kg이지만 추세는 {ewma_kg}kg, {direction}일 수 있어요.")
 
     if plateau and plateau.get("detected"):
         dur = plateau.get("durationDays", 0)
@@ -667,7 +803,7 @@ def build_insight(
         elif level == "standard":
             lines.append("CDC 권장 범위(주 0.5%) 안의 건강한 페이스입니다.")
         elif level == "conservative":
-            lines.append("느리지만 지속 가능한 페이스 — 장기 유지에 유리합니다.")
+            lines.append("느리지만 지속 가능한 페이스입니다. 장기 유지에 유리합니다.")
 
     return {"headline": lines[0] if lines else None, "lines": lines}
 
@@ -696,6 +832,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "lossIntensity": None,
             "plateau": {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None},
             "predictionCI": {"stdResidual": None, "series": []},
+            "modelDiagnostics": {
+                "confidence": {"level": "low", "label": "낮음", "score": 0, "reasons": ["데이터 없음"]},
+                "trendWindows": {},
+                "backtest": {},
+            },
             "insight": {"headline": None, "lines": []},
             "series": {"daily": [], "ma7": [], "ma14": [], "ewma": [], "prediction": [], "predictionCI": [], "steps": [], "exerciseMinutes": []},
         }
@@ -734,7 +875,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     current_ma14 = ma14_by_date.get(latest_date)
     current_ewma = ewma_values[-1] if ewma_values else None
 
-    # EWMA slope + MA7 slope + 운동 칼로리 기대치 합성 감량률
+    # EWMA slope 중심 + MA7 보조 감량률. 운동 kcal은 기본 예측에서 제외한다.
     trend_window = int(config.get("exerciseTrendWindow") or 28)
     kcal_to_kg_pre = parse_float(config.get("kcalToKgFactor")) or 7700.0
     loss_rate_detail = compute_weekly_loss_rate(
@@ -767,7 +908,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     con_pct = parse_float(pct_deltas.get("conservative")) or -0.30
 
     recent7_avg_kcal = exercise_trend["recent7Avg"] or 0.0
-    # 체중 증가 추세(음수)는 0으로 클리핑 — 예측선이 현재 수준보다 위로 올라가지 않도록
+    # 체중 증가 추세(음수)는 0으로 클리핑: 예측선이 현재 수준보다 위로 올라가지 않도록
     base_trend_loss = max(weekly_loss_rate, 0.0) if weekly_loss_rate is not None else 0.0
 
     # --- 시나리오 계산 (운동 칼로리 ±% 보정) ---
@@ -777,7 +918,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "conservative": {"pct_delta": con_pct, "multiplier": 0.6, "label": "보수적"},
     }
     scenarios: dict[str, Any] = {}
-    if current_ma7 is not None:
+    prediction_start = current_ewma if current_ewma is not None else current_ma7
+    if prediction_start is not None:
         for name, sdef in SCENARIO_DEFS.items():
             pct = sdef["pct_delta"]
             extra_daily_kcal = recent7_avg_kcal * pct
@@ -793,7 +935,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 desc = "현재 운동량 유지 기준 예측"
             scenarios[name] = {
                 "multiplier": sdef["multiplier"],           # 호환용 유지
-                "threeMonthWeightKg": round_or_none(current_ma7 - effective_loss * 12, 2),
+                "threeMonthWeightKg": round_or_none(prediction_start - effective_loss * 12, 2),
                 "assumedDailyKcal": assumed_daily,
                 "weeklyKcalDelta": round_or_none(extra_weekly_kcal, 1),
                 "extraWeeklyLossKg": round_or_none(extra_weekly_loss_kg, 4),
@@ -807,16 +949,18 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     one_month_weight = None
     three_month_weight = None
-    if current_ma7 is not None and base_effective_loss > 0:
-        one_month_weight = round_or_none(current_ma7 - base_effective_loss * 4, 2)
-        three_month_weight = round_or_none(current_ma7 - base_effective_loss * 12, 2)
+    if prediction_start is not None and base_effective_loss > 0:
+        one_month_weight = round_or_none(prediction_start - base_effective_loss * 4, 2)
+        three_month_weight = round_or_none(prediction_start - base_effective_loss * 12, 2)
 
     target_weight = parse_float(config.get("targetWeightKg"))
     remaining_kg = None
     eta_days = None
     eta_date = None
-    if target_weight is not None and current_ma7 is not None:
-        remaining_kg = round_or_none(current_ma7 - target_weight, 2)
+    eta_range_days = None
+    eta_range_dates = None
+    if target_weight is not None and prediction_start is not None:
+        remaining_kg = round_or_none(prediction_start - target_weight, 2)
         if remaining_kg <= 0:
             eta_days = 0
             eta_date = latest_date
@@ -842,6 +986,60 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     measured_count = sum(1 for r in last30 if r.get("weight_kg") is not None)
     coverage_pct = round(measured_count / len(last30) * 100, 0) if last30 else 0
 
+    # 마지막 측정일과 경과 일수
+    last_measurement_date: str | None = None
+    for r in reversed(rows):
+        if r.get("weight_kg") is not None:
+            last_measurement_date = r["date"]
+            break
+    if last_measurement_date:
+        try:
+            last_dt = date.fromisoformat(last_measurement_date)
+            days_since = (date.today() - last_dt).days
+        except Exception:
+            days_since = None
+    else:
+        days_since = None
+
+    if remaining_kg is not None and remaining_kg > 0 and scenarios:
+        fast_loss = scenarios.get("optimistic", {}).get("effectiveWeeklyLossKg")
+        slow_loss = scenarios.get("conservative", {}).get("effectiveWeeklyLossKg")
+        if fast_loss and slow_loss and fast_loss > 0 and slow_loss > 0:
+            min_eta = math.ceil((remaining_kg / fast_loss) * 7)
+            max_eta = math.ceil((remaining_kg / slow_loss) * 7)
+            base_day = datetime.strptime(latest_date, "%Y-%m-%d").date()
+            eta_range_days = {"min": min_eta, "max": max_eta}
+            eta_range_dates = {
+                "min": (base_day + timedelta(days=min_eta)).isoformat(),
+                "max": (base_day + timedelta(days=max_eta)).isoformat(),
+            }
+
+    trend_windows = compute_trend_windows(ewma_series, latest_date)
+    backtest = backtest_predictions(rows, ewma_series, ma7_by_date, train_window=trend_window)
+    confidence = classify_prediction_confidence(
+        coverage_pct=coverage_pct,
+        measured_days=measured_count,
+        std_residual=prediction_ci.get("stdResidual"),
+        backtests=backtest,
+    )
+    model_diagnostics = {
+        "model": "EWMA trend + MA7 guardrail; exercise kcal affects scenarios only",
+        "confidence": confidence,
+        "coverage": {
+            "measuredDays": measured_count,
+            "totalDays": len(last30),
+            "pct": coverage_pct,
+        },
+        "trendWindows": trend_windows,
+        "residualStdKg": prediction_ci.get("stdResidual"),
+        "backtest": backtest,
+        "notes": [
+            "기본 예측은 체중 추세 기반입니다.",
+            "운동 칼로리는 낙관/보수 시나리오 조정에만 사용합니다.",
+            "28일 이상 예측은 장기 추정으로 취급합니다.",
+        ],
+    }
+
     return {
         "generatedAt": datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z",
         "current": {
@@ -862,15 +1060,20 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "remainingKg": remaining_kg,
             "etaDays": eta_days,
             "etaDate": eta_date,
+            "etaRangeDays": eta_range_days,
+            "etaRangeDates": eta_range_dates,
         },
         "lossIntensity": loss_intensity,
         "plateau": plateau,
         "predictionCI": prediction_ci,
+        "modelDiagnostics": model_diagnostics,
         "insight": insight,
         "coverage": {
             "last30Measured": measured_count,
             "last30Total": len(last30),
             "last30Pct": coverage_pct,
+            "lastMeasurementAt": last_measurement_date,
+            "daysSinceLastMeasurement": days_since,
         },
         "series": {
             "daily": daily_series,
@@ -912,7 +1115,7 @@ def sync_rows(args: argparse.Namespace, paths: Paths) -> list[dict[str, Any]]:
         LOGGER.info("syncing %s", day)
         new_row = fetch_day_row(client, day)
         if _row_is_empty(new_row) and day in existing_rows:
-            LOGGER.warning("all fields empty for %s — keeping existing data", day)
+            LOGGER.warning("all fields empty for %s, keeping existing data", day)
             continue
         existing_rows[day] = new_row
 
