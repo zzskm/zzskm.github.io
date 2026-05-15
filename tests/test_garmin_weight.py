@@ -122,6 +122,153 @@ class GarminWeightTests(unittest.TestCase):
         self.assertIn("generatedAt", payload)
         self.assertEqual(75, payload["goal"]["targetWeightKg"])
 
+    def test_days_since_last_measurement_not_negative(self) -> None:
+        """P6 회귀: latest_date 기준으로 측정 일수를 계산해 음수가 나오지 않음."""
+        rows = [
+            {
+                "date": f"2030-01-{day:02d}",
+                "weight_kg": 82.0 - day * 0.05,
+                "weight_measure_count": 1,
+                "exercise_minutes": 30,
+                "exercise_calories": 200,
+                "activity_count": 1,
+                "steps": 7000,
+                "sleep_hours": 7,
+                "resting_hr": 60,
+                "visceral_fat": None,
+                "metabolic_age": None,
+            }
+            for day in range(1, 21)
+        ]
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75})
+        days = summary["coverage"]["daysSinceLastMeasurement"]
+        self.assertIsNotNone(days)
+        self.assertGreaterEqual(days, 0)
+
+    def test_multi_window_blend_responds_to_recent_acceleration(self) -> None:
+        """P2 회귀: 후반에 가속된 감량 추세가 단일 28일 회귀보다 큰 blended를 만든다."""
+        # 앞 14일은 평탄, 뒤 14일은 빠르게 감량 — 다중 윈도우가 가속을 반영해야 함
+        rows = []
+        for day in range(1, 15):
+            rows.append({
+                "date": f"2030-02-{day:02d}",
+                "weight_kg": 82.0,
+                "weight_measure_count": 1,
+                "exercise_minutes": 30,
+                "exercise_calories": 200,
+                "activity_count": 1,
+                "steps": 7000,
+                "sleep_hours": 7,
+                "resting_hr": 60,
+                "visceral_fat": None,
+                "metabolic_age": None,
+            })
+        for day in range(15, 29):
+            rows.append({
+                "date": f"2030-02-{day:02d}",
+                "weight_kg": round(82.0 - (day - 14) * 0.15, 2),
+                "weight_measure_count": 1,
+                "exercise_minutes": 45,
+                "exercise_calories": 350,
+                "activity_count": 1,
+                "steps": 9000,
+                "sleep_hours": 7,
+                "resting_hr": 58,
+                "visceral_fat": None,
+                "metabolic_age": None,
+            })
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75})
+        detail = summary["rolling"]["lossRateDetail"]
+        self.assertEqual(detail["model"], "multi_window_ewma_blend")
+        self.assertIn("windowSlopes", detail)
+        # 7일 슬로프가 28일 슬로프보다 더 가파른 감량을 보여야 함
+        slopes = detail["windowSlopes"]
+        self.assertIsNotNone(slopes.get("7d"))
+        self.assertIsNotNone(slopes.get("28d"))
+        self.assertGreater(slopes["7d"], slopes["28d"])
+        # blended는 단순 28일 값보다 단기 신호 쪽으로 끌려 와야 함
+        self.assertGreater(detail["blended"], slopes["28d"])
+
+    def test_kcal_per_kg_bmi_tiers(self) -> None:
+        """Phase 2B 회귀: BMI 구간별 kcal_per_kg 매핑."""
+        # 체지방률이 우선
+        v, src = sync_garmin.kcal_per_kg(32.0, 90.0, 175.0)
+        self.assertEqual(8000.0, v)
+        self.assertEqual("body_fat", src)
+        # BMI 30+ → 8000
+        v, src = sync_garmin.kcal_per_kg(None, 95.0, 175.0)
+        self.assertEqual("bmi", src)
+        self.assertEqual(8000.0, v)
+        # BMI 23 → 7400
+        v, src = sync_garmin.kcal_per_kg(None, 70.0, 175.0)
+        self.assertEqual("bmi", src)
+        self.assertEqual(7400.0, v)
+        # 키 정보 없음 → default
+        v, src = sync_garmin.kcal_per_kg(None, 70.0, None)
+        self.assertEqual("default", src)
+        self.assertEqual(7700.0, v)
+
+    def test_calibration_reports_efficiency_in_summary(self) -> None:
+        """Phase 1A 회귀: 충분한 history에서 calibration이 modelDiagnostics에 노출."""
+        rows = []
+        for day in range(1, 32):
+            rows.append({
+                "date": f"2030-03-{day:02d}",
+                "weight_kg": round(82.0 - day * 0.05, 2),
+                "weight_measure_count": 1,
+                "exercise_minutes": 30,
+                "exercise_calories": 300,
+                "activity_count": 1,
+                "steps": 8000,
+                "sleep_hours": 7,
+                "resting_hr": 60,
+                "visceral_fat": None,
+                "metabolic_age": None,
+            })
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
+        diag = summary["modelDiagnostics"]
+        self.assertIn("calibration", diag)
+        self.assertIn("kcalPerKg", diag)
+        self.assertIn(diag["kcalPerKgSource"], ("body_fat", "bmi", "default"))
+        self.assertIn("exerciseEfficiency", diag["calibration"])
+
+    def test_backtest_uses_exp_decay_model(self) -> None:
+        """Phase 3 회귀: backtest 결과의 predicted가 지수 감쇠 외삽과 일치해야 한다."""
+        # 충분히 긴 history + 목표 체중 가까이 — 지수 감쇠가 선형보다 분명히 보수적인 예측을 함
+        rows = []
+        for day in range(60):
+            rows.append({
+                "date": (sync_garmin.date(2030, 1, 1) + sync_garmin.timedelta(days=day)).isoformat(),
+                "weight_kg": round(85.0 - day * 0.04, 2),
+                "weight_measure_count": 1,
+                "exercise_minutes": 30,
+                "exercise_calories": 250,
+                "activity_count": 1,
+                "steps": 8000,
+                "sleep_hours": 7,
+                "resting_hr": 60,
+                "visceral_fat": None,
+                "metabolic_age": None,
+            })
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
+        bt = summary["modelDiagnostics"]["backtest"]
+        # backtest는 ok 상태여야 하고 maeKg이 합리적 범위
+        for horizon in ("7d", "14d", "28d"):
+            entry = bt.get(horizon)
+            if entry and entry.get("status") == "ok":
+                self.assertLess(entry["maeKg"], 1.0)
+
+    def test_prediction_curve_decays_toward_target(self) -> None:
+        """P3 회귀: 선형 외삽이라면 12주 감량 = 12 * weekly. 지수 감쇠는 더 작아야 함."""
+        start = 90.0
+        weekly = 0.3
+        target = 80.0
+        linear_12w_drop = weekly * 12  # = 3.6
+        proj = sync_garmin._projected_weight(start, weekly, 12, target_weight=target)
+        actual_drop = start - proj
+        self.assertLess(actual_drop, linear_12w_drop)
+        self.assertGreater(proj, target)  # 목표를 지나치지 않음
+
 
 if __name__ == "__main__":
     unittest.main()

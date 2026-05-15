@@ -1,50 +1,51 @@
 /* ============================================================
-   체중 대시보드 — white, clean, editorial
+   체중 대시보드 — dark editorial (Whoop/Oura 계열)
    ============================================================ */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* Surfaces — soft off-white */
-  --bg: #f5f3ef;
-  --bg-tint: #efece6;
-  --panel: #fbfaf7;
-  --panel-soft: #eeeae2;
-  --line: #e2ddd3;
-  --line-strong: #cfc9bd;
+  /* Surfaces — deep navy hierarchy */
+  --bg: #0f1419;
+  --bg-tint: #141a21;
+  --panel: #1a1f26;
+  --panel-soft: #202730;
+  --line: #262d36;
+  --line-strong: #353d48;
 
-  /* Ink — near black, neutral */
-  --ink: #111111;
-  --ink-soft: #2b2b2b;
-  --muted: #6b6b68;
-  --muted-2: #9a9a96;
+  /* Ink — near white on dark */
+  --ink: #f4f4f3;
+  --ink-soft: #d4d6d2;
+  --muted: #9aa0a6;
+  --muted-2: #6b7280;
 
-  /* Accent — single restrained accent */
-  --accent: #c25a31;        /* terracotta, used sparingly */
-  --accent-ink: #8b3d1d;
-  --accent-tint: #fbf1ea;
+  /* Accent — restrained teal */
+  --accent: #14b8a6;        /* teal — used sparingly */
+  --accent-ink: #5eead4;
+  --accent-tint: rgba(20,184,166,0.12);
 
-  /* Chart series — hierarchy: actual bold, others muted */
-  --actual: #111111;        /* main, black */
-  --actual-fill: rgba(17,17,17,0.04);
-  --ma7: #b8b8b4;           /* soft gray */
-  --ma14: #d8d8d4;          /* lighter gray */
-  --predict: #c25a31;       /* accent only for forecast */
+  /* Chart series — hierarchy: actual = ink, prediction = accent */
+  --actual: #f4f4f3;        /* main, white */
+  --actual-fill: rgba(244,244,243,0.05);
+  --ma7: #4b5563;           /* deep muted */
+  --ma14: #374151;          /* deeper muted */
+  --predict: #14b8a6;       /* teal */
+  --predict-band: rgba(20,184,166,0.12);
 
-  /* Intensity levels */
-  --intensity-maintaining: #9a9a96;
-  --intensity-conservative: #6a8caf;
-  --intensity-standard: #79b089;
-  --intensity-aggressive: #c25a31;
+  /* Intensity levels — toned for dark */
+  --intensity-maintaining: #6b7280;
+  --intensity-conservative: #7aa2c9;
+  --intensity-standard: #4ade80;
+  --intensity-aggressive: #14b8a6;
 
   /* Amber — plateau warning */
-  --amber: #d97706;
-  --amber-tint: #fffbeb;
-  --amber-line: #fde68a;
+  --amber: #f59e0b;
+  --amber-tint: rgba(245,158,11,0.10);
+  --amber-line: rgba(245,158,11,0.32);
 
   /* Motion */
   --ease: cubic-bezier(.2,.7,.2,1);
-  --shadow-sm: 0 1px 0 rgba(17,17,17,0.03);
-  --shadow: 0 1px 0 rgba(17,17,17,0.03);
+  --shadow-sm: 0 1px 0 rgba(0,0,0,0.40);
+  --shadow: 0 1px 2px rgba(0,0,0,0.45);
 }
 
 * { box-sizing: border-box; }
@@ -119,8 +120,8 @@ body {
 
 .sync-dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: #79b089;
-  box-shadow: 0 0 0 3px rgba(121,176,137,0.15);
+  background: var(--intensity-standard);
+  box-shadow: 0 0 0 3px rgba(74,222,128,0.18);
   flex: none;
 }
 
@@ -293,7 +294,7 @@ body {
 }
 .big-weight-meta .delta { color: var(--ink-soft); font-weight: 500; }
 .delta.up { color: var(--accent-ink); }
-.delta.down { color: #2e6b4b; }
+.delta.down { color: var(--intensity-standard); }
 
 .hero-metrics {
   display: flex;
@@ -397,7 +398,7 @@ body {
 .seg-btn.is-active {
   background: var(--bg);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(17,17,17,0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Chips — minimal, now without swatch color dots on unchecked */
@@ -706,7 +707,7 @@ body {
   background: var(--line);
 }
 .dot-cell.has { background: var(--ink-soft); }
-.dot-cell.has-today { background: var(--accent); box-shadow: 0 0 0 1.5px rgba(194,90,49,0.15); }
+.dot-cell.has-today { background: var(--accent); box-shadow: 0 0 0 1.5px rgba(20,184,166,0.25); }
 
 /* Coverage card — full-width dots in 10-col grid */
 .bottom-card--coverage {
@@ -779,7 +780,7 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--amber);
-  background: rgba(217,119,6,0.1);
+  background: var(--amber-tint);
   padding: 2px 8px;
   border-radius: 4px;
 }

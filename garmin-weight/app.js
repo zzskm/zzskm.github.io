@@ -4,6 +4,36 @@
   const SUMMARY_URL = './data/summary.json';
   const CONFIG_URL = './config.json';
 
+  // Dark editorial theme — style.css의 :root 변수와 동기화 유지
+  const THEME = {
+    ink: '#f4f4f3',
+    inkSoft: '#d4d6d2',
+    muted: '#9aa0a6',
+    muted2: '#6b7280',
+    line: '#262d36',
+    panel: '#1a1f26',
+    bg: '#0f1419',
+    accent: '#14b8a6',
+    accentInk: '#5eead4',
+    accentTint: 'rgba(20,184,166,0.12)',
+    actual: '#f4f4f3',
+    actualFill: 'rgba(244,244,243,0.05)',
+    ma7: '#4b5563',
+    ma14: '#374151',
+    predict: '#14b8a6',
+    predictFill: 'rgba(20,184,166,0.12)',
+    grid: 'rgba(244,244,243,0.06)',
+    tooltipBg: '#1a1f26',
+    tooltipBorder: '#353d48',
+    tooltipBody: '#d4d6d2',
+    plateauShade: 'rgba(245,158,11,0.10)',
+    activityBar: 'rgba(20,184,166,0.30)',
+    activityBarStroke: '#14b8a6',
+    activitySteps: '#6b7280',
+    syncStale: '#ef4444',
+    syncWarn: '#f59e0b',
+  };
+
   const state = {
     summary: null,
     config: null,
@@ -377,9 +407,9 @@
     const last = pts[pts.length - 1];
     host.innerHTML = `
       <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-        <path d="${area}" fill="rgba(17,17,17,0.05)" />
-        <path d="${d}" fill="none" stroke="#2b2b2b" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="${last[0]}" cy="${last[1]}" r="2" fill="#c25a31"/>
+        <path d="${area}" fill="${THEME.actualFill}" />
+        <path d="${d}" fill="none" stroke="${THEME.ink}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${last[0]}" cy="${last[1]}" r="2" fill="${THEME.accent}"/>
       </svg>`;
   }
 
@@ -427,7 +457,7 @@
         const x1 = xScale.getPixelForValue(startIdx);
         const x2 = xScale.getPixelForValue(endIdx);
         ctx.save();
-        ctx.fillStyle = 'rgba(217,119,6,0.06)';
+        ctx.fillStyle = THEME.plateauShade;
         ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
         ctx.restore();
       },
@@ -468,7 +498,7 @@
       datasets.push({
         label: '14일 평균',
         data: align(ma14),
-        borderColor: '#d8d8d4',
+        borderColor: THEME.ma14,
         borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 3,
@@ -484,7 +514,7 @@
       datasets.push({
         label: '추세',
         data: align(ewma),
-        borderColor: '#b8b8b4',
+        borderColor: THEME.ma7,
         borderWidth: 1.75,
         pointRadius: 0,
         pointHoverRadius: 3,
@@ -505,7 +535,7 @@
         pointRadius: 0,
         spanGaps: true,
         fill: '+1',
-        backgroundColor: 'rgba(194,90,49,0.10)',
+        backgroundColor: THEME.predictFill,
         tension: 0.25,
         order: 2,
       });
@@ -524,12 +554,12 @@
       datasets.push({
         label: '예측',
         data: align(prediction),
-        borderColor: '#c25a31',
+        borderColor: THEME.predict,
         borderWidth: 1.75,
         borderDash: [5, 4],
         pointRadius: 0,
         pointHoverRadius: 4,
-        pointBackgroundColor: '#c25a31',
+        pointBackgroundColor: THEME.predict,
         tension: 0.25,
         spanGaps: true,
         fill: false,
@@ -541,13 +571,13 @@
     datasets.push({
       label: '실제',
       data: align(daily),
-      borderColor: '#c25a31',
-      backgroundColor: 'rgba(194,90,49,0.06)',
+      borderColor: THEME.actual,
+      backgroundColor: THEME.actualFill,
       borderWidth: 2.5,
       pointRadius: 3,
       pointHoverRadius: 5,
-      pointBackgroundColor: '#111111',
-      pointBorderColor: '#ffffff',
+      pointBackgroundColor: THEME.accent,
+      pointBorderColor: THEME.panel,
       pointBorderWidth: 1.5,
       tension: 0.3,
       spanGaps: true,
@@ -574,9 +604,11 @@
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: '#111111',
-            titleColor: '#ffffff',
-            bodyColor: '#e6e6e4',
+            backgroundColor: THEME.tooltipBg,
+            borderColor: THEME.tooltipBorder,
+            borderWidth: 1,
+            titleColor: THEME.ink,
+            bodyColor: THEME.tooltipBody,
             padding: 10,
             cornerRadius: 6,
             titleFont: { family: 'Inter Tight', weight: '600', size: 12 },
@@ -619,10 +651,10 @@
         },
         scales: {
           x: {
-            grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
+            grid: { color: THEME.grid, drawTicks: false },
             border: { display: false },
             ticks: {
-              color: '#9a9a96',
+              color: THEME.muted,
               font: { family: 'JetBrains Mono', size: 10.5 },
               maxRotation: 0,
               autoSkip: true,
@@ -632,10 +664,10 @@
           },
           y: {
             min: yMin,
-            grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
+            grid: { color: THEME.grid, drawTicks: false },
             border: { display: false },
             ticks: {
-              color: '#9a9a96',
+              color: THEME.muted,
               font: { family: 'JetBrains Mono', size: 10.5 },
               callback: (v) => `${v}`,
               padding: 8,
@@ -669,8 +701,8 @@
         type: 'bar',
         label: '운동 시간',
         data: minutesArr,
-        backgroundColor: 'rgba(31, 90, 116, 0.45)',
-        borderColor: '#1f5a74',
+        backgroundColor: THEME.activityBar,
+        borderColor: THEME.activityBarStroke,
         borderWidth: 0,
         borderRadius: 2,
         barPercentage: 0.7,
@@ -682,7 +714,7 @@
         type: 'line',
         label: '걸음 수',
         data: stepsArr,
-        borderColor: '#c8c8c4',
+        borderColor: THEME.activitySteps,
         backgroundColor: 'transparent',
         borderWidth: 1.25,
         pointRadius: 0,
@@ -705,16 +737,18 @@
             position: 'top',
             align: 'end',
             labels: {
-              color: '#6b6b68',
+              color: THEME.muted,
               usePointStyle: true,
               boxWidth: 8,
               font: { family: 'Inter Tight', size: 11.5 },
             },
           },
           tooltip: {
-            backgroundColor: '#111111',
-            titleColor: '#ffffff',
-            bodyColor: '#e6e6e4',
+            backgroundColor: THEME.tooltipBg,
+            borderColor: THEME.tooltipBorder,
+            borderWidth: 1,
+            titleColor: THEME.ink,
+            bodyColor: THEME.tooltipBody,
             padding: 10,
             cornerRadius: 6,
             callbacks: {
@@ -731,7 +765,7 @@
             grid: { display: false },
             border: { display: false },
             ticks: {
-              color: '#9a9a96',
+              color: THEME.muted,
               font: { family: 'JetBrains Mono', size: 10 },
               maxRotation: 0,
               autoSkip: true,
@@ -743,10 +777,10 @@
             position: 'left',
             beginAtZero: true,
             suggestedMax: hasMinutes ? undefined : 10,
-            grid: { color: 'rgba(17,17,17,0.04)', drawTicks: false },
+            grid: { color: THEME.grid, drawTicks: false },
             border: { display: false },
             ticks: {
-              color: '#6b6b68',
+              color: THEME.muted,
               font: { family: 'JetBrains Mono', size: 10 },
               stepSize: hasMinutes ? undefined : 2,
               precision: 0,
@@ -761,7 +795,7 @@
             grid: { display: false },
             border: { display: false },
             ticks: {
-              color: '#c8c8c4',
+              color: THEME.muted2,
               font: { family: 'JetBrains Mono', size: 10 },
               callback: (v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v,
               padding: 6,
@@ -866,7 +900,7 @@
       const lowCoverage = cov && cov.last30Pct < 70;
       const syncPill = el('lastSync');
       const syncDot = syncPill?.querySelector('.sync-dot');
-      if (syncDot) syncDot.style.background = stale ? '#b91c1c' : (lowCoverage ? '#d97706' : '');
+      if (syncDot) syncDot.style.background = stale ? THEME.syncStale : (lowCoverage ? THEME.syncWarn : '');
       const staleText = stale ? ` · 마지막 측정 ${daysSince}일 전` : '';
       syncPill.querySelector('.sync-text').textContent = gen
         ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${covText}${staleText}`
@@ -878,6 +912,18 @@
       }
       setText('statusLine',
         `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);
+
+      // V2: 운동 효율 캘리브레이션 메시지
+      const calib = state.summary.modelDiagnostics?.calibration;
+      const calibLine = el('calibrationLine');
+      if (calibLine) {
+        if (calib?.interpretation && Number.isFinite(calib.exerciseEfficiency)) {
+          calibLine.textContent = calib.interpretation;
+          calibLine.hidden = false;
+        } else {
+          calibLine.hidden = true;
+        }
+      }
 
       appRoot.dataset.state = 'ready';
     } catch (err) {
