@@ -140,87 +140,244 @@ def _linreg_slope(xy_pairs: list[tuple[float, float]]) -> float | None:
     return num / den if den != 0 else 0.0
 
 
+def build_smart_scenarios(
+    exercise_trend: dict[str, Any],
+    opt_pct: float,
+    con_pct: float,
+    recent7_avg_kcal: float,
+) -> dict[str, dict[str, Any]]:
+    """Phase 6 — 활동 로그 기반 시나리오.
+
+    legacy '±30%'가 추상적이라, 운동 세션 평균 kcal을 기반으로 "주2회 추가" 등
+    구체적 라벨을 생성한다. 표본이 부족하면 pct 기반 fallback.
+    """
+    # exercise_trend의 recent7Avg는 일평균 kcal. 운동 세션 평균 kcal은 active_days 기반으로 추정.
+    avg_session_kcal = 0.0
+    if recent7_avg_kcal > 0:
+        # active_days 정확값은 rolling에서 계산되지만 여기선 보수적으로 4일 가정
+        # (주 4회 운동 = 일평균 kcal × 7 / 4)
+        avg_session_kcal = recent7_avg_kcal * 7 / 4.0
+
+    def _scenario(name: str, label: str, extra_kcal_per_week: float, desc: str, multiplier: float) -> dict[str, Any]:
+        return {
+            "label": label,
+            "extra_weekly_kcal": extra_kcal_per_week,
+            "description": desc,
+            "multiplier": multiplier,
+        }
+
+    if avg_session_kcal >= 100:
+        # 구체적 세션 기반 시나리오
+        opt_extra = round(avg_session_kcal * 2, 0)        # +주2회
+        con_extra = -round(avg_session_kcal * 2, 0)       # −주2회
+        opt_desc = f"주2회 추가 운동 (회당 ~{round(avg_session_kcal)}kcal) 가정"
+        con_desc = f"주2회 운동 누락 (회당 ~{round(avg_session_kcal)}kcal) 가정"
+    else:
+        # fallback: legacy pct 기반
+        opt_extra = recent7_avg_kcal * opt_pct * 7
+        con_extra = recent7_avg_kcal * con_pct * 7
+        opt_desc = f"운동 +{opt_pct*100:.0f}% 가정"
+        con_desc = f"운동 {con_pct*100:.0f}% 가정"
+
+    return {
+        "optimistic":   _scenario("optimistic",   "낙관",   opt_extra, opt_desc, 1.0),
+        "base":         _scenario("base",         "기준",   0.0,        "현재 운동량 유지 기준 예측", 0.8),
+        "conservative": _scenario("conservative", "보수적", con_extra, con_desc, 0.6),
+    }
+
+
+def compute_calibration(
+    rows: list[dict[str, Any]],
+    observed_weekly_loss: float | None,
+    kcal_to_kg: float,
+    window: int = 28,
+    min_samples: int = 14,
+) -> dict[str, Any]:
+    """Phase 1A — intake-free 운동 효율 캘리브레이션.
+
+    observed_weekly_loss(=blended)와 운동 칼로리에서 기대되는 감량을 비교해,
+    "운동 효과가 실제 감량으로 얼마나 이어졌는가"를 0.3 ~ 1.5 범위로 산출.
+
+    표본 부족 / 운동량 0 / 비정상 신호일 때는 1.0 (보정 없음).
+    """
+    if observed_weekly_loss is None or observed_weekly_loss <= 0:
+        return {
+            "exerciseEfficiency": None,
+            "samples": 0,
+            "windowDays": window,
+            "interpretation": "감량 추세가 확인되지 않아 보정값을 계산하지 않습니다.",
+        }
+
+    sample_rows = rows[-window:] if len(rows) >= window else rows
+    kcal_vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in sample_rows]
+    n = sum(1 for v in kcal_vals if v > 0)
+    if n < min_samples:
+        return {
+            "exerciseEfficiency": None,
+            "samples": n,
+            "windowDays": window,
+            "interpretation": f"표본 부족 ({n}/{min_samples}일) — 보정 비활성",
+        }
+
+    avg_kcal = sum(kcal_vals) / len(kcal_vals)
+    expected_weekly_loss = avg_kcal * 7 / kcal_to_kg
+    if expected_weekly_loss <= 0:
+        return {
+            "exerciseEfficiency": None,
+            "samples": n,
+            "windowDays": window,
+            "interpretation": "운동량이 없어 보정값을 계산하지 않습니다.",
+        }
+
+    raw_ratio = observed_weekly_loss / expected_weekly_loss
+    efficiency = max(0.3, min(1.5, raw_ratio))
+    pct = round(efficiency * 100)
+    if efficiency >= 1.1:
+        msg = f"운동 효과가 기대보다 큽니다 ({pct}%) — 식이 통제도 기여 중."
+    elif efficiency >= 0.85:
+        msg = f"운동 효과가 기대치와 비슷합니다 ({pct}%)."
+    else:
+        msg = f"운동 효과의 {pct}%만 실제 감량으로 이어졌습니다 — NEAT 감소·보상 섭취 가능성."
+
+    return {
+        "exerciseEfficiency": round(efficiency, 3),
+        "samples": n,
+        "windowDays": window,
+        "interpretation": msg,
+    }
+
+
+def kcal_per_kg(
+    body_fat_percent: float | None,
+    weight_kg: float | None,
+    height_cm: float | None,
+    default: float = 7700.0,
+) -> tuple[float, str]:
+    """Phase 2 — 동적 에너지 밀도.
+
+    체지방률이 있으면 Forbes-lite 티어, 없으면 BMI 티어, 둘 다 없으면 기본값.
+    반환: (kcal_per_kg, source) where source ∈ {"body_fat","bmi","default"}
+    """
+    # 2A: body_fat_percent 기반 (가장 정확)
+    if body_fat_percent is not None and body_fat_percent > 0:
+        if body_fat_percent >= 30:
+            return 8000.0, "body_fat"
+        if body_fat_percent >= 20:
+            return 7700.0, "body_fat"
+        if body_fat_percent >= 15:
+            return 7200.0, "body_fat"
+        return 6500.0, "body_fat"
+
+    # 2B: BMI 티어 (체지방 결손 시 폴백)
+    if weight_kg is not None and height_cm is not None and height_cm > 0:
+        bmi = weight_kg / ((height_cm / 100.0) ** 2)
+        if bmi >= 30:
+            return 8000.0, "bmi"
+        if bmi >= 25:
+            return 7700.0, "bmi"
+        if bmi >= 22:
+            return 7400.0, "bmi"
+        return 7000.0, "bmi"
+
+    return default, "default"
+
+
+def _slope_over_window(
+    series_map: dict[str, float | None],
+    end_day: date,
+    window: int,
+    min_points: int = 3,
+) -> tuple[float | None, int]:
+    """단일 윈도우 선형 회귀 slope (kg/day, 음수=감소). 표본 부족 시 (None, 점수)."""
+    pts = []
+    for i in range(window + 1):
+        d = (end_day - timedelta(days=window - i)).isoformat()
+        v = series_map.get(d)
+        if v is not None:
+            pts.append((float(i), v))
+    if len(pts) < min_points:
+        return None, len(pts)
+    return _linreg_slope(pts), len(pts)
+
+
 def compute_weekly_loss_rate(
     ewma_series: list[dict[str, Any]],
     ma7_by_date: dict[str, float | None],
     rows: list[dict[str, Any]],
     latest_date: str,
-    window: int = 28,
+    window: int = 28,  # 호환성 유지용 (다중 윈도우에서는 무시)
     kcal_to_kg: float = 7700.0,
-    weights: tuple[float, float, float] = (0.65, 0.35, 0.0),
+    weights: tuple[float, float, float] = (0.65, 0.35, 0.0),  # 호환성 유지용
 ) -> dict[str, Any]:
-    """EWMA slope 중심 주간 감량률.
+    """다중 윈도우 EWMA slope 블렌딩 기반 주간 감량률.
+
+    P2 개선: 28일 단일 EWMA+MA7 회귀(거의 동일 신호)를 3/7/14/28일 EWMA slope 합성으로 교체.
+    가중치는 최근에 더 큰 비중 → 추세 가속이 빨리 반영되어 변동폭 증가.
 
     반환:
-      blended   - 최종 합성값 (kg/주, 양수=감소). 운동 kcal은 기본 예측에서 제외
-      ewmaSlope - EWMA 선형 회귀 slope
-      ma7Slope  - MA7 선형 회귀 slope
+      blended   - 최종 합성값 (kg/주, 양수=감소).
+      ewmaSlope - 28일 EWMA slope (legacy 호환)
+      ma7Slope  - 7일 EWMA slope을 노출 (legacy 키로 매핑)
       kcalRate  - 운동 칼로리 기반 기대 감량률 참고값(시나리오 전용)
-      weights   - 실제 사용된 (ewma_w, ma7_w, kcal_w) 합계=1
+      weights   - 사용된 윈도우 가중치 (단기/중기/장기)
+      windowSlopes - {"3d":..., "7d":..., "14d":..., "28d":...} 각 윈도우 kg/주
     """
     end = date.fromisoformat(latest_date)
 
-    # EWMA slope: window일 선형 회귀
-    ewma_map = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
-    ewma_pts = []
-    for i in range(window + 1):
-        d = (end - timedelta(days=window - i)).isoformat()
-        v = ewma_map.get(d)
-        if v is not None:
-            ewma_pts.append((float(i), v))
-    raw_ewma_slope = _linreg_slope(ewma_pts)  # kg/day (음수=감소)
-    ewma_slope = round_or_none(-raw_ewma_slope * 7, 4) if raw_ewma_slope is not None else None  # kg/주 (양수=감소)
+    # EWMA map은 모든 윈도우가 공유
+    ewma_map: dict[str, float | None] = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
 
-    # MA7 slope: window일 선형 회귀 (단순 lookback 대신 회귀로 노이즈 감소)
-    ma7_pts = []
-    for i in range(window + 1):
-        d = (end - timedelta(days=window - i)).isoformat()
-        v = ma7_by_date.get(d)
-        if v is not None:
-            ma7_pts.append((float(i), v))
-    raw_ma7_slope = _linreg_slope(ma7_pts)
-    ma7_slope = round_or_none(-raw_ma7_slope * 7, 4) if raw_ma7_slope is not None else None
+    # 윈도우별 slope (kg/주, 양수=감소)
+    # 윈도우별 (목표가중치, 최소표본수)
+    # 28d는 충분히 긴 history가 있어야만 인정 — 데이터가 부족하면 blended를 끄는 게이트 역할.
+    window_specs = [
+        ("3d", 3, 0.10, 3),     # 매우 단기 - 노이즈 크므로 가중치 낮음
+        ("7d", 7, 0.30, 5),     # 단기 - 최근 트렌드 핵심
+        ("14d", 14, 0.35, 10),  # 중기 - 안정성
+        ("28d", 28, 0.25, 14),  # 장기 - 베이스라인 (가드 역할)
+    ]
+    window_slopes: dict[str, float | None] = {}
+    window_used_weight: dict[str, float] = {}
+    components: list[tuple[float, float]] = []
+    for key, w_days, target_w, min_pts in window_specs:
+        raw, n = _slope_over_window(ewma_map, end, w_days, min_points=min_pts)
+        weekly = -raw * 7 if raw is not None else None
+        window_slopes[key] = round(weekly, 4) if weekly is not None else None
+        if weekly is not None:
+            components.append((weekly, target_w))
+            window_used_weight[key] = target_w
+        else:
+            window_used_weight[key] = 0.0
 
-    # 운동 칼로리 기대 감량률 (최근 14일 평균 kcal/day → kg/주).
-    # 체중 추세에는 이미 운동 효과가 반영되어 있으므로 기본 예측에는 더하지 않고
-    # optimistic/conservative 시나리오 조정값으로만 사용한다.
+    # 충분한 표본 가드: 28일 슬로프 (가장 엄격한 최소 표본수)가 존재해야만 blended를 만든다.
+    has_long_window = window_slopes.get("28d") is not None
+    if components and has_long_window:
+        total_w = sum(w for _, w in components)
+        blended = round(sum(v * w for v, w in components) / total_w, 4)
+        normalized_weights = {k: round(w / total_w, 3) for k, w in window_used_weight.items()}
+    else:
+        blended = None
+        normalized_weights = {k: 0.0 for k in window_used_weight}
+
+    # 운동 칼로리 기대 감량률 (참고값, 시나리오에서만 사용)
     kcal_rows = rows[-14:] if len(rows) >= 14 else rows
     kcal_vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in kcal_rows]
     avg_daily_kcal = sum(kcal_vals) / len(kcal_vals) if kcal_vals else 0.0
     kcal_rate = round_or_none(avg_daily_kcal * 7 / kcal_to_kg, 4)
 
-    # 가중 합성
-    w_ewma, w_ma7, w_kcal = weights
-    components: list[tuple[float, float]] = []
-    if ewma_slope is not None:
-        components.append((ewma_slope, w_ewma))
-    if ma7_slope is not None:
-        components.append((ma7_slope, w_ma7))
-    if w_kcal > 0 and kcal_rate is not None and kcal_rate > 0:
-        components.append((kcal_rate, w_kcal))
-
-    if not components:
-        blended = None
-        actual_weights = (0.0, 0.0, 0.0)
-    else:
-        total_w = sum(w for _, w in components)
-        blended = round(sum(v * w for v, w in components) / total_w, 4)
-        # 실제 사용 가중치 (정규화)
-        def _aw(target_w: float) -> float:
-            return round(target_w / total_w, 3) if any(w == target_w for _, w in components) else 0.0
-        actual_weights = (
-            round(w_ewma / total_w, 3) if ewma_slope is not None else 0.0,
-            round(w_ma7 / total_w, 3) if ma7_slope is not None else 0.0,
-            round(w_kcal / total_w, 3) if (w_kcal > 0 and kcal_rate is not None and kcal_rate > 0) else 0.0,
-        )
-
     return {
         "blended": blended,
-        "ewmaSlope": ewma_slope,
-        "ma7Slope": ma7_slope,
+        "ewmaSlope": window_slopes.get("28d"),  # legacy 호환
+        "ma7Slope": window_slopes.get("7d"),    # legacy 호환 (단기 신호로 재매핑)
         "kcalRate": kcal_rate,
-        "weights": {"ewma": actual_weights[0], "ma7": actual_weights[1], "kcal": actual_weights[2]},
-        "model": "ewma_ma7_trend",
+        "weights": {  # legacy 키 유지 + 신규 윈도우 가중치
+            "ewma": normalized_weights.get("28d", 0.0),
+            "ma7": normalized_weights.get("7d", 0.0),
+            "kcal": 0.0,
+            "windows": normalized_weights,
+        },
+        "windowSlopes": window_slopes,
+        "model": "multi_window_ewma_blend",
     }
 
 
@@ -532,13 +689,45 @@ def rolling_average(weights_by_date: dict[str, float | None], all_dates: list[st
     return round_or_none(mean(values), 2)
 
 
+def _projected_weight(
+    start_weight: float,
+    effective_weekly_loss: float,
+    week: int,
+    target_weight: float | None = None,
+    half_life_weeks: float = 16.0,
+) -> float:
+    """P3: 지수 감쇠 외삽.
+
+    초반에는 effective_weekly_loss로 거의 선형 감소하다가, target_weight 또는
+    asymptote 쪽으로 수렴. half_life_weeks가 클수록 더 직선에 가깝다.
+    target_weight가 없거나 현재 체중보다 높으면 선형 fallback.
+    """
+    if target_weight is None or target_weight >= start_weight or effective_weekly_loss <= 0:
+        return start_weight - effective_weekly_loss * week
+
+    # 감속 모델: w(t) = target + (start - target) * exp(-k*t)
+    # 첫 주 감량이 effective_weekly_loss와 일치하도록 k를 결정한다.
+    initial_gap = start_weight - target_weight
+    if initial_gap <= 0:
+        return start_weight
+
+    # k가 너무 크면 즉시 수렴, 너무 작으면 선형 — half-life 기반으로 부드러운 곡선 보장
+    k_from_rate = effective_weekly_loss / initial_gap  # 초기 감량률
+    k_from_halflife = math.log(2) / max(half_life_weeks, 1.0)
+    k = min(k_from_rate, k_from_halflife * 2)  # rate가 너무 빠르면 half-life로 제한
+
+    decayed_gap = initial_gap * math.exp(-k * week)
+    return target_weight + decayed_gap
+
+
 def build_prediction_series(
     latest_date: str | None,
     start_weight: float | None,
     effective_weekly_loss: float | None,
     weeks: int = 12,
+    target_weight: float | None = None,
 ) -> list[dict[str, Any]]:
-    """예측 직선 생성. effective_weekly_loss는 실제 감량률(체중 추세 + 칼로리 보정)."""
+    """예측 시리즈 생성. P3에서 지수 감쇠로 변경 — 장기 horizon의 과대 추정 완화."""
     if latest_date is None or start_weight is None or effective_weekly_loss is None:
         return []
 
@@ -546,7 +735,7 @@ def build_prediction_series(
     series = [{"date": latest_date, "valueKg": round(start_weight, 2)}]
     for week in range(1, weeks + 1):
         future_date = start_day + timedelta(days=7 * week)
-        projected = start_weight - effective_weekly_loss * week
+        projected = _projected_weight(start_weight, effective_weekly_loss, week, target_weight)
         series.append({"date": future_date.isoformat(), "valueKg": round(projected, 2)})
     return series
 
@@ -567,8 +756,14 @@ def compute_prediction_ci(
     weight_series: list[dict[str, Any]],
     effective_weekly_loss: float,
     prediction_weeks: int = 12,
+    target_weight: float | None = None,
+    backtest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """잔차(실측 - EWMA) std 기반 80% 예측 구간. sqrt(t)로 시간에 따라 확장."""
+    """예측 구간 (80% 밴드).
+
+    P3: central은 지수 감쇠 외삽과 일치.
+    P4: 잔차 std × √t 와 horizon별 backtest RMSE 중 더 큰 값 사용 (CI 저평가 방지).
+    """
     ew_map = {p["date"]: p["valueKg"] for p in ewma_series if p["valueKg"] is not None}
     residuals = [
         p["valueKg"] - ew_map[p["date"]]
@@ -583,10 +778,39 @@ def compute_prediction_ci(
 
     start = last_valid["valueKg"]
     last_date = date.fromisoformat(last_valid["date"])
+
+    # P4: backtest RMSE를 주(week) 단위 키로 사전 인덱싱. 키는 7d/14d/28d → 1/2/4주.
+    bt_rmse_by_week: dict[int, float] = {}
+    if backtest:
+        for horizon_key, val in backtest.items():
+            if not isinstance(val, dict) or val.get("status") != "ok":
+                continue
+            try:
+                days = int(horizon_key.rstrip("d"))
+            except ValueError:
+                continue
+            wk = max(1, round(days / 7))
+            rmse = val.get("rmseKg")
+            if isinstance(rmse, (int, float)):
+                bt_rmse_by_week[wk] = float(rmse)
+
+    def _backtest_rmse_for(week: int) -> float | None:
+        """가장 가까운 horizon의 RMSE를 반환. (예: 5주차 → 4주 backtest 사용)"""
+        if not bt_rmse_by_week:
+            return None
+        nearest = min(bt_rmse_by_week.keys(), key=lambda w: abs(w - week))
+        return bt_rmse_by_week[nearest]
+
     series = []
     for week in range(1, prediction_weeks + 1):
-        central = round(start - effective_weekly_loss * week, 2)
-        spread80 = round(1.28 * std * (week ** 0.5), 2)
+        central_raw = _projected_weight(start, effective_weekly_loss, week, target_weight)
+        central = round(central_raw, 2)
+        residual_spread = 1.28 * std * (week ** 0.5)
+        bt_rmse = _backtest_rmse_for(week)
+        # backtest RMSE는 이미 실측 오차이므로 1.28σ에 해당한다고 보고 동일 스케일로 비교
+        # (분포가 가우시안 80%면 1.28σ ≈ RMSE 수준).
+        bt_spread = bt_rmse if bt_rmse is not None else 0.0
+        spread80 = round(max(residual_spread, bt_spread), 2)
         series.append({
             "date": (last_date + timedelta(weeks=week)).isoformat(),
             "central": central,
@@ -627,6 +851,7 @@ def backtest_predictions(
     horizons: tuple[int, ...] = (7, 14, 28),
     train_window: int = 28,
     min_samples: int = 3,
+    target_weight: float | None = None,
 ) -> dict[str, Any]:
     """과거 prefix 기준 단순 백테스트. 실제 측정값은 목표일 ±3일 내 가장 가까운 값."""
     ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
@@ -660,7 +885,8 @@ def backtest_predictions(
             if not candidates:
                 continue
             actual = min(candidates, key=lambda item: item[0])[1]
-            predicted = current_ewma - rate * (horizon / 7)
+            # P3: 본 예측과 동일한 지수 감쇠 모델 사용 — CI에 들어가는 RMSE 비대칭 제거.
+            predicted = _projected_weight(current_ewma, rate, horizon / 7, target_weight)
             errors.append(predicted - actual)
 
         key = f"{horizon}d"
@@ -821,6 +1047,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "last7StepsAvg": None,
                 "last7ActiveDays": 0,
                 "last7WeightRangeKg": None,
+                "last7SleepHoursAvg": None,
+                "last7RestingHrAvg": None,
             },
             "predictions": {"oneMonthWeightKg": None, "threeMonthWeightKg": None, "scenarios": {}},
             "goal": {
@@ -887,6 +1115,10 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     last7 = rows[-7:]
     weight_values = [row.get("weight_kg") for row in last7 if row.get("weight_kg") is not None]
     steps_values = [row.get("steps") for row in last7 if row.get("steps") is not None]
+    sleep_values = [parse_float(row.get("sleep_hours")) for row in last7]
+    sleep_values = [v for v in sleep_values if v is not None]
+    rhr_values = [parse_float(row.get("resting_hr")) for row in last7]
+    rhr_values = [v for v in rhr_values if v is not None]
     active_days = sum(1 for row in last7 if (row.get("exercise_minutes") or 0) > 0)
 
     rolling = {
@@ -897,10 +1129,17 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "last7StepsAvg": round_or_none(mean(steps_values), 0),
         "last7ActiveDays": active_days,
         "last7WeightRangeKg": round_or_none((max(weight_values) - min(weight_values)) if len(weight_values) >= 2 else None, 2),
+        "last7SleepHoursAvg": round_or_none(mean(sleep_values), 2) if sleep_values else None,
+        "last7RestingHrAvg": round_or_none(mean(rhr_values), 1) if rhr_values else None,
     }
 
     # --- 운동 칼로리 추이 ---
-    kcal_to_kg = parse_float(config.get("kcalToKgFactor")) or 7700.0
+    kcal_to_kg_default = parse_float(config.get("kcalToKgFactor")) or 7700.0
+    height_cm = parse_float(config.get("heightCm"))
+    body_fat_pct = parse_float((rows[-1] if rows else {}).get("body_fat_percent")) if rows else None
+    # Phase 2: 동적 kcal_per_kg — body_fat > BMI > default 우선순위
+    kcal_to_kg, kcal_source = kcal_per_kg(body_fat_pct, current_weight, height_cm, default=kcal_to_kg_default)
+
     trend_window = int(config.get("exerciseTrendWindow") or 28)
     exercise_trend = build_exercise_trend(rows, window=trend_window)
     pct_deltas = config.get("scenarioExercisePctDelta") or {}
@@ -911,49 +1150,48 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     # 체중 증가 추세(음수)는 0으로 클리핑: 예측선이 현재 수준보다 위로 올라가지 않도록
     base_trend_loss = max(weekly_loss_rate, 0.0) if weekly_loss_rate is not None else 0.0
 
-    # --- 시나리오 계산 (운동 칼로리 ±% 보정) ---
-    SCENARIO_DEFS = {
-        "optimistic": {"pct_delta": opt_pct, "multiplier": 1.0, "label": "낙관"},
-        "base":       {"pct_delta": 0.0,     "multiplier": 0.8, "label": "기준"},
-        "conservative": {"pct_delta": con_pct, "multiplier": 0.6, "label": "보수적"},
-    }
+    # Phase 1A: 운동 효율 캘리브레이션 (kcal_to_kg는 위에서 정한 동적 값 사용)
+    calibration = compute_calibration(rows, weekly_loss_rate, kcal_to_kg, window=trend_window)
+    efficiency = calibration.get("exerciseEfficiency") or 1.0
+
+    # Phase 6: 활동 로그 기반 시나리오 — 운동 세션 평균 kcal로 구체화
+    smart_scenarios = build_smart_scenarios(
+        exercise_trend, opt_pct, con_pct, recent7_avg_kcal,
+    )
+
+    target_weight = parse_float(config.get("targetWeightKg"))
     scenarios: dict[str, Any] = {}
     prediction_start = current_ewma if current_ewma is not None else current_ma7
     if prediction_start is not None:
-        for name, sdef in SCENARIO_DEFS.items():
-            pct = sdef["pct_delta"]
-            extra_daily_kcal = recent7_avg_kcal * pct
-            extra_weekly_kcal = extra_daily_kcal * 7
-            extra_weekly_loss_kg = extra_weekly_kcal / kcal_to_kg
+        for name, sdef in smart_scenarios.items():
+            extra_weekly_kcal = sdef["extra_weekly_kcal"]
+            # Phase 2: 동적 kcal_to_kg · Phase 1A: 운동 효율 계수 적용
+            extra_weekly_loss_kg = (extra_weekly_kcal / kcal_to_kg) * efficiency
             effective_loss = base_trend_loss + extra_weekly_loss_kg
-            assumed_daily = round_or_none(recent7_avg_kcal + extra_daily_kcal, 1)
-            if pct > 0:
-                desc = f"운동 +{pct*100:.0f}% 가정 · 추가 {round(abs(extra_weekly_loss_kg), 3)} kg/주 감량"
-            elif pct < 0:
-                desc = f"운동 {pct*100:.0f}% 가정 · {round(abs(extra_weekly_loss_kg), 3)} kg/주 감량 감소"
-            else:
-                desc = "현재 운동량 유지 기준 예측"
+            assumed_daily = round_or_none(recent7_avg_kcal + extra_weekly_kcal / 7.0, 1)
+            # P3: 시나리오 3개월 예측도 지수 감쇠 사용
+            three_month_proj = _projected_weight(prediction_start, max(effective_loss, 0.0), 12, target_weight)
             scenarios[name] = {
-                "multiplier": sdef["multiplier"],           # 호환용 유지
-                "threeMonthWeightKg": round_or_none(prediction_start - effective_loss * 12, 2),
+                "multiplier": sdef.get("multiplier", 0.8),  # 호환용 유지
+                "threeMonthWeightKg": round_or_none(three_month_proj, 2),
                 "assumedDailyKcal": assumed_daily,
                 "weeklyKcalDelta": round_or_none(extra_weekly_kcal, 1),
                 "extraWeeklyLossKg": round_or_none(extra_weekly_loss_kg, 4),
                 "effectiveWeeklyLossKg": round_or_none(effective_loss, 4),
                 "label": sdef["label"],
-                "description": desc,
+                "description": sdef["description"],
             }
 
     # base 시나리오의 effective_weekly_loss 를 예측/ETA/CI 에 사용
     base_effective_loss = scenarios.get("base", {}).get("effectiveWeeklyLossKg") or 0.0
 
+    # P3: 1/3개월 예측도 지수 감쇠 외삽으로 통일
     one_month_weight = None
     three_month_weight = None
     if prediction_start is not None and base_effective_loss > 0:
-        one_month_weight = round_or_none(prediction_start - base_effective_loss * 4, 2)
-        three_month_weight = round_or_none(prediction_start - base_effective_loss * 12, 2)
+        one_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 4, target_weight), 2)
+        three_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 12, target_weight), 2)
 
-    target_weight = parse_float(config.get("targetWeightKg"))
     remaining_kg = None
     eta_days = None
     eta_date = None
@@ -969,7 +1207,19 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             eta_date = (datetime.strptime(latest_date, "%Y-%m-%d").date() + timedelta(days=eta_days)).isoformat()
 
     # 고도화 계산
-    prediction_ci = compute_prediction_ci(ewma_series, daily_series, base_effective_loss)
+    # P3/P4: target_weight + backtest를 CI에 주입하려면 backtest를 먼저 계산해야 한다.
+    _early_backtest = backtest_predictions(
+        rows, ewma_series, ma7_by_date,
+        train_window=trend_window,
+        target_weight=target_weight,
+    )
+    prediction_ci = compute_prediction_ci(
+        ewma_series,
+        daily_series,
+        base_effective_loss,
+        target_weight=target_weight,
+        backtest=_early_backtest,
+    )
     loss_intensity = classify_loss_intensity(
         base_effective_loss if base_effective_loss > 0 else None,
         current_ewma,
@@ -987,15 +1237,17 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     coverage_pct = round(measured_count / len(last30) * 100, 0) if last30 else 0
 
     # 마지막 측정일과 경과 일수
+    # latest_date(CSV의 최신 일자)를 기준으로 계산해 UTC/KST 경계의 음수 결과를 방지한다.
     last_measurement_date: str | None = None
     for r in reversed(rows):
         if r.get("weight_kg") is not None:
             last_measurement_date = r["date"]
             break
-    if last_measurement_date:
+    if last_measurement_date and latest_date:
         try:
             last_dt = date.fromisoformat(last_measurement_date)
-            days_since = (date.today() - last_dt).days
+            ref_dt = date.fromisoformat(latest_date)
+            days_since = max((ref_dt - last_dt).days, 0)
         except Exception:
             days_since = None
     else:
@@ -1015,7 +1267,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             }
 
     trend_windows = compute_trend_windows(ewma_series, latest_date)
-    backtest = backtest_predictions(rows, ewma_series, ma7_by_date, train_window=trend_window)
+    backtest = _early_backtest  # CI 계산에 사용한 동일한 백테스트 결과 재사용
     confidence = classify_prediction_confidence(
         coverage_pct=coverage_pct,
         measured_days=measured_count,
@@ -1023,7 +1275,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         backtests=backtest,
     )
     model_diagnostics = {
-        "model": "EWMA trend + MA7 guardrail; exercise kcal affects scenarios only",
+        "model": "multi_window_ewma_blend + exp_decay + dynamic_kcal_per_kg + exercise_efficiency",
         "confidence": confidence,
         "coverage": {
             "measuredDays": measured_count,
@@ -1033,9 +1285,12 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "trendWindows": trend_windows,
         "residualStdKg": prediction_ci.get("stdResidual"),
         "backtest": backtest,
+        "kcalPerKg": round(kcal_to_kg, 0),
+        "kcalPerKgSource": kcal_source,  # "body_fat" | "bmi" | "default"
+        "calibration": calibration,
         "notes": [
             "기본 예측은 체중 추세 기반입니다.",
-            "운동 칼로리는 낙관/보수 시나리오 조정에만 사용합니다.",
+            "시나리오는 운동 효율 계수(NEAT·보상 섭취 보정)와 동적 kcal/kg 사용.",
             "28일 이상 예측은 장기 추정으로 취급합니다.",
         ],
     }
@@ -1080,7 +1335,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "ma7": ma7_series,
             "ma14": ma14_series,
             "ewma": ewma_series,
-            "prediction": build_prediction_series(latest_date, current_ewma, base_effective_loss),
+            "prediction": build_prediction_series(latest_date, current_ewma, base_effective_loss, target_weight=target_weight),
             "predictionCI": prediction_ci["series"],
             "steps": [
                 {"date": row["date"], "value": row.get("steps")}
