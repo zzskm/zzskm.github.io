@@ -1,5 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#0f1419"/>
-  <circle cx="256" cy="256" r="112" fill="none" stroke="#14b8a6" stroke-width="22"/>
-  <path d="M256 158 L256 256 L326 256" fill="none" stroke="#14b8a6" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 마스크 가능 — 가장자리 20% safe zone 확보 -->
+  <rect width="512" height="512" fill="#4F81BD"/>
+
+  <!-- 중앙 다이얼 (체중계 표시면) -->
+  <!-- 안전 영역 102~410 -->
+  <g transform="translate(0, 24)">
+    <!-- 반원 게이지 -->
+    <path d="M 168 312 A 88 88 0 1 1 344 312"
+          fill="none" stroke="#f4f4f4" stroke-width="14" stroke-linecap="round"/>
+    <!-- 눈금 -->
+    <g stroke="#f4f4f4" stroke-width="6" stroke-linecap="round">
+      <line x1="168" y1="312" x2="180" y2="302"/>
+      <line x1="200" y1="252" x2="212" y2="262"/>
+      <line x1="256" y1="216" x2="256" y2="234"/>
+      <line x1="312" y1="252" x2="300" y2="262"/>
+      <line x1="344" y1="312" x2="332" y2="302"/>
+    </g>
+    <!-- 바늘 -->
+    <line x1="256" y1="312" x2="216" y2="240"
+          stroke="#f4f4f4" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="256" cy="312" r="16" fill="#f4f4f4"/>
+  </g>
 </svg>

@@ -4,34 +4,34 @@
   const SUMMARY_URL = './data/summary.json';
   const CONFIG_URL = './config.json';
 
-  // Dark editorial theme — style.css의 :root 변수와 동기화 유지
+  // Light paper theme — style.css의 :root 변수와 동기화 유지
   const THEME = {
-    ink: '#f4f4f3',
-    inkSoft: '#d4d6d2',
-    muted: '#9aa0a6',
-    muted2: '#6b7280',
-    line: '#262d36',
-    panel: '#1a1f26',
-    bg: '#0f1419',
-    accent: '#14b8a6',
-    accentInk: '#5eead4',
-    accentTint: 'rgba(20,184,166,0.12)',
-    actual: '#f4f4f3',
-    actualFill: 'rgba(244,244,243,0.05)',
-    ma7: '#4b5563',
-    ma14: '#374151',
-    predict: '#14b8a6',
-    predictFill: 'rgba(20,184,166,0.12)',
-    grid: 'rgba(244,244,243,0.06)',
-    tooltipBg: '#1a1f26',
-    tooltipBorder: '#353d48',
-    tooltipBody: '#d4d6d2',
-    plateauShade: 'rgba(245,158,11,0.10)',
-    activityBar: 'rgba(20,184,166,0.30)',
-    activityBarStroke: '#14b8a6',
-    activitySteps: '#6b7280',
-    syncStale: '#ef4444',
-    syncWarn: '#f59e0b',
+    ink: '#262626',
+    inkSoft: 'rgba(38,38,38,0.78)',
+    muted: 'rgba(38,38,38,0.62)',
+    muted2: 'rgba(38,38,38,0.38)',
+    line: 'rgba(38,38,38,0.14)',
+    panel: '#f4f4f4',
+    bg: '#e8e8e8',
+    accent: '#4F81BD',
+    accentInk: '#3a5d8a',
+    accentTint: 'rgba(79,129,189,0.10)',
+    actual: '#262626',
+    actualFill: 'rgba(38,38,38,0.04)',
+    ma7: 'rgba(38,38,38,0.32)',
+    ma14: 'rgba(38,38,38,0.20)',
+    predict: '#4F81BD',
+    predictFill: 'rgba(79,129,189,0.10)',
+    grid: 'rgba(38,38,38,0.06)',
+    tooltipBg: '#f4f4f4',
+    tooltipBorder: 'rgba(38,38,38,0.28)',
+    tooltipBody: '#262626',
+    plateauShade: 'rgba(176,135,80,0.10)',
+    activityBar: 'rgba(79,129,189,0.30)',
+    activityBarStroke: '#4F81BD',
+    activitySteps: 'rgba(38,38,38,0.38)',
+    syncStale: '#b91c1c',
+    syncWarn: '#b08750',
   };
 
   const state = {
@@ -250,6 +250,104 @@
     const headline = insight?.headline;
     if (!headline) { card.hidden = true; return; }
     setText('insightHeadline', headline);
+    card.hidden = false;
+  }
+
+  // ---------- C1: 가속 신호 (다중 윈도우 감량률) ----------
+  function renderTrendWindows(s) {
+    const card = el('windowsCard');
+    if (!card) return;
+    const tw = s.modelDiagnostics?.trendWindows || {};
+    const order = ['3d', '7d', '14d', '28d'];
+    const rows = order.map(k => ({
+      key: k,
+      v: Number.isFinite(tw[k]?.weeklyLossKg) ? tw[k].weeklyLossKg : null,
+    })).filter(r => r.v !== null);
+
+    if (rows.length < 2) { card.hidden = true; return; }
+    const maxAbs = Math.max(...rows.map(r => Math.abs(r.v)), 0.0001);
+
+    const host = el('windowsBars');
+    host.innerHTML = rows.map((r, i) => {
+      const pct = Math.min(100, (Math.abs(r.v) / maxAbs) * 100);
+      const sign = r.v >= 0 ? '+' : '−';
+      const recent = i === 0 ? ' is-recent' : '';
+      return `<div class="windows-row${recent}">
+        <span>${r.key}</span>
+        <span class="windows-bar-track"><span class="windows-bar-fill" style="width:${pct.toFixed(0)}%"></span></span>
+        <span class="windows-val">${sign}${Math.abs(r.v).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+
+    // 가속 시그널: 7d > 28d?
+    const v7 = tw['7d']?.weeklyLossKg, v28 = tw['28d']?.weeklyLossKg;
+    if (Number.isFinite(v7) && Number.isFinite(v28)) {
+      const ratio = v28 !== 0 ? v7 / v28 : 1;
+      if (ratio >= 1.3) {
+        setText('windowsCaption', '최근 추세 가속');
+        setText('windowsHint', `7d가 28d 대비 ${(ratio).toFixed(1)}× — 단기 흐름이 더 빠릅니다.`);
+      } else if (ratio <= 0.7 && v28 > 0.05) {
+        setText('windowsCaption', '최근 추세 둔화');
+        setText('windowsHint', `7d가 28d의 ${(ratio * 100).toFixed(0)}% — 단기 흐름이 느려졌어요.`);
+      } else {
+        setText('windowsCaption', '일정한 페이스');
+        setText('windowsHint', '단기·장기 추세가 비슷하게 유지됩니다.');
+      }
+    } else {
+      setText('windowsCaption', '윈도우별 감량률');
+      setText('windowsHint', 'kg/주 · 양수=감량');
+    }
+    card.hidden = false;
+  }
+
+  // ---------- C2: Kalman vs V1 비교 strip ----------
+  function renderKalmanStrip(s) {
+    const strip = el('kalmanStrip');
+    if (!strip) return;
+    const mc = s.modelDiagnostics?.modelComparison;
+    const perHorizon = mc?.perHorizon || {};
+    const horizons = ['7d', '14d', '28d'].filter(h => perHorizon[h]);
+    if (horizons.length === 0) { strip.hidden = true; return; }
+
+    const parts = horizons.map(h => {
+      const r = perHorizon[h];
+      const sign = r.deltaKg >= 0 ? '+' : '−';
+      const cls = r.kalmanWins ? 'is-win' : '';
+      return `<span class="kalman-item ${cls}">${h} ${sign}${Math.abs(r.deltaKg).toFixed(2)}kg</span>`;
+    }).join('<span class="kalman-sep">·</span>');
+
+    strip.classList.toggle('is-recommended', !!mc.recommendKalman);
+    strip.innerHTML = `<span class="kalman-tag">Kalman vs V1</span>${parts}`;
+    strip.hidden = false;
+  }
+
+  // ---------- C3: 대사 시그니처 카드 ----------
+  function renderMetabolicCard(s) {
+    const card = el('metabolicCard');
+    if (!card) return;
+    const diag = s.modelDiagnostics || {};
+    const calib = diag.calibration || {};
+    const eff = calib.exerciseEfficiency;
+    const kcal = diag.kcalPerKg;
+    const src = diag.kcalPerKgSource;
+
+    if (!Number.isFinite(eff) && !Number.isFinite(kcal)) {
+      card.hidden = true;
+      return;
+    }
+
+    setText('metabolicEfficiency', Number.isFinite(eff) ? `${Math.round(eff * 100)}%` : '–');
+    setText('metabolicKcal', Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')}` : '–');
+    setText('metabolicKcalSrc', src === 'body_fat' ? 'kcal/kg · 체지방' : src === 'bmi' ? 'kcal/kg · BMI' : 'kcal/kg');
+
+    // body_fat 가장 최근 값
+    const daily = s.series?.daily || [];
+    const allRows = s.series?.daily || [];  // body_fat은 daily 시리즈에 없으므로 별도 데이터 없으면 숨김
+    const bfWrap = el('metabolicBodyFatWrap');
+    if (bfWrap) bfWrap.hidden = true;
+    // 추후 summary.json에 body_fat 노출되면 여기 채울 수 있음
+
+    setText('metabolicHint', calib.interpretation || '');
     card.hidden = false;
   }
 
@@ -916,6 +1014,9 @@
 
       renderHero();
       renderBottom();
+      renderTrendWindows(state.summary);
+      renderMetabolicCard(state.summary);
+      renderKalmanStrip(state.summary);
       renderInsight(state.summary.insight);
       renderPlateau(state.summary.plateau);
       renderChart();
