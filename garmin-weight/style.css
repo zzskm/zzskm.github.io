@@ -673,6 +673,7 @@ body {
 }
 .bottom-card {
   flex: 1;
+  min-width: 0;          /* 그리드 자식이 콘텐츠 크기로 강제 확장되지 않도록 */
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -681,7 +682,9 @@ body {
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 20px;
+  overflow: hidden;       /* 만약 콘텐츠가 넘쳐도 카드 밖으로 보이지 않게 */
 }
+.bottom-card > * { min-width: 0; }
 .bottom-card > .label { grid-column: 1 / -1; margin-bottom: -6px; }
 .bottom-card .bottom-val {
   grid-column: 1;
@@ -733,7 +736,7 @@ body {
   background: var(--line);
 }
 .dot-cell.has { background: var(--ink-soft); }
-.dot-cell.has-today { background: var(--accent); box-shadow: 0 0 0 1.5px rgba(20,184,166,0.25); }
+.dot-cell.has-today { background: var(--accent); box-shadow: 0 0 0 1.5px var(--accent-tint); }
 
 /* Coverage card — full-width dots in 10-col grid */
 .bottom-card--coverage {
@@ -746,6 +749,19 @@ body {
   max-width: none;
   grid-template-columns: repeat(10, 1fr);
   gap: 5px;
+}
+
+/* C1/C3 카드는 내부 콘텐츠가 풀폭 1열 구조 — 부모 2열 그리드 무효화 */
+.bottom-card--windows,
+.bottom-card--metabolic {
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 8px;
+}
+.bottom-card--windows > *,
+.bottom-card--metabolic > * {
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 
 /* ====================== TREND WEIGHT ====================== */
@@ -994,6 +1010,13 @@ kbd {
 @media (max-width: 520px) {
   /* D1: 작은 화면에서 hero 메트릭의 4번째(예측 신뢰도)를 숨겨 정보 밀도 완화 */
   .hero-metric--confidence { display: none; }
+
+  /* 모바일에서 bottom-card padding 축소 + 내부 그리드 gap 줄임 */
+  .bottom-card { padding: 14px 14px; gap: 10px; }
+  .bottom-card .bottom-val { font-size: 24px; }
+  .bottom-card .bottom-val--small { font-size: 12px; }
+  .windows-row { grid-template-columns: 26px 1fr 44px; gap: 6px; font-size: 10.5px; }
+  .metabolic-stat-val { font-size: clamp(13px, 4vw, 16px); }
 }
 
 @media (max-width: 412px) {
@@ -1068,6 +1091,10 @@ kbd {
   border: 1px solid var(--line-hair);
   border-radius: 4px;
   letter-spacing: -0.005em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
 }
 .kalman-strip .kalman-tag {
   display: inline-block;
@@ -1090,8 +1117,8 @@ kbd {
 /* ====================== C3: 대사 시그니처 카드 ====================== */
 .metabolic-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 10px;
   margin: 8px 0;
   padding: 8px 0;
   border-top: 1px solid var(--line-hair);
@@ -1102,11 +1129,16 @@ kbd {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  min-width: 0;
 }
 .metabolic-stat-val {
   font-family: var(--mono);
-  font-size: 17px;
+  font-size: clamp(14px, 3.6vw, 17px);
   font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
   letter-spacing: -0.01em;
 }
