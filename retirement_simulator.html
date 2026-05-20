@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<title>은퇴 현금흐름 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { fontFamily: { sans: ['"Pretendard Variable"', 'Pretendard', 'system-ui', 'sans-serif'] } } },
+  };
+</script>
+<style>
+  html, body { background: #f8fafc; color: #0f172a; }
+  body { font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; letter-spacing: -0.005em; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; background: #e2e8f0; border-radius: 999px; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #0f172a; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #0f172a; cursor: pointer; border: 2px solid #fff; }
+  .num { font-variant-numeric: tabular-nums; }
+  .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; color: #64748b; font-size: 14px; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  .chev { transition: transform 0.15s; }
+  details[open] .chev { transform: rotate(90deg); }
+  .scenario-tab { position: relative; }
+  .scenario-tab.active::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: currentColor; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "recharts": "https://esm.sh/recharts@2.12.7?deps=react@18.3.1,react-dom@18.3.1"
+  }
+}
+</script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"><div class="loading">로딩 중…</div></div>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  ResponsiveContainer, ComposedChart, Area, Bar, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ReferenceArea, ReferenceLine, ReferenceDot,
+} from "recharts";
+
+// ============================================================
+// 상수 / 디폴트
+// ============================================================
+
+const KR_DEFAULTS = {
+  // 프로필
+  currentAge: 40,
+  retireAge: 55,
+  pensionStartAge: 65,
+  lifeExpectancy: 90,
+  spouseRetireAge: 55,
+
+  // 국민연금
+  npYearsAutoMode: true,
+  npYearsContributed: 25, // 자동모드일 때 무시됨
+
+  // 소득 (만원)
+  currentSalary: 8000,
+  salaryGrowthRate: 1.0,    // 실질
+  sideIncomeSelf: 0,        // 만원/월, 퇴직 후
+  sideIncomeSpouse: 0,      // 만원/월
+
+  // 자산
+  currentDC: 5000,
+  currentPensionSavings: 3000,
+  insuranceValue: 2000,
+  monthlyAdditionalSaving: 30,   // 만원/월, 근로기 추가저축
+  housePrice: 80000,
+  houseInflationRate: 0.5,       // 실질
+  mortgageBalance: 20000,
+  monthlyMortgagePayment: 150,
+
+  // 시장 (실질)
+  investmentReturnRate: 3.5,
+  inflationRate: 2.5,            // 표기용
+  scenarioBandSpread: 2.0,
+
+  // 생활비 (현재가치, 만원/월)
+  workingLivingCost: 350,
+  bridgeLivingCost: 400,
+  retirementLivingCost: 300,
+
+  // 자녀
+  child1BirthYear: 2015,
+  child2BirthYear: 2018,
+  childCostMultiplier: 1.0,
+
+  // 다운사이징
+  downsizeEnabled: false,
+  downsizeAge: 65,
+  downsizeRatio: 0.6,
+
+  // 토글
+  applyHealthInsurance: true,
+  applyPensionTax: false,
+};
+
+const NP_REPLACEMENT_RATE = 0.40;
+const NP_A_VALUE_MONTHLY = 300;
+const PENSION_TAX_RATE = 0.055;
+const SCENARIO_COLORS = ["#0f172a", "#0ea5e9", "#f59e0b", "#8b5cf6"];
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+// ============================================================
+// 계산 헬퍼
+// ============================================================
+
+function npYears(input) {
+  if (input.npYearsAutoMode) return Math.min(40, Math.max(0, input.retireAge - 25));
+  return Math.min(40, Math.max(0, input.npYearsContributed));
+}
+
+function estimatedPensionMonthly(input) {
+  const avgMonthly = (NP_A_VALUE_MONTHLY + input.currentSalary / 12) / 2;
+  return NP_REPLACEMENT_RATE * avgMonthly * (npYears(input) / 40);
+}
+
+function ageFactor(age) {
+  if (age < 65) return 1.0;
+  if (age < 75) return 0.75;
+  return 0.55;
+}
+
+function childCostAt(age) {
+  if (age < 0) return 0;
+  if (age <= 6) return 50;
+  if (age <= 18) return 80;
+  if (age <= 22) return 150;
+  return 0;
+}
+
+function childCostYearly(input, year) {
+  let cost = 0;
+  for (const by of [input.child1BirthYear, input.child2BirthYear]) {
+    if (!by) continue;
+    cost += childCostAt(year - by) * 12;
+  }
+  return cost * (input.childCostMultiplier ?? 1.0);
+}
+
+function childEvents(input) {
+  const events = [];
+  [input.child1BirthYear, input.child2BirthYear].forEach((by, i) => {
+    if (!by) return;
+    const idx = i + 1;
+    const parentAgeAt = (childAge) =>
+      input.currentAge + ((by + childAge) - CURRENT_YEAR);
+    events.push({ age: parentAgeAt(19), label: `자녀${idx} 대학` });
+    events.push({ age: parentAgeAt(23), label: `자녀${idx} 독립` });
+  });
+  return events.filter(e => e.age >= input.currentAge && e.age <= input.lifeExpectancy);
+}
+
+// 지역가입자 건보료 단순 추정 (만원/년)
+function healthInsuranceYearly(financial, house, sideIncomeAnnual) {
+  // 소득점수 + 재산점수 단순화. 실제 산식과 다름.
+  const base = Math.max(0, sideIncomeAnnual) * 0.08
+             + Math.max(0, financial) * 0.0010
+             + Math.max(0, house) * 0.0006;
+  const cap = 800; // 연 800만원 한도
+  return Math.min(base, cap);
+}
+
+// ============================================================
+// 핵심 시뮬레이션
+// ============================================================
+
+function calculateScenario(input, returnRateOverride) {
+  const years = [];
+  const npMonthly = estimatedPensionMonthly(input);
+
+  let financialDC = input.currentDC;
+  let financialOther = input.currentPensionSavings + input.insuranceValue;
+  let house = input.housePrice;
+  let mortgage = input.mortgageBalance;
+
+  const r = (returnRateOverride ?? input.investmentReturnRate) / 100;
+  const sg = input.salaryGrowthRate / 100;
+  const hg = input.houseInflationRate / 100;
+
+  let depletionAge = null;
+  let bridgeShortfall = 0;
+  let totalAssetsAtRetirement = 0;
+  let severancePaid = false;
+  let downsizeDone = false;
+  const downsizeEvents = [];
+
+  for (let age = input.currentAge; age <= input.lifeExpectancy; age++) {
+    const t = age - input.currentAge;
+    const year = CURRENT_YEAR + t;
+
+    const isWork = age < input.retireAge;
+    const isPension = age >= input.pensionStartAge;
+    const isBridge = !isWork && !isPension;
+    const phase = isWork ? "work" : isBridge ? "bridge" : "pension";
+
+    const salaryAnnual = isWork ? input.currentSalary * Math.pow(1 + sg, t) : 0;
+
+    // DC 매년 회사 적립 (연봉/12)
+    const dcContribAnnual = isWork ? salaryAnnual / 12 : 0;
+
+    // 국민연금 (세후)
+    let pensionAnnual = isPension ? npMonthly * 12 : 0;
+    if (input.applyPensionTax && pensionAnnual > 0) {
+      pensionAnnual *= (1 - PENSION_TAX_RATE);
+    }
+
+    // 부수입
+    const sideSelfAnnual = !isWork ? input.sideIncomeSelf * 12 : 0;
+    const spouseActive = age < input.spouseRetireAge;
+    const sideSpouseAnnual = spouseActive ? input.sideIncomeSpouse * 12 : 0;
+
+    // 생활비
+    const baseLivingMonthly = isWork ? input.workingLivingCost
+                            : isBridge ? input.bridgeLivingCost
+                            : input.retirementLivingCost;
+    const livingAnnual = baseLivingMonthly * 12 * ageFactor(age);
+
+    const childAnnual = childCostYearly(input, year);
+
+    const mortgagePaid = Math.min(mortgage, input.monthlyMortgagePayment * 12);
+    mortgage = Math.max(0, mortgage - mortgagePaid);
+
+    // 추가저축 — 자산에 합산 (BUGFIX). 근로기에만.
+    const extraSavingAnnual = isWork ? input.monthlyAdditionalSaving * 12 : 0;
+
+    // 건강보험료 (퇴직 후만)
+    const sideIncomeForHI = sideSelfAnnual + sideSpouseAnnual;
+    const healthInsAnnual = (!isWork && input.applyHealthInsurance)
+      ? healthInsuranceYearly(financialDC + financialOther, house, sideIncomeForHI)
+      : 0;
+
+    // 퇴직 시점 일시금 (법정 퇴직금 + DC도 동일하게 유지)
+    if (!severancePaid && age === input.retireAge) {
+      const yearsWorked = Math.max(0, input.retireAge - 25);
+      const severance = (input.currentSalary / 12) * yearsWorked;
+      financialOther += severance;
+      severancePaid = true;
+    }
+
+    // 다운사이징
+    if (!downsizeDone && input.downsizeEnabled && age === input.downsizeAge) {
+      const liquidated = house * (1 - input.downsizeRatio);
+      financialOther += liquidated;
+      house = house * input.downsizeRatio;
+      downsizeDone = true;
+      downsizeEvents.push({ age, label: "주택 다운사이징", liquidated });
+    }
+
+    const income = salaryAnnual + pensionAnnual + sideSelfAnnual + sideSpouseAnnual;
+    const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual;
+    const cashflowExclSaving = income - outflow;
+    const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
+
+    // 운용: DC와 기타 금융자산 모두 동일 r 적용
+    const prevDC = financialDC;
+    const prevOther = financialOther;
+    financialDC = financialDC * (1 + r) + dcContribAnnual;
+    // 추가저축은 매년 OTHER에 적립 (현금흐름과 별개 흐름)
+    financialOther = financialOther * (1 + r) + extraSavingAnnual + cashflowExclSaving;
+
+    if (financialDC + financialOther <= 0 && depletionAge === null && age >= input.retireAge) {
+      depletionAge = age;
+    }
+
+    house = house * (1 + hg);
+
+    const financialTotal = financialDC + financialOther;
+    const netWorth = financialTotal + house - mortgage;
+
+    if (isBridge && cashflowExclSaving < 0) bridgeShortfall += -cashflowExclSaving;
+    if (age === input.retireAge) totalAssetsAtRetirement = financialTotal;
+
+    years.push({
+      age, year, phase,
+      financialDC: Math.round(financialDC),
+      financialOther: Math.round(financialOther),
+      financialAssets: Math.round(financialTotal),
+      houseValue: Math.round(house),
+      mortgage: Math.round(mortgage),
+      netWorth: Math.round(netWorth),
+      salaryMonthly: Math.round(salaryAnnual / 12),
+      pensionMonthly: Math.round(pensionAnnual / 12),
+      sideMonthly: Math.round((sideSelfAnnual + sideSpouseAnnual) / 12),
+      livingMonthly: Math.round(livingAnnual / 12),
+      childMonthly: Math.round(childAnnual / 12),
+      mortgageMonthly: Math.round(mortgagePaid / 12),
+      healthInsMonthly: Math.round(healthInsAnnual / 12),
+      cashflowMonthly: Math.round(cashflowWithSaving / 12),
+    });
+  }
+
+  const bridgeYears = Math.max(0, input.pensionStartAge - input.retireAge);
+
+  // 준비율: 수명까지 자산이 유지되면 100%+. 소진 시 (소진까지 기간 / 필요 기간) %.
+  let readinessRatio;
+  if (depletionAge === null) {
+    // 수명까지 남는 자산 / (퇴직 시점 자산) 비율 — 여유도 보조 지표
+    const last = years[years.length - 1];
+    const margin = Math.max(0, last.financialAssets);
+    readinessRatio = Math.min(300, 100 + (totalAssetsAtRetirement > 0 ? (margin / totalAssetsAtRetirement) * 100 : 0));
+  } else {
+    const survived = depletionAge - input.retireAge;
+    const need = input.lifeExpectancy - input.retireAge;
+    readinessRatio = need > 0 ? (survived / need) * 100 : 0;
+  }
+
+  return {
+    yearlyAssetFlow: years,
+    bridgeYears,
+    bridgeShortfall: Math.round(bridgeShortfall),
+    totalAssetsAtRetirement: Math.round(totalAssetsAtRetirement),
+    nationalPensionMonthly: Math.round(npMonthly),
+    readinessRatio: Math.round(readinessRatio),
+    depletionAge,
+    childEventList: childEvents(input),
+    downsizeEvents,
+  };
+}
+
+// 수익률 밴드
+function runScenarioBand(input) {
+  const r = input.investmentReturnRate;
+  const s = input.scenarioBandSpread;
+  return {
+    pessimistic: calculateScenario(input, r - s),
+    mid: calculateScenario(input, r),
+    optimistic: calculateScenario(input, r + s),
+  };
+}
+
+// ============================================================
+// 자동 인사이트
+// ============================================================
+
+const INSIGHT_CANDIDATES = [
+  { key: "retire+5",  label: "퇴직 +5세",       patch: (i) => ({ retireAge: Math.min(75, i.retireAge + 5) }) },
+  { key: "side+50",   label: "지속소득 +50만/월", patch: (i) => ({ sideIncomeSelf: i.sideIncomeSelf + 50 }) },
+  { key: "live-50",   label: "생활비 −50만/월",   patch: (i) => ({
+                          bridgeLivingCost: Math.max(50, i.bridgeLivingCost - 50),
+                          retirementLivingCost: Math.max(50, i.retirementLivingCost - 50),
+                       }) },
+  { key: "downsize",  label: "주택 다운사이징 60%", patch: (i) => ({
+                          downsizeEnabled: true,
+                          downsizeAge: Math.min(i.lifeExpectancy - 1, i.retireAge + 5),
+                          downsizeRatio: 0.6,
+                       }) },
+  { key: "saving+30", label: "추가저축 +30만/월",   patch: (i) => ({ monthlyAdditionalSaving: i.monthlyAdditionalSaving + 30 }) },
+];
+
+function findBestInsights(input, baseResult) {
+  const baseR = baseResult.readinessRatio;
+  const results = INSIGHT_CANDIDATES.map(c => {
+    const patched = { ...input, ...c.patch(input) };
+    const r = calculateScenario(patched).readinessRatio;
+    return { key: c.key, label: c.label, delta: r - baseR, newRatio: r };
+  });
+  results.sort((a, b) => b.delta - a.delta);
+  return results.filter(r => r.delta > 0.5).slice(0, 3);
+}
+
+// ============================================================
+// 포맷
+// ============================================================
+
+function fmt만원(v) {
+  if (v == null || isNaN(v)) return "—";
+  if (Math.abs(v) >= 10000) return `${(v / 10000).toFixed(1)}억`;
+  return `${Math.round(v).toLocaleString()}만`;
+}
+function fmt만원월(v) {
+  if (v == null || isNaN(v)) return "—";
+  return `${Math.round(v).toLocaleString()}만/월`;
+}
+
+// ============================================================
+// UI: 편집 가능 슬라이더
+// ============================================================
+
+function Slider({ label, value, min, max, step, onChange, format, hint }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (!editing) setDraft(String(value)); }, [value, editing]);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.select(); }, [editing]);
+
+  const commit = () => {
+    const n = Number(draft);
+    if (!isNaN(n)) onChange(n);
+    setEditing(false);
+  };
+  const cancel = () => { setDraft(String(value)); setEditing(false); };
+
+  return (
+    <div className="mb-3">
+      <div className="flex items-baseline justify-between mb-1 gap-2">
+        <label className="text-xs text-slate-600 truncate">{label}</label>
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="number"
+            value={draft}
+            step={step}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") cancel();
+            }}
+            className="num text-sm font-medium w-24 px-1 py-0.5 border border-slate-300 rounded text-right bg-white focus:outline-none focus:border-slate-500"
+          />
+        ) : (
+          <button
+            onClick={() => setEditing(true)}
+            className="text-sm font-medium num text-slate-900 hover:bg-slate-100 px-1 rounded -mx-1"
+            title="클릭하여 직접 입력"
+          >{format ? format(value) : value}</button>
+        )}
+      </div>
+      <input
+        type="range"
+        min={min} max={max} step={step}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-full"
+      />
+      {hint && <p className="text-[10px] text-slate-400 mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+function NumberInput({ label, value, onChange, suffix }) {
+  return (
+    <div className="mb-3">
+      <label className="block text-xs text-slate-600 mb-1">{label}</label>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          value={value ?? ""}
+          onChange={e => onChange(e.target.value === "" ? null : Number(e.target.value))}
+          className="num w-full px-2 py-1 text-sm rounded border border-slate-200 bg-white focus:outline-none focus:border-slate-400"
+        />
+        {suffix && <span className="text-xs text-slate-500">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ label, value, onChange, hint }) {
+  return (
+    <div className="mb-3 flex items-center justify-between">
+      <div>
+        <div className="text-xs text-slate-700">{label}</div>
+        {hint && <div className="text-[10px] text-slate-400">{hint}</div>}
+      </div>
+      <button
+        onClick={() => onChange(!value)}
+        className={`relative w-9 h-5 rounded-full transition ${value ? 'bg-slate-900' : 'bg-slate-300'}`}
+        aria-pressed={value}
+      >
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition ${value ? 'left-4' : 'left-0.5'}`} />
+      </button>
+    </div>
+  );
+}
+
+function Section({ title, summary, defaultOpen, children }) {
+  return (
+    <details className="mb-2 border-b border-slate-100 last:border-b-0" open={!!defaultOpen}>
+      <summary className="flex items-center justify-between py-2 select-none">
+        <div className="flex items-center gap-1.5">
+          <span className="chev text-slate-400 text-xs">▶</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</span>
+        </div>
+        {summary && <span className="text-[11px] text-slate-400 num">{summary}</span>}
+      </summary>
+      <div className="pt-1 pb-3">{children}</div>
+    </details>
+  );
+}
+
+function SummaryCard({ label, value, color, sub }) {
+  const colorMap = {
+    red:   "bg-red-50 border-red-200 text-red-900",
+    amber: "bg-amber-50 border-amber-200 text-amber-900",
+    green: "bg-emerald-50 border-emerald-200 text-emerald-900",
+    blue:  "bg-blue-50 border-blue-200 text-blue-900",
+    slate: "bg-slate-50 border-slate-200 text-slate-900",
+  };
+  return (
+    <div className={`rounded-lg border p-3 ${colorMap[color] || colorMap.slate}`}>
+      <div className="text-[11px] opacity-70 mb-1">{label}</div>
+      <div className="text-xl font-semibold num">{value}</div>
+      {sub && <div className="text-[11px] opacity-70 mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function readinessColor(ratio) {
+  if (ratio < 80) return "red";
+  if (ratio < 110) return "amber";
+  if (ratio < 150) return "green";
+  return "blue";
+}
+function readinessLabel(ratio) {
+  if (ratio < 80) return "위험";
+  if (ratio < 110) return "경계";
+  if (ratio < 150) return "안정";
+  return "매우 안정";
+}
+
+// ============================================================
+// 메인 앱
+// ============================================================
+
+const LS_KEY = "retirement-sim-v2";
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function makeScenario(name, input, colorIdx) {
+  return {
+    id: uid(),
+    name,
+    color: SCENARIO_COLORS[colorIdx % SCENARIO_COLORS.length],
+    input: { ...input },
+  };
+}
+
+function loadInitial() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (Array.isArray(obj.scenarios) && obj.scenarios.length) {
+        // merge missing defaults into input
+        obj.scenarios = obj.scenarios.map(s => ({
+          ...s,
+          input: { ...KR_DEFAULTS, ...s.input },
+        }));
+        return obj;
+      }
+    }
+  } catch {}
+  const base = makeScenario("현재", KR_DEFAULTS, 0);
+  return { scenarios: [base], activeId: base.id };
+}
+
+function App() {
+  const initial = loadInitial();
+  const [scenarios, setScenarios] = useState(initial.scenarios);
+  const [activeId, setActiveId] = useState(initial.activeId);
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ scenarios, activeId })); } catch {}
+  }, [scenarios, activeId]);
+
+  const active = scenarios.find(s => s.id === activeId) || scenarios[0];
+  const setInputField = (k) => (v) => {
+    setScenarios(prev => prev.map(s =>
+      s.id === active.id ? { ...s, input: { ...s.input, [k]: v } } : s
+    ));
+  };
+
+  const addScenario = () => {
+    if (scenarios.length >= 4) return;
+    const presetRetire = [50, 55, 60][scenarios.length - 1] || 55;
+    const next = makeScenario(
+      `퇴직 ${presetRetire}`,
+      { ...active.input, retireAge: presetRetire },
+      scenarios.length,
+    );
+    setScenarios(prev => [...prev, next]);
+    setActiveId(next.id);
+  };
+
+  const removeScenario = (id) => {
+    if (scenarios.length <= 1) return;
+    setScenarios(prev => prev.filter(s => s.id !== id));
+    if (activeId === id) setActiveId(scenarios[0].id);
+  };
+
+  const renameScenario = (id) => {
+    const cur = scenarios.find(s => s.id === id);
+    const name = prompt("시나리오 이름", cur?.name || "");
+    if (name) setScenarios(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+  };
+
+  const resetActive = () => {
+    setScenarios(prev => prev.map(s => s.id === activeId ? { ...s, input: { ...KR_DEFAULTS } } : s));
+  };
+
+  // 결과 계산
+  const bandsById = useMemo(() => {
+    const m = new Map();
+    for (const s of scenarios) m.set(s.id, runScenarioBand(s.input));
+    return m;
+  }, [scenarios]);
+
+  const activeBand = bandsById.get(active.id);
+  const activeResult = activeBand.mid;
+  const insights = useMemo(() => findBestInsights(active.input, activeResult), [active.input, activeResult]);
+
+  // 입력 패널 요약값들
+  const assetSummary = fmt만원(
+    active.input.currentDC + active.input.currentPensionSavings +
+    active.input.insuranceValue + active.input.housePrice - active.input.mortgageBalance
+  );
+
+  // 자산흐름 차트 데이터 결합
+  const chartData = useMemo(() => {
+    const map = new Map();
+    const ages = activeBand.mid.yearlyAssetFlow.map(y => y.age);
+    for (const age of ages) map.set(age, { age });
+    for (const s of scenarios) {
+      const band = bandsById.get(s.id);
+      band.mid.yearlyAssetFlow.forEach((y, idx) => {
+        const row = map.get(y.age) || { age: y.age };
+        row[`mid_${s.id}`] = y.netWorth;
+        row[`pess_${s.id}`] = band.pessimistic.yearlyAssetFlow[idx]?.netWorth;
+        row[`opt_${s.id}`] = band.optimistic.yearlyAssetFlow[idx]?.netWorth;
+        if (s.id === active.id) {
+          row[`band_${s.id}`] = [
+            band.pessimistic.yearlyAssetFlow[idx]?.netWorth,
+            band.optimistic.yearlyAssetFlow[idx]?.netWorth,
+          ];
+        }
+        map.set(y.age, row);
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => a.age - b.age);
+  }, [scenarios, bandsById, active.id]);
+
+  const cashflowData = activeResult.yearlyAssetFlow.map(y => ({
+    age: y.age,
+    근로: y.salaryMonthly,
+    연금: y.pensionMonthly,
+    부수입: y.sideMonthly,
+    생활비: -y.livingMonthly,
+    자녀비: -y.childMonthly,
+    대출: -y.mortgageMonthly,
+    건보료: -y.healthInsMonthly,
+    순흐름: y.cashflowMonthly,
+  }));
+
+  const i = active.input;
+  const minAge = i.currentAge;
+  const maxAge = i.lifeExpectancy;
+
+  return (
+    <div className="min-h-screen">
+      <header className="border-b border-slate-200 bg-white sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-2.5">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <h1 className="text-base font-semibold">은퇴 현금흐름 시뮬레이터</h1>
+            <span className="text-[11px] text-slate-500 hidden md:inline">브릿지 위험과 국민연금 효과를 시각화</span>
+          </div>
+          {/* 시나리오 탭 */}
+          <div className="mt-1.5 flex items-center gap-1 overflow-x-auto -mb-px">
+            {scenarios.map(s => (
+              <div key={s.id} className={`scenario-tab flex items-center gap-1 px-2 py-1 rounded-t border-b-2 ${s.id === activeId ? 'border-current' : 'border-transparent'}`} style={{ color: s.color }}>
+                <button
+                  onClick={() => setActiveId(s.id)}
+                  className="text-xs font-medium"
+                >{s.name}</button>
+                <button onClick={() => renameScenario(s.id)} className="text-[10px] text-slate-400 hover:text-slate-700" title="이름 변경">✎</button>
+                {scenarios.length > 1 && (
+                  <button onClick={() => removeScenario(s.id)} className="text-[10px] text-slate-400 hover:text-red-500" title="삭제">×</button>
+                )}
+              </div>
+            ))}
+            {scenarios.length < 4 && (
+              <button onClick={addScenario} className="text-xs px-2 py-1 text-slate-500 hover:text-slate-900">+ 시나리오</button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* 입력 패널 */}
+        <aside className="lg:col-span-4 xl:col-span-3">
+          <div className="lg:sticky lg:top-24 bg-white rounded-xl border border-slate-200 p-4 max-h-[calc(100vh-7rem)] overflow-y-auto">
+            <div className="mb-3 pb-2 border-b border-slate-100">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">편집 중</div>
+              <div className="text-sm font-semibold" style={{ color: active.color }}>{active.name}</div>
+            </div>
+
+            <Section title="프로필" defaultOpen summary={`${i.currentAge}→${i.retireAge}→${i.pensionStartAge}세`}>
+              <Slider label="현재 나이" value={i.currentAge} min={25} max={70} step={1} onChange={setInputField("currentAge")} format={v => `${v}세`} />
+              <Slider label="퇴직 나이" value={i.retireAge} min={i.currentAge} max={75} step={1} onChange={setInputField("retireAge")} format={v => `${v}세`} />
+              <Slider label="국민연금 개시" value={i.pensionStartAge} min={60} max={75} step={1} onChange={setInputField("pensionStartAge")} format={v => `${v}세`} />
+              <Slider label="배우자 은퇴 나이" value={i.spouseRetireAge} min={40} max={75} step={1} onChange={setInputField("spouseRetireAge")} format={v => `${v}세`} />
+              <Slider label="기대수명" value={i.lifeExpectancy} min={70} max={100} step={1} onChange={setInputField("lifeExpectancy")} format={v => `${v}세`} />
+            </Section>
+
+            <Section title="소득" defaultOpen summary={fmt만원(i.currentSalary)}>
+              <Slider label="현재 연봉" value={i.currentSalary} min={2000} max={30000} step={100} onChange={setInputField("currentSalary")} format={fmt만원} />
+              <Slider label="연봉 상승률(실질)" value={i.salaryGrowthRate} min={-2} max={5} step={0.1} onChange={setInputField("salaryGrowthRate")} format={v => `${v.toFixed(1)}%`} />
+              <Slider label="본인 지속소득(퇴직후)" value={i.sideIncomeSelf} min={0} max={500} step={10} onChange={setInputField("sideIncomeSelf")} format={v => `${v}만/월`} />
+              <Slider label="배우자 월소득" value={i.sideIncomeSpouse} min={0} max={500} step={10} onChange={setInputField("sideIncomeSpouse")} format={v => `${v}만/월`} />
+              <Toggle label="국민연금 가입연수 자동" value={i.npYearsAutoMode} onChange={setInputField("npYearsAutoMode")} hint="자동 = 퇴직나이−25 (최대 40년)" />
+              {!i.npYearsAutoMode && (
+                <Slider label="국민연금 가입연수" value={i.npYearsContributed} min={0} max={40} step={1} onChange={setInputField("npYearsContributed")} format={v => `${v}년`} />
+              )}
+            </Section>
+
+            <Section title="자산" summary={assetSummary}>
+              <Slider label="DC형 퇴직연금" value={i.currentDC} min={0} max={50000} step={500} onChange={setInputField("currentDC")} format={fmt만원} hint="회사가 매년 연봉/12 만큼 자동 적립" />
+              <Slider label="연금저축" value={i.currentPensionSavings} min={0} max={30000} step={500} onChange={setInputField("currentPensionSavings")} format={fmt만원} />
+              <Slider label="보험 적립금" value={i.insuranceValue} min={0} max={20000} step={100} onChange={setInputField("insuranceValue")} format={fmt만원} />
+              <Slider label="추가저축(근로기)" value={i.monthlyAdditionalSaving} min={0} max={300} step={10} onChange={setInputField("monthlyAdditionalSaving")} format={v => `${v}만/월`} />
+              <Slider label="주택 가치" value={i.housePrice} min={0} max={300000} step={1000} onChange={setInputField("housePrice")} format={fmt만원} />
+              <Slider label="대출 잔액" value={i.mortgageBalance} min={0} max={100000} step={500} onChange={setInputField("mortgageBalance")} format={fmt만원} />
+              <Slider label="월 원리금" value={i.monthlyMortgagePayment} min={0} max={500} step={10} onChange={setInputField("monthlyMortgagePayment")} format={v => `${v}만/월`} />
+            </Section>
+
+            <Section title="생활비 (현재가치)" summary={`${i.bridgeLivingCost}/${i.retirementLivingCost}만`}>
+              <Slider label="근로기" value={i.workingLivingCost} min={100} max={800} step={10} onChange={setInputField("workingLivingCost")} format={v => `${v}만/월`} />
+              <Slider label="브릿지 기간" value={i.bridgeLivingCost} min={100} max={800} step={10} onChange={setInputField("bridgeLivingCost")} format={v => `${v}만/월`} />
+              <Slider label="연금 수령기" value={i.retirementLivingCost} min={100} max={600} step={10} onChange={setInputField("retirementLivingCost")} format={v => `${v}만/월`} />
+              <p className="text-[10px] text-slate-400">65~74세 0.75배 / 75세+ 0.55배 자동 적용</p>
+            </Section>
+
+            <Section title="자녀" summary={`${[i.child1BirthYear, i.child2BirthYear].filter(Boolean).length}명`}>
+              <NumberInput label="첫째 출생연도" value={i.child1BirthYear} onChange={setInputField("child1BirthYear")} />
+              <NumberInput label="둘째 출생연도" value={i.child2BirthYear} onChange={setInputField("child2BirthYear")} />
+              <Slider label="사교육비 강도" value={i.childCostMultiplier} min={0.5} max={2.0} step={0.1} onChange={setInputField("childCostMultiplier")} format={v => `${v.toFixed(1)}×`} hint="1.0 = 표준 (0~6:50/초중고:80/대학:150만/월)" />
+            </Section>
+
+            <Section title="이벤트 — 다운사이징" summary={i.downsizeEnabled ? `${i.downsizeAge}세` : "OFF"}>
+              <Toggle label="주택 다운사이징 사용" value={i.downsizeEnabled} onChange={setInputField("downsizeEnabled")} />
+              {i.downsizeEnabled && <>
+                <Slider label="매각 나이" value={i.downsizeAge} min={i.retireAge} max={i.lifeExpectancy - 1} step={1} onChange={setInputField("downsizeAge")} format={v => `${v}세`} />
+                <Slider label="매각 후 보유비율" value={i.downsizeRatio} min={0} max={1} step={0.05} onChange={setInputField("downsizeRatio")} format={v => `${Math.round(v*100)}%`} hint="0.6 = 60% 가치 주택으로 다운사이즈, 40% 현금화" />
+              </>}
+            </Section>
+
+            <Section title="시장 가정 (실질)" summary={`${i.investmentReturnRate.toFixed(1)}%`}>
+              <Slider label="투자수익률" value={i.investmentReturnRate} min={0} max={8} step={0.1} onChange={setInputField("investmentReturnRate")} format={v => `${v.toFixed(1)}%`} />
+              <Slider label="수익률 밴드 ±" value={i.scenarioBandSpread} min={0} max={4} step={0.1} onChange={setInputField("scenarioBandSpread")} format={v => `±${v.toFixed(1)}%p`} />
+              <Slider label="물가상승률(표기용)" value={i.inflationRate} min={0} max={6} step={0.1} onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
+              <Slider label="주택 상승률(실질)" value={i.houseInflationRate} min={-3} max={3} step={0.1} onChange={setInputField("houseInflationRate")} format={v => `${v.toFixed(1)}%`} />
+            </Section>
+
+            <Section title="세제·건보">
+              <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
+              <Toggle label="연금소득세 5.5%" value={i.applyPensionTax} onChange={setInputField("applyPensionTax")} hint="분리과세 가정" />
+            </Section>
+
+            <button
+              onClick={resetActive}
+              className="w-full mt-2 px-3 py-2 text-xs rounded-md text-slate-500 hover:bg-slate-50 border border-slate-200"
+            >이 시나리오 기본값으로 리셋</button>
+          </div>
+        </aside>
+
+        {/* 결과 패널 */}
+        <section className="lg:col-span-8 xl:col-span-9 space-y-5">
+          {/* 요약 카드 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <SummaryCard
+              label="브릿지 기간"
+              value={`${activeResult.bridgeYears}년`}
+              color={activeResult.bridgeYears >= 10 ? "red" : activeResult.bridgeYears >= 5 ? "amber" : "green"}
+              sub={`${i.retireAge}세 → ${i.pensionStartAge}세`}
+            />
+            <SummaryCard
+              label="브릿지 누적 적자"
+              value={fmt만원(activeResult.bridgeShortfall)}
+              color={activeResult.bridgeShortfall > 30000 ? "red" : activeResult.bridgeShortfall > 10000 ? "amber" : "green"}
+              sub="현금흐름 음수 합계"
+            />
+            <SummaryCard
+              label="국민연금 예상"
+              value={fmt만원월(activeResult.nationalPensionMonthly)}
+              color="blue"
+              sub={`${i.pensionStartAge}세 / 가입 ${npYears(i)}년`}
+            />
+            <SummaryCard
+              label={`준비율 (${readinessLabel(activeResult.readinessRatio)})`}
+              value={`${activeResult.readinessRatio}%`}
+              color={readinessColor(activeResult.readinessRatio)}
+              sub={activeResult.depletionAge ? `${activeResult.depletionAge}세 자산소진` : "수명까지 유지"}
+            />
+          </div>
+
+          {/* 자산흐름 그래프 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+              <h2 className="text-sm font-semibold">자산 흐름 (순자산)</h2>
+              <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>근로기</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400"></span>브릿지</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400"></span>연금기</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-slate-400">음영 = 활성 시나리오 수익률 ±{i.scenarioBandSpread}%p</span>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: 360 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke="#f1f5f9" />
+                  <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => fmt만원(v)} width={60} />
+
+                  <ReferenceArea x1={minAge} x2={i.retireAge} fill="#10b981" fillOpacity={0.05} />
+                  <ReferenceArea x1={i.retireAge} x2={i.pensionStartAge} fill="#ef4444" fillOpacity={0.07} />
+                  <ReferenceArea x1={i.pensionStartAge} x2={maxAge} fill="#3b82f6" fillOpacity={0.05} />
+
+                  {activeResult.childEventList.map((e, idx) => (
+                    <ReferenceLine key={`c${idx}`} x={e.age} stroke="#94a3b8" strokeDasharray="3 3"
+                      label={{ value: e.label, position: "top", fontSize: 9, fill: "#64748b" }} />
+                  ))}
+                  {activeResult.downsizeEvents.map((e, idx) => (
+                    <ReferenceLine key={`d${idx}`} x={e.age} stroke="#8b5cf6" strokeDasharray="4 2"
+                      label={{ value: "🏠 다운사이즈", position: "top", fontSize: 9, fill: "#8b5cf6" }} />
+                  ))}
+
+                  <Tooltip
+                    formatter={(v, name) => [fmt만원(v), name]}
+                    labelFormatter={(age) => `${age}세`}
+                    contentStyle={{ fontSize: 12 }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+
+                  {/* 활성 시나리오 밴드 */}
+                  <Area type="monotone" dataKey={`band_${active.id}`} name="수익률 밴드"
+                    stroke="none" fill={active.color} fillOpacity={0.10} />
+
+                  {/* 시나리오별 중간 라인 */}
+                  {scenarios.map(s => (
+                    <Line key={s.id}
+                      type="monotone"
+                      dataKey={`mid_${s.id}`}
+                      name={s.name}
+                      stroke={s.color}
+                      strokeWidth={s.id === active.id ? 2.5 : 1.5}
+                      strokeDasharray={s.id === active.id ? undefined : "5 3"}
+                      dot={false}
+                    />
+                  ))}
+
+                  {scenarios.map(s => {
+                    const r = bandsById.get(s.id).mid;
+                    if (!r.depletionAge) return null;
+                    return (
+                      <ReferenceDot key={`dep-${s.id}`} x={r.depletionAge} y={0} r={4}
+                        fill={s.color} stroke="#fff" strokeWidth={2} />
+                    );
+                  })}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 시나리오 비교 테이블 */}
+          {scenarios.length > 1 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <h2 className="text-sm font-semibold mb-2">시나리오 비교</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] text-slate-500 border-b border-slate-100">
+                      <th className="py-2 pr-2">시나리오</th>
+                      <th className="py-2 px-2 text-right">퇴직</th>
+                      <th className="py-2 px-2 text-right">브릿지</th>
+                      <th className="py-2 px-2 text-right">누적적자</th>
+                      <th className="py-2 px-2 text-right">소진</th>
+                      <th className="py-2 px-2 text-right">준비율</th>
+                      <th className="py-2 pl-2 text-right">국민연금</th>
+                    </tr>
+                  </thead>
+                  <tbody className="num">
+                    {scenarios.map(s => {
+                      const r = bandsById.get(s.id).mid;
+                      return (
+                        <tr key={s.id} className={`border-b border-slate-50 last:border-b-0 ${s.id === activeId ? 'bg-slate-50' : ''}`}>
+                          <td className="py-2 pr-2">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full" style={{ background: s.color }}></span>
+                              <span className="font-medium" style={{ color: s.color }}>{s.name}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-right">{s.input.retireAge}세</td>
+                          <td className="py-2 px-2 text-right">{r.bridgeYears}년</td>
+                          <td className="py-2 px-2 text-right">{fmt만원(r.bridgeShortfall)}</td>
+                          <td className={`py-2 px-2 text-right ${r.depletionAge ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {r.depletionAge ? `${r.depletionAge}세` : '없음'}
+                          </td>
+                          <td className={`py-2 px-2 text-right font-medium text-${readinessColor(r.readinessRatio)}-600`}>
+                            {r.readinessRatio}%
+                          </td>
+                          <td className="py-2 pl-2 text-right">{fmt만원월(r.nationalPensionMonthly)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 월 현금흐름 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <h2 className="text-sm font-semibold mb-2">월 현금흐름 — <span style={{color: active.color}}>{active.name}</span></h2>
+            <div style={{ width: "100%", height: 280 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={cashflowData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }} stackOffset="sign">
+                  <CartesianGrid stroke="#f1f5f9" />
+                  <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={50} />
+                  <Tooltip formatter={(v) => `${Math.abs(v).toLocaleString()}만`} labelFormatter={(age) => `${age}세`} contentStyle={{ fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <ReferenceLine y={0} stroke="#94a3b8" />
+                  <Bar dataKey="근로" stackId="a" fill="#10b981" />
+                  <Bar dataKey="연금" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="부수입" stackId="a" fill="#06b6d4" />
+                  <Bar dataKey="생활비" stackId="a" fill="#f59e0b" />
+                  <Bar dataKey="자녀비" stackId="a" fill="#a855f7" />
+                  <Bar dataKey="대출" stackId="a" fill="#64748b" />
+                  <Bar dataKey="건보료" stackId="a" fill="#ef4444" />
+                  <Line type="monotone" dataKey="순흐름" stroke="#0f172a" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 자동 인사이트 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <h2 className="text-sm font-semibold mb-2">자동 인사이트</h2>
+            <ul className="text-sm text-slate-700 space-y-1.5 leading-relaxed">
+              <li>• 브릿지 기간 <b>{activeResult.bridgeYears}년</b> 동안 누적 적자: <b className="text-red-600">{fmt만원(activeResult.bridgeShortfall)}</b></li>
+              {activeResult.depletionAge ? (
+                <li>• <b className="text-red-600">⚠ {activeResult.depletionAge}세 자산소진</b> — 수명({i.lifeExpectancy}세)까지 <b>{i.lifeExpectancy - activeResult.depletionAge}년</b> 부족</li>
+              ) : (
+                <li>• <span className="text-emerald-700">✓ 수명({i.lifeExpectancy}세)까지 자산이 유지됩니다.</span> 수익률 비관 시나리오에서도 확인 권장.</li>
+              )}
+              {activeBand.pessimistic.depletionAge && !activeResult.depletionAge && (
+                <li>• 비관 시나리오(수익률 −{i.scenarioBandSpread}%p)에서는 <b className="text-amber-600">{activeBand.pessimistic.depletionAge}세 소진</b> — 시장 변동성에 취약합니다.</li>
+              )}
+              {insights.length > 0 && (
+                <li className="pt-2 mt-2 border-t border-slate-100">
+                  <div className="text-xs text-slate-500 mb-1.5">▷ 가장 효과적인 개선책 (준비율 변화):</div>
+                  <div className="space-y-1">
+                    {insights.map(ins => (
+                      <div key={ins.key} className="flex items-center justify-between text-sm">
+                        <span>{ins.label}</span>
+                        <span className="num text-emerald-600 font-medium">+{Math.round(ins.delta)}%p → {Math.round(ins.newRatio)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </li>
+              )}
+              {scenarios.length > 1 && (
+                <li className="pt-2 mt-2 border-t border-slate-100 text-xs text-slate-500">
+                  비교 표에서 다른 시나리오와 즉시 대조 가능합니다. <b>+ 시나리오</b>로 최대 4개까지 추가하세요.
+                </li>
+              )}
+            </ul>
+          </div>
+
+          <footer className="text-[11px] text-slate-400 pb-8 leading-relaxed">
+            ※ <b>실질가치 기준</b> (수익률·연봉성장률·주택상승률 모두 실질). 국민연금은 A값 단순 추정.
+            건강보험료/세제는 단순 추정이며 실제 산식과 다를 수 있습니다. DC는 매년 연봉/12 적립 가정, 퇴직금은 (월급×근속연수) 단순 일시금.
+          </footer>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
