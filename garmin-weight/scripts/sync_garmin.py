@@ -30,7 +30,21 @@ CSV_HEADERS = [
     "resting_hr",
     "visceral_fat",
     "metabolic_age",
+    # V2 PR2: 컨텍스트 신호
+    "body_fat_percent",
+    "sleep_score",
+    "training_load_acute",
 ]
+
+# 정수 컬럼 (load/format에서 round 처리)
+INT_CSV_COLUMNS = {
+    "weight_measure_count",
+    "activity_count",
+    "steps",
+    "metabolic_age",
+    "sleep_score",
+    "training_load_acute",
+}
 
 
 @dataclass
@@ -90,7 +104,7 @@ def round_or_none(value: float | None, digits: int = 2) -> float | None:
 def format_cell(value: Any, field: str) -> str:
     if value is None:
         return ""
-    if field in {"weight_measure_count", "activity_count", "steps", "metabolic_age"}:
+    if field in INT_CSV_COLUMNS:
         return str(int(round(float(value))))
     if field == "date":
         return str(value)
@@ -109,7 +123,7 @@ def load_existing_rows(path: Path) -> dict[str, dict[str, Any]]:
                 continue
             parsed = {"date": key}
             for field in CSV_HEADERS[1:]:
-                if field in {"weight_measure_count", "activity_count", "steps", "metabolic_age"}:
+                if field in INT_CSV_COLUMNS:
                     parsed[field] = parse_int(row.get(field))
                 else:
                     parsed[field] = parse_float(row.get(field))
@@ -569,6 +583,18 @@ def extract_body_metrics(body: Any) -> dict[str, Any]:
     if weight is not None and weigh_count == 0:
         weigh_count = 1
 
+    body_fat = first_number(
+        payload,
+        "bodyFat",
+        "bodyFatPercentage",
+        "bodyFatPercent",
+        "fatPercentage",
+        "percentFat",
+    )
+    # Garmin은 0~1 범위(소수)로도 0~100(%)로도 반환할 수 있어 정규화
+    if body_fat is not None and body_fat <= 1.0:
+        body_fat *= 100.0
+
     return {
         "weight_kg": round_or_none(weight, 2),
         "weight_measure_count": weigh_count,
@@ -577,6 +603,7 @@ def extract_body_metrics(body: Any) -> dict[str, Any]:
             2,
         ),
         "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge")),
+        "body_fat_percent": round_or_none(body_fat, 1),
     }
 
 
@@ -584,6 +611,54 @@ def extract_sleep_hours(sleep: Any) -> float | None:
     dto = get_nested(sleep, "dailySleepDTO")
     sleep_seconds = first_number(dto, "sleepTimeSeconds")
     return round_or_none(None if sleep_seconds is None else sleep_seconds / 3600, 2)
+
+
+def extract_sleep_score(sleep: Any) -> int | None:
+    """Garmin 'overallSleepScore' (0-100). 다양한 응답 형태를 모두 시도."""
+    dto = get_nested(sleep, "dailySleepDTO")
+    # 최신 응답: dailySleepDTO.sleepScores.overall.value
+    overall = get_nested(dto, "sleepScores", "overall")
+    if isinstance(overall, dict):
+        v = first_number(overall, "value", "score")
+        if v is not None:
+            return parse_int(v)
+    # 구버전: dailySleepDTO.overallSleepScore (직접 숫자/딕셔너리)
+    direct = get_nested(dto, "overallSleepScore")
+    if isinstance(direct, dict):
+        v = first_number(direct, "value", "score")
+        if v is not None:
+            return parse_int(v)
+    if direct is not None:
+        return parse_int(direct)
+    # 또 다른 변형
+    score = first_number(dto, "sleepScore", "overallSleepScoreValue")
+    if score is not None:
+        return parse_int(score)
+    return None
+
+
+def extract_training_load(training: Any) -> int | None:
+    """급성 훈련 부하 (대개 0-1000+). 응답 키 변이가 많아 폭넓게 탐색."""
+    if not isinstance(training, dict):
+        return None
+    # 1차: 직접 키
+    v = first_number(
+        training,
+        "acuteTrainingLoad",
+        "acuteLoad",
+        "trainingLoadAcute",
+        "load",
+    )
+    if v is not None:
+        return parse_int(v)
+    # 2차: 중첩
+    for key in ("acuteTrainingLoadDTO", "trainingLoad", "training", "trainingStatus"):
+        nested = training.get(key)
+        if isinstance(nested, dict):
+            v = first_number(nested, "acuteTrainingLoad", "acuteLoad", "value", "load")
+            if v is not None:
+                return parse_int(v)
+    return None
 
 
 def extract_resting_hr(stats: Any, heart_rates: Any, sleep: Any) -> float | None:
@@ -631,6 +706,12 @@ def fetch_day_row(client: Any, day: str) -> dict[str, Any]:
     sleep = safe_call(client, "get_sleep_data", day, default={}) or {}
     body = safe_call(client, "get_body_composition", day, default={}) or {}
     activities = fetch_activities_for_date(client, day)
+    # V2 PR2: 컨텍스트 신호 — 엔드포인트가 없어도 sync는 계속 (safe_call이 default 반환)
+    training = (
+        safe_call(client, "get_training_readiness", day, default={})
+        or safe_call(client, "get_training_status", day, default={})
+        or {}
+    )
 
     body_metrics = extract_body_metrics(body)
     activity_totals = extract_activity_totals(activities)
@@ -659,6 +740,9 @@ def fetch_day_row(client: Any, day: str) -> dict[str, Any]:
         "resting_hr": extract_resting_hr(stats, heart_rates, sleep),
         "visceral_fat": body_metrics["visceral_fat"],
         "metabolic_age": body_metrics["metabolic_age"],
+        "body_fat_percent": body_metrics["body_fat_percent"],
+        "sleep_score": extract_sleep_score(sleep),
+        "training_load_acute": extract_training_load(training),
     }
 
 
@@ -740,13 +824,40 @@ def build_prediction_series(
     return series
 
 
-def compute_ewma(weight_values: list[float | None], lambda_: float = EWMA_LAMBDA) -> list[float | None]:
-    """Z_t = λ·X_t + (1-λ)·Z_{t-1}. None은 건너뛰고 직전 Z 유지."""
+def measurement_weight(row: dict[str, Any]) -> float:
+    """Phase 4 — 컨텍스트 기반 측정 신뢰도 가중치 (0.5 ~ 1.0).
+
+    수면 부족·급격한 훈련 부하 증가는 수분 정체/글리코겐 변동을 일으켜 그날
+    체중을 추세 신호가 아닌 잡음으로 만든다. 신뢰도가 낮을수록 EWMA 업데이트
+    비중을 줄여 추세선이 노이즈에 끌려가지 않게 한다.
+    """
+    w = 1.0
+    score = parse_float(row.get("sleep_score"))
+    if score is not None and score < 60:
+        w *= 0.7  # 수면 점수 60 미만 → 수분 정체 가능성
+    load = parse_int(row.get("training_load_acute"))
+    if load is not None and load >= 400:
+        w *= 0.85  # 급성 부하 매우 높음 → 글리코겐/수분 저장 가능성
+    return max(w, 0.4)
+
+
+def compute_ewma(
+    weight_values: list[float | None],
+    lambda_: float = EWMA_LAMBDA,
+    weights: list[float] | None = None,
+) -> list[float | None]:
+    """Z_t = λ_eff·X_t + (1-λ_eff)·Z_{t-1}. None은 건너뛰고 직전 Z 유지.
+
+    weights가 제공되면 그 날의 가중치만큼 λ를 축소(`λ_eff = λ · w`).
+    가중치 1.0 = 기존 동작, 0.7 = 영향력 30% 감소.
+    """
     z: float | None = None
     out: list[float | None] = []
-    for x in weight_values:
+    for i, x in enumerate(weight_values):
         if x is not None:
-            z = x if z is None else lambda_ * x + (1 - lambda_) * z
+            w = (weights[i] if weights is not None and i < len(weights) else 1.0)
+            lam_eff = lambda_ * max(min(w, 1.0), 0.0)
+            z = x if z is None else lam_eff * x + (1 - lam_eff) * z
         out.append(round(z, 2) if z is not None else None)
     return out
 
@@ -985,20 +1096,42 @@ def detect_plateau(
     ewma_series: list[dict[str, Any]],
     threshold_kg_per_week: float = 0.05,
     min_days: int = 14,
+    rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """EWMA 기준 최근 min_days 동안 변화량이 threshold 미만이면 정체기."""
+    """EWMA 기준 최근 min_days 동안 변화량이 threshold 미만이면 정체기.
+
+    Phase 4: rows가 함께 제공되면 같은 기간 평균 training_load_acute로
+    정체기 유형을 'metabolic'(대사 적응) vs 'glycogen'(부하 급증 → 수분 저장)으로 분리.
+    """
     recent = [p for p in ewma_series[-min_days:] if p.get("valueKg") is not None]
     if len(recent) < min_days:
-        return {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None}
+        return {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None, "type": None}
 
     days = (date.fromisoformat(recent[-1]["date"]) - date.fromisoformat(recent[0]["date"])).days
     weekly_change = (recent[0]["valueKg"] - recent[-1]["valueKg"]) / (days / 7) if days > 0 else 0.0
     detected = abs(weekly_change) < threshold_kg_per_week
+
+    plateau_type: str | None = None
+    if detected and rows:
+        # 정체기 기간의 최근 7일 평균 부하 vs 정체기 직전 21일 평균 부하 비교
+        loads = [parse_int(r.get("training_load_acute")) for r in rows[-min_days:]]
+        loads = [v for v in loads if v is not None]
+        if len(loads) >= 7:
+            recent_load = sum(loads[-7:]) / max(len(loads[-7:]), 1)
+            baseline_loads = loads[:-7] if len(loads) > 7 else loads
+            baseline_load = sum(baseline_loads) / max(len(baseline_loads), 1)
+            # 평균 부하가 직전보다 25% 이상 상승했으면 글리코겐 정체기로 분류
+            if baseline_load > 0 and recent_load > baseline_load * 1.25:
+                plateau_type = "glycogen"
+            else:
+                plateau_type = "metabolic"
+
     return {
         "detected": detected,
         "startDate": recent[0]["date"] if detected else None,
         "durationDays": days if detected else 0,
         "weeklyChangeDelta": round(weekly_change, 3),
+        "type": plateau_type,
     }
 
 
@@ -1058,7 +1191,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "etaDate": None,
             },
             "lossIntensity": None,
-            "plateau": {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None},
+            "plateau": {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None, "type": None},
             "predictionCI": {"stdResidual": None, "series": []},
             "modelDiagnostics": {
                 "confidence": {"level": "low", "label": "낮음", "score": 0, "reasons": ["데이터 없음"]},
@@ -1091,9 +1224,10 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         if weight is not None:
             latest_weight_row = row
 
-    # EWMA 계산
+    # EWMA 계산 — Phase 4: 컨텍스트(수면 점수·훈련 부하)가 있으면 측정 가중치 적용
     all_weights = [row.get("weight_kg") for row in rows]
-    ewma_values = compute_ewma(all_weights)
+    ewma_weights = [measurement_weight(row) for row in rows]
+    ewma_values = compute_ewma(all_weights, weights=ewma_weights)
     ewma_series = [{"date": all_dates[i], "valueKg": ewma_values[i]} for i in range(len(rows))]
 
     latest_date = rows[-1]["date"]
@@ -1136,7 +1270,13 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     # --- 운동 칼로리 추이 ---
     kcal_to_kg_default = parse_float(config.get("kcalToKgFactor")) or 7700.0
     height_cm = parse_float(config.get("heightCm"))
-    body_fat_pct = parse_float((rows[-1] if rows else {}).get("body_fat_percent")) if rows else None
+    # body_fat: 최근 14일 내 마지막 유효값 사용 (체중계가 매일 측정 안 할 수 있음)
+    body_fat_pct: float | None = None
+    for r in reversed(rows[-14:] if len(rows) > 14 else rows):
+        v = parse_float(r.get("body_fat_percent"))
+        if v is not None:
+            body_fat_pct = v
+            break
     # Phase 2: 동적 kcal_per_kg — body_fat > BMI > default 우선순위
     kcal_to_kg, kcal_source = kcal_per_kg(body_fat_pct, current_weight, height_cm, default=kcal_to_kg_default)
 
@@ -1224,7 +1364,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         base_effective_loss if base_effective_loss > 0 else None,
         current_ewma,
     )
-    plateau = detect_plateau(ewma_series)
+    plateau = detect_plateau(ewma_series, rows=rows)
     insight = build_insight(current_weight, current_ewma, loss_intensity, plateau)
 
     # rolling에 exerciseTrend 추가
@@ -1268,6 +1408,29 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     trend_windows = compute_trend_windows(ewma_series, latest_date)
     backtest = _early_backtest  # CI 계산에 사용한 동일한 백테스트 결과 재사용
+
+    # Phase 5: Kalman 필터 후보 모델 비교 (채택 결정용)
+    kalman_comparison: dict[str, Any] | None = None
+    try:
+        # 같은 디렉토리의 모듈을 안전하게 로드 (실행 방식에 무관)
+        import importlib.util as _ilu
+        _kspec = _ilu.spec_from_file_location(
+            "kalman_predictor",
+            Path(__file__).resolve().parent / "kalman_predictor.py",
+        )
+        if _kspec is None or _kspec.loader is None:
+            raise RuntimeError("kalman_predictor module not found")
+        _kmod = _ilu.module_from_spec(_kspec)
+        _kspec.loader.exec_module(_kmod)
+        kalman_bt = _kmod.kalman_backtest(rows, train_window=trend_window)
+        kalman_comparison = {
+            "kalmanBacktest": kalman_bt,
+            **_kmod.compare_backtests(backtest, kalman_bt),
+        }
+    except Exception as exc:  # 한 번이라도 실패해도 V1 흐름 영향 없음
+        LOGGER.warning("kalman comparison skipped: %s", exc)
+        kalman_comparison = {"error": str(exc)}
+
     confidence = classify_prediction_confidence(
         coverage_pct=coverage_pct,
         measured_days=measured_count,
@@ -1288,6 +1451,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "kcalPerKg": round(kcal_to_kg, 0),
         "kcalPerKgSource": kcal_source,  # "body_fat" | "bmi" | "default"
         "calibration": calibration,
+        "modelComparison": kalman_comparison,  # V1 vs Kalman backtest 비교
         "notes": [
             "기본 예측은 체중 추세 기반입니다.",
             "시나리오는 운동 효율 계수(NEAT·보상 섭취 보정)와 동적 kcal/kg 사용.",
