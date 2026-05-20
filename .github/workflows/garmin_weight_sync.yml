@@ -26,6 +26,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
+        with:
+          # rebase against origin/main on concurrent bot pushes 필요 — 전체 히스토리 받기
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5.6.0
@@ -83,9 +86,40 @@ jobs:
             garmin-weight/data/summary.json
           if-no-files-found: warn
 
-      - name: Commit and push data
+      # git-auto-commit-action@v5는 push 전에 pull/rebase를 하지 않아
+      # 다른 봇(parking_log 등)이 같은 시각에 main을 진전시키면 non-fast-forward로 실패.
+      # 직접 commit + push-with-rebase-retry 처리한다.
+      - name: Commit and push data (with rebase retry)
         if: success()
-        uses: stefanzweifel/git-auto-commit-action@v5.0.1
-        with:
-          commit_message: "chore: update garmin weight data"
-          file_pattern: "garmin-weight/data/daily_metrics.csv garmin-weight/data/summary.json"
+        env:
+          DATA_FILES: "garmin-weight/data/daily_metrics.csv garmin-weight/data/summary.json"
+          MAX_ATTEMPTS: "5"
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add $DATA_FILES
+          if git diff --staged --quiet; then
+            echo "No data changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: update garmin weight data"
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            if git push; then
+              echo "Push succeeded on attempt $attempt."
+              exit 0
+            fi
+            echo "Push failed on attempt $attempt — fetching latest and rebasing."
+            git fetch origin main
+            # 데이터 파일은 자동 생성이라 충돌 시 항상 우리 새 결과를 우선
+            git rebase -X theirs origin/main || {
+              echo "Rebase failed, aborting"; git rebase --abort; exit 1;
+            }
+            # 짧은 백오프
+            sleep $((attempt * 2))
+          done
+
+          echo "::error::Push still failing after $MAX_ATTEMPTS retries"
+          exit 1
