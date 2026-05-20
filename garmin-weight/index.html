@@ -135,15 +135,11 @@
     <!-- 정체기 코칭 카드 (plateau.detected 시에만 표시) -->
     <aside class="plateau-card" id="plateauCard" hidden>
       <div class="plateau-head">
-        <span class="plateau-tag">정체기 감지</span>
+        <span class="plateau-tag" id="plateauTag">정체기 감지</span>
         <span id="plateauDuration" class="plateau-duration">–</span>
       </div>
-      <p class="plateau-msg">대사 적응 과정의 정상적인 현상입니다. 의지의 문제가 아니에요.</p>
-      <ul class="plateau-actions">
-        <li>운동 강도 또는 시간 10% 늘리기</li>
-        <li>탄수화물 비중 일시 조정 (재공급)</li>
-        <li>수면 7시간 이상 확보</li>
-      </ul>
+      <p class="plateau-msg" id="plateauMsg">대사 적응 과정의 정상적인 현상입니다. 의지의 문제가 아니에요.</p>
+      <ul class="plateau-actions" id="plateauActions"></ul>
     </aside>
 
     <!-- Trend + scenarios (scenarios replace duplicate 1m/3m insight cards) -->

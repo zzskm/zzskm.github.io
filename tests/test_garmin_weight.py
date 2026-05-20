@@ -258,6 +258,72 @@ class GarminWeightTests(unittest.TestCase):
             if entry and entry.get("status") == "ok":
                 self.assertLess(entry["maeKg"], 1.0)
 
+    def test_phase2a_body_fat_takes_priority_over_bmi(self) -> None:
+        """Phase 2A 회귀: body_fat_percent가 있으면 BMI보다 우선해 kcalPerKgSource를 결정."""
+        rows = []
+        for d in range(30):
+            rows.append({
+                "date": f"2030-04-{d+1:02d}",
+                "weight_kg": round(95.0 - d * 0.05, 2),  # BMI 30+ (175cm)
+                "weight_measure_count": 1,
+                "exercise_minutes": 30, "exercise_calories": 300,
+                "activity_count": 1, "steps": 8000,
+                "sleep_hours": 7, "resting_hr": 60,
+                "visceral_fat": None, "metabolic_age": None,
+                "body_fat_percent": 22.0,   # 22% → kcal_per_kg=7700 (body_fat tier)
+                "sleep_score": 75, "training_load_acute": 180,
+            })
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 80, "heightCm": 175})
+        diag = summary["modelDiagnostics"]
+        self.assertEqual("body_fat", diag["kcalPerKgSource"])
+        self.assertEqual(7700.0, diag["kcalPerKg"])
+
+    def test_phase4_glycogen_plateau_classified(self) -> None:
+        """Phase 4 회귀: 정체기 + 훈련 부하 급증 → type='glycogen'."""
+        rows = []
+        # 14일 평탄(체중 변화 거의 없음) + 부하 급증 패턴
+        base_kg = 82.0
+        for d in range(28):
+            load = 150 if d < 14 else 500   # 후반 부하 급증
+            rows.append({
+                "date": (sync_garmin.date(2030, 5, 1) + sync_garmin.timedelta(days=d)).isoformat(),
+                "weight_kg": round(base_kg - d * 0.02, 2),  # 매우 느린 감소
+                "weight_measure_count": 1,
+                "exercise_minutes": 30, "exercise_calories": 300,
+                "activity_count": 1, "steps": 8000,
+                "sleep_hours": 7, "resting_hr": 60,
+                "visceral_fat": None, "metabolic_age": None,
+                "body_fat_percent": None,
+                "sleep_score": 75,
+                "training_load_acute": load,
+            })
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
+        plateau = summary["plateau"]
+        if plateau.get("detected"):
+            self.assertEqual("glycogen", plateau.get("type"))
+
+    def test_phase5_kalman_comparison_present(self) -> None:
+        """Phase 5 회귀: modelDiagnostics.modelComparison이 V1/Kalman MAE 비교를 노출."""
+        rows = []
+        for d in range(60):
+            rows.append({
+                "date": (sync_garmin.date(2030, 6, 1) + sync_garmin.timedelta(days=d)).isoformat(),
+                "weight_kg": round(85.0 - d * 0.04, 2),
+                "weight_measure_count": 1,
+                "exercise_minutes": 30, "exercise_calories": 300,
+                "activity_count": 1, "steps": 8000,
+                "sleep_hours": 7, "resting_hr": 60,
+                "visceral_fat": None, "metabolic_age": None,
+                "body_fat_percent": 22.0,
+                "sleep_score": 75, "training_load_acute": 180,
+            })
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
+        mc = summary["modelDiagnostics"].get("modelComparison")
+        self.assertIsNotNone(mc)
+        self.assertIn("kalmanBacktest", mc)
+        self.assertIn("recommendKalman", mc)
+        self.assertIn("perHorizon", mc)
+
     def test_prediction_curve_decays_toward_target(self) -> None:
         """P3 회귀: 선형 외삽이라면 12주 감량 = 12 * weekly. 지수 감쇠는 더 작아야 함."""
         start = 90.0
