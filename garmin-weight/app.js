@@ -213,7 +213,6 @@
 
     // Sparklines
     renderScenarioSparklines(s);
-    renderScenarioCompare(s.lossIntensity, state.scenario);
     renderModelDiagnostics(s);
   }
 
@@ -474,21 +473,6 @@
     });
   }
 
-  // ---------- scenario compare label ----------
-  function renderScenarioCompare(intensity, scenario) {
-    const label = el('scenariosCurrent');
-    if (!label) return;
-    if (!intensity) { label.hidden = true; return; }
-    const currentLabel = INTENSITY_LABELS[intensity.level] ?? intensity.level;
-    const scenarioMap = { optimistic: '공격적', base: '표준', conservative: '보수적' };
-    const selectedLabel = scenarioMap[scenario] ?? scenario;
-    if (currentLabel === selectedLabel) {
-      label.hidden = true;
-      return;
-    }
-    label.textContent = `현재 ${currentLabel} · 시나리오 ${selectedLabel}`;
-    label.hidden = false;
-  }
 
   // ---------- bottom: variability + coverage ----------
   function renderBottom() {
@@ -955,7 +939,6 @@
     if (lower) lower.data = remap(toMap(ci.lower));
 
     state.chart.update('none');
-    renderScenarioCompare(s.lossIntensity, state.scenario);
   }
 
   // ---------- interactions ----------
