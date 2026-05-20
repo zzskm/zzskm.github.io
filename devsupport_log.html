@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Dev Support팀 일일업무_학습일지</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='54' font-size='56'>📋</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
@@ -30,7 +31,7 @@
   .savestate{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:0.04em;}
   .savestate.flash{color:var(--ink);}
 
-  .meta-row{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;}
+  .meta-row{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;}
   .field{display:flex;flex-direction:column;gap:6px;}
   .field label{font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:var(--ink-faint);text-transform:uppercase;}
   .field input[type=date],
@@ -53,8 +54,10 @@
     box-sizing:border-box;min-height:38px;
   }
   .weeknav-btn:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
-  .field.name-field{margin-left:auto;}
   .field.name-field input{width:200px;max-width:100%;}
+  .lunch-range{display:flex;gap:6px;align-items:center;}
+  .lunch-range input[type=time]{width:110px;}
+  .lunch-range .dash{color:var(--ink-faint);font-family:var(--mono);font-size:13px;}
 
   /* preview that mimics docx — header table (blue top/bottom only) */
   .header-table{
@@ -82,9 +85,9 @@
   table.sheet thead th{background:var(--shade);font-weight:600;font-size:13px;text-align:center;letter-spacing:0.04em;}
   .date-cell{width:130px;text-align:center;font-family:var(--mono);font-size:13px;letter-spacing:0.02em;vertical-align:middle !important;}
   textarea{
-    width:100%;border:0;background:transparent;resize:vertical;
+    width:100%;border:0;background:transparent;resize:none;overflow:hidden;
     font-family:var(--sans);font-size:14px;line-height:1.6;color:var(--ink);
-    min-height:90px;padding:0;letter-spacing:-0.003em;
+    min-height:134px;padding:0;letter-spacing:-0.003em;
   }
   textarea:focus{outline:none;}
   textarea::placeholder{color:var(--ink-faint);font-style:italic;}
@@ -142,7 +145,7 @@
   @media (max-width:640px){
     .shell{padding:20px 14px 60px;}
     .date-cell{width:88px;font-size:12px;}
-    textarea{font-size:13.5px;}
+    textarea{font-size:13.5px;min-height:124px;}
     .timehelper input[type=time]{width:80px;}
   }
 </style>
@@ -175,8 +178,16 @@
       <input type="text" class="sans" id="nameInput" placeholder="예: 홍길동" />
     </div>
     <div class="field">
-      <label>업무 시작 시간</label>
+      <label>업무 시작</label>
       <input type="time" id="workStartTime" value="09:00" />
+    </div>
+    <div class="field">
+      <label>점심 시간</label>
+      <div class="lunch-range">
+        <input type="time" id="lunchStart" value="12:00" />
+        <span class="dash">–</span>
+        <input type="time" id="lunchEnd" value="13:00" />
+      </div>
     </div>
   </div>
 
@@ -226,6 +237,8 @@
   const $filenameInput = document.getElementById("filenameInput");
   const $autoBtn = document.getElementById("autoBtn");
   const $workStartTime = document.getElementById("workStartTime");
+  const $lunchStart = document.getElementById("lunchStart");
+  const $lunchEnd = document.getElementById("lunchEnd");
   const $prevWeekBtn = document.getElementById("prevWeekBtn");
   const $todayWeekBtn = document.getElementById("todayWeekBtn");
   const $nextWeekBtn = document.getElementById("nextWeekBtn");
@@ -267,6 +280,20 @@
     return `${monday.getMonth()+1}/${monday.getDate()} ~ ${f.getMonth()+1}/${f.getDate()}`;
   }
   function sanitize(s){ return (s || "").replace(/[\/\\:*?"<>|]/g, "_"); }
+
+  const TA_BASE_ROWS = 6;
+  const TA_STEP_ROWS = 2;
+  function autosizeTextarea(ta){
+    const cs = getComputedStyle(ta);
+    const lineH = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) * 1.6);
+    const baseH = Math.ceil(TA_BASE_ROWS * lineH);
+    ta.style.height = "auto";
+    const need = ta.scrollHeight;
+    if (need <= baseH){ ta.style.height = baseH + "px"; return; }
+    const stepH = TA_STEP_ROWS * lineH;
+    const steps = Math.ceil((need - baseH) / stepH);
+    ta.style.height = Math.ceil(baseH + steps * stepH) + "px";
+  }
   function daysFromMonday(monday){
     return DAY_LABELS.map((wk, i) => {
       const d = new Date(monday);
@@ -290,6 +317,8 @@
     weeksByStart: {},
     name: "",
     workStartTime: "09:00",
+    lunchStart: "12:00",
+    lunchEnd: "13:00",
     filename: "",
     userEditedFilename: false
   };
@@ -362,9 +391,11 @@
       ta.placeholder = "09:00-11:00 …\n11:00-12:00 점심식사\n…";
       ta.addEventListener("input", () => {
         state.days[i].content = ta.value;
+        autosizeTextarea(ta);
         scheduleSave();
       });
       tdContent.appendChild(ta);
+      requestAnimationFrame(() => autosizeTextarea(ta));
 
       // time helper
       const helper = document.createElement("div");
@@ -376,18 +407,31 @@
       const textI = document.createElement("input"); textI.type = "text"; textI.placeholder = "내용";
       const addBtn = document.createElement("button"); addBtn.textContent = "+ 추가";
 
+      const appendLine = (line) => {
+        const cur = ta.value;
+        ta.value = cur && !cur.endsWith("\n") ? cur + "\n" + line : cur + line;
+      };
       const doAdd = () => {
         const s = startI.value, e = endI.value, t = textI.value.trim();
         if (!s || !e) return;
-        const line = `${s}-${e}${t ? " " + t : ""}`;
-        const cur = ta.value;
-        ta.value = cur && !cur.endsWith("\n") ? cur + "\n" + line : cur + line;
+        appendLine(`${s}-${e}${t ? " " + t : ""}`);
+        // shift defaults — jump over lunch if next slot would land before/in lunch
+        let nextStart = e;
+        let nextEnd = addOneHour(nextStart);
+        const ls = state.lunchStart || "12:00";
+        const le = state.lunchEnd   || "13:00";
+        if (ls < le && nextStart < le && nextEnd > ls){
+          // only insert the lunch line when the user's block ended before lunch starts
+          if (nextStart <= ls) appendLine(`${ls}-${le} 점심식사`);
+          nextStart = le;
+          nextEnd = addOneHour(le);
+        }
         state.days[i].content = ta.value;
-        // shift defaults
-        startI.value = e;
-        endI.value = addOneHour(e);
+        startI.value = nextStart;
+        endI.value = nextEnd;
         textI.value = "";
         textI.focus();
+        autosizeTextarea(ta);
         scheduleSave();
       };
       addBtn.addEventListener("click", doAdd);
@@ -424,6 +468,8 @@
       schema: 2,
       name: state.name,
       workStartTime: state.workStartTime,
+      lunchStart: state.lunchStart,
+      lunchEnd: state.lunchEnd,
       weekStart: state.weekStart,
       weeksByStart: state.weeksByStart,
       filename: state.filename,
@@ -450,6 +496,8 @@
         state.weeksByStart = obj.weeksByStart || {};
         state.name = obj.name || "";
         state.workStartTime = obj.workStartTime || "09:00";
+        state.lunchStart = obj.lunchStart || "12:00";
+        state.lunchEnd = obj.lunchEnd || "13:00";
         state.filename = obj.filename || "";
         state.userEditedFilename = !!obj.userEditedFilename;
         return true;
@@ -480,6 +528,15 @@
   $workStartTime.addEventListener("change", () => {
     state.workStartTime = $workStartTime.value || "09:00";
     renderDays();
+    scheduleSave();
+  });
+
+  $lunchStart.addEventListener("change", () => {
+    state.lunchStart = $lunchStart.value || "12:00";
+    scheduleSave();
+  });
+  $lunchEnd.addEventListener("change", () => {
+    state.lunchEnd = $lunchEnd.value || "13:00";
     scheduleSave();
   });
 
@@ -713,6 +770,8 @@
     state.weekStart = toISO(mondayOf(parseISO(state.weekStart)));
     $nameInput.value = state.name || "";
     $workStartTime.value = state.workStartTime || "09:00";
+    $lunchStart.value = state.lunchStart || "12:00";
+    $lunchEnd.value = state.lunchEnd || "13:00";
     rebuildDays();
     if (state.userEditedFilename && state.filename){
       $filenameInput.value = state.filename;
