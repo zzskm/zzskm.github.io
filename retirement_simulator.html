@@ -213,6 +213,8 @@ const PRESETS = {
     includeSeveranceLumpSum: ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     applyHealthInsurance: true,
     applyPensionTax: false,
+    // C5: 인출 전략
+    withdrawalStrategy: "unified",    // "unified" | "bucket" | "4pct" | "vpw"
   },
 };
 
@@ -393,6 +395,10 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
   const downsizeEvents = [];
   const years = [];
 
+  // C5: 인출 전략 — 4% SWR 기준값은 퇴직 시점에 확정
+  const strategy = input.withdrawalStrategy ?? "unified";
+  let swrAnnual = 0;   // 4pct 전략용 고정 인출액 (퇴직 시 확정)
+
   // 유족연금 추적
   let selfSurvivorNpBonus   = 0;  // 배우자 사망 시 본인이 받을 추가 NP
   let spouseSurvivorNpBonus = 0;  // 본인 사망 시 배우자가 받을 추가 NP (계산만)
@@ -512,12 +518,114 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     const cashflowExclSaving = income - outflow;
     const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
 
-    // ── 자산 운용 ──
+    // ── 자산 운용 (C5: 인출 전략 분기) ──
     const r = rateFn(age);
+
+    // 먼저 모든 버킷에 수익률 적용
     financialRetirement     = financialRetirement     * (1 + r) + dcContribAnnual;
     financialPrivatePension = financialPrivatePension * (1 + r);
-    financialCash           = financialCash           * (1 + r) + extraSavingAnnual + cashflowExclSaving;
+    financialCash           = financialCash           * (1 + r);
     house = input.hasHouse ? house * (1 + hg) : 0;
+
+    // 퇴직 시점 4pct SWR 기준값 확정
+    if (strategy === "4pct" && age === input.retireAge) {
+      const totalAtRetire = financialRetirement + financialPrivatePension + financialCash;
+      swrAnnual = totalAtRetire * 0.04;
+    }
+
+    // 전략별 현금흐름 적용
+    if (strategy === "unified") {
+      // 기존: 모든 잉여/부족을 financialCash에 통합
+      financialCash += extraSavingAnnual + cashflowExclSaving;
+
+    } else if (strategy === "bucket") {
+      // Bucket 전략: 잉여 → 현금 적립, 부족 → 현금→DC→개인연금 순서로 인출
+      const net = extraSavingAnnual + cashflowExclSaving;
+      if (net >= 0) {
+        financialCash += net;
+      } else {
+        let deficit = -net;
+        // 1) 현금에서 우선 인출
+        const fromCash = Math.min(Math.max(0, financialCash), deficit);
+        financialCash -= fromCash;
+        deficit -= fromCash;
+        // 2) 퇴직연금(DC/IRP)에서 인출
+        if (deficit > 0 && age >= input.retireAge) {
+          const fromRetire = Math.min(Math.max(0, financialRetirement), deficit);
+          financialRetirement -= fromRetire;
+          deficit -= fromRetire;
+        }
+        // 3) 개인연금에서 인출
+        if (deficit > 0 && age >= input.privatePensionStartAge) {
+          const fromPension = Math.min(Math.max(0, financialPrivatePension), deficit);
+          financialPrivatePension -= fromPension;
+          deficit -= fromPension;
+        }
+        // 4) 여전히 부족 → financialCash 음수로 표현 (소진 감지)
+        if (deficit > 0) financialCash -= deficit;
+      }
+
+    } else if (strategy === "4pct") {
+      // 4% 규칙: 퇴직 후 매년 swrAnnual을 인출. 근로기는 unified와 동일
+      if (age < input.retireAge) {
+        financialCash += extraSavingAnnual + cashflowExclSaving;
+      } else {
+        // 실제 인출액 = 고정 SWR (연금·소득으로 일부 충당된 만큼은 차감)
+        const incomeFromNonAssets = income; // 연금+근로+부수입
+        const livingOutflow = outflow;
+        const netNeed = Math.max(0, livingOutflow - incomeFromNonAssets);
+        // 인출은 필요액과 SWR 중 큰 값 (SWR이 안전 한도)
+        const withdrawal = Math.max(netNeed, Math.min(swrAnnual, financialCash + financialRetirement + financialPrivatePension));
+        // Bucket 방식으로 인출
+        let need = withdrawal - (incomeFromNonAssets - livingOutflow > 0 ? 0 : 0);
+        let actualWithdrawal = Math.min(withdrawal, Math.max(0, financialCash + financialRetirement + financialPrivatePension));
+        const fromCash4 = Math.min(Math.max(0, financialCash), actualWithdrawal);
+        financialCash -= fromCash4;
+        const rem4 = actualWithdrawal - fromCash4;
+        const fromRetire4 = Math.min(Math.max(0, financialRetirement), rem4);
+        financialRetirement -= fromRetire4;
+        const rem4b = rem4 - fromRetire4;
+        financialPrivatePension -= Math.min(Math.max(0, financialPrivatePension), rem4b);
+        financialCash += extraSavingAnnual;
+      }
+
+    } else if (strategy === "vpw") {
+      // VPW (Variable Percentage Withdrawal): 매년 잔여 기대연수 기반 인출
+      // withdrawal_rate = PMT(r, remainingYears, -1) 역수 근사
+      // simplified: rate = r / (1 - (1+r)^-n) for remaining n years
+      financialCash += extraSavingAnnual;
+      if (age >= input.retireAge) {
+        const remaining = Math.max(1, simEndAge - age);
+        const vpwRate = r > 0.0001
+          ? r / (1 - Math.pow(1 + r, -remaining))
+          : 1 / remaining;
+        const totalFinancial = financialRetirement + financialPrivatePension + financialCash;
+        const vpwWithdrawal = totalFinancial * vpwRate;
+        // 생활비 대비 인출 조정: 실제 필요액과 VPW 중 큰 값
+        const actualNeed = Math.max(0, outflow - (income));
+        const withdrawal = Math.max(actualNeed, Math.min(vpwWithdrawal, totalFinancial));
+        // Bucket 방식으로 분배
+        const adjNet = (income - outflow);
+        if (adjNet >= 0) {
+          financialCash += adjNet;
+        } else {
+          let vpwDef = -adjNet;
+          const fc = Math.min(Math.max(0, financialCash), vpwDef);
+          financialCash -= fc; vpwDef -= fc;
+          if (vpwDef > 0 && age >= input.retireAge) {
+            const fr = Math.min(Math.max(0, financialRetirement), vpwDef);
+            financialRetirement -= fr; vpwDef -= fr;
+          }
+          if (vpwDef > 0) { financialPrivatePension -= Math.min(Math.max(0, financialPrivatePension), vpwDef); }
+        }
+      } else {
+        financialCash += cashflowExclSaving;
+      }
+
+    } else {
+      // fallback: unified
+      financialCash += extraSavingAnnual + cashflowExclSaving;
+    }
 
     const financialTotal = financialRetirement + financialPrivatePension + financialCash;
     const netWorth = financialTotal + house - mortgage;
@@ -616,6 +724,30 @@ function runScenarioBand(input, assumptions = ASSUMPTIONS) {
 }
 
 // ============================================================
+// C9: 입력 정합성 검증
+// ============================================================
+
+function validateInput(input) {
+  const warnings = [];
+  if (input.retireAge <= input.currentAge)
+    warnings.push({ key: "retire_age", level: "error", msg: `퇴직 나이(${input.retireAge}세)가 현재 나이(${input.currentAge}세) 이하입니다.` });
+  if (input.selfPensionStartAge <= input.retireAge)
+    warnings.push({ key: "pension_start", level: "warn", msg: `국민연금 개시(${input.selfPensionStartAge}세)가 퇴직(${input.retireAge}세) 이전 또는 동시입니다. 브릿지 기간이 0이 됩니다.` });
+  if (input.selfLifeExpectancy <= input.retireAge)
+    warnings.push({ key: "life_exp", level: "error", msg: `기대수명(${input.selfLifeExpectancy}세)이 퇴직 나이(${input.retireAge}세) 이하입니다.` });
+  if (input.hasMortgage && input.mortgageBalance > 0 && input.monthlyMortgagePayment <= 0)
+    warnings.push({ key: "mortgage", level: "warn", msg: "대출 잔액이 있으나 월 원리금이 0입니다. 대출이 상환되지 않습니다." });
+  if ((input.retirementBalance + input.privatePensionBalance + input.cashSavings) <= 0 && input.selfCurrentSalary <= 0)
+    warnings.push({ key: "no_asset", level: "warn", msg: "금융자산과 소득이 모두 0입니다. 자산 항목을 확인해주세요." });
+  if (input.investmentReturnRate > 0 && input.inflationRate >= input.investmentReturnRate)
+    warnings.push({ key: "real_return", level: "warn", msg: `물가상승률(${input.inflationRate}%)이 투자수익률(${input.investmentReturnRate}%)보다 높아 실질수익률이 음수입니다.` });
+  if (input.spouseEnabled && input.spouseCurrentAge != null && input.spouseLifeExpectancy != null
+      && input.spouseLifeExpectancy <= input.spouseCurrentAge)
+    warnings.push({ key: "spouse_life", level: "error", msg: `배우자 기대수명(${input.spouseLifeExpectancy}세)이 현재 나이(${input.spouseCurrentAge}세) 이하입니다.` });
+  return warnings;
+}
+
+// ============================================================
 // 자동 인사이트
 // ============================================================
 
@@ -664,6 +796,10 @@ function fmt만원월(v) {
 // ============================================================
 // 모바일 감지 훅
 // ============================================================
+
+function useDebugMode() {
+  return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get("debug") === "1";
+}
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
@@ -818,6 +954,96 @@ function readinessLabel(ratio) {
   if (ratio < 110) return "경계";
   if (ratio < 150) return "안정";
   return "매우 안정";
+}
+
+// ============================================================
+// C7: 모델 가정 투명화 모달
+// ============================================================
+
+function AssumptionsModal({ onClose }) {
+  const a = ASSUMPTIONS;
+  const p = a.krPolicy;
+  const lc = a.lifeCycle;
+  const ar = a.assetRules;
+
+  const Row = ({ label, value, note }) => (
+    <tr className="border-b border-slate-50">
+      <td className="py-1.5 pr-3 text-xs text-slate-600 whitespace-nowrap">{label}</td>
+      <td className="py-1.5 px-3 text-xs font-medium text-slate-900 num whitespace-nowrap">{value}</td>
+      <td className="py-1.5 pl-3 text-[11px] text-slate-400 leading-snug">{note}</td>
+    </tr>
+  );
+
+  return (
+    <div className="wizard-overlay" onClick={onClose}>
+      <div className="wizard-card max-w-lg" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-semibold">모델 가정 ({a.version})</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">시뮬레이션에 사용된 상수와 기준값입니다. 모두 단순화된 추정이며 실제 제도와 다를 수 있습니다.</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none ml-4">×</button>
+        </div>
+
+        <div className="space-y-4">
+          {/* 국민연금 */}
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">국민연금 (한국)</h3>
+            <table className="w-full">
+              <tbody>
+                <Row label="소득대체율 (완전 가입 기준)" value={`${p.pensionReplacementRate * 100}%`} note="가입연수 40년 기준 단순 비례 적용. 실제는 연도별 하향 조정 중." />
+                <Row label="A값 (평균 월소득)" value={`${p.pensionAValueMonthly}만/월`} note="2024년 A값 299만원 기준 단순화. 매년 임금상승률로 인상." />
+                <Row label="최대 가입연수" value={`${p.maxNpYears}년`} note="법정 최대 40년 (자동 계산 시 퇴직나이−25로 추정)." />
+                <Row label="연금소득세" value={`${p.pensionTaxRate * 100}%`} note="분리과세 5.5% (지방세 포함). 소득 수준·과세 방식에 따라 다름." />
+                <Row label="유족연금" value={`사망자 NP × ${p.survivorPensionRatio * 100}%`} note="사망한 배우자의 국민연금 50% 단순 적용. 실제는 중복 지급 제한 있음." />
+                <Row label="가입 시작 나이 (자동)" value={`${p.contributionStartAge}세`} note="'자동 계산' 모드에서 퇴직나이 − 25로 가입연수 추정." />
+              </tbody>
+            </table>
+          </div>
+          {/* 생애주기 */}
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">생활비 생애주기</h3>
+            <table className="w-full">
+              <tbody>
+                <Row label="지출 감소 (65~74세)" value="× 0.75" note="노화에 따른 소비 감소. 의료비는 별도 항목으로 반영." />
+                <Row label="지출 감소 (75세 이상)" value="× 0.55" note="생애주기 가설 기반 단순화 (Bernheim et al.)." />
+                <Row label="노년 의료비 기준 (1인)" value="50대 15만 → 65세 30만 → 75세 60만 → 85세 100만/월" note="국민건강보험공단 통계 단순화. 의료물가 연 +1.5%p 초과 상승 가정." />
+                <Row label="의료물가 초과 상승" value={`+${lc.medicalInflationRealPremium}%p/년`} note="의료물가가 일반물가보다 매년 1.5%p 더 빠르게 상승하는 가정." />
+              </tbody>
+            </table>
+          </div>
+          {/* 자산 규칙 */}
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">자산·세제</h3>
+            <table className="w-full">
+              <tbody>
+                <Row label="DC 연간 적립" value="연봉 ÷ 12" note="매년 월 연봉만큼 DC 자동 적립. 회사 매칭·수수료 미반영." />
+                <Row label="퇴직금 세율" value="6.6%" note="근속연수 공제 후 분리과세 단순 적용. 실제는 근속에 따라 세금 크게 다름." />
+                <Row label="개인연금 기본 인출률" value={`${ar.privatePensionWithdrawRate}%/년`} note="잔액에서 매년 해당 비율만큼 인출. 실제 연금 수령 방식과 다를 수 있음." />
+                <Row label="개인연금 개시 나이" value={`${ar.privatePensionStartAge}세`} note="법정 최소 개시 나이 55세, 이 시뮬레이터 기본값 60세." />
+                <Row label="건강보험료 추정" value="지역가입자 단순 근사" note={`소득 × ${p.healthInsurance.sideIncomeRate * 100}% + 금융자산 × ${p.healthInsurance.financialAssetRate * 100}% + 주택 × ${p.healthInsurance.houseAssetRate * 100}% (상한 ${p.healthInsurance.annualCap}만/년)`} />
+                <Row label="준비율 최대 표시" value={`${ar.readinessMaxRatio}%`} note="수명까지 자산이 남을 경우 최대 300%로 캡핑." />
+              </tbody>
+            </table>
+          </div>
+          {/* 수익률 밴드 */}
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">시퀀스 리스크</h3>
+            <table className="w-full">
+              <tbody>
+                <Row label="충격 강도" value="−10%p, 5년" note="퇴직 직후 5년간 투자수익률을 10%p 낮춤. 순서 리스크(Sequence of Returns Risk) 간단 모델." />
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-between items-center">
+          <a href="https://www.nps.or.kr" target="_blank" rel="noopener" className="text-[11px] text-slate-400 hover:text-slate-600 underline">국민연금공단 →</a>
+          <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-700">닫기</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================
@@ -1080,6 +1306,8 @@ function normalizeInput(raw = {}) {
     includeSeveranceLumpSum:   raw.includeSeveranceLumpSum   ?? ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     medicalCostMultiplier:     raw.medicalCostMultiplier     ?? 1.0,
     applyMedicalCost:          raw.applyMedicalCost          ?? true,
+    // C5: 인출 전략
+    withdrawalStrategy:        raw.withdrawalStrategy        ?? "unified",
     children,
   };
 
@@ -1160,6 +1388,8 @@ function App() {
     try { return localStorage.getItem("retirement-sim-wizard-seen") === "1"; } catch { return false; }
   });
   const [showSeqShock, setShowSeqShock] = useState(false);
+  const [showAssumptions, setShowAssumptions] = useState(false); // C7
+  const debugMode = useDebugMode(); // C9
   const [mobileView, setMobileView] = useState("results"); // "results" | "inputs"
   const isMobile = useIsMobile();
 
@@ -1269,6 +1499,25 @@ function App() {
     return cur !== def;
   };
 
+  // C9: 입력 정합성 검증
+  const validationWarnings = useMemo(() => validateInput(i), [i]);
+
+  // C9: 디버그 콘솔 로그
+  useEffect(() => {
+    if (!debugMode) return;
+    console.group(`[RetireSim Debug] 시나리오: ${active.name}`);
+    console.table({
+      준비율: activeResult.readinessRatio + "%",
+      자산소진: activeResult.depletionAge ? activeResult.depletionAge + "세" : "없음",
+      퇴직시자산: fmt만원(activeResult.totalAssetsAtRetirement),
+      브릿지인출: fmt만원(activeResult.bridgeShortfall),
+      본인연금월: fmt만원월(activeResult.selfNpMonthly),
+      인출전략: i.withdrawalStrategy,
+    });
+    console.log("yearlyAssetFlow:", activeResult.yearlyAssetFlow);
+    console.groupEnd();
+  }, [activeResult, debugMode, active.name]);
+
   // 입력 패널 요약값
   const assetSummary = fmt만원(
     active.input.retirementBalance + active.input.privatePensionBalance + active.input.cashSavings +
@@ -1343,6 +1592,7 @@ function App() {
           onClose={() => setShowWizard(false)}
         />
       )}
+      {showAssumptions && <AssumptionsModal onClose={() => setShowAssumptions(false)} />}
 
       <header className="border-b border-slate-200 bg-white sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-2.5">
@@ -1351,11 +1601,18 @@ function App() {
               <h1 className="text-base font-semibold">은퇴 현금흐름 시뮬레이터</h1>
               <span className="text-[11px] text-slate-500 hidden md:inline">브릿지 위험과 국민연금 효과를 시각화</span>
             </div>
-            <button
-              onClick={() => { setShowWizard(true); try { localStorage.setItem("retirement-sim-wizard-seen", "1"); } catch {} setWizardSeen(true); }}
-              className={`text-sm px-3 py-1.5 rounded-lg font-medium shrink-0 transition-all bg-slate-900 text-white hover:bg-slate-700 shadow-sm ${!wizardSeen ? "ring-2 ring-amber-300 ring-offset-2 animate-pulse" : ""}`}
-              title="기본 정보 몇 가지만 입력하면 자동으로 시나리오를 만들어 드립니다"
-            >🪄 빠른 설정</button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowAssumptions(true)}
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                title="시뮬레이션에 사용된 가정과 상수를 확인합니다"
+              >ⓘ 가정</button>
+              <button
+                onClick={() => { setShowWizard(true); try { localStorage.setItem("retirement-sim-wizard-seen", "1"); } catch {} setWizardSeen(true); }}
+                className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-all bg-slate-900 text-white hover:bg-slate-700 shadow-sm ${!wizardSeen ? "ring-2 ring-amber-300 ring-offset-2 animate-pulse" : ""}`}
+                title="기본 정보 몇 가지만 입력하면 자동으로 시나리오를 만들어 드립니다"
+              >🪄 빠른 설정</button>
+            </div>
           </div>
           {/* 모바일: 결과/입력 토글 */}
           {isMobile && (
@@ -1574,6 +1831,33 @@ function App() {
                 <Toggle label="퇴직금 일시금 별도 반영" value={i.includeSeveranceLumpSum} onChange={setInputField("includeSeveranceLumpSum")} hint="DC 매년 적립과 중복될 수 있어 기본값은 OFF" />
                 <Toggle label="노년기 의료비 반영" value={i.applyMedicalCost !== false} onChange={v => setInputField("applyMedicalCost")(v)} hint="생활비 섹션 배율 슬라이더와 연동" />
               </Section>
+
+              {/* C5: 인출 전략 */}
+              <Section title="인출 전략" summary={
+                { unified: "통합", bucket: "버킷", "4pct": "4% 룰", vpw: "VPW" }[i.withdrawalStrategy] ?? "통합"
+              }>
+                <p className="text-[11px] text-slate-500 mb-2 leading-relaxed">
+                  퇴직 후 금융자산에서 생활비를 충당하는 방식을 선택합니다.
+                </p>
+                {[
+                  { value: "unified", label: "통합 풀",   desc: "현금·DC·개인연금을 하나의 풀로 운용. 단순하고 최적화 없음." },
+                  { value: "bucket",  label: "버킷 전략", desc: "현금 → DC → 개인연금 순으로 인출. 성장 자산을 오래 유지." },
+                  { value: "4pct",    label: "4% 룰",     desc: "퇴직 시 자산의 4%를 매년 고정 인출 (Trinity Study 기반)." },
+                  { value: "vpw",     label: "VPW",       desc: "잔여 기대수명 기반 비율 인출. 자산소진 위험 최소화." },
+                ].map(opt => (
+                  <label key={opt.value} className={`flex items-start gap-2 mb-2 p-2 rounded-lg border cursor-pointer transition-colors ${i.withdrawalStrategy === opt.value ? "border-slate-800 bg-slate-50" : "border-slate-200 hover:border-slate-300"}`}>
+                    <input type="radio" name="withdrawalStrategy" value={opt.value}
+                      checked={i.withdrawalStrategy === opt.value}
+                      onChange={() => setInputField("withdrawalStrategy")(opt.value)}
+                      className="mt-0.5 accent-slate-900"
+                    />
+                    <div>
+                      <div className="text-xs font-semibold text-slate-800">{opt.label}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </Section>
             )}
 
             <button
@@ -1585,6 +1869,30 @@ function App() {
 
         {/* 결과 패널 */}
         <section className={`lg:col-span-8 xl:col-span-9 space-y-5 ${isMobile && mobileView !== "results" ? "hidden" : ""}`}>
+
+          {/* C9: 검증 경고 배너 */}
+          {validationWarnings.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1">
+              {validationWarnings.map(w => (
+                <div key={w.key} className={`flex items-start gap-2 text-xs ${w.level === "error" ? "text-red-700" : "text-amber-800"}`}>
+                  <span className="shrink-0 font-bold">{w.level === "error" ? "⚠" : "!"}</span>
+                  <span>{w.msg}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* C9: 디버그 배너 */}
+          {debugMode && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-700 font-mono space-y-0.5">
+              <div className="font-semibold mb-1">🛠 Debug Mode</div>
+              <div>준비율: {activeResult.readinessRatio}% | 자산소진: {activeResult.depletionAge ?? "없음"} | 인출전략: {i.withdrawalStrategy}</div>
+              <div>퇴직시자산: {fmt만원(activeResult.totalAssetsAtRetirement)} | 브릿지인출: {fmt만원(activeResult.bridgeShortfall)}</div>
+              <div>시뮬종료나이: {activeResult.simEndAge} | 가입연수: {npYearsFor(i)}년</div>
+              <div className="text-violet-400">console에 상세 데이터 출력됨 (F12)</div>
+            </div>
+          )}
+
           {/* 요약 카드 */}
           <div className="grid grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] gap-3">
             {/* 준비율: 가장 중요한 지표를 가장 먼저, 크게 */}
@@ -1858,8 +2166,13 @@ function App() {
                   </div>
                 </li>
               )}
-              {scenarios.length > 1 && (
+              {i.withdrawalStrategy !== "unified" && (
                 <li className="pt-2 mt-2 border-t border-slate-100 text-xs text-slate-500">
+                  인출 전략: <b className="text-slate-700">{{ bucket: "버킷 전략", "4pct": "4% 룰 (SWR)", vpw: "VPW" }[i.withdrawalStrategy]}</b> 적용 중 (고급 > 인출 전략에서 변경)
+                </li>
+              )}
+              {scenarios.length > 1 && (
+                <li className={`${i.withdrawalStrategy !== "unified" ? "" : "pt-2 mt-2 border-t border-slate-100"} text-xs text-slate-500`}>
                   탭의 <b className="text-slate-700">+ 비교</b> 버튼으로 퇴직나이 +5/+10세 시나리오를 추가해 즉시 비교할 수 있습니다.
                 </li>
               )}
@@ -1871,8 +2184,9 @@ function App() {
             국민연금은 A값(300만) 단순 추정. 건강보험료/세제는 단순 추정. DC는 매년 연봉/12 적립 가정.
             퇴직금 일시금은 근속연수 기준 단순 계산 후 6.6% 과세 적용. 유족연금은 사망 배우자 연금의 50% 단순 가정.
             <b>노년기 의료비</b>: 50대 15만 → 65세 30만 → 75세 60만 → 85세 100만/월 기준, 의료물가는 일반물가보다 +1.5%p 상승 가정.
-            <b>시퀀스 리스크</b>: 퇴직 직후 5년 수익률 −10%p 적용 시나리오 (점선 빨강).
-            <b>준비율·자산유지</b>는 본인·배우자 최대 수명 기준.
+            <b>시퀀스 리스크</b>: 퇴직 직후 5년 수익률 −10%p 적용 시나리오 (토글 ON 시 차트에 점선 표시).
+            <b>인출 전략</b>: 버킷=현금→DC→개인연금 순 인출. 4% 룰=퇴직자산×4% 고정. VPW=잔여기대연수 기반 비율 인출.
+            <b>준비율·자산유지</b>는 본인·배우자 최대 수명 기준. <b>디버그</b>: URL에 ?debug=1 추가 시 상세 로그.
           </footer>
         </section>
       </main>
