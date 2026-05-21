@@ -1472,10 +1472,10 @@ function App() {
   };
 
   const addScenario = () => {
-    if (scenarios.length >= 4) return;
-    // 활성 시나리오의 퇴직나이 기준으로 +5, +10, -5 순으로 비교 시나리오 생성
+    if (scenarios.length >= 3) return;
+    // 활성 시나리오의 퇴직나이 기준으로 +5, -5 순으로 비교 시나리오 생성 (고정 ±5)
     const base = active.input.retireAge;
-    const offsets = [5, 10, -5];
+    const offsets = [5, -5];
     const off = offsets[scenarios.length - 1] ?? 5;
     const minRetire = Math.max(active.input.currentAge + 1, 25);
     const newRetire = Math.min(75, Math.max(minRetire, base + off));
@@ -1696,11 +1696,11 @@ function App() {
                 </div>
               );
             })}
-            {scenarios.length < 4 && (
+            {scenarios.length < 3 && (
               <button
                 onClick={addScenario}
                 className="text-xs px-2.5 py-1 text-slate-400 hover:text-slate-700 border border-dashed border-slate-300 hover:border-slate-400 rounded-md ml-1 transition-colors"
-                title="현재 시나리오 퇴직 나이 기준 +5세 비교 시나리오 추가"
+                title="현재 시나리오 퇴직 나이 기준 ±5세 비교 시나리오 추가"
               >+ 비교</button>
             )}
           </div>
