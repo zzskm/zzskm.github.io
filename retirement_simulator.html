@@ -1898,6 +1898,7 @@ function App() {
             </Section>
 
             {advancedMode && (
+              <>
               <Section title="세제·건보·의료">
                 <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
                 <Toggle label="연금소득세 5.5%" value={i.applyPensionTax} onChange={setInputField("applyPensionTax")} hint="분리과세 가정" />
@@ -1931,6 +1932,7 @@ function App() {
                   </label>
                 ))}
               </Section>
+              </>
             )}
 
             <button
