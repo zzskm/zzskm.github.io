@@ -20,6 +20,11 @@
   input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; background: #e2e8f0; border-radius: 999px; outline: none; }
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #0f172a; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
   input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #0f172a; cursor: pointer; border: 2px solid #fff; }
+  @media (max-width: 640px) {
+    input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+    input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+    input[type="range"] { height: 5px; }
+  }
   .num { font-variant-numeric: tabular-nums; }
   .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; color: #64748b; font-size: 14px; }
   details > summary { list-style: none; cursor: pointer; }
@@ -86,6 +91,15 @@ const ASSUMPTIONS = {
       { minAge: 7, maxAge: 18, amount: 80 },
       { minAge: 19, maxAge: 22, amount: 150 },
     ],
+    // 노년기 의료비 (1인 기준, 만원/월 현재가치)
+    medicalMonthlyByAge: [
+      { fromAge:  0, amount:  0 },
+      { fromAge: 50, amount: 15 },   // 50대 만성질환 시작
+      { fromAge: 65, amount: 30 },   // 노인 외래·약제비
+      { fromAge: 75, amount: 60 },   // 입원·시술 빈도 증가
+      { fromAge: 85, amount: 100 },  // 장기요양·간병
+    ],
+    medicalInflationRealPremium: 1.5, // %/년 — 의료물가가 일반물가보다 초과 상승
   },
   assetRules: {
     dcAnnualContributionSalaryDivisor: 12,
@@ -132,6 +146,7 @@ const UI_RANGES = {
   childCostMultiplier:      { min: 0.5, max: 2.0, step: 0.1 },
   downsizeAge:              { min: 40, max: 105, step: 1 },
   downsizeRatio:            { min: 0, max: 1, step: 0.05 },
+  medicalCostMultiplier:    { min: 0.5, max: 3.0, step: 0.1 },
 };
 
 const PRESETS = {
@@ -191,6 +206,9 @@ const PRESETS = {
     downsizeEnabled: false,
     downsizeAge: 65,
     downsizeRatio: 0.6,
+    // 의료비
+    medicalCostMultiplier: 1.0,    // ×배율 (0.5 = 민영보험 보장 두텁게, 2.0 = 중증질환 대비)
+    applyMedicalCost: true,
     // 세제
     includeSeveranceLumpSum: ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     applyHealthInsurance: true,
@@ -227,6 +245,15 @@ function autoLifeExpectancy(currentAge) {
   if (currentAge <= 50) return 85;
   if (currentAge <= 60) return 84;
   return 83;
+}
+
+// 부부 최대 수명을 본인 나이축으로 환산
+function simEndAgeFor(input) {
+  const selfLE = input.selfLifeExpectancy ?? 87;
+  if (!input.spouseEnabled) return selfLE;
+  const offset = (input.spouseCurrentAge ?? input.currentAge) - input.currentAge;
+  const spouseLeInSelfAge = (input.spouseLifeExpectancy ?? selfLE) - offset;
+  return Math.max(selfLE, spouseLeInSelfAge);
 }
 
 // ============================================================
@@ -303,7 +330,18 @@ function childEvents(input) {
     events.push({ age: parentAgeAt(19), label: `자녀${idx} 대학` });
     events.push({ age: parentAgeAt(23), label: `자녀${idx} 독립` });
   });
-  return events.filter(e => e.age >= input.currentAge && e.age <= input.selfLifeExpectancy);
+  const endAge = simEndAgeFor(input);
+  return events.filter(e => e.age >= input.currentAge && e.age <= endAge);
+}
+
+// 연령별 의료비 1인 기준 (만원/월), 의료물가 초과 상승 반영
+function medicalCostMonthly(age, yearsFromNow, assumptions = ASSUMPTIONS) {
+  const lc = assumptions.lifeCycle;
+  const base = [...(lc.medicalMonthlyByAge ?? [])]
+    .filter(r => age >= r.fromAge)
+    .sort((a, b) => b.fromAge - a.fromAge)[0]?.amount ?? 0;
+  const premium = (lc.medicalInflationRealPremium ?? 0) / 100;
+  return base * Math.pow(1 + premium, yearsFromNow);
 }
 
 // 지역가입자 건보료 단순 추정 (만원/년). 실제 산식과 다름.
@@ -325,7 +363,10 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
   // ── 명목 → 실질 변환 ──────────────────────────────────────
   const inflRate = input.inflationRate / 100;
   const toReal = (nomPct) => (1 + nomPct / 100) / (1 + inflRate) - 1;
-  const r  = toReal(returnRateOverride ?? input.investmentReturnRate);
+  // returnRateOverride가 함수이면 연도별 실질수익률 함수; 숫자이면 고정
+  const rateFn = typeof returnRateOverride === "function"
+    ? returnRateOverride
+    : () => toReal(returnRateOverride ?? input.investmentReturnRate);
   const sg = toReal(input.salaryGrowthRate);
   const hg = toReal(input.houseInflationRate);
 
@@ -335,12 +376,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
 
   // ── 시뮬레이션 종료 나이 (self 기준) ──────────────────────
   const selfLE   = input.selfLifeExpectancy;
-  // 배우자 수명을 본인 나이 축으로 변환
-  const spouseAgeOffset = (input.spouseCurrentAge ?? input.currentAge) - input.currentAge;
-  const spouseLeInSelfAge = input.spouseEnabled
-    ? (input.spouseLifeExpectancy - spouseAgeOffset)
-    : selfLE;
-  const simEndAge = Math.max(selfLE, spouseLeInSelfAge);
+  const simEndAge = simEndAgeFor(input);
 
   // ── 초기 자산 ─────────────────────────────────────────────
   let financialRetirement   = input.retirementBalance;
@@ -438,6 +474,12 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       ? healthInsuranceYearly(financialRetirement + financialPrivatePension + financialCash, house, sideIncomeForHI, assumptions)
       : 0;
 
+    // ── 노년기 의료비 ──
+    const selfMedical   = selfAlive   ? medicalCostMonthly(age,      t, assumptions) * 12 : 0;
+    const spouseMedical = spouseAlive ? medicalCostMonthly(spouseAge, t, assumptions) * 12 : 0;
+    const medicalAnnual = (input.applyMedicalCost !== false)
+      ? (selfMedical + spouseMedical) * (input.medicalCostMultiplier ?? 1.0) : 0;
+
     // ── 퇴직금 일시금 ──
     if (!severancePaid && age === input.retireAge && selfAlive) {
       const yearsWorked = Math.max(0, input.retireAge - policy.contributionStartAge);
@@ -466,11 +508,12 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     // ── 현금흐름 집계 ──
     const income = selfSalaryAnnual + spouseSalaryAnnual + selfPensionAnnual + spousePensionAnnual
                  + privatePensionAnnual + bridgeSideAnnual;
-    const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual;
+    const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual + medicalAnnual;
     const cashflowExclSaving = income - outflow;
     const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
 
     // ── 자산 운용 ──
+    const r = rateFn(age);
     financialRetirement     = financialRetirement     * (1 + r) + dcContribAnnual;
     financialPrivatePension = financialPrivatePension * (1 + r);
     financialCash           = financialCash           * (1 + r) + extraSavingAnnual + cashflowExclSaving;
@@ -507,6 +550,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       childMonthly:         Math.round(childAnnual        / 12),
       mortgageMonthly:      Math.round(mortgagePaid       / 12),
       healthInsMonthly:     Math.round(healthInsAnnual    / 12),
+      medicalMonthly:       Math.round(medicalAnnual      / 12),
       cashflowMonthly:      Math.round(cashflowWithSaving / 12),
     });
   }
@@ -521,7 +565,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       100 + (totalAssetsAtRetirement > 0 ? (margin / totalAssetsAtRetirement) * 100 : 0));
   } else {
     const survived = depletionAge - input.retireAge;
-    const need = selfLE - input.retireAge;
+    const need = simEndAge - input.retireAge;  // 부부 최대 수명 기준
     readinessRatio = need > 0 ? (survived / need) * 100 : 0;
   }
 
@@ -545,6 +589,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     ),
     readinessRatio: Math.round(readinessRatio),
     depletionAge,
+    simEndAge,
     childEventList: childEvents(input),
     downsizeEvents,
     assumptionVersion: assumptions.version,
@@ -555,10 +600,18 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
 function runScenarioBand(input, assumptions = ASSUMPTIONS) {
   const r = input.investmentReturnRate;
   const s = input.scenarioBandSpread;
+  const inflRate = input.inflationRate / 100;
+  const toReal = (nomPct) => (1 + nomPct / 100) / (1 + inflRate) - 1;
   return {
     pessimistic: calculateScenario(input, r - s, assumptions),
     mid:         calculateScenario(input, r,     assumptions),
     optimistic:  calculateScenario(input, r + s, assumptions),
+    // 시퀀스 리스크: 퇴직 직후 5년 수익률 -10%p, 이후 정상
+    sequenceShock: calculateScenario(input, (age) => {
+      const baseReal  = toReal(r);
+      const shockReal = toReal(Math.max(-30, r - 10));
+      return (age >= input.retireAge && age < input.retireAge + 5) ? shockReal : baseReal;
+    }, assumptions),
   };
 }
 
@@ -1020,6 +1073,8 @@ function normalizeInput(raw = {}) {
     privatePensionStartAge:    raw.privatePensionStartAge    ?? ASSUMPTIONS.assetRules.privatePensionStartAge,
     privatePensionWithdrawRate: raw.privatePensionWithdrawRate ?? ASSUMPTIONS.assetRules.privatePensionWithdrawRate,
     includeSeveranceLumpSum:   raw.includeSeveranceLumpSum   ?? ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
+    medicalCostMultiplier:     raw.medicalCostMultiplier     ?? 1.0,
+    applyMedicalCost:          raw.applyMedicalCost          ?? true,
     children,
   };
 
@@ -1096,6 +1151,7 @@ function App() {
   const [activeId, setActiveId] = useState(initial.activeId);
   const [advancedMode, setAdvancedMode] = useState(false);
   const [showWizard, setShowWizard] = useState(() => initial.isNew);
+  const [mobileView, setMobileView] = useState("results"); // "results" | "inputs"
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -1212,12 +1268,25 @@ function App() {
             band.pessimistic.yearlyAssetFlow[idx]?.netWorth,
             band.optimistic.yearlyAssetFlow[idx]?.netWorth,
           ];
+          // 시퀀스 리스크 라인
+          row["seq_shock"] = band.sequenceShock.yearlyAssetFlow[idx]?.netWorth;
         }
         map.set(y.age, row);
       });
     }
     return Array.from(map.values()).sort((a, b) => a.age - b.age);
   }, [scenarios, bandsById, active.id]);
+
+  // 자산 구성 변화 차트 데이터 (활성 시나리오)
+  const bucketData = useMemo(() =>
+    activeResult.yearlyAssetFlow.map(y => ({
+      age:    y.age,
+      "현금·투자":    Math.max(0, y.financialCash),
+      "퇴직연금(DC)": Math.max(0, y.financialRetirement),
+      "개인연금":     Math.max(0, y.financialPrivatePension),
+      "주택(순)":    Math.max(0, y.houseValue - y.mortgage),
+    })),
+  [activeResult]);
 
   // 현금흐름 차트 데이터 (Step 6 — 라벨 표준화)
   const cashflowData = activeResult.yearlyAssetFlow.map(y => ({
@@ -1232,6 +1301,7 @@ function App() {
     "양육비":       -y.childMonthly,
     "대출 상환":    -y.mortgageMonthly,
     "건강보험료":   -y.healthInsMonthly,
+    "의료비":      -y.medicalMonthly,
     "순현금흐름":    y.cashflowMonthly,
   }));
 
@@ -1262,6 +1332,13 @@ function App() {
               title="설정 마법사 열기"
             >🪄 마법사</button>
           </div>
+          {/* 모바일: 결과/입력 토글 */}
+          {isMobile && (
+            <div className="mt-1.5 flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 w-fit">
+              <button onClick={() => setMobileView("results")} className={`px-3 py-1 rounded-md transition-all ${mobileView === "results" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500'}`}>결과</button>
+              <button onClick={() => setMobileView("inputs")} className={`px-3 py-1 rounded-md transition-all ${mobileView === "inputs" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500'}`}>입력</button>
+            </div>
+          )}
           {/* 시나리오 탭 */}
           <div className="mt-1.5 flex items-center gap-1 overflow-x-auto -mb-px">
             {scenarios.map(s => (
@@ -1285,7 +1362,7 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* 입력 패널 */}
-        <aside className="lg:col-span-4 xl:col-span-3">
+        <aside className={`lg:col-span-4 xl:col-span-3 ${isMobile && mobileView !== "inputs" ? "hidden" : ""}`}>
           <div className="lg:sticky lg:top-24 bg-white rounded-xl border border-slate-200 p-4 max-h-[calc(100vh-7rem)] overflow-y-auto">
             <div className="mb-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-2">
               <div>
@@ -1407,6 +1484,9 @@ function App() {
               <Slider label="브릿지 기간" value={i.bridgeLivingCost} {...UI_RANGES.bridgeLivingCost} onChange={setInputField("bridgeLivingCost")} format={v => `${v}만/월`} />
               <Slider label="연금 수령기" value={i.retirementLivingCost} {...UI_RANGES.retirementLivingCost} onChange={setInputField("retirementLivingCost")} format={v => `${v}만/월`} />
               <p className="text-[10px] text-slate-400">65~74세 0.75배 / 75세+ 0.55배 자동 적용. 배우자만 생존 시 0.7배.</p>
+              <div className="mt-2 pt-2 border-t border-slate-100">
+                <Slider label="노년기 의료비 ×배율" value={i.medicalCostMultiplier} {...UI_RANGES.medicalCostMultiplier} onChange={setInputField("medicalCostMultiplier")} format={v => `${v.toFixed(1)}×`} hint="1.0 = 기본 (50대15만→65세30만→75세60만→85세100만/월). 민영보험 두텁 ↓ · 중증질환 대비 ↑" />
+              </div>
             </Section>
 
             {advancedMode && (
@@ -1448,10 +1528,11 @@ function App() {
             </Section>
 
             {advancedMode && (
-              <Section title="세제·건보">
+              <Section title="세제·건보·의료">
                 <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
                 <Toggle label="연금소득세 5.5%" value={i.applyPensionTax} onChange={setInputField("applyPensionTax")} hint="분리과세 가정" />
                 <Toggle label="퇴직금 일시금 별도 반영" value={i.includeSeveranceLumpSum} onChange={setInputField("includeSeveranceLumpSum")} hint="DC 매년 적립과 중복될 수 있어 기본값은 OFF" />
+                <Toggle label="노년기 의료비 반영" value={i.applyMedicalCost !== false} onChange={v => setInputField("applyMedicalCost")(v)} hint="생활비 섹션 배율 슬라이더와 연동" />
               </Section>
             )}
 
@@ -1463,7 +1544,7 @@ function App() {
         </aside>
 
         {/* 결과 패널 */}
-        <section className="lg:col-span-8 xl:col-span-9 space-y-5">
+        <section className={`lg:col-span-8 xl:col-span-9 space-y-5 ${isMobile && mobileView !== "results" ? "hidden" : ""}`}>
           {/* 요약 카드 */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <SummaryCard
@@ -1548,6 +1629,10 @@ function App() {
                     />
                   ))}
 
+                  {/* 시퀀스 리스크 라인 */}
+                  <Line type="monotone" dataKey="seq_shock" name="시퀀스 리스크(퇴직초 -10%)"
+                    stroke="#dc2626" strokeWidth={1.5} strokeDasharray="3 3" dot={false} />
+
                   {scenarios.map(s => {
                     const res = bandsById.get(s.id).mid;
                     if (!res.depletionAge) return null;
@@ -1556,6 +1641,34 @@ function App() {
                         fill={s.color} stroke="#fff" strokeWidth={2} />
                     );
                   })}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 자산 구성 변화 차트 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
+            <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+              <h2 className="text-sm font-semibold">자산 구성 변화 — <span style={{color: active.color}}>{active.name}</span></h2>
+              <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-600"></span>현금·투자</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span>퇴직연금</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500"></span>개인연금</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span>주택(순)</span>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: isMobile ? 200 : 320 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={bucketData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke="#f1f5f9" />
+                  <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => fmt만원(v)} width={60} />
+                  <Tooltip formatter={(v, name) => [fmt만원(v), name]} labelFormatter={(age) => `${age}세`} contentStyle={{ fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="현금·투자"    stackId="b" stroke="#475569" fill="#94a3b8" fillOpacity={0.8} />
+                  <Area type="monotone" dataKey="퇴직연금(DC)" stackId="b" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.8} />
+                  <Area type="monotone" dataKey="개인연금"     stackId="b" stroke="#7c3aed" fill="#8b5cf6" fillOpacity={0.8} />
+                  <Area type="monotone" dataKey="주택(순)"    stackId="b" stroke="#d97706" fill="#f59e0b" fillOpacity={0.8} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -1621,6 +1734,7 @@ function App() {
                   <Bar dataKey="양육비"        stackId="a" fill="#a855f7" />
                   <Bar dataKey="대출 상환"      stackId="a" fill="#64748b" />
                   <Bar dataKey="건강보험료"     stackId="a" fill="#ef4444" />
+                  <Bar dataKey="의료비"        stackId="a" fill="#dc2626" />
                   <Line type="monotone" dataKey="순현금흐름" stroke="#0f172a" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1633,12 +1747,17 @@ function App() {
             <ul className="text-sm text-slate-700 space-y-1.5 leading-relaxed">
               <li>• 브릿지 기간 <b>{activeResult.bridgeYears}년</b> 동안 누적 적자: <b className="text-red-600">{fmt만원(activeResult.bridgeShortfall)}</b></li>
               {activeResult.depletionAge ? (
-                <li>• <b className="text-red-600">⚠ {activeResult.depletionAge}세 자산소진</b> — 수명({i.selfLifeExpectancy}세)까지 <b>{i.selfLifeExpectancy - activeResult.depletionAge}년</b> 부족</li>
+                <li>• <b className="text-red-600">⚠ {activeResult.depletionAge}세 자산소진</b> — 수명({activeResult.simEndAge}세)까지 <b>{activeResult.simEndAge - activeResult.depletionAge}년</b> 부족{i.spouseEnabled ? " (부부 최대 수명 기준)" : ""}</li>
               ) : (
-                <li>• <span className="text-emerald-700">✓ 수명({i.selfLifeExpectancy}세)까지 자산이 유지됩니다.</span> 수익률 비관 시나리오에서도 확인 권장.</li>
+                <li>• <span className="text-emerald-700">✓ 수명({activeResult.simEndAge}세)까지 자산이 유지됩니다.</span>{i.spouseEnabled ? " (부부 최대 수명 기준)" : ""} 수익률 비관 시나리오에서도 확인 권장.</li>
               )}
               {activeBand.pessimistic.depletionAge && !activeResult.depletionAge && (
                 <li>• 비관 시나리오(수익률 −{i.scenarioBandSpread}%p)에서는 <b className="text-amber-600">{activeBand.pessimistic.depletionAge}세 소진</b> — 시장 변동성에 취약합니다.</li>
+              )}
+              {activeBand.sequenceShock && (
+                activeBand.sequenceShock.depletionAge
+                  ? <li>• <b className="text-red-700">⚡ 시퀀스 리스크</b>: 퇴직 직후 5년 −10%p 충격 시 <b className="text-red-700">{activeBand.sequenceShock.depletionAge}세 소진</b> (준비율 {activeBand.sequenceShock.readinessRatio}%)</li>
+                  : !activeResult.depletionAge && <li>• 퇴직 직후 5년 −10%p 충격 시나리오에서도 자산이 유지됩니다. (준비율 {activeBand.sequenceShock.readinessRatio}%)</li>
               )}
               {activeResult.selfNpMonthly > 0 && (
                 <li>• 본인 국민연금 예상: <b className="text-blue-700">{fmt만원월(activeResult.selfNpMonthly)}</b>
@@ -1677,9 +1796,11 @@ function App() {
 
           <footer className="text-[11px] text-slate-400 pb-8 leading-relaxed">
             ※ 수익률·연봉상승률·주택상승률은 <b>명목 % 입력</b>, 내부적으로 물가상승률 차감 후 실질률로 계산. 차트는 현재가치 기준 표시.
-            국민연금은 A값(300만) 단순 추정 — 실제 수령액과 다를 수 있음. 건강보험료/세제는 단순 추정.
-            DC는 매년 연봉/12 적립 가정. 퇴직금 일시금은 근속연수 기준 단순 계산 후 6.6% 과세 적용.
-            유족연금은 사망 배우자 연금의 50% 단순 가정.
+            국민연금은 A값(300만) 단순 추정. 건강보험료/세제는 단순 추정. DC는 매년 연봉/12 적립 가정.
+            퇴직금 일시금은 근속연수 기준 단순 계산 후 6.6% 과세 적용. 유족연금은 사망 배우자 연금의 50% 단순 가정.
+            <b>노년기 의료비</b>: 50대 15만 → 65세 30만 → 75세 60만 → 85세 100만/월 기준, 의료물가는 일반물가보다 +1.5%p 상승 가정.
+            <b>시퀀스 리스크</b>: 퇴직 직후 5년 수익률 −10%p 적용 시나리오 (점선 빨강).
+            <b>준비율·자산유지</b>는 본인·배우자 최대 수명 기준.
           </footer>
         </section>
       </main>
