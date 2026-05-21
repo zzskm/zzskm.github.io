@@ -57,62 +57,123 @@ import {
 // 상수 / 디폴트
 // ============================================================
 
-const KR_DEFAULTS = {
-  // 프로필
-  currentAge: 40,
-  retireAge: 55,
-  pensionStartAge: 65,
-  lifeExpectancy: 90,
-  spouseRetireAge: 55,
-
-  // 국민연금
-  npYearsAutoMode: true,
-  npYearsContributed: 25, // 자동모드일 때 무시됨
-
-  // 소득 (만원)
-  currentSalary: 8000,
-  salaryGrowthRate: 1.0,    // 실질
-  sideIncomeSelf: 0,        // 만원/월, 퇴직 후
-  sideIncomeSpouse: 0,      // 만원/월
-
-  // 자산
-  currentDC: 5000,
-  currentPensionSavings: 3000,
-  insuranceValue: 2000,
-  monthlyAdditionalSaving: 30,   // 만원/월, 근로기 추가저축
-  housePrice: 80000,
-  houseInflationRate: 0.5,       // 실질
-  mortgageBalance: 20000,
-  monthlyMortgagePayment: 150,
-
-  // 시장 (실질)
-  investmentReturnRate: 3.5,
-  inflationRate: 2.5,            // 표기용
-  scenarioBandSpread: 2.0,
-
-  // 생활비 (현재가치, 만원/월)
-  workingLivingCost: 350,
-  bridgeLivingCost: 400,
-  retirementLivingCost: 300,
-
-  // 자녀
-  child1BirthYear: 2015,
-  child2BirthYear: 2018,
-  childCostMultiplier: 1.0,
-
-  // 다운사이징
-  downsizeEnabled: false,
-  downsizeAge: 65,
-  downsizeRatio: 0.6,
-
-  // 토글
-  applyHealthInsurance: true,
-  applyPensionTax: false,
+const ASSUMPTIONS = {
+  version: "kr-stepwise-2026-05",
+  krPolicy: {
+    pensionReplacementRate: 0.40,       // 국민연금 단순 소득대체율
+    pensionAValueMonthly: 300,          // 만원/월, 국민연금 A값 단순 가정
+    pensionTaxRate: 0.055,              // 연금소득세 단순 분리과세율
+    maxNpYears: 40,                     // 국민연금 최대 가입연수
+    contributionStartAge: 25,           // 자동 가입연수/퇴직급여 계산 기준 나이
+    healthInsurance: {
+      sideIncomeRate: 0.08,             // 부수입 연액 대비 단순 보험료율
+      financialAssetRate: 0.0010,       // 금융자산 연액 환산 단순 계수
+      houseAssetRate: 0.0006,           // 주택가치 연액 환산 단순 계수
+      annualCap: 800,                   // 만원/년
+    },
+  },
+  lifeCycle: {
+    spendingFactors: [
+      { fromAge: 0, factor: 1.0 },
+      { fromAge: 65, factor: 0.75 },
+      { fromAge: 75, factor: 0.55 },
+    ],
+    childMonthlyCosts: [
+      { minAge: 0, maxAge: 6, amount: 50 },    // 만원/월
+      { minAge: 7, maxAge: 18, amount: 80 },   // 만원/월
+      { minAge: 19, maxAge: 22, amount: 150 }, // 만원/월
+    ],
+  },
+  assetRules: {
+    dcAnnualContributionSalaryDivisor: 12, // DC/IRP 회사 적립 = 연봉 / 12
+    readinessMaxRatio: 300,                // %
+    includeSeveranceLumpSumDefault: false, // DC 매년 적립과 퇴직금 중복 반영 방지
+    privatePensionStartAge: 60,
+    privatePensionWithdrawRate: 5.0,       // %/년
+  },
 };
 
-const NP_REPLACEMENT_RATE = 0.40;
-const NP_A_VALUE_MONTHLY = 300;
-const PENSION_TAX_RATE = 0.055;
+const UI_RANGES = {
+  currentAge: { min: 25, max: 70, step: 1 },
+  retireAge: { min: 25, max: 75, step: 1 },
+  pensionStartAge: { min: 55, max: 75, step: 1 },
+  spouseCurrentAge: { min: 20, max: 80, step: 1 },
+  spouseRetireAge: { min: 40, max: 75, step: 1 },
+  lifeExpectancy: { min: 70, max: 105, step: 1 },
+  npYearsContributed: { min: 0, max: 40, step: 1 },
+  currentSalary: { min: 0, max: 30000, step: 100 },
+  salaryGrowthRate: { min: -2, max: 5, step: 0.1 },
+  postRetireSideIncome: { min: 0, max: 500, step: 10 },
+  spouseMonthlyIncome: { min: 0, max: 500, step: 10 },
+  retirementBalance: { min: 0, max: 50000, step: 500 },
+  privatePensionBalance: { min: 0, max: 30000, step: 500 },
+  cashSavings: { min: 0, max: 50000, step: 500 },
+  monthlyAddSaving: { min: 0, max: 300, step: 10 },
+  privatePensionStartAge: { min: 55, max: 75, step: 1 },
+  privatePensionWithdrawRate: { min: 0, max: 10, step: 0.1 },
+  housePrice: { min: 0, max: 300000, step: 1000 },
+  houseInflationRate: { min: -3, max: 3, step: 0.1 },
+  mortgageBalance: { min: 0, max: 100000, step: 500 },
+  monthlyMortgagePayment: { min: 0, max: 500, step: 10 },
+  investmentReturnRate: { min: -2, max: 8, step: 0.1 },
+  inflationRate: { min: 0, max: 6, step: 0.1 },
+  scenarioBandSpread: { min: 0, max: 4, step: 0.1 },
+  workingLivingCost: { min: 50, max: 800, step: 10 },
+  bridgeLivingCost: { min: 50, max: 800, step: 10 },
+  retirementLivingCost: { min: 50, max: 600, step: 10 },
+  childCostMultiplier: { min: 0.5, max: 2.0, step: 0.1 },
+  downsizeAge: { min: 40, max: 105, step: 1 },
+  downsizeRatio: { min: 0, max: 1, step: 0.05 },
+};
+
+const PRESETS = {
+  krDefault: {
+    currentAge: 40,
+    retireAge: 55,
+    pensionStartAge: 65,
+    lifeExpectancy: 90,
+    spouseEnabled: false,
+    spouseCurrentAge: 40,
+    spouseRetireAge: 55,
+    npYearsAutoMode: true,
+    npYearsContributed: 25,
+    currentSalary: 8000,
+    salaryGrowthRate: 1.0,
+    postRetireSideIncome: 0,
+    spouseMonthlyIncome: 0,
+    retirementBalance: 5000,
+    privatePensionBalance: 3000,
+    privatePensionStartAge: ASSUMPTIONS.assetRules.privatePensionStartAge,
+    privatePensionWithdrawRate: ASSUMPTIONS.assetRules.privatePensionWithdrawRate,
+    cashSavings: 2000,
+    monthlyAddSaving: 30,
+    hasHouse: true,
+    housePrice: 80000,
+    houseInflationRate: 0.5,
+    hasMortgage: true,
+    mortgageBalance: 20000,
+    monthlyMortgagePayment: 150,
+    investmentReturnRate: 3.5,
+    inflationRate: 2.5,
+    scenarioBandSpread: 2.0,
+    workingLivingCost: 350,
+    bridgeLivingCost: 400,
+    retirementLivingCost: 300,
+    children: [
+      { id: "child-1", birthYear: 2015 },
+      { id: "child-2", birthYear: 2018 },
+    ],
+    childCostMultiplier: 1.0,
+    downsizeEnabled: false,
+    downsizeAge: 65,
+    downsizeRatio: 0.6,
+    includeSeveranceLumpSum: ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
+    applyHealthInsurance: true,
+    applyPensionTax: false,
+  },
+};
+
+const KR_DEFAULTS = PRESETS.krDefault;
 const SCENARIO_COLORS = ["#0f172a", "#0ea5e9", "#f59e0b", "#8b5cf6"];
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -121,46 +182,54 @@ const CURRENT_YEAR = new Date().getFullYear();
 // 계산 헬퍼
 // ============================================================
 
-function npYears(input) {
-  if (input.npYearsAutoMode) return Math.min(40, Math.max(0, input.retireAge - 25));
-  return Math.min(40, Math.max(0, input.npYearsContributed));
+function npYears(input, assumptions = ASSUMPTIONS) {
+  const policy = assumptions.krPolicy;
+  if (input.npYearsAutoMode) {
+    return Math.min(policy.maxNpYears, Math.max(0, input.retireAge - policy.contributionStartAge));
+  }
+  return Math.min(policy.maxNpYears, Math.max(0, input.npYearsContributed));
 }
 
-function estimatedPensionMonthly(input) {
-  const avgMonthly = (NP_A_VALUE_MONTHLY + input.currentSalary / 12) / 2;
-  return NP_REPLACEMENT_RATE * avgMonthly * (npYears(input) / 40);
+function estimatedPensionMonthly(input, assumptions = ASSUMPTIONS) {
+  const policy = assumptions.krPolicy;
+  const avgMonthly = (policy.pensionAValueMonthly + input.currentSalary / 12) / 2;
+  return policy.pensionReplacementRate * avgMonthly * (npYears(input, assumptions) / policy.maxNpYears);
 }
 
-function ageFactor(age) {
-  if (age < 65) return 1.0;
-  if (age < 75) return 0.75;
-  return 0.55;
+function ageFactor(age, assumptions = ASSUMPTIONS) {
+  return assumptions.lifeCycle.spendingFactors
+    .filter(row => age >= row.fromAge)
+    .sort((a, b) => b.fromAge - a.fromAge)[0]?.factor ?? 1.0;
 }
 
-function childCostAt(age) {
+function childCostAt(age, assumptions = ASSUMPTIONS) {
   if (age < 0) return 0;
-  if (age <= 6) return 50;
-  if (age <= 18) return 80;
-  if (age <= 22) return 150;
-  return 0;
+  return assumptions.lifeCycle.childMonthlyCosts.find(row =>
+    age >= row.minAge && age <= row.maxAge
+  )?.amount ?? 0;
 }
 
-function childCostYearly(input, year) {
+function childrenOf(input) {
+  if (Array.isArray(input.children)) return input.children.filter(c => c && c.birthYear);
+  return [input.child1BirthYear, input.child2BirthYear]
+    .filter(Boolean)
+    .map((birthYear, idx) => ({ id: `legacy-child-${idx + 1}`, birthYear }));
+}
+
+function childCostYearly(input, year, assumptions = ASSUMPTIONS) {
   let cost = 0;
-  for (const by of [input.child1BirthYear, input.child2BirthYear]) {
-    if (!by) continue;
-    cost += childCostAt(year - by) * 12;
+  for (const child of childrenOf(input)) {
+    cost += childCostAt(year - child.birthYear, assumptions) * 12;
   }
   return cost * (input.childCostMultiplier ?? 1.0);
 }
 
 function childEvents(input) {
   const events = [];
-  [input.child1BirthYear, input.child2BirthYear].forEach((by, i) => {
-    if (!by) return;
+  childrenOf(input).forEach((child, i) => {
     const idx = i + 1;
     const parentAgeAt = (childAge) =>
-      input.currentAge + ((by + childAge) - CURRENT_YEAR);
+      input.currentAge + ((child.birthYear + childAge) - CURRENT_YEAR);
     events.push({ age: parentAgeAt(19), label: `자녀${idx} 대학` });
     events.push({ age: parentAgeAt(23), label: `자녀${idx} 독립` });
   });
@@ -168,27 +237,28 @@ function childEvents(input) {
 }
 
 // 지역가입자 건보료 단순 추정 (만원/년)
-function healthInsuranceYearly(financial, house, sideIncomeAnnual) {
+function healthInsuranceYearly(financial, house, sideIncomeAnnual, assumptions = ASSUMPTIONS) {
+  const hi = assumptions.krPolicy.healthInsurance;
   // 소득점수 + 재산점수 단순화. 실제 산식과 다름.
-  const base = Math.max(0, sideIncomeAnnual) * 0.08
-             + Math.max(0, financial) * 0.0010
-             + Math.max(0, house) * 0.0006;
-  const cap = 800; // 연 800만원 한도
-  return Math.min(base, cap);
+  const base = Math.max(0, sideIncomeAnnual) * hi.sideIncomeRate
+             + Math.max(0, financial) * hi.financialAssetRate
+             + Math.max(0, house) * hi.houseAssetRate;
+  return Math.min(base, hi.annualCap);
 }
 
 // ============================================================
 // 핵심 시뮬레이션
 // ============================================================
 
-function calculateScenario(input, returnRateOverride) {
+function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS) {
   const years = [];
-  const npMonthly = estimatedPensionMonthly(input);
+  const npMonthly = estimatedPensionMonthly(input, assumptions);
 
-  let financialDC = input.currentDC;
-  let financialOther = input.currentPensionSavings + input.insuranceValue;
-  let house = input.housePrice;
-  let mortgage = input.mortgageBalance;
+  let financialRetirement = input.retirementBalance;
+  let financialPrivatePension = input.privatePensionBalance;
+  let financialCash = input.cashSavings;
+  let house = input.hasHouse ? input.housePrice : 0;
+  let mortgage = input.hasHouse && input.hasMortgage ? input.mortgageBalance : 0;
 
   const r = (returnRateOverride ?? input.investmentReturnRate) / 100;
   const sg = input.salaryGrowthRate / 100;
@@ -197,7 +267,7 @@ function calculateScenario(input, returnRateOverride) {
   let depletionAge = null;
   let bridgeShortfall = 0;
   let totalAssetsAtRetirement = 0;
-  let severancePaid = false;
+  let severancePaid = !input.includeSeveranceLumpSum;
   let downsizeDone = false;
   const downsizeEvents = [];
 
@@ -213,75 +283,81 @@ function calculateScenario(input, returnRateOverride) {
     const salaryAnnual = isWork ? input.currentSalary * Math.pow(1 + sg, t) : 0;
 
     // DC 매년 회사 적립 (연봉/12)
-    const dcContribAnnual = isWork ? salaryAnnual / 12 : 0;
+    const dcContribAnnual = isWork ? salaryAnnual / assumptions.assetRules.dcAnnualContributionSalaryDivisor : 0;
 
     // 국민연금 (세후)
     let pensionAnnual = isPension ? npMonthly * 12 : 0;
     if (input.applyPensionTax && pensionAnnual > 0) {
-      pensionAnnual *= (1 - PENSION_TAX_RATE);
+      pensionAnnual *= (1 - assumptions.krPolicy.pensionTaxRate);
     }
 
     // 부수입
-    const sideSelfAnnual = !isWork ? input.sideIncomeSelf * 12 : 0;
-    const spouseActive = age < input.spouseRetireAge;
-    const sideSpouseAnnual = spouseActive ? input.sideIncomeSpouse * 12 : 0;
+    const sideSelfAnnual = !isWork ? input.postRetireSideIncome * 12 : 0;
+    const spouseAge = input.spouseCurrentAge + t;
+    const spouseActive = input.spouseEnabled && spouseAge < input.spouseRetireAge;
+    const sideSpouseAnnual = spouseActive ? input.spouseMonthlyIncome * 12 : 0;
 
     // 생활비
     const baseLivingMonthly = isWork ? input.workingLivingCost
                             : isBridge ? input.bridgeLivingCost
                             : input.retirementLivingCost;
-    const livingAnnual = baseLivingMonthly * 12 * ageFactor(age);
+    const livingAnnual = baseLivingMonthly * 12 * ageFactor(age, assumptions);
 
-    const childAnnual = childCostYearly(input, year);
+    const childAnnual = childCostYearly(input, year, assumptions);
 
-    const mortgagePaid = Math.min(mortgage, input.monthlyMortgagePayment * 12);
+    const mortgagePaid = input.hasHouse && input.hasMortgage
+      ? Math.min(mortgage, input.monthlyMortgagePayment * 12)
+      : 0;
     mortgage = Math.max(0, mortgage - mortgagePaid);
 
     // 추가저축 — 자산에 합산 (BUGFIX). 근로기에만.
-    const extraSavingAnnual = isWork ? input.monthlyAdditionalSaving * 12 : 0;
+    const extraSavingAnnual = isWork ? input.monthlyAddSaving * 12 : 0;
 
     // 건강보험료 (퇴직 후만)
     const sideIncomeForHI = sideSelfAnnual + sideSpouseAnnual;
     const healthInsAnnual = (!isWork && input.applyHealthInsurance)
-      ? healthInsuranceYearly(financialDC + financialOther, house, sideIncomeForHI)
+      ? healthInsuranceYearly(financialRetirement + financialPrivatePension + financialCash, house, sideIncomeForHI, assumptions)
       : 0;
 
-    // 퇴직 시점 일시금 (법정 퇴직금 + DC도 동일하게 유지)
+    // 퇴직금 일시금은 DC 매년 적립과 중복될 수 있어 기본 OFF.
     if (!severancePaid && age === input.retireAge) {
-      const yearsWorked = Math.max(0, input.retireAge - 25);
+      const yearsWorked = Math.max(0, input.retireAge - assumptions.krPolicy.contributionStartAge);
       const severance = (input.currentSalary / 12) * yearsWorked;
-      financialOther += severance;
+      financialCash += severance;
       severancePaid = true;
     }
 
     // 다운사이징
-    if (!downsizeDone && input.downsizeEnabled && age === input.downsizeAge) {
+    if (!downsizeDone && input.hasHouse && input.downsizeEnabled && age === input.downsizeAge) {
       const liquidated = house * (1 - input.downsizeRatio);
-      financialOther += liquidated;
+      financialCash += liquidated;
       house = house * input.downsizeRatio;
       downsizeDone = true;
       downsizeEvents.push({ age, label: "주택 다운사이징", liquidated });
     }
 
-    const income = salaryAnnual + pensionAnnual + sideSelfAnnual + sideSpouseAnnual;
+    const privatePensionAnnual = age >= input.privatePensionStartAge && financialPrivatePension > 0
+      ? Math.min(financialPrivatePension, financialPrivatePension * (input.privatePensionWithdrawRate / 100))
+      : 0;
+    financialPrivatePension -= privatePensionAnnual;
+
+    const income = salaryAnnual + pensionAnnual + privatePensionAnnual + sideSelfAnnual + sideSpouseAnnual;
     const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual;
     const cashflowExclSaving = income - outflow;
     const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
 
-    // 운용: DC와 기타 금융자산 모두 동일 r 적용
-    const prevDC = financialDC;
-    const prevOther = financialOther;
-    financialDC = financialDC * (1 + r) + dcContribAnnual;
-    // 추가저축은 매년 OTHER에 적립 (현금흐름과 별개 흐름)
-    financialOther = financialOther * (1 + r) + extraSavingAnnual + cashflowExclSaving;
+    // 운용: 퇴직연금, 개인연금, 일반 금융자산 모두 동일 실질 수익률 적용
+    financialRetirement = financialRetirement * (1 + r) + dcContribAnnual;
+    financialPrivatePension = financialPrivatePension * (1 + r);
+    financialCash = financialCash * (1 + r) + extraSavingAnnual + cashflowExclSaving;
 
-    if (financialDC + financialOther <= 0 && depletionAge === null && age >= input.retireAge) {
+    if (financialRetirement + financialPrivatePension + financialCash <= 0 && depletionAge === null && age >= input.retireAge) {
       depletionAge = age;
     }
 
-    house = house * (1 + hg);
+    house = input.hasHouse ? house * (1 + hg) : 0;
 
-    const financialTotal = financialDC + financialOther;
+    const financialTotal = financialRetirement + financialPrivatePension + financialCash;
     const netWorth = financialTotal + house - mortgage;
 
     if (isBridge && cashflowExclSaving < 0) bridgeShortfall += -cashflowExclSaving;
@@ -289,14 +365,16 @@ function calculateScenario(input, returnRateOverride) {
 
     years.push({
       age, year, phase,
-      financialDC: Math.round(financialDC),
-      financialOther: Math.round(financialOther),
+      financialRetirement: Math.round(financialRetirement),
+      financialPrivatePension: Math.round(financialPrivatePension),
+      financialCash: Math.round(financialCash),
       financialAssets: Math.round(financialTotal),
       houseValue: Math.round(house),
       mortgage: Math.round(mortgage),
       netWorth: Math.round(netWorth),
       salaryMonthly: Math.round(salaryAnnual / 12),
       pensionMonthly: Math.round(pensionAnnual / 12),
+      privatePensionMonthly: Math.round(privatePensionAnnual / 12),
       sideMonthly: Math.round((sideSelfAnnual + sideSpouseAnnual) / 12),
       livingMonthly: Math.round(livingAnnual / 12),
       childMonthly: Math.round(childAnnual / 12),
@@ -314,34 +392,57 @@ function calculateScenario(input, returnRateOverride) {
     // 수명까지 남는 자산 / (퇴직 시점 자산) 비율 — 여유도 보조 지표
     const last = years[years.length - 1];
     const margin = Math.max(0, last.financialAssets);
-    readinessRatio = Math.min(300, 100 + (totalAssetsAtRetirement > 0 ? (margin / totalAssetsAtRetirement) * 100 : 0));
+    readinessRatio = Math.min(assumptions.assetRules.readinessMaxRatio, 100 + (totalAssetsAtRetirement > 0 ? (margin / totalAssetsAtRetirement) * 100 : 0));
   } else {
     const survived = depletionAge - input.retireAge;
     const need = input.lifeExpectancy - input.retireAge;
     readinessRatio = need > 0 ? (survived / need) * 100 : 0;
   }
 
+  const lastYear = years[years.length - 1] || {};
+
   return {
     yearlyAssetFlow: years,
+    assetBucketsAtEnd: {
+      retirement: lastYear.financialRetirement ?? 0,
+      privatePension: lastYear.financialPrivatePension ?? 0,
+      cash: lastYear.financialCash ?? 0,
+      totalFinancial: lastYear.financialAssets ?? 0,
+    },
+    cashflowKeys: [
+      "salaryMonthly",
+      "pensionMonthly",
+      "privatePensionMonthly",
+      "sideMonthly",
+      "livingMonthly",
+      "childMonthly",
+      "mortgageMonthly",
+      "healthInsMonthly",
+      "cashflowMonthly",
+    ],
     bridgeYears,
     bridgeShortfall: Math.round(bridgeShortfall),
     totalAssetsAtRetirement: Math.round(totalAssetsAtRetirement),
     nationalPensionMonthly: Math.round(npMonthly),
+    privatePensionMonthly: Math.round(
+      years.find(y => y.privatePensionMonthly > 0)?.privatePensionMonthly ?? 0
+    ),
     readinessRatio: Math.round(readinessRatio),
     depletionAge,
     childEventList: childEvents(input),
     downsizeEvents,
+    assumptionVersion: assumptions.version,
   };
 }
 
 // 수익률 밴드
-function runScenarioBand(input) {
+function runScenarioBand(input, assumptions = ASSUMPTIONS) {
   const r = input.investmentReturnRate;
   const s = input.scenarioBandSpread;
   return {
-    pessimistic: calculateScenario(input, r - s),
-    mid: calculateScenario(input, r),
-    optimistic: calculateScenario(input, r + s),
+    pessimistic: calculateScenario(input, r - s, assumptions),
+    mid: calculateScenario(input, r, assumptions),
+    optimistic: calculateScenario(input, r + s, assumptions),
   };
 }
 
@@ -351,25 +452,28 @@ function runScenarioBand(input) {
 
 const INSIGHT_CANDIDATES = [
   { key: "retire+5",  label: "퇴직 +5세",       patch: (i) => ({ retireAge: Math.min(75, i.retireAge + 5) }) },
-  { key: "side+50",   label: "지속소득 +50만/월", patch: (i) => ({ sideIncomeSelf: i.sideIncomeSelf + 50 }) },
+  { key: "side+50",   label: "지속소득 +50만/월", patch: (i) => ({ postRetireSideIncome: i.postRetireSideIncome + 50 }) },
   { key: "live-50",   label: "생활비 −50만/월",   patch: (i) => ({
                           bridgeLivingCost: Math.max(50, i.bridgeLivingCost - 50),
                           retirementLivingCost: Math.max(50, i.retirementLivingCost - 50),
                        }) },
   { key: "downsize",  label: "주택 다운사이징 60%", patch: (i) => ({
+                          hasHouse: true,
                           downsizeEnabled: true,
                           downsizeAge: Math.min(i.lifeExpectancy - 1, i.retireAge + 5),
                           downsizeRatio: 0.6,
                        }) },
-  { key: "saving+30", label: "추가저축 +30만/월",   patch: (i) => ({ monthlyAdditionalSaving: i.monthlyAdditionalSaving + 30 }) },
+  { key: "saving+30", label: "추가저축 +30만/월",   patch: (i) => ({ monthlyAddSaving: i.monthlyAddSaving + 30 }) },
+  { key: "private+1", label: "개인연금 인출률 +1%p", patch: (i) => ({ privatePensionWithdrawRate: Math.min(10, i.privatePensionWithdrawRate + 1) }) },
+  { key: "spouse+3",  label: "배우자 은퇴 +3세", patch: (i) => i.spouseEnabled ? ({ spouseRetireAge: Math.min(75, i.spouseRetireAge + 3) }) : ({}) },
 ];
 
 function findBestInsights(input, baseResult) {
   const baseR = baseResult.readinessRatio;
   const results = INSIGHT_CANDIDATES.map(c => {
     const patched = { ...input, ...c.patch(input) };
-    const r = calculateScenario(patched).readinessRatio;
-    return { key: c.key, label: c.label, delta: r - baseR, newRatio: r };
+    const r = calculateScenario(patched, undefined, ASSUMPTIONS).readinessRatio;
+    return { key: c.key, label: c.label, delta: r - baseR, newRatio: r, patch: c.patch };
   });
   results.sort((a, b) => b.delta - a.delta);
   return results.filter(r => r.delta > 0.5).slice(0, 3);
@@ -390,6 +494,20 @@ function fmt만원월(v) {
 }
 
 // ============================================================
+// 모바일 감지 훅
+// ============================================================
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
+// ============================================================
 // UI: 편집 가능 슬라이더
 // ============================================================
 
@@ -397,6 +515,9 @@ function Slider({ label, value, min, max, step, onChange, format, hint }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef(null);
+  const numericValue = Number(value);
+  const effectiveMin = Number.isFinite(numericValue) ? Math.min(min, numericValue) : min;
+  const effectiveMax = Number.isFinite(numericValue) ? Math.max(max, numericValue) : max;
 
   useEffect(() => { if (!editing) setDraft(String(value)); }, [value, editing]);
   useEffect(() => { if (editing && inputRef.current) inputRef.current.select(); }, [editing]);
@@ -436,7 +557,7 @@ function Slider({ label, value, min, max, step, onChange, format, hint }) {
       </div>
       <input
         type="range"
-        min={min} max={max} step={step}
+        min={effectiveMin} max={effectiveMax} step={step}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
         className="w-full"
@@ -530,32 +651,90 @@ function readinessLabel(ratio) {
 // 메인 앱
 // ============================================================
 
-const LS_KEY = "retirement-sim-v2";
+const LS_KEY = "retirement-sim-v3-stepwise";
+const LEGACY_LS_KEYS = ["retirement-sim-v2"];
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function normalizeInput(raw = {}) {
+  const legacyChildren = [raw.child1BirthYear, raw.child2BirthYear]
+    .filter(Boolean)
+    .map((birthYear, idx) => ({ id: `legacy-child-${idx + 1}`, birthYear }));
+  const children = Array.isArray(raw.children)
+    ? raw.children.filter(c => c && c.birthYear).slice(0, 5).map((c, idx) => ({
+        id: c.id || `child-${idx + 1}`,
+        birthYear: Number(c.birthYear),
+      }))
+    : legacyChildren;
+
+  const input = {
+    ...KR_DEFAULTS,
+    ...raw,
+    postRetireSideIncome: raw.postRetireSideIncome ?? raw.sideIncomeSelf ?? KR_DEFAULTS.postRetireSideIncome,
+    spouseMonthlyIncome: raw.spouseMonthlyIncome ?? raw.sideIncomeSpouse ?? KR_DEFAULTS.spouseMonthlyIncome,
+    retirementBalance: raw.retirementBalance ?? raw.currentDC ?? KR_DEFAULTS.retirementBalance,
+    privatePensionBalance: raw.privatePensionBalance ?? raw.currentPensionSavings ?? KR_DEFAULTS.privatePensionBalance,
+    cashSavings: raw.cashSavings ?? raw.insuranceValue ?? KR_DEFAULTS.cashSavings,
+    monthlyAddSaving: raw.monthlyAddSaving ?? raw.monthlyAdditionalSaving ?? KR_DEFAULTS.monthlyAddSaving,
+    spouseEnabled: raw.spouseEnabled ?? ((raw.sideIncomeSpouse ?? raw.spouseMonthlyIncome ?? 0) > 0),
+    spouseCurrentAge: raw.spouseCurrentAge ?? raw.currentAge ?? KR_DEFAULTS.currentAge,
+    hasHouse: raw.hasHouse ?? ((raw.housePrice ?? KR_DEFAULTS.housePrice) > 0),
+    hasMortgage: raw.hasMortgage ?? ((raw.mortgageBalance ?? KR_DEFAULTS.mortgageBalance) > 0),
+    privatePensionStartAge: raw.privatePensionStartAge ?? ASSUMPTIONS.assetRules.privatePensionStartAge,
+    privatePensionWithdrawRate: raw.privatePensionWithdrawRate ?? ASSUMPTIONS.assetRules.privatePensionWithdrawRate,
+    includeSeveranceLumpSum: raw.includeSeveranceLumpSum ?? ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
+    children,
+  };
+
+  const normalized = {
+    ...input,
+    housePrice: input.hasHouse ? input.housePrice : 0,
+    mortgageBalance: input.hasHouse && input.hasMortgage ? input.mortgageBalance : 0,
+    monthlyMortgagePayment: input.hasHouse && input.hasMortgage ? input.monthlyMortgagePayment : 0,
+    downsizeEnabled: input.hasHouse ? input.downsizeEnabled : false,
+  };
+  delete normalized.sideIncomeSelf;
+  delete normalized.sideIncomeSpouse;
+  delete normalized.currentDC;
+  delete normalized.currentPensionSavings;
+  delete normalized.insuranceValue;
+  delete normalized.monthlyAdditionalSaving;
+  delete normalized.child1BirthYear;
+  delete normalized.child2BirthYear;
+  return normalized;
+}
 
 function makeScenario(name, input, colorIdx) {
   return {
     id: uid(),
     name,
     color: SCENARIO_COLORS[colorIdx % SCENARIO_COLORS.length],
-    input: { ...input },
+    input: normalizeInput(input),
   };
 }
 
 function loadInitial() {
+  const readStored = (key) => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!Array.isArray(obj.scenarios) || !obj.scenarios.length) return null;
+    return {
+      activeId: obj.activeId,
+      scenarios: obj.scenarios.map((s, idx) => ({
+        ...s,
+        color: s.color || SCENARIO_COLORS[idx % SCENARIO_COLORS.length],
+        input: normalizeInput(s.input),
+      })),
+    };
+  };
+
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const obj = JSON.parse(raw);
-      if (Array.isArray(obj.scenarios) && obj.scenarios.length) {
-        // merge missing defaults into input
-        obj.scenarios = obj.scenarios.map(s => ({
-          ...s,
-          input: { ...KR_DEFAULTS, ...s.input },
-        }));
-        return obj;
-      }
+    const current = readStored(LS_KEY);
+    if (current) return current;
+    for (const key of LEGACY_LS_KEYS) {
+      const migrated = readStored(key);
+      if (migrated) return migrated;
     }
   } catch {}
   const base = makeScenario("현재", KR_DEFAULTS, 0);
@@ -566,6 +745,8 @@ function App() {
   const initial = loadInitial();
   const [scenarios, setScenarios] = useState(initial.scenarios);
   const [activeId, setActiveId] = useState(initial.activeId);
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify({ scenarios, activeId })); } catch {}
@@ -574,8 +755,26 @@ function App() {
   const active = scenarios.find(s => s.id === activeId) || scenarios[0];
   const setInputField = (k) => (v) => {
     setScenarios(prev => prev.map(s =>
-      s.id === active.id ? { ...s, input: { ...s.input, [k]: v } } : s
+      s.id === active.id ? { ...s, input: normalizeInput({ ...s.input, [k]: v }) } : s
     ));
+  };
+  const setInputPatch = (patch) => {
+    setScenarios(prev => prev.map(s =>
+      s.id === active.id ? { ...s, input: normalizeInput({ ...s.input, ...patch }) } : s
+    ));
+  };
+  const addChild = () => {
+    if (active.input.children.length >= 5) return;
+    setInputField("children")([
+      ...active.input.children,
+      { id: uid(), birthYear: CURRENT_YEAR - Math.max(0, active.input.currentAge - 35) },
+    ]);
+  };
+  const updateChild = (id, birthYear) => {
+    setInputField("children")(active.input.children.map(c => c.id === id ? { ...c, birthYear } : c));
+  };
+  const removeChild = (id) => {
+    setInputField("children")(active.input.children.filter(c => c.id !== id));
   };
 
   const addScenario = () => {
@@ -603,7 +802,16 @@ function App() {
   };
 
   const resetActive = () => {
-    setScenarios(prev => prev.map(s => s.id === activeId ? { ...s, input: { ...KR_DEFAULTS } } : s));
+    setScenarios(prev => prev.map(s => s.id === activeId ? { ...s, input: normalizeInput(KR_DEFAULTS) } : s));
+  };
+
+  const applyInsightAsNewScenario = (ins) => {
+    if (scenarios.length >= 4) return;
+    const newInput = normalizeInput({ ...active.input, ...ins.patch(active.input) });
+    const nextColor = SCENARIO_COLORS[scenarios.length];
+    const newId = uid();
+    setScenarios(prev => [...prev, { id: newId, name: ins.label, color: nextColor, input: newInput }]);
+    setActiveId(newId);
   };
 
   // 결과 계산
@@ -619,8 +827,9 @@ function App() {
 
   // 입력 패널 요약값들
   const assetSummary = fmt만원(
-    active.input.currentDC + active.input.currentPensionSavings +
-    active.input.insuranceValue + active.input.housePrice - active.input.mortgageBalance
+    active.input.retirementBalance + active.input.privatePensionBalance + active.input.cashSavings +
+    (active.input.hasHouse ? active.input.housePrice : 0) -
+    (active.input.hasHouse && active.input.hasMortgage ? active.input.mortgageBalance : 0)
   );
 
   // 자산흐름 차트 데이터 결합
@@ -650,7 +859,8 @@ function App() {
   const cashflowData = activeResult.yearlyAssetFlow.map(y => ({
     age: y.age,
     근로: y.salaryMonthly,
-    연금: y.pensionMonthly,
+    국민연금: y.pensionMonthly,
+    개인연금: y.privatePensionMonthly,
     부수입: y.sideMonthly,
     생활비: -y.livingMonthly,
     자녀비: -y.childMonthly,
@@ -678,7 +888,7 @@ function App() {
                 <button
                   onClick={() => setActiveId(s.id)}
                   className="text-xs font-medium"
-                >{s.name}</button>
+                >{isMobile && s.name.length > 6 ? s.name.slice(0, 6) + '…' : s.name}</button>
                 <button onClick={() => renameScenario(s.id)} className="text-[10px] text-slate-400 hover:text-slate-700" title="이름 변경">✎</button>
                 {scenarios.length > 1 && (
                   <button onClick={() => removeScenario(s.id)} className="text-[10px] text-slate-400 hover:text-red-500" title="삭제">×</button>
@@ -696,72 +906,124 @@ function App() {
         {/* 입력 패널 */}
         <aside className="lg:col-span-4 xl:col-span-3">
           <div className="lg:sticky lg:top-24 bg-white rounded-xl border border-slate-200 p-4 max-h-[calc(100vh-7rem)] overflow-y-auto">
-            <div className="mb-3 pb-2 border-b border-slate-100">
-              <div className="text-[10px] uppercase tracking-wider text-slate-400">편집 중</div>
-              <div className="text-sm font-semibold" style={{ color: active.color }}>{active.name}</div>
+            <div className="mb-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">편집 중</div>
+                <div className="text-sm font-semibold" style={{ color: active.color }}>{active.name}</div>
+              </div>
+              <div className="flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 shrink-0">
+                <button onClick={() => setAdvancedMode(false)} className={`px-2 py-1 rounded-md transition-all ${!advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>기본</button>
+                <button onClick={() => setAdvancedMode(true)} className={`px-2 py-1 rounded-md transition-all ${advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>고급</button>
+              </div>
             </div>
 
             <Section title="프로필" defaultOpen summary={`${i.currentAge}→${i.retireAge}→${i.pensionStartAge}세`}>
-              <Slider label="현재 나이" value={i.currentAge} min={25} max={70} step={1} onChange={setInputField("currentAge")} format={v => `${v}세`} />
-              <Slider label="퇴직 나이" value={i.retireAge} min={i.currentAge} max={75} step={1} onChange={setInputField("retireAge")} format={v => `${v}세`} />
-              <Slider label="국민연금 개시" value={i.pensionStartAge} min={60} max={75} step={1} onChange={setInputField("pensionStartAge")} format={v => `${v}세`} />
-              <Slider label="배우자 은퇴 나이" value={i.spouseRetireAge} min={40} max={75} step={1} onChange={setInputField("spouseRetireAge")} format={v => `${v}세`} />
-              <Slider label="기대수명" value={i.lifeExpectancy} min={70} max={100} step={1} onChange={setInputField("lifeExpectancy")} format={v => `${v}세`} />
-            </Section>
-
-            <Section title="소득" defaultOpen summary={fmt만원(i.currentSalary)}>
-              <Slider label="현재 연봉" value={i.currentSalary} min={2000} max={30000} step={100} onChange={setInputField("currentSalary")} format={fmt만원} />
-              <Slider label="연봉 상승률(실질)" value={i.salaryGrowthRate} min={-2} max={5} step={0.1} onChange={setInputField("salaryGrowthRate")} format={v => `${v.toFixed(1)}%`} />
-              <Slider label="본인 지속소득(퇴직후)" value={i.sideIncomeSelf} min={0} max={500} step={10} onChange={setInputField("sideIncomeSelf")} format={v => `${v}만/월`} />
-              <Slider label="배우자 월소득" value={i.sideIncomeSpouse} min={0} max={500} step={10} onChange={setInputField("sideIncomeSpouse")} format={v => `${v}만/월`} />
-              <Toggle label="국민연금 가입연수 자동" value={i.npYearsAutoMode} onChange={setInputField("npYearsAutoMode")} hint="자동 = 퇴직나이−25 (최대 40년)" />
-              {!i.npYearsAutoMode && (
-                <Slider label="국민연금 가입연수" value={i.npYearsContributed} min={0} max={40} step={1} onChange={setInputField("npYearsContributed")} format={v => `${v}년`} />
-              )}
-            </Section>
-
-            <Section title="자산" summary={assetSummary}>
-              <Slider label="DC형 퇴직연금" value={i.currentDC} min={0} max={50000} step={500} onChange={setInputField("currentDC")} format={fmt만원} hint="회사가 매년 연봉/12 만큼 자동 적립" />
-              <Slider label="연금저축" value={i.currentPensionSavings} min={0} max={30000} step={500} onChange={setInputField("currentPensionSavings")} format={fmt만원} />
-              <Slider label="보험 적립금" value={i.insuranceValue} min={0} max={20000} step={100} onChange={setInputField("insuranceValue")} format={fmt만원} />
-              <Slider label="추가저축(근로기)" value={i.monthlyAdditionalSaving} min={0} max={300} step={10} onChange={setInputField("monthlyAdditionalSaving")} format={v => `${v}만/월`} />
-              <Slider label="주택 가치" value={i.housePrice} min={0} max={300000} step={1000} onChange={setInputField("housePrice")} format={fmt만원} />
-              <Slider label="대출 잔액" value={i.mortgageBalance} min={0} max={100000} step={500} onChange={setInputField("mortgageBalance")} format={fmt만원} />
-              <Slider label="월 원리금" value={i.monthlyMortgagePayment} min={0} max={500} step={10} onChange={setInputField("monthlyMortgagePayment")} format={v => `${v}만/월`} />
-            </Section>
-
-            <Section title="생활비 (현재가치)" summary={`${i.bridgeLivingCost}/${i.retirementLivingCost}만`}>
-              <Slider label="근로기" value={i.workingLivingCost} min={100} max={800} step={10} onChange={setInputField("workingLivingCost")} format={v => `${v}만/월`} />
-              <Slider label="브릿지 기간" value={i.bridgeLivingCost} min={100} max={800} step={10} onChange={setInputField("bridgeLivingCost")} format={v => `${v}만/월`} />
-              <Slider label="연금 수령기" value={i.retirementLivingCost} min={100} max={600} step={10} onChange={setInputField("retirementLivingCost")} format={v => `${v}만/월`} />
-              <p className="text-[10px] text-slate-400">65~74세 0.75배 / 75세+ 0.55배 자동 적용</p>
-            </Section>
-
-            <Section title="자녀" summary={`${[i.child1BirthYear, i.child2BirthYear].filter(Boolean).length}명`}>
-              <NumberInput label="첫째 출생연도" value={i.child1BirthYear} onChange={setInputField("child1BirthYear")} />
-              <NumberInput label="둘째 출생연도" value={i.child2BirthYear} onChange={setInputField("child2BirthYear")} />
-              <Slider label="사교육비 강도" value={i.childCostMultiplier} min={0.5} max={2.0} step={0.1} onChange={setInputField("childCostMultiplier")} format={v => `${v.toFixed(1)}×`} hint="1.0 = 표준 (0~6:50/초중고:80/대학:150만/월)" />
-            </Section>
-
-            <Section title="이벤트 — 다운사이징" summary={i.downsizeEnabled ? `${i.downsizeAge}세` : "OFF"}>
-              <Toggle label="주택 다운사이징 사용" value={i.downsizeEnabled} onChange={setInputField("downsizeEnabled")} />
-              {i.downsizeEnabled && <>
-                <Slider label="매각 나이" value={i.downsizeAge} min={i.retireAge} max={i.lifeExpectancy - 1} step={1} onChange={setInputField("downsizeAge")} format={v => `${v}세`} />
-                <Slider label="매각 후 보유비율" value={i.downsizeRatio} min={0} max={1} step={0.05} onChange={setInputField("downsizeRatio")} format={v => `${Math.round(v*100)}%`} hint="0.6 = 60% 가치 주택으로 다운사이즈, 40% 현금화" />
+              <Slider label="현재 나이" value={i.currentAge} {...UI_RANGES.currentAge} onChange={setInputField("currentAge")} format={v => `${v}세`} />
+              <Slider label="퇴직 나이" value={i.retireAge} min={i.currentAge} max={UI_RANGES.retireAge.max} step={UI_RANGES.retireAge.step} onChange={setInputField("retireAge")} format={v => `${v}세`} />
+              <Slider label="국민연금 개시" value={i.pensionStartAge} {...UI_RANGES.pensionStartAge} onChange={setInputField("pensionStartAge")} format={v => `${v}세`} />
+              <Slider label="기대수명" value={i.lifeExpectancy} {...UI_RANGES.lifeExpectancy} onChange={setInputField("lifeExpectancy")} format={v => `${v}세`} />
+              {advancedMode && <>
+                <Toggle label="배우자 반영" value={i.spouseEnabled} onChange={setInputField("spouseEnabled")} hint="배우자 근로소득과 은퇴 나이를 별도로 계산" />
+                {i.spouseEnabled && <>
+                  <Slider label="배우자 현재 나이" value={i.spouseCurrentAge} {...UI_RANGES.spouseCurrentAge} onChange={setInputField("spouseCurrentAge")} format={v => `${v}세`} />
+                  <Slider label="배우자 은퇴 나이" value={i.spouseRetireAge} {...UI_RANGES.spouseRetireAge} onChange={setInputField("spouseRetireAge")} format={v => `${v}세`} />
+                </>}
               </>}
             </Section>
 
-            <Section title="시장 가정 (실질)" summary={`${i.investmentReturnRate.toFixed(1)}%`}>
-              <Slider label="투자수익률" value={i.investmentReturnRate} min={0} max={8} step={0.1} onChange={setInputField("investmentReturnRate")} format={v => `${v.toFixed(1)}%`} />
-              <Slider label="수익률 밴드 ±" value={i.scenarioBandSpread} min={0} max={4} step={0.1} onChange={setInputField("scenarioBandSpread")} format={v => `±${v.toFixed(1)}%p`} />
-              <Slider label="물가상승률(표기용)" value={i.inflationRate} min={0} max={6} step={0.1} onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
-              <Slider label="주택 상승률(실질)" value={i.houseInflationRate} min={-3} max={3} step={0.1} onChange={setInputField("houseInflationRate")} format={v => `${v.toFixed(1)}%`} />
+            <Section title="소득" defaultOpen summary={fmt만원(i.currentSalary)}>
+              <Slider label="현재 연봉" value={i.currentSalary} {...UI_RANGES.currentSalary} onChange={setInputField("currentSalary")} format={fmt만원} />
+              {advancedMode && <>
+                <Slider label="연봉 상승률(실질)" value={i.salaryGrowthRate} {...UI_RANGES.salaryGrowthRate} onChange={setInputField("salaryGrowthRate")} format={v => `${v.toFixed(1)}%`} />
+                <Slider label="본인 지속소득(퇴직후)" value={i.postRetireSideIncome} {...UI_RANGES.postRetireSideIncome} onChange={setInputField("postRetireSideIncome")} format={v => `${v}만/월`} />
+                {i.spouseEnabled && (
+                  <Slider label="배우자 월 근로소득" value={i.spouseMonthlyIncome} {...UI_RANGES.spouseMonthlyIncome} onChange={setInputField("spouseMonthlyIncome")} format={v => `${v}만/월`} />
+                )}
+                <Toggle label="국민연금 가입연수 자동" value={i.npYearsAutoMode} onChange={setInputField("npYearsAutoMode")} hint="자동 = 퇴직나이−25 (최대 40년)" />
+                {!i.npYearsAutoMode && (
+                  <Slider label="국민연금 가입연수" value={i.npYearsContributed} {...UI_RANGES.npYearsContributed} onChange={setInputField("npYearsContributed")} format={v => `${v}년`} />
+                )}
+              </>}
             </Section>
 
-            <Section title="세제·건보">
-              <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
-              <Toggle label="연금소득세 5.5%" value={i.applyPensionTax} onChange={setInputField("applyPensionTax")} hint="분리과세 가정" />
+            <Section title="자산" summary={assetSummary}>
+              <Slider label="퇴직연금 잔액(IRP/DC)" value={i.retirementBalance} {...UI_RANGES.retirementBalance} onChange={setInputField("retirementBalance")} format={fmt만원} hint="회사가 매년 연봉/12 만큼 자동 적립" />
+              <Slider label="개인연금 잔액(연금저축/IRP)" value={i.privatePensionBalance} {...UI_RANGES.privatePensionBalance} onChange={setInputField("privatePensionBalance")} format={fmt만원} />
+              <Slider label="현금·투자 금융자산" value={i.cashSavings} {...UI_RANGES.cashSavings} onChange={setInputField("cashSavings")} format={fmt만원} />
+              {advancedMode && <>
+                <Slider label="추가저축(근로기)" value={i.monthlyAddSaving} {...UI_RANGES.monthlyAddSaving} onChange={setInputField("monthlyAddSaving")} format={v => `${v}만/월`} />
+                <Toggle label="주택 보유" value={i.hasHouse} onChange={(v) => setInputPatch({ hasHouse: v })} />
+                {i.hasHouse && <>
+                  <Slider label="주택 가치" value={i.housePrice} {...UI_RANGES.housePrice} onChange={setInputField("housePrice")} format={fmt만원} />
+                  <Toggle label="주택 대출 보유" value={i.hasMortgage} onChange={(v) => setInputPatch({ hasMortgage: v })} />
+                  {i.hasMortgage && <>
+                    <Slider label="대출 잔액" value={i.mortgageBalance} {...UI_RANGES.mortgageBalance} onChange={setInputField("mortgageBalance")} format={fmt만원} />
+                    <Slider label="월 원리금" value={i.monthlyMortgagePayment} {...UI_RANGES.monthlyMortgagePayment} onChange={setInputField("monthlyMortgagePayment")} format={v => `${v}만/월`} />
+                  </>}
+                </>}
+              </>}
             </Section>
+
+            {advancedMode && (
+              <Section title="개인연금 인출" summary={`${i.privatePensionStartAge}세 · ${i.privatePensionWithdrawRate.toFixed(1)}%`}>
+                <Slider label="인출 시작 나이" value={i.privatePensionStartAge} {...UI_RANGES.privatePensionStartAge} onChange={setInputField("privatePensionStartAge")} format={v => `${v}세`} />
+                <Slider label="연간 인출률" value={i.privatePensionWithdrawRate} {...UI_RANGES.privatePensionWithdrawRate} onChange={setInputField("privatePensionWithdrawRate")} format={v => `${v.toFixed(1)}%`} hint="매년 잔액 × 인출률만큼 현금흐름에 반영" />
+              </Section>
+            )}
+
+            <Section title="생활비 (현재가치)" summary={`${i.bridgeLivingCost}/${i.retirementLivingCost}만`}>
+              {advancedMode && (
+                <Slider label="근로기" value={i.workingLivingCost} {...UI_RANGES.workingLivingCost} onChange={setInputField("workingLivingCost")} format={v => `${v}만/월`} />
+              )}
+              <Slider label="브릿지 기간" value={i.bridgeLivingCost} {...UI_RANGES.bridgeLivingCost} onChange={setInputField("bridgeLivingCost")} format={v => `${v}만/월`} />
+              <Slider label="연금 수령기" value={i.retirementLivingCost} {...UI_RANGES.retirementLivingCost} onChange={setInputField("retirementLivingCost")} format={v => `${v}만/월`} />
+              <p className="text-[10px] text-slate-400">65~74세 0.75배 / 75세+ 0.55배 자동 적용</p>
+            </Section>
+
+            {advancedMode && (
+              <Section title="자녀" summary={`${i.children.length}명`}>
+                {i.children.length === 0 && <p className="text-xs text-slate-400 mb-2">자녀 없음</p>}
+                {i.children.map((child, idx) => (
+                  <div key={child.id} className="flex items-end gap-2 mb-2">
+                    <div className="flex-1">
+                      <NumberInput label={`자녀 ${idx + 1} 출생연도`} value={child.birthYear} onChange={v => updateChild(child.id, v)} />
+                    </div>
+                    <button onClick={() => removeChild(child.id)} className="mb-3 px-2 py-1 text-xs rounded border border-slate-200 text-slate-500 hover:text-red-600">삭제</button>
+                  </div>
+                ))}
+                {i.children.length < 5 && (
+                  <button onClick={addChild} className="mb-3 px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50">+ 자녀 추가</button>
+                )}
+                <Slider label="사교육비 강도" value={i.childCostMultiplier} {...UI_RANGES.childCostMultiplier} onChange={setInputField("childCostMultiplier")} format={v => `${v.toFixed(1)}×`} hint="1.0 = 표준 (0~6:50/초중고:80/대학:150만/월)" />
+              </Section>
+            )}
+
+            {advancedMode && i.hasHouse && (
+              <Section title="이벤트 — 다운사이징" summary={i.downsizeEnabled ? `${i.downsizeAge}세` : "OFF"}>
+                <Toggle label="주택 다운사이징 사용" value={i.downsizeEnabled} onChange={setInputField("downsizeEnabled")} />
+                {i.downsizeEnabled && <>
+                  <Slider label="매각 나이" value={i.downsizeAge} min={i.retireAge} max={i.lifeExpectancy - 1} step={UI_RANGES.downsizeAge.step} onChange={setInputField("downsizeAge")} format={v => `${v}세`} />
+                  <Slider label="매각 후 보유비율" value={i.downsizeRatio} {...UI_RANGES.downsizeRatio} onChange={setInputField("downsizeRatio")} format={v => `${Math.round(v*100)}%`} hint="0.6 = 60% 가치 주택으로 다운사이즈, 40% 현금화" />
+                </>}
+              </Section>
+            )}
+
+            <Section title="시장 가정 (실질)" summary={`${i.investmentReturnRate.toFixed(1)}%`}>
+              <Slider label="투자수익률" value={i.investmentReturnRate} {...UI_RANGES.investmentReturnRate} onChange={setInputField("investmentReturnRate")} format={v => `${v.toFixed(1)}%`} />
+              {advancedMode && <>
+                <Slider label="수익률 밴드 ±" value={i.scenarioBandSpread} {...UI_RANGES.scenarioBandSpread} onChange={setInputField("scenarioBandSpread")} format={v => `±${v.toFixed(1)}%p`} />
+                <Slider label="물가상승률(표기용)" value={i.inflationRate} {...UI_RANGES.inflationRate} onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
+                {i.hasHouse && <Slider label="주택 상승률(실질)" value={i.houseInflationRate} {...UI_RANGES.houseInflationRate} onChange={setInputField("houseInflationRate")} format={v => `${v.toFixed(1)}%`} />}
+              </>}
+            </Section>
+
+            {advancedMode && (
+              <Section title="세제·건보">
+                <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
+                <Toggle label="연금소득세 5.5%" value={i.applyPensionTax} onChange={setInputField("applyPensionTax")} hint="분리과세 가정" />
+                <Toggle label="퇴직금 일시금 별도 반영" value={i.includeSeveranceLumpSum} onChange={setInputField("includeSeveranceLumpSum")} hint="DC 매년 적립과 중복될 수 있어 기본값은 OFF" />
+              </Section>
+            )}
 
             <button
               onClick={resetActive}
@@ -790,7 +1052,7 @@ function App() {
               label="국민연금 예상"
               value={fmt만원월(activeResult.nationalPensionMonthly)}
               color="blue"
-              sub={`${i.pensionStartAge}세 / 가입 ${npYears(i)}년`}
+              sub={`${i.pensionStartAge}세 / 가입 ${npYears(i, ASSUMPTIONS)}년`}
             />
             <SummaryCard
               label={`준비율 (${readinessLabel(activeResult.readinessRatio)})`}
@@ -812,7 +1074,7 @@ function App() {
                 <span className="text-slate-400">음영 = 활성 시나리오 수익률 ±{i.scenarioBandSpread}%p</span>
               </div>
             </div>
-            <div style={{ width: "100%", height: 360 }}>
+            <div style={{ width: "100%", height: isMobile ? 220 : 360 }}>
               <ResponsiveContainer>
                 <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
                   <CartesianGrid stroke="#f1f5f9" />
@@ -919,7 +1181,7 @@ function App() {
           {/* 월 현금흐름 */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h2 className="text-sm font-semibold mb-2">월 현금흐름 — <span style={{color: active.color}}>{active.name}</span></h2>
-            <div style={{ width: "100%", height: 280 }}>
+            <div style={{ width: "100%", height: isMobile ? 180 : 280 }}>
               <ResponsiveContainer>
                 <ComposedChart data={cashflowData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }} stackOffset="sign">
                   <CartesianGrid stroke="#f1f5f9" />
@@ -929,7 +1191,8 @@ function App() {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine y={0} stroke="#94a3b8" />
                   <Bar dataKey="근로" stackId="a" fill="#10b981" />
-                  <Bar dataKey="연금" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="국민연금" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="개인연금" stackId="a" fill="#8b5cf6" />
                   <Bar dataKey="부수입" stackId="a" fill="#06b6d4" />
                   <Bar dataKey="생활비" stackId="a" fill="#f59e0b" />
                   <Bar dataKey="자녀비" stackId="a" fill="#a855f7" />
@@ -959,9 +1222,18 @@ function App() {
                   <div className="text-xs text-slate-500 mb-1.5">▷ 가장 효과적인 개선책 (준비율 변화):</div>
                   <div className="space-y-1">
                     {insights.map(ins => (
-                      <div key={ins.key} className="flex items-center justify-between text-sm">
+                      <div key={ins.key} className="flex items-center justify-between gap-2 text-sm">
                         <span>{ins.label}</span>
-                        <span className="num text-emerald-600 font-medium">+{Math.round(ins.delta)}%p → {Math.round(ins.newRatio)}%</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="num text-emerald-600 font-medium">+{Math.round(ins.delta)}%p → {Math.round(ins.newRatio)}%</span>
+                          {scenarios.length < 4 && (
+                            <button
+                              onClick={() => applyInsightAsNewScenario(ins)}
+                              className="text-[11px] px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 whitespace-nowrap"
+                              title="이 조건으로 새 시나리오 추가"
+                            >+ 추가</button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
