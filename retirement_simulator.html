@@ -1548,6 +1548,8 @@ function App() {
     return cur !== def;
   };
 
+  const i = active.input;
+
   // C9: 입력 정합성 검증
   const validationWarnings = useMemo(() => validateInput(i), [i]);
 
@@ -1628,7 +1630,6 @@ function App() {
     "순현금흐름":    y.cashflowMonthly,
   }));
 
-  const i = active.input;
   const minAge = i.currentAge;
   const maxAge = i.selfLifeExpectancy;
 
