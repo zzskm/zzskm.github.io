@@ -215,14 +215,14 @@
     </div>
     <div class="field">
       <label>업무 시작</label>
-      <input type="time" id="workStartTime" value="09:00" />
+      <input type="time" id="workStartTime" value="09:00" step="600" />
     </div>
     <div class="field">
       <label>점심 시간</label>
       <div class="lunch-range">
-        <input type="time" id="lunchStart" value="12:00" />
+        <input type="time" id="lunchStart" value="12:00" step="600" />
         <span class="dash">–</span>
-        <input type="time" id="lunchEnd" value="13:00" />
+        <input type="time" id="lunchEnd" value="13:00" step="600" />
       </div>
     </div>
   </div>
@@ -296,10 +296,10 @@
     d.setDate(d.getDate() + 4);
     return d;
   }
-  function nthMondayOfMonth(monday){
+  function nthFridayOfMonth(friday){
     let n = 1;
-    const m = monday.getMonth();
-    const cur = new Date(monday);
+    const m = friday.getMonth();
+    const cur = new Date(friday);
     cur.setDate(cur.getDate() - 7);
     while (cur.getMonth() === m){
       n++;
@@ -308,7 +308,8 @@
     return n;
   }
   function weekLabelFor(monday){
-    return `${monday.getFullYear()}-${pad2(monday.getMonth()+1)}-${nthMondayOfMonth(monday)}주`;
+    const f = fridayOf(monday);
+    return `${f.getFullYear()}-${pad2(f.getMonth()+1)}-${nthFridayOfMonth(f)}주`;
   }
   function rangeLabelFor(monday){
     const f = fridayOf(monday);
@@ -489,9 +490,9 @@
     // ── time column (always editable inputs)
     const timeEl = document.createElement("div");
     timeEl.className = "time";
-    const sIn = document.createElement("input"); sIn.type = "time"; sIn.value = line.start || "";
+    const sIn = document.createElement("input"); sIn.type = "time"; sIn.step = "600"; sIn.value = line.start || "";
     const tDash = document.createElement("span"); tDash.className = "dash"; tDash.textContent = "–";
-    const eIn = document.createElement("input"); eIn.type = "time"; eIn.value = line.end || "";
+    const eIn = document.createElement("input"); eIn.type = "time"; eIn.step = "600"; eIn.value = line.end || "";
     sIn.addEventListener("change", () => {
       state.days[dayIdx].lines[li].start = sIn.value || "";
       scheduleSave();
@@ -634,9 +635,9 @@
       const helper = document.createElement("div");
       helper.className = "timehelper";
       const defaultStart = state.workStartTime || "09:00";
-      const startI = document.createElement("input"); startI.type = "time"; startI.value = defaultStart;
+      const startI = document.createElement("input"); startI.type = "time"; startI.step = "600"; startI.value = defaultStart;
       const dash = document.createElement("span"); dash.className = "dash"; dash.textContent = "–";
-      const endI = document.createElement("input"); endI.type = "time"; endI.value = addOneHour(defaultStart);
+      const endI = document.createElement("input"); endI.type = "time"; endI.step = "600"; endI.value = addOneHour(defaultStart);
       const textI = document.createElement("input"); textI.type = "text"; textI.placeholder = "내용";
       const urlI = document.createElement("input"); urlI.type = "text"; urlI.placeholder = "링크 (선택)";
       const addBtn = document.createElement("button"); addBtn.textContent = "+ 추가";
