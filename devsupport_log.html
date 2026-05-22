@@ -85,13 +85,48 @@
   table.sheet th:last-child,  table.sheet td:last-child{border-right:0;}
   table.sheet thead th{background:var(--shade);font-weight:600;font-size:13px;text-align:center;letter-spacing:0.04em;}
   .date-cell{width:130px;text-align:center;font-family:var(--mono);font-size:13px;letter-spacing:0.02em;vertical-align:middle !important;}
-  textarea{
-    width:100%;border:0;background:transparent;resize:none;overflow:hidden;
-    font-family:var(--sans);font-size:14px;line-height:1.6;color:var(--ink);
-    min-height:134px;padding:0;letter-spacing:-0.003em;
+
+  .lines{display:flex;flex-direction:column;gap:4px;min-height:134px;}
+  .line-row{
+    display:grid;grid-template-columns:200px 1fr auto;gap:8px;align-items:center;
+    font-family:var(--sans);font-size:14px;line-height:1.5;color:var(--ink);
+    padding:2px 0;min-height:34px;
   }
-  textarea:focus{outline:none;}
-  textarea::placeholder{color:var(--ink-faint);font-style:italic;}
+  .line-row .time{display:flex;gap:3px;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-mute);}
+  .line-row .time input[type=time]{
+    font-family:var(--mono);font-size:12px;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:4px;
+    padding:2px 4px;width:88px;
+  }
+  .line-row .time input[type=time]:focus{outline:none;border-color:var(--line-strong);}
+  .line-row .time .dash{color:var(--ink-faint);}
+  .line-row .text{
+    min-width:0;word-break:break-word;cursor:text;
+    font-family:var(--sans);font-size:13px;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:4px;
+    padding:4px 8px;min-height:26px;line-height:1.5;
+  }
+  .line-row .text:hover{border-color:var(--line-strong);}
+  .line-row .text.has-link{color:#1a4fad;text-decoration:underline;}
+  .line-row .text.placeholder{color:var(--ink-faint);font-style:italic;}
+  .line-row .actions-inline{display:flex;gap:4px;}
+  .line-row .iconbtn{
+    font-family:var(--sans);font-size:12px;line-height:1;
+    padding:3px 6px;border:1px solid var(--line);background:var(--surface);color:var(--ink-mute);
+    border-radius:4px;cursor:pointer;
+  }
+  .line-row .iconbtn:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .line-row .edit-mid{display:flex;gap:6px;align-items:center;min-width:0;}
+  .line-row .edit-mid input[type=text]{
+    font-family:var(--sans);font-size:13px;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;
+    padding:4px 8px;min-width:0;
+  }
+  .line-row .edit-mid input.edit-text{flex:2;}
+  .line-row .edit-mid input.edit-url{flex:1;}
+  .line-row .edit-mid input:focus{outline:none;border-color:var(--ink);}
+  .iconbtn.disabled{opacity:0.35;pointer-events:none;cursor:default;}
+  .lines-empty{color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0;}
 
   .timehelper{
     display:flex;gap:6px;align-items:center;flex-wrap:wrap;
@@ -261,10 +296,10 @@
     d.setDate(d.getDate() + 4);
     return d;
   }
-  function nthFridayOfMonth(friday){
+  function nthMondayOfMonth(monday){
     let n = 1;
-    const m = friday.getMonth();
-    const cur = new Date(friday);
+    const m = monday.getMonth();
+    const cur = new Date(monday);
     cur.setDate(cur.getDate() - 7);
     while (cur.getMonth() === m){
       n++;
@@ -273,8 +308,7 @@
     return n;
   }
   function weekLabelFor(monday){
-    const f = fridayOf(monday);
-    return `${f.getFullYear()}-${pad2(f.getMonth()+1)}-${nthFridayOfMonth(f)}주`;
+    return `${monday.getFullYear()}-${pad2(monday.getMonth()+1)}-${nthMondayOfMonth(monday)}주`;
   }
   function rangeLabelFor(monday){
     const f = fridayOf(monday);
@@ -282,19 +316,43 @@
   }
   function sanitize(s){ return (s || "").replace(/[\/\\:*?"<>|]/g, "_"); }
 
-  const TA_BASE_ROWS = 6;
-  const TA_STEP_ROWS = 2;
-  function autosizeTextarea(ta){
-    const cs = getComputedStyle(ta);
-    const lineH = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) * 1.6);
-    const baseH = Math.ceil(TA_BASE_ROWS * lineH);
-    ta.style.height = "auto";
-    const need = ta.scrollHeight;
-    if (need <= baseH){ ta.style.height = baseH + "px"; return; }
-    const stepH = TA_STEP_ROWS * lineH;
-    const steps = Math.ceil((need - baseH) / stepH);
-    ta.style.height = Math.ceil(baseH + steps * stepH) + "px";
+  // ───── line parsing / migration helpers
+  const TIME_LINE_RE = /^(\d{1,2}:\d{2})\s*[-–~]\s*(\d{1,2}:\d{2})\s*(.*)$/;
+  function parseContentToLines(content){
+    const out = [];
+    (content || "").split(/\r?\n/).forEach(raw => {
+      const line = raw.replace(/\s+$/,"");
+      if (!line){ out.push({ start:"", end:"", text:"", url:"" }); return; }
+      const m = line.match(TIME_LINE_RE);
+      if (m){
+        out.push({ start: m[1], end: m[2], text: (m[3] || "").trim(), url: "" });
+      } else {
+        out.push({ start:"", end:"", text: line, url:"" });
+      }
+    });
+    // trim trailing empty
+    while (out.length && !out[out.length-1].start && !out[out.length-1].text) out.pop();
+    return out;
   }
+  function normalizeLines(arr){
+    if (!Array.isArray(arr)) return [];
+    return arr.map(l => ({
+      start: l.start || "",
+      end: l.end || "",
+      text: l.text || "",
+      url: l.url || ""
+    }));
+  }
+  function isValidUrl(u){
+    if (!u) return false;
+    return /^(https?:|mailto:|tel:|ftp:|\/)/i.test(u) || /^www\./i.test(u);
+  }
+  function normalizeUrl(u){
+    if (!u) return "";
+    if (/^www\./i.test(u)) return "https://" + u;
+    return u;
+  }
+
   function daysFromMonday(monday){
     return DAY_LABELS.map((wk, i) => {
       const d = new Date(monday);
@@ -343,24 +401,38 @@
   }
 
   // ───── week storage helpers
+  function isEmptyLine(l){
+    return !l || (!l.start && !l.end && !l.text && !l.url);
+  }
+  function stripTrailingEmpty(arr){
+    const out = normalizeLines(arr);
+    while (out.length && isEmptyLine(out[out.length-1])) out.pop();
+    return out;
+  }
   function snapshotCurrentWeek(){
     if (!state.weekStart) return;
     state.weeksByStart[state.weekStart] = state.days.map(d => ({
-      iso: d.iso, label: d.label, content: d.content || ""
+      iso: d.iso, label: d.label, lines: stripTrailingEmpty(d.lines)
     }));
   }
   function loadWeekFromStore(mondayIso){
     const monday = parseISO(mondayIso);
     const dayMeta = daysFromMonday(monday);
     const stored = state.weeksByStart[mondayIso] || [];
-    const prevByIso = Object.fromEntries(stored.map(x => [x.iso, x.content||""]));
+    const prevByIso = Object.fromEntries(stored.map(x => {
+      // backward compat: if stored has `content` (legacy v2) parse it
+      if (x.lines) return [x.iso, normalizeLines(x.lines)];
+      if (typeof x.content === "string") return [x.iso, parseContentToLines(x.content)];
+      return [x.iso, []];
+    }));
     state.days = dayMeta.map(d => ({
       iso: d.iso,
       label: d.label,
-      content: prevByIso[d.iso] || ""
+      lines: prevByIso[d.iso] || []
     }));
   }
   function goToWeek(newMondayIso){
+    exitActiveEditor(true);
     snapshotCurrentWeek();
     state.weekStart = newMondayIso;
     loadWeekFromStore(newMondayIso);
@@ -377,6 +449,172 @@
     renderLabel();
   }
 
+  function formatTimeLabel(line){
+    if (line.start && line.end) return `${line.start}–${line.end}`;
+    if (line.start) return line.start;
+    return "";
+  }
+
+  // Single-editor coordinator: only one line is in edit mode across the entire page
+  let activeEditor = null; // { commit: fn, cancel: fn }
+  function exitActiveEditor(commit){
+    if (!activeEditor) return;
+    const ed = activeEditor;
+    activeEditor = null;
+    if (commit) ed.commit(); else ed.cancel();
+  }
+
+  function renderLinesContainer(dayIdx, container){
+    container.innerHTML = "";
+    const day = state.days[dayIdx];
+    day.lines = day.lines || [];
+    if (day.lines.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "lines-empty";
+      empty.textContent = "아래에서 시간/내용 입력 후 + 추가 하세요.";
+      container.appendChild(empty);
+      return;
+    }
+    day.lines.forEach((line, li) => {
+      const row = buildLineRow(dayIdx, li, container);
+      container.appendChild(row);
+    });
+  }
+
+  function buildLineRow(dayIdx, li, container){
+    const line = state.days[dayIdx].lines[li];
+    const row = document.createElement("div");
+    row.className = "line-row";
+
+    // ── time column (always editable inputs)
+    const timeEl = document.createElement("div");
+    timeEl.className = "time";
+    const sIn = document.createElement("input"); sIn.type = "time"; sIn.value = line.start || "";
+    const tDash = document.createElement("span"); tDash.className = "dash"; tDash.textContent = "–";
+    const eIn = document.createElement("input"); eIn.type = "time"; eIn.value = line.end || "";
+    sIn.addEventListener("change", () => {
+      state.days[dayIdx].lines[li].start = sIn.value || "";
+      scheduleSave();
+    });
+    eIn.addEventListener("change", () => {
+      state.days[dayIdx].lines[li].end = eIn.value || "";
+      scheduleSave();
+    });
+    timeEl.append(sIn, tDash, eIn);
+
+    // ── middle (text display) + right (actions)
+    const textEl = document.createElement("div");
+    textEl.className = "text";
+    const actions = document.createElement("div");
+    actions.className = "actions-inline";
+
+    const renderDisplay = () => {
+      textEl.classList.remove("has-link", "placeholder");
+      const ln = state.days[dayIdx].lines[li];
+      const hasLink = isValidUrl(ln.url);
+      if (ln.text){
+        textEl.textContent = ln.text;
+        if (hasLink) textEl.classList.add("has-link");
+        textEl.title = hasLink ? `클릭하여 편집 · 링크: ${normalizeUrl(ln.url)}` : "클릭하여 편집";
+      } else {
+        textEl.textContent = "내용 입력...";
+        textEl.classList.add("placeholder");
+        textEl.title = "클릭하여 편집";
+      }
+      // actions
+      actions.innerHTML = "";
+      const openBtn = document.createElement("a");
+      openBtn.className = "iconbtn" + (hasLink ? "" : " disabled");
+      if (hasLink){
+        openBtn.href = normalizeUrl(ln.url);
+        openBtn.target = "_blank";
+        openBtn.rel = "noopener noreferrer";
+        openBtn.title = "링크 열기";
+      } else {
+        openBtn.title = "링크 없음";
+      }
+      openBtn.textContent = "↗";
+      openBtn.style.textDecoration = "none";
+      actions.appendChild(openBtn);
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "iconbtn";
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+      delBtn.title = "삭제";
+      delBtn.addEventListener("click", () => {
+        exitActiveEditor(true);
+        state.days[dayIdx].lines.splice(li, 1);
+        renderLinesContainer(dayIdx, container);
+        scheduleSave();
+      });
+      actions.appendChild(delBtn);
+    };
+
+    textEl.addEventListener("click", () => {
+      // exit any other active editor first (commit it), then enter this one
+      exitActiveEditor(true);
+      enterEditMode(dayIdx, li, row, textEl, actions, renderDisplay, container);
+    });
+
+    renderDisplay();
+    row.append(timeEl, textEl, actions);
+    return row;
+  }
+
+  function enterEditMode(dayIdx, lineIdx, row, textEl, actionsEl, renderDisplay, container){
+    const line = state.days[dayIdx].lines[lineIdx];
+
+    // swap middle cell: replace text div with input pair
+    const mid = document.createElement("div");
+    mid.className = "edit-mid";
+    const tI = document.createElement("input"); tI.type = "text"; tI.className = "edit-text"; tI.placeholder = "내용"; tI.value = line.text || "";
+    const uI = document.createElement("input"); uI.type = "text"; uI.className = "edit-url";  uI.placeholder = "링크 (선택)"; uI.value = line.url || "";
+    mid.append(tI, uI);
+    row.replaceChild(mid, textEl);
+
+    // swap right cell: replace actions with save/cancel
+    const newActions = document.createElement("div");
+    newActions.className = "actions-inline";
+    const okBtn = document.createElement("button"); okBtn.className = "iconbtn"; okBtn.type = "button"; okBtn.textContent = "✓"; okBtn.title = "저장";
+    const cancelBtn = document.createElement("button"); cancelBtn.className = "iconbtn"; cancelBtn.type = "button"; cancelBtn.textContent = "↶"; cancelBtn.title = "취소";
+    newActions.append(okBtn, cancelBtn);
+    row.replaceChild(newActions, actionsEl);
+
+    tI.focus();
+    tI.setSelectionRange(tI.value.length, tI.value.length);
+
+    const restoreDisplay = () => {
+      if (mid.parentNode === row) row.replaceChild(textEl, mid);
+      if (newActions.parentNode === row) row.replaceChild(actionsEl, newActions);
+      renderDisplay();
+    };
+
+    const commit = () => {
+      state.days[dayIdx].lines[lineIdx] = {
+        start: state.days[dayIdx].lines[lineIdx].start || "",
+        end:   state.days[dayIdx].lines[lineIdx].end   || "",
+        text: (tI.value || "").trim(),
+        url:  (uI.value || "").trim()
+      };
+      restoreDisplay();
+      scheduleSave();
+    };
+    const cancel = () => {
+      restoreDisplay();
+    };
+
+    activeEditor = { commit, cancel };
+
+    okBtn.addEventListener("click", () => exitActiveEditor(true));
+    cancelBtn.addEventListener("click", () => exitActiveEditor(false));
+    [tI, uI].forEach(inp => inp.addEventListener("keydown", ev => {
+      if (ev.key === "Enter"){ ev.preventDefault(); exitActiveEditor(true); }
+      else if (ev.key === "Escape"){ ev.preventDefault(); exitActiveEditor(false); }
+    }));
+  }
+
+
   function renderDays(){
     $daysBody.innerHTML = "";
     state.days.forEach((d, i) => {
@@ -387,16 +625,10 @@
       tdDate.textContent = d.label;
 
       const tdContent = document.createElement("td");
-      const ta = document.createElement("textarea");
-      ta.value = d.content;
-      ta.placeholder = "09:00-11:00 …\n11:00-12:00 점심식사\n…";
-      ta.addEventListener("input", () => {
-        state.days[i].content = ta.value;
-        autosizeTextarea(ta);
-        scheduleSave();
-      });
-      tdContent.appendChild(ta);
-      requestAnimationFrame(() => autosizeTextarea(ta));
+      const linesContainer = document.createElement("div");
+      linesContainer.className = "lines";
+      tdContent.appendChild(linesContainer);
+      renderLinesContainer(i, linesContainer);
 
       // time helper
       const helper = document.createElement("div");
@@ -406,41 +638,42 @@
       const dash = document.createElement("span"); dash.className = "dash"; dash.textContent = "–";
       const endI = document.createElement("input"); endI.type = "time"; endI.value = addOneHour(defaultStart);
       const textI = document.createElement("input"); textI.type = "text"; textI.placeholder = "내용";
+      const urlI = document.createElement("input"); urlI.type = "text"; urlI.placeholder = "링크 (선택)";
       const addBtn = document.createElement("button"); addBtn.textContent = "+ 추가";
 
-      const appendLine = (line) => {
-        const cur = ta.value;
-        ta.value = cur && !cur.endsWith("\n") ? cur + "\n" + line : cur + line;
+      const pushLine = (obj) => {
+        state.days[i].lines = state.days[i].lines || [];
+        state.days[i].lines.push(obj);
       };
       const doAdd = () => {
-        const s = startI.value, e = endI.value, t = textI.value.trim();
+        exitActiveEditor(true);
+        const s = startI.value, e = endI.value, t = textI.value.trim(), u = urlI.value.trim();
         if (!s || !e) return;
-        appendLine(`${s}-${e}${t ? " " + t : ""}`);
+        pushLine({ start: s, end: e, text: t, url: u });
         // shift defaults — jump over lunch if next slot would land before/in lunch
         let nextStart = e;
         let nextEnd = addOneHour(nextStart);
         const ls = state.lunchStart || "12:00";
         const le = state.lunchEnd   || "13:00";
         if (ls < le && nextStart < le && nextEnd > ls){
-          // only insert the lunch line when the user's block ended before lunch starts
-          if (nextStart <= ls) appendLine(`${ls}-${le} 점심식사`);
+          if (nextStart <= ls) pushLine({ start: ls, end: le, text: "점심식사", url: "" });
           nextStart = le;
           nextEnd = addOneHour(le);
         }
-        state.days[i].content = ta.value;
         startI.value = nextStart;
         endI.value = nextEnd;
         textI.value = "";
+        urlI.value = "";
         textI.focus();
-        autosizeTextarea(ta);
+        renderLinesContainer(i, linesContainer);
         scheduleSave();
       };
       addBtn.addEventListener("click", doAdd);
-      textI.addEventListener("keydown", ev => {
-        if (ev.key === "Enter"){ ev.preventDefault(); doAdd(); }
-      });
+      const onEnter = ev => { if (ev.key === "Enter"){ ev.preventDefault(); doAdd(); } };
+      textI.addEventListener("keydown", onEnter);
+      urlI.addEventListener("keydown", onEnter);
 
-      helper.append(startI, dash, endI, textI, addBtn);
+      helper.append(startI, dash, endI, textI, urlI, addBtn);
       tdContent.appendChild(helper);
 
       tr.appendChild(tdDate);
@@ -466,7 +699,7 @@
   function save(){
     snapshotCurrentWeek();
     const payload = {
-      schema: 2,
+      schema: 3,
       name: state.name,
       workStartTime: state.workStartTime,
       lunchStart: state.lunchStart,
@@ -492,9 +725,21 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return false;
       const obj = JSON.parse(raw);
-      if (obj && obj.schema === 2 && obj.weekStart && obj.weeksByStart){
+      if (obj && (obj.schema === 2 || obj.schema === 3) && obj.weekStart && obj.weeksByStart){
         state.weekStart = obj.weekStart;
-        state.weeksByStart = obj.weeksByStart || {};
+        // migrate week storage to lines-based shape
+        const wbs = obj.weeksByStart || {};
+        const migrated = {};
+        Object.keys(wbs).forEach(k => {
+          migrated[k] = (wbs[k] || []).map(x => {
+            if (x.lines) return { iso: x.iso, label: x.label, lines: normalizeLines(x.lines) };
+            if (typeof x.content === "string"){
+              return { iso: x.iso, label: x.label, lines: parseContentToLines(x.content) };
+            }
+            return { iso: x.iso, label: x.label, lines: [] };
+          });
+        });
+        state.weeksByStart = migrated;
         state.name = obj.name || "";
         state.workStartTime = obj.workStartTime || "09:00";
         state.lunchStart = obj.lunchStart || "12:00";
@@ -557,7 +802,7 @@
   document.getElementById("resetBtn").addEventListener("click", () => {
     const m = parseISO(state.weekStart), f = fridayOf(m);
     if (!confirm(`${toISO(m)} ~ ${toISO(f)} 주차 내용을 비웁니다.\n계속할까요?`)) return;
-    state.days.forEach(d => d.content = "");
+    state.days.forEach(d => d.lines = []);
     renderDays();
     save();
   });
@@ -581,7 +826,8 @@
     }
     const {
       Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-      WidthType, AlignmentType, BorderStyle, HeightRule, VerticalAlign
+      WidthType, AlignmentType, BorderStyle, HeightRule, VerticalAlign,
+      ExternalHyperlink, UnderlineType
     } = docx;
 
     const wkLabel = weekLabelFor(parseISO(state.weekStart));
@@ -610,6 +856,42 @@
     const multiPara = (text) => {
       const lines = (text || "").split(/\r?\n/);
       return lines.map(l => para(l));
+    };
+
+    // Build a paragraph for one structured line, with optional hyperlink on text portion
+    const linePara = (line) => {
+      const children = [];
+      const timeLabel = line.start && line.end
+        ? `${line.start}-${line.end}`
+        : (line.start || "");
+      if (timeLabel){
+        children.push(new TextRun({ text: timeLabel + (line.text ? " " : ""), ...runOpts({ bold: true }) }));
+      }
+      if (line.text){
+        if (isValidUrl(line.url)){
+          const link = normalizeUrl(line.url);
+          children.push(new ExternalHyperlink({
+            link: link,
+            children: [
+              new TextRun({
+                text: line.text,
+                ...runOpts({ bold: true, color: "0000FF" }),
+                underline: { type: UnderlineType.SINGLE, color: "0000FF" }
+              })
+            ]
+          }));
+        } else {
+          children.push(new TextRun({ text: line.text, ...runOpts({ bold: true }) }));
+        }
+      }
+      if (children.length === 0){
+        children.push(new TextRun({ text: "", ...runOpts() }));
+      }
+      return new Paragraph({
+        alignment: AlignmentType.BOTH,
+        spacing: { before: 0, after: 0, line: 240, lineRule: "auto" },
+        children
+      });
     };
 
     // ── Header table
@@ -666,16 +948,16 @@
             { width: 7498, shade: "D9D9D9" }),
         ]
       }),
-      ...state.days.map(d => new TableRow({
-        height: { value: 1941, rule: HeightRule.ATLEAST },
-        children: [
-          bodyCell(para(d.label, { bold: true, align: AlignmentType.CENTER }), { width: 2786 }),
-          bodyCell(
-            (d.content || "").split(/\r?\n/).map(l => para(l, { bold: true, align: AlignmentType.BOTH })),
-            { width: 7498 }
-          ),
-        ]
-      }))
+      ...state.days.map(d => {
+        const lines = (d.lines && d.lines.length) ? d.lines : [{ start:"", end:"", text:"", url:"" }];
+        return new TableRow({
+          height: { value: 1941, rule: HeightRule.ATLEAST },
+          children: [
+            bodyCell(para(d.label, { bold: true, align: AlignmentType.CENTER }), { width: 2786 }),
+            bodyCell(lines.map(linePara), { width: 7498 }),
+          ]
+        });
+      })
     ];
 
     const bodyTable = new Table({
@@ -780,7 +1062,7 @@
     } else {
       refreshFilename(true);
     }
-    if (loaded && (state.days.some(d => d.content) || state.name)){
+    if (loaded && (state.days.some(d => d.lines && d.lines.length) || state.name)){
       $saveState.textContent = "복원됨";
     }
   }
