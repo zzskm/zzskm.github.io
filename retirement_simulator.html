@@ -106,6 +106,21 @@ const ASSUMPTIONS = {
     dcAnnualContributionSalaryDivisor: 12,
     readinessMaxRatio: 300,
     includeSeveranceLumpSumDefault: false,
+    housingLiquidationThreshold: 600,   // 만원 — 이 이하로 떨어지면 자동 cascade
+    fallbackMonthlyRent: 80,            // 만/월 — jeonse→monthly_rent 전환 시 기본 시세
+    fallbackDepositOnRent: 5000,        // 만원 — 월세 전환 후 유지할 잔존 보증금
+  },
+  // 주거비 인플레이션 동학 (CPI와 분리, 주거 모드별 독립 적용)
+  housingInflation: {
+    scenarios: {
+      stable:   { rentAnnual: 0.035, jeonseBumpRange: [0.05, 0.08], jeonseShockYears: null, jeonseShockRange: null, maintAnnual: 0.04 },
+      realistic:{ rentAnnual: 0.04,  jeonseBumpRange: [0.07, 0.10], jeonseShockYears: 10,   jeonseShockRange: [0.20, 0.30], maintAnnual: 0.045 },
+      stress:   { rentAnnual: 0.06,  jeonseBumpRange: [0.10, 0.14], jeonseShockYears: 8,    jeonseShockRange: [0.25, 0.35], maintAnnual: 0.06 },
+    },
+    defaultScenario: "realistic",
+    jeonseRenewalYears: 2,
+    elderlyAge: 75,
+    elderlyExtraRate: 0.015,  // 75세+ 주거비 가중 +1.5%p/년
   },
   // 2024 한국 소득세 + 4대보험 단순 모델 (세전↔세후 변환용)
   taxModel: {
@@ -189,6 +204,9 @@ const UI_RANGES = {
   houseInflationRate:       { min: 0, max: 10, step: 0.1 },  // 명목 %
   mortgageBalance:          { min: 0, max: 100000, step: 500 },
   monthlyMortgagePayment:   { min: 0, max: 500, step: 10 },
+  housingMaintenance:       { min: 0, max: 100, step: 1 },   // 만/월
+  monthlyRent:              { min: 0, max: 300, step: 5 },   // 만/월
+  deposit:                  { min: 0, max: 200000, step: 1000 }, // 만원
   investmentReturnRate:     { min: 0, max: 12, step: 0.1 },  // 명목 %
   inflationRate:            { min: 0, max: 8, step: 0.1 },
   scenarioBandSpread:       { min: 0, max: 4, step: 0.1 },
@@ -233,12 +251,19 @@ const PRESETS = {
     savingsBalance: 2000,
     savingsReturnRate: 3.0,          // 명목 % — 저축성 수익률 (스트레스 미적용)
     monthlyAddSaving: 30,
-    hasHouse: true,
+    // 주거 (housingMode: "own" | "monthly_rent" | "jeonse")
+    housingMode: "own",
+    housingMaintenance: 20,          // 만/월 관리비 (모든 모드 공통)
+    housingInflationScenario: "realistic",
+    // 자가 모드 전용
     housePrice: 80000,
-    houseInflationRate: 3.0,       // 명목 %
+    houseInflationRate: 3.0,         // 명목 %
     hasMortgage: true,
     mortgageBalance: 20000,
     monthlyMortgagePayment: 150,
+    // 전세/월세 모드 전용
+    deposit: 0,                      // 만원 (보증금)
+    monthlyRent: 0,                  // 만/월 (월세)
     // 시장 가정 (명목 %)
     investmentReturnRate: 6.0,
     inflationRate: 2.5,
@@ -436,8 +461,33 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
   // ── 초기 자산 (2-bucket: 저축성 / 투자성) ───────────────────
   let financialSavings     = input.savingsBalance;      // 저축성 (예금·MMF, 스트레스 미적용)
   let financialInvestments = input.investmentBalance;   // 투자성 (DC/IRP·주식·ETF, 스트레스 적용)
-  let house = input.hasHouse ? input.housePrice : 0;
-  let mortgage = input.hasHouse && input.hasMortgage ? input.mortgageBalance : 0;
+
+  // ── 주거 모드 초기화 (cascade로 변경 가능 — mutable 로컬 변수) ──
+  let simHousingMode = input.housingMode ?? "own";
+  const isOwn    = () => simHousingMode === "own";
+  const isRent   = () => simHousingMode === "monthly_rent";
+  const isJeonse = () => simHousingMode === "jeonse";
+
+  let house    = isOwn() ? input.housePrice : 0;
+  let mortgage = isOwn() && input.hasMortgage ? input.mortgageBalance : 0;
+
+  // 주거비 (현재가치 기준 real)
+  let curMaintenance = input.housingMaintenance ?? 0;   // 만/월
+  let curMonthlyRent = input.monthlyRent ?? 0;          // 만/월
+  let curDeposit     = input.deposit ?? 0;              // 만원 (보증금)
+
+  // 주거비 인플레이션 파라미터
+  const hInfl    = assumptions.housingInflation;
+  const hScen    = hInfl.scenarios[input.housingInflationScenario ?? hInfl.defaultScenario] ?? hInfl.scenarios.realistic;
+  const hRentReal  = (1 + hScen.rentAnnual)  / (1 + inflRate) - 1;
+  const hMaintReal = (1 + hScen.maintAnnual) / (1 + inflRate) - 1;
+  const jeonseBumpMid  = (hScen.jeonseBumpRange[0] + hScen.jeonseBumpRange[1]) / 2;
+  const jeonseShockMid = hScen.jeonseShockRange ? (hScen.jeonseShockRange[0] + hScen.jeonseShockRange[1]) / 2 : 0;
+  // real 2-year equivalent bump
+  const jeonseBumpReal  = (1 + jeonseBumpMid)  / Math.pow(1 + inflRate, hInfl.jeonseRenewalYears) - 1;
+  const jeonseShockReal = (1 + jeonseShockMid) / (1 + inflRate) - 1;
+  let jeonseYearsSinceRenewal = 0;
+  let yearsSinceShock = 0;
 
   let depletionAge = null;
   let bridgeShortfall = 0;
@@ -514,13 +564,43 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
 
     const childAnnual = isAnyoneAlive ? childCostYearly(input, year, assumptions) : 0;
 
-    // ── 대출 상환 ──
-    const mortgagePaid = (input.hasHouse && input.hasMortgage)
+    // ── 대출 상환 (자가 모드만) ──
+    const mortgagePaid = (isOwn() && input.hasMortgage)
       ? Math.min(mortgage, input.monthlyMortgagePayment * 12) : 0;
     mortgage = Math.max(0, mortgage - mortgagePaid);
 
     // ── 추가저축 (본인 근로기만) ──
     const extraSavingAnnual = selfIsWorking ? input.monthlyAddSaving * 12 : 0;
+
+    // ── 주거비 인플레이션 동학 ──
+    const elderlyBonus = (age >= hInfl.elderlyAge) ? hInfl.elderlyExtraRate : 0;
+
+    // 관리비: 모든 모드, 실질 성장
+    curMaintenance *= (1 + hMaintReal + elderlyBonus);
+
+    // 월세: 실질 성장
+    if (isRent()) {
+      curMonthlyRent *= (1 + hRentReal + elderlyBonus);
+    }
+
+    // 전세: 2년 주기 보증금 점프 + 충격
+    let jeonseTopUpAnnual = 0;
+    if (isJeonse()) {
+      jeonseYearsSinceRenewal++;
+      if (jeonseYearsSinceRenewal >= hInfl.jeonseRenewalYears) {
+        const bump = curDeposit * (jeonseBumpReal + elderlyBonus * hInfl.jeonseRenewalYears);
+        curDeposit += bump;
+        jeonseTopUpAnnual += bump;
+        jeonseYearsSinceRenewal = 0;
+      }
+      yearsSinceShock++;
+      if (hScen.jeonseShockYears && yearsSinceShock >= hScen.jeonseShockYears) {
+        const shock = curDeposit * jeonseShockReal;
+        curDeposit += shock;
+        jeonseTopUpAnnual += shock;
+        yearsSinceShock = 0;
+      }
+    }
 
     // ── 건강보험료 (퇴직 후) ──
     const sideIncomeForHI = bridgeSideAnnual + spouseSalaryAnnual;
@@ -544,8 +624,8 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       severancePaid = true;
     }
 
-    // ── 다운사이징 ──
-    if (!downsizeDone && input.hasHouse && input.downsizeEnabled && age === input.downsizeAge) {
+    // ── 수동 다운사이징 (자가 모드만) ──
+    if (!downsizeDone && isOwn() && input.downsizeEnabled && age === input.downsizeAge) {
       const liquidated = house * (1 - input.downsizeRatio);
       financialSavings += liquidated;
       house = house * input.downsizeRatio;
@@ -553,10 +633,15 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       downsizeEvents.push({ age, label: "주택 다운사이징", liquidated });
     }
 
+    // ── 주거비 집계 ──
+    const maintAnnual = isAnyoneAlive ? curMaintenance * 12 : 0;
+    const rentAnnual  = (isAnyoneAlive && isRent()) ? curMonthlyRent * 12 : 0;
+
     // ── 현금흐름 집계 ──
     const income = selfSalaryAnnual + spouseSalaryAnnual + selfPensionAnnual + spousePensionAnnual
                  + bridgeSideAnnual;
-    const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual + medicalAnnual;
+    const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual + medicalAnnual
+                  + maintAnnual + rentAnnual + jeonseTopUpAnnual;
     const cashflowExclSaving = income - outflow;
     const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
 
@@ -567,7 +652,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     // 먼저 모든 버킷에 수익률 적용
     financialInvestments = financialInvestments * (1 + rInv) + dcContribAnnual;
     financialSavings     = financialSavings     * (1 + rSav);
-    house = input.hasHouse ? house * (1 + hg) : 0;
+    house = isOwn() ? house * (1 + hg) : 0;
 
     // 퇴직 시점 4pct SWR 기준값 확정
     if (strategy === "4pct" && age === input.retireAge) {
@@ -642,14 +727,47 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     }
 
     const financialTotal = financialSavings + financialInvestments;
-    const netWorth = financialTotal + house - mortgage;
 
-    if (financialTotal <= 0 && depletionAge === null && age >= input.retireAge) {
+    // ── 자동 주거 다운그레이드 cascade (퇴직 후, 금융자산 임계값 미만) ──
+    const THRESHOLD = assumptions.assetRules.housingLiquidationThreshold;
+    if (age >= input.retireAge) {
+      // Step 1: 자가 → 전세
+      if (isOwn() && house > 0 && financialTotal < THRESHOLD) {
+        const houseAfterMortgage = Math.max(0, house - mortgage);
+        const newDeposit = houseAfterMortgage * 0.7;
+        const cashOut    = houseAfterMortgage * 0.3;
+        curDeposit = newDeposit;
+        financialSavings += cashOut;
+        house = 0; mortgage = 0;
+        simHousingMode = "jeonse";
+        jeonseYearsSinceRenewal = 0; yearsSinceShock = 0;
+        downsizeEvents.push({ age, label: "자가→전세 전환 (자동)", liquidated: cashOut, deposit: newDeposit });
+      }
+      // Step 2: 전세 → 월세
+      const financialTotalPostCascade1 = financialSavings + financialInvestments;
+      if (isJeonse() && curDeposit > 0 && financialTotalPostCascade1 < THRESHOLD) {
+        const fallbackDeposit = assumptions.assetRules.fallbackDepositOnRent;
+        const remainDeposit = Math.min(curDeposit, fallbackDeposit);
+        const recovered = curDeposit - remainDeposit;
+        curDeposit = remainDeposit;
+        financialSavings += recovered;
+        simHousingMode = "monthly_rent";
+        if (!curMonthlyRent || curMonthlyRent <= 0) {
+          curMonthlyRent = assumptions.assetRules.fallbackMonthlyRent;
+        }
+        downsizeEvents.push({ age, label: "전세→월세 전환 (자동)", liquidated: recovered, depositRemaining: remainDeposit });
+      }
+    }
+
+    const financialTotalFinal = financialSavings + financialInvestments;
+    const netWorth = financialTotalFinal + house - mortgage + curDeposit;
+
+    if (financialTotalFinal <= 0 && depletionAge === null && age >= input.retireAge) {
       depletionAge = age;
     }
 
     if (selfIsBridge && cashflowExclSaving < 0) bridgeShortfall += -cashflowExclSaving;
-    if (age === input.retireAge) totalAssetsAtRetirement = financialTotal;
+    if (age === input.retireAge) totalAssetsAtRetirement = financialTotalFinal;
 
     years.push({
       age, year,
@@ -657,10 +775,14 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       selfAlive, spouseAlive,
       financialSavings: Math.round(financialSavings),
       financialInvestments: Math.round(financialInvestments),
-      financialAssets: Math.round(financialTotal),
+      financialAssets: Math.round(financialTotalFinal),
       houseValue: Math.round(house),
       mortgage: Math.round(mortgage),
+      deposit: Math.round(curDeposit),
+      housingMode: simHousingMode,
       netWorth: Math.round(netWorth),
+      maintMonthly:  Math.round(curMaintenance),
+      rentMonthly:   Math.round(isRent() ? curMonthlyRent : 0),
       selfSalaryMonthly:    Math.round(selfSalaryAnnual   / 12),
       spouseSalaryMonthly:  Math.round(spouseSalaryAnnual / 12),
       selfPensionMonthly:   Math.round(selfPensionAnnual  / 12),
@@ -671,6 +793,8 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       mortgageMonthly:      Math.round(mortgagePaid       / 12),
       healthInsMonthly:     Math.round(healthInsAnnual    / 12),
       medicalMonthly:       Math.round(medicalAnnual      / 12),
+      maintMonthlyOut:      Math.round(maintAnnual        / 12),
+      rentMonthlyOut:       Math.round((rentAnnual + jeonseTopUpAnnual) / 12),
       cashflowMonthly:      Math.round(cashflowWithSaving / 12),
     });
   }
@@ -785,7 +909,7 @@ function validateInput(input) {
     warnings.push({ key: "pension_start", level: "warn", msg: `국민연금 개시(${input.selfPensionStartAge}세)가 퇴직(${input.retireAge}세) 이전 또는 동시입니다. 브릿지 기간이 0이 됩니다.` });
   if (input.selfLifeExpectancy <= input.retireAge)
     warnings.push({ key: "life_exp", level: "error", msg: `기대수명(${input.selfLifeExpectancy}세)이 퇴직 나이(${input.retireAge}세) 이하입니다.` });
-  if (input.hasMortgage && input.mortgageBalance > 0 && input.monthlyMortgagePayment <= 0)
+  if (input.housingMode === "own" && input.hasMortgage && input.mortgageBalance > 0 && input.monthlyMortgagePayment <= 0)
     warnings.push({ key: "mortgage", level: "warn", msg: "대출 잔액이 있으나 월 원리금이 0입니다. 대출이 상환되지 않습니다." });
   if ((input.investmentBalance + input.savingsBalance) <= 0 && input.selfCurrentSalary <= 0)
     warnings.push({ key: "no_asset", level: "warn", msg: "금융자산과 소득이 모두 0입니다. 자산 항목을 확인해주세요." });
@@ -809,7 +933,7 @@ const INSIGHT_CANDIDATES = [
                           retirementLivingCost: Math.max(50, i.retirementLivingCost - 50),
                        }) },
   { key: "downsize",  label: "주택 다운사이징 60%",  patch: (i) => ({
-                          hasHouse: true,
+                          housingMode: "own",
                           downsizeEnabled: true,
                           downsizeAge: Math.min(i.selfLifeExpectancy - 1, i.retireAge + 5),
                           downsizeRatio: 0.6,
@@ -1177,11 +1301,14 @@ function SetupWizard({ initial, onComplete, onClose }) {
     spouseSalaryBasis:   initial.spouseSalaryBasis   ?? "gross",
     savingsBalance:     initial.savingsBalance     ?? 2000,
     investmentBalance:  initial.investmentBalance  ?? 5000,
-    hasHouse: initial.hasHouse ?? true,
-    housePrice: initial.housePrice ?? 80000,
-    hasMortgage: initial.hasMortgage ?? true,
-    mortgageBalance: initial.mortgageBalance ?? 20000,
+    housingMode:        initial.housingMode        ?? "own",
+    housingMaintenance: initial.housingMaintenance ?? 20,
+    housePrice:         initial.housePrice         ?? 80000,
+    hasMortgage:        initial.hasMortgage        ?? true,
+    mortgageBalance:    initial.mortgageBalance    ?? 20000,
     monthlyMortgagePayment: initial.monthlyMortgagePayment ?? 150,
+    deposit:            initial.deposit            ?? 0,
+    monthlyRent:        initial.monthlyRent        ?? 0,
     bridgeLivingCost:      initial.bridgeLivingCost      ?? 400,
     retirementLivingCost:  initial.retirementLivingCost  ?? 300,
     investmentReturnRate:  initial.investmentReturnRate  ?? 6.0,
@@ -1292,20 +1419,23 @@ function SetupWizard({ initial, onComplete, onClose }) {
       <p className="text-sm text-slate-500 mb-4">현재 보유 자산과 주거 현황을 입력해주세요.</p>
       {num("savingsBalance", "저축성 자산 (예금·MMF 등)", 0, 50000, 500, "만원")}
       {num("investmentBalance", "투자성 자산 (DC/IRP·주식·ETF 등)", 0, 50000, 500, "만원")}
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">주택 보유</span>
-        <button onClick={() => set("hasHouse")(!draft.hasHouse)}
-          className={`relative rounded-full transition`}
-          style={{height:22, width:40, background: draft.hasHouse ? '#0f172a' : '#cbd5e1'}}
-        >
-          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition`}
-            style={{left: draft.hasHouse ? '20px' : '2px'}} />
-        </button>
+      {/* 주거 모드 */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-slate-700 mb-2">주거 형태</label>
+        <div className="flex gap-1">
+          {[["own","🏠 자가"],["jeonse","🔑 전세"],["monthly_rent","🏢 월세"]].map(([mode, label]) => (
+            <button key={mode}
+              onClick={() => set("housingMode")(mode)}
+              className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${draft.housingMode === mode ? "border-slate-800 bg-slate-900 text-white" : "border-slate-200 text-slate-500 hover:border-slate-400"}`}
+            >{label}</button>
+          ))}
+        </div>
       </div>
-      {draft.hasHouse && <>
-        {num("housePrice", "주택 가치", 0, 200000, 1000, "만원")}
+      {/* 자가 전용 */}
+      {draft.housingMode === "own" && <>
+        {num("housePrice", "주택 시세", 0, 200000, 1000, "만원")}
         <div className="mb-4 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-700">대출 있음</span>
+          <span className="text-sm font-medium text-slate-700">주택 대출 있음</span>
           <button onClick={() => set("hasMortgage")(!draft.hasMortgage)}
             className="relative rounded-full transition"
             style={{height:22, width:40, background: draft.hasMortgage ? '#0f172a' : '#cbd5e1'}}
@@ -1319,6 +1449,15 @@ function SetupWizard({ initial, onComplete, onClose }) {
           {num("monthlyMortgagePayment", "월 원리금", 0, 500, 10, "만/월")}
         </>}
       </>}
+      {/* 전세 전용 */}
+      {draft.housingMode === "jeonse" && num("deposit", "전세 보증금", 0, 200000, 1000, "만원")}
+      {/* 월세 전용 */}
+      {draft.housingMode === "monthly_rent" && <>
+        {num("deposit", "보증금", 0, 100000, 1000, "만원")}
+        {num("monthlyRent", "월세", 0, 300, 5, "만/월")}
+      </>}
+      {/* 공통: 관리비 */}
+      {num("housingMaintenance", "월 관리비 (공통)", 0, 100, 1, "만/월")}
     </div>,
     // 4: 생활비·시장
     <div key="step4">
@@ -1355,11 +1494,14 @@ function SetupWizard({ initial, onComplete, onClose }) {
       spouseSalaryBasis:   draft.spouseSalaryBasis ?? "gross",
       savingsBalance:      draft.savingsBalance,
       investmentBalance:   draft.investmentBalance,
-      hasHouse:            draft.hasHouse,
-      housePrice:          draft.hasHouse ? draft.housePrice : 0,
-      hasMortgage:         draft.hasHouse && draft.hasMortgage,
-      mortgageBalance:     draft.hasHouse && draft.hasMortgage ? draft.mortgageBalance : 0,
-      monthlyMortgagePayment: draft.hasHouse && draft.hasMortgage ? draft.monthlyMortgagePayment : 0,
+      housingMode:         draft.housingMode ?? "own",
+      housingMaintenance:  draft.housingMaintenance ?? 20,
+      housePrice:          draft.housingMode === "own" ? draft.housePrice : 0,
+      hasMortgage:         draft.housingMode === "own" && draft.hasMortgage,
+      mortgageBalance:     draft.housingMode === "own" && draft.hasMortgage ? draft.mortgageBalance : 0,
+      monthlyMortgagePayment: draft.housingMode === "own" && draft.hasMortgage ? draft.monthlyMortgagePayment : 0,
+      deposit:             draft.housingMode !== "own" ? (draft.deposit ?? 0) : 0,
+      monthlyRent:         draft.housingMode === "monthly_rent" ? (draft.monthlyRent ?? 0) : 0,
       bridgeLivingCost:    draft.bridgeLivingCost,
       retirementLivingCost: draft.retirementLivingCost,
       investmentReturnRate: draft.investmentReturnRate,
@@ -1470,7 +1612,12 @@ function normalizeInput(raw = {}) {
     monthlyAddSaving:    raw.monthlyAddSaving     ?? raw.monthlyAdditionalSaving ?? KR_DEFAULTS.monthlyAddSaving,
     spouseEnabled:       raw.spouseEnabled        ?? ((raw.spouseMonthlyIncome ?? raw.spouseCurrentSalary ?? 0) > 0),
     spouseCurrentAge:    raw.spouseCurrentAge     ?? KR_DEFAULTS.spouseCurrentAge,
-    hasHouse:            raw.hasHouse             ?? ((raw.housePrice ?? KR_DEFAULTS.housePrice) > 0),
+    // PR4: housingMode (hasHouse 레거시 마이그레이션)
+    housingMode:         raw.housingMode          ?? (raw.hasHouse === false ? "monthly_rent" : "own"),
+    housingMaintenance:  raw.housingMaintenance   ?? KR_DEFAULTS.housingMaintenance,
+    housingInflationScenario: raw.housingInflationScenario ?? KR_DEFAULTS.housingInflationScenario,
+    deposit:             raw.deposit              ?? KR_DEFAULTS.deposit,
+    monthlyRent:         raw.monthlyRent          ?? KR_DEFAULTS.monthlyRent,
     hasMortgage:         raw.hasMortgage          ?? ((raw.mortgageBalance ?? KR_DEFAULTS.mortgageBalance) > 0),
     includeSeveranceLumpSum:   raw.includeSeveranceLumpSum   ?? ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     medicalCostMultiplier:     raw.medicalCostMultiplier     ?? 1.0,
@@ -1490,14 +1637,19 @@ function normalizeInput(raw = {}) {
   // 단순히 기존 값을 그대로 쓰되, 하위 호환성 이슈 최소화를 위해 정상 범위로 클램핑
   // (실질 3.5% → 명목 3.5%는 약간 낮지만 사용자가 다시 설정할 것)
 
+  const isOwn = input.housingMode === "own";
   const normalized = {
     ...input,
-    housePrice:            input.hasHouse ? input.housePrice : 0,
-    mortgageBalance:       input.hasHouse && input.hasMortgage ? input.mortgageBalance : 0,
-    monthlyMortgagePayment: input.hasHouse && input.hasMortgage ? input.monthlyMortgagePayment : 0,
-    downsizeEnabled:       input.hasHouse ? input.downsizeEnabled : false,
+    housePrice:            isOwn ? input.housePrice : 0,
+    mortgageBalance:       isOwn && input.hasMortgage ? input.mortgageBalance : 0,
+    monthlyMortgagePayment: isOwn && input.hasMortgage ? input.monthlyMortgagePayment : 0,
+    downsizeEnabled:       isOwn ? input.downsizeEnabled : false,
+    // 자가 아닌 모드에서 자가 전용 필드 무효화
+    deposit:               isOwn ? 0 : input.deposit,
+    monthlyRent:           input.housingMode === "monthly_rent" ? input.monthlyRent : 0,
   };
   // 레거시 필드 정리
+  delete normalized.hasHouse;
   delete normalized.lifeExpectancy;
   delete normalized.pensionStartAge;
   delete normalized.npYearsContributed;
@@ -1715,8 +1867,9 @@ function App() {
   // 입력 패널 요약값
   const assetSummary = fmt만원(
     active.input.investmentBalance + active.input.savingsBalance +
-    (active.input.hasHouse ? active.input.housePrice : 0) -
-    (active.input.hasHouse && active.input.hasMortgage ? active.input.mortgageBalance : 0)
+    (active.input.housingMode === "own" ? active.input.housePrice : 0) +
+    (active.input.housingMode !== "own" ? (active.input.deposit ?? 0) : 0) -
+    (active.input.housingMode === "own" && active.input.hasMortgage ? active.input.mortgageBalance : 0)
   );
 
   // 자산흐름 차트 데이터 결합
@@ -1752,6 +1905,7 @@ function App() {
       "저축성 자산":  Math.max(0, y.financialSavings),
       "투자성 자산":  Math.max(0, y.financialInvestments),
       "주택(순)":    Math.max(0, y.houseValue - y.mortgage),
+      "보증금":      Math.max(0, y.deposit),
     })),
   [activeResult]);
 
@@ -1768,6 +1922,7 @@ function App() {
     "대출 상환":    -y.mortgageMonthly,
     "건강보험료":   -y.healthInsMonthly,
     "의료비":      -y.medicalMonthly,
+    "관리비·주거":  -(y.maintMonthlyOut ?? 0) - (y.rentMonthlyOut ?? 0),
     "순현금흐름":    y.cashflowMonthly,
   }));
 
@@ -1954,17 +2109,47 @@ function App() {
               <Slider label="저축성 자산 (예금·MMF 등)" value={i.savingsBalance} {...UI_RANGES.savingsBalance} onChange={setInputField("savingsBalance")} format={fmt만원} hint="안정적 수익. 스트레스 테스트 미적용." />
               {advancedMode && <>
                 <Slider label="추가저축(근로기)" value={i.monthlyAddSaving} {...UI_RANGES.monthlyAddSaving} onChange={setInputField("monthlyAddSaving")} format={v => `${v}만/월`} />
-                <Toggle label="주택 보유" value={i.hasHouse} onChange={(v) => setInputPatch({ hasHouse: v })} />
-                {i.hasHouse && <>
-                  <Slider label="주택 가치" value={i.housePrice} {...UI_RANGES.housePrice} onChange={setInputField("housePrice")} format={fmt만원} changed={changedFrom("housePrice")} />
+              </>}
+            </Section>
+
+            {/* 주거 */}
+            {advancedMode && (
+              <Section title="주거" summary={
+                i.housingMode === "own" ? `자가 ${fmt만원(i.housePrice)}` :
+                i.housingMode === "jeonse" ? `전세 보증금 ${fmt만원(i.deposit)}` :
+                `월세 ${i.monthlyRent}만/월`
+              }>
+                {/* 주거 모드 선택 */}
+                <div className="flex gap-1 mb-3 text-xs">
+                  {[["own","🏠 자가"],["jeonse","🔑 전세"],["monthly_rent","🏢 월세"]].map(([mode, label]) => (
+                    <button key={mode}
+                      onClick={() => setInputPatch({ housingMode: mode })}
+                      className={`flex-1 py-1.5 rounded-lg border text-[11px] font-medium transition-colors ${i.housingMode === mode ? "border-slate-800 bg-slate-900 text-white" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                    >{label}</button>
+                  ))}
+                </div>
+                {/* 자가 전용 */}
+                {i.housingMode === "own" && <>
+                  <Slider label="주택 시세" value={i.housePrice} {...UI_RANGES.housePrice} onChange={setInputField("housePrice")} format={fmt만원} changed={changedFrom("housePrice")} />
                   <Toggle label="주택 대출 보유" value={i.hasMortgage} onChange={(v) => setInputPatch({ hasMortgage: v })} />
                   {i.hasMortgage && <>
                     <Slider label="대출 잔액" value={i.mortgageBalance} {...UI_RANGES.mortgageBalance} onChange={setInputField("mortgageBalance")} format={fmt만원} />
                     <Slider label="월 원리금" value={i.monthlyMortgagePayment} {...UI_RANGES.monthlyMortgagePayment} onChange={setInputField("monthlyMortgagePayment")} format={v => `${v}만/월`} />
                   </>}
                 </>}
-              </>}
-            </Section>
+                {/* 전세 전용 */}
+                {i.housingMode === "jeonse" && (
+                  <Slider label="전세 보증금" value={i.deposit} {...UI_RANGES.deposit} onChange={setInputField("deposit")} format={fmt만원} />
+                )}
+                {/* 월세 전용 */}
+                {i.housingMode === "monthly_rent" && <>
+                  <Slider label="보증금" value={i.deposit} {...UI_RANGES.deposit} onChange={setInputField("deposit")} format={fmt만원} />
+                  <Slider label="월세" value={i.monthlyRent} {...UI_RANGES.monthlyRent} onChange={setInputField("monthlyRent")} format={v => `${v}만/월`} />
+                </>}
+                {/* 공통: 관리비 */}
+                <Slider label="월 관리비" value={i.housingMaintenance ?? 20} {...UI_RANGES.housingMaintenance} onChange={setInputField("housingMaintenance")} format={v => `${v}만/월`} />
+              </Section>
+            )}
 
             {/* 생활비 */}
             <Section title="생활비 (현재가치)" summary={`${i.bridgeLivingCost}/${i.retirementLivingCost}만`}>
@@ -1997,7 +2182,7 @@ function App() {
               </Section>
             )}
 
-            {advancedMode && i.hasHouse && (
+            {advancedMode && i.housingMode === "own" && (
               <Section title="이벤트 — 다운사이징" summary={i.downsizeEnabled ? `${i.downsizeAge}세` : "OFF"}>
                 <Toggle label="주택 다운사이징 사용" value={i.downsizeEnabled} onChange={setInputField("downsizeEnabled")} />
                 {i.downsizeEnabled && <>
@@ -2014,7 +2199,25 @@ function App() {
               <Slider label="물가상승률 (기준)" value={i.inflationRate} {...UI_RANGES.inflationRate} onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
               {advancedMode && <>
                 <Slider label="수익률 밴드 ±" value={i.scenarioBandSpread} {...UI_RANGES.scenarioBandSpread} onChange={setInputField("scenarioBandSpread")} format={v => `±${v.toFixed(1)}%p`} />
-                {i.hasHouse && <Slider label="주택 상승률 (명목)" value={i.houseInflationRate} {...UI_RANGES.houseInflationRate} onChange={setInputField("houseInflationRate")} format={v => `${v.toFixed(1)}%`} />}
+                {i.housingMode === "own" && <Slider label="주택 상승률 (명목)" value={i.houseInflationRate} {...UI_RANGES.houseInflationRate} onChange={setInputField("houseInflationRate")} format={v => `${v.toFixed(1)}%`} />}
+                {i.housingMode !== "own" && (
+                  <div className="mb-3">
+                    <span className="text-xs text-slate-600 font-medium">주거비 인플레이션 시나리오</span>
+                    <div className="flex gap-1 mt-1">
+                      {[["stable","안정"],["realistic","현실"],["stress","스트레스"]].map(([s,l]) => (
+                        <button key={s}
+                          onClick={() => setInputPatch({ housingInflationScenario: s })}
+                          className={`flex-1 py-1 rounded-lg border text-[11px] font-medium transition-colors ${(i.housingInflationScenario ?? "realistic") === s ? "border-slate-800 bg-slate-900 text-white" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                        >{l}</button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {(i.housingInflationScenario ?? "realistic") === "stable" ? "월세 +3.5%/년, 전세 갱신 +6.5%" :
+                       (i.housingInflationScenario ?? "realistic") === "realistic" ? "월세 +4%/년, 전세 갱신 +8.5%+10년충격" :
+                       "월세 +6%/년, 전세 갱신 +12%+8년충격"}. 75세+ 추가 +1.5%p.
+                    </p>
+                  </div>
+                )}
                 {/* C1: 시퀀스 리스크 스트레스 테스트 */}
                 <div className="mt-3 pt-3 border-t border-slate-100">
                   <div className="flex items-center justify-between mb-2">
@@ -2270,6 +2473,7 @@ function App() {
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400"></span>저축성</span>
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span>투자성</span>
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span>주택(순)</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-400"></span>보증금</span>
               </div>
             </div>
             <div style={{ width: "100%", height: isMobile ? 200 : 320 }}>
@@ -2283,6 +2487,7 @@ function App() {
                   <Area type="monotone" dataKey="저축성 자산"  stackId="b" stroke="#64748b" fill="#94a3b8" fillOpacity={0.8} />
                   <Area type="monotone" dataKey="투자성 자산"  stackId="b" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.8} />
                   <Area type="monotone" dataKey="주택(순)"    stackId="b" stroke="#d97706" fill="#f59e0b" fillOpacity={0.8} />
+                  <Area type="monotone" dataKey="보증금"       stackId="b" stroke="#0d9488" fill="#2dd4bf" fillOpacity={0.8} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -2348,6 +2553,7 @@ function App() {
                   <Bar dataKey="대출 상환"      stackId="a" fill="#64748b" />
                   <Bar dataKey="건강보험료"     stackId="a" fill="#ef4444" />
                   <Bar dataKey="의료비"        stackId="a" fill="#dc2626" />
+                  <Bar dataKey="관리비·주거"    stackId="a" fill="#78716c" />
                   <Line type="monotone" dataKey="순현금흐름" stroke="#0f172a" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
