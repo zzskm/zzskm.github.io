@@ -106,8 +106,6 @@ const ASSUMPTIONS = {
     dcAnnualContributionSalaryDivisor: 12,
     readinessMaxRatio: 300,
     includeSeveranceLumpSumDefault: false,
-    privatePensionStartAge: 60,
-    privatePensionWithdrawRate: 5.0,
   },
 };
 
@@ -128,12 +126,10 @@ const UI_RANGES = {
   spouseCurrentSalary:      { min: 0, max: 30000, step: 100 },
   salaryGrowthRate:         { min: 0, max: 8, step: 0.1 },   // 명목 %
   postRetireSideIncome:     { min: 0, max: 500, step: 10 },
-  retirementBalance:        { min: 0, max: 50000, step: 500 },
-  privatePensionBalance:    { min: 0, max: 30000, step: 500 },
-  cashSavings:              { min: 0, max: 50000, step: 500 },
+  investmentBalance:        { min: 0, max: 50000, step: 500 },
+  savingsBalance:           { min: 0, max: 50000, step: 500 },
   monthlyAddSaving:         { min: 0, max: 300, step: 10 },
-  privatePensionStartAge:   { min: 55, max: 75, step: 1 },
-  privatePensionWithdrawRate: { min: 0, max: 10, step: 0.1 },
+  savingsReturnRate:        { min: 0, max: 8, step: 0.1 },  // 명목 %
   housePrice:               { min: 0, max: 300000, step: 1000 },
   houseInflationRate:       { min: 0, max: 10, step: 0.1 },  // 명목 %
   mortgageBalance:          { min: 0, max: 100000, step: 500 },
@@ -175,12 +171,10 @@ const PRESETS = {
     spouseCurrentSalary: 0,        // 만원/년
     // 퇴직 후 소득
     postRetireSideIncome: 0,       // 만원/월 (브릿지기간 본인)
-    // 자산
-    retirementBalance: 5000,
-    privatePensionBalance: 3000,
-    privatePensionStartAge: ASSUMPTIONS.assetRules.privatePensionStartAge,
-    privatePensionWithdrawRate: ASSUMPTIONS.assetRules.privatePensionWithdrawRate,
-    cashSavings: 2000,
+    // 자산 (저축성: 예금·MMF 등 / 투자성: DC/IRP·주식·ETF 등)
+    investmentBalance: 5000,
+    savingsBalance: 2000,
+    savingsReturnRate: 3.0,          // 명목 % — 저축성 수익률 (스트레스 미적용)
     monthlyAddSaving: 30,
     hasHouse: true,
     housePrice: 80000,
@@ -213,7 +207,6 @@ const PRESETS = {
     // 세제
     includeSeveranceLumpSum: ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     applyHealthInsurance: true,
-    applyPensionTax: false,
     // C5: 인출 전략
     withdrawalStrategy: "unified",    // "unified" | "bucket" | "4pct" | "vpw"
     // C1: 시퀀스 리스크 스트레스 테스트
@@ -383,10 +376,9 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
   const selfLE   = input.selfLifeExpectancy;
   const simEndAge = simEndAgeFor(input);
 
-  // ── 초기 자산 ─────────────────────────────────────────────
-  let financialRetirement   = input.retirementBalance;
-  let financialPrivatePension = input.privatePensionBalance;
-  let financialCash         = input.cashSavings;
+  // ── 초기 자산 (2-bucket: 저축성 / 투자성) ───────────────────
+  let financialSavings     = input.savingsBalance;      // 저축성 (예금·MMF, 스트레스 미적용)
+  let financialInvestments = input.investmentBalance;   // 투자성 (DC/IRP·주식·ETF, 스트레스 적용)
   let house = input.hasHouse ? input.housePrice : 0;
   let mortgage = input.hasHouse && input.hasMortgage ? input.mortgageBalance : 0;
 
@@ -445,10 +437,6 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
 
     let selfPensionAnnual   = selfIsPension   ? (selfNpMonthly   + (selfAlive ? selfSurvivorNpBonus : 0))  * 12 : 0;
     let spousePensionAnnual = spouseIsPension ? (spouseNpMonthly + spouseSurvivorNpBonus) * 12 : 0;
-    if (input.applyPensionTax) {
-      if (selfPensionAnnual   > 0) selfPensionAnnual   *= (1 - policy.pensionTaxRate);
-      if (spousePensionAnnual > 0) spousePensionAnnual *= (1 - policy.pensionTaxRate);
-    }
 
     // ── 브릿지 소득 (본인 퇴직 후, 연금 개시 전) ──
     const selfIsRetired = selfAlive && !selfIsWorking;
@@ -480,7 +468,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     // ── 건강보험료 (퇴직 후) ──
     const sideIncomeForHI = bridgeSideAnnual + spouseSalaryAnnual;
     const healthInsAnnual = (selfIsRetired && input.applyHealthInsurance)
-      ? healthInsuranceYearly(financialRetirement + financialPrivatePension + financialCash, house, sideIncomeForHI, assumptions)
+      ? healthInsuranceYearly(financialSavings + financialInvestments, house, sideIncomeForHI, assumptions)
       : 0;
 
     // ── 노년기 의료비 ──
@@ -495,142 +483,108 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       const grossSeverance = (input.selfCurrentSalary / 12) * yearsWorked;
       // 퇴직소득세 단순 적용 (근속연수공제 후 6.6% 단순 가정)
       const severanceTax = grossSeverance * 0.066;
-      financialCash += grossSeverance - severanceTax;
+      financialSavings += grossSeverance - severanceTax;
       severancePaid = true;
     }
 
     // ── 다운사이징 ──
     if (!downsizeDone && input.hasHouse && input.downsizeEnabled && age === input.downsizeAge) {
       const liquidated = house * (1 - input.downsizeRatio);
-      financialCash += liquidated;
+      financialSavings += liquidated;
       house = house * input.downsizeRatio;
       downsizeDone = true;
       downsizeEvents.push({ age, label: "주택 다운사이징", liquidated });
     }
 
-    // ── 개인연금 인출 ──
-    const privatePensionAnnual = age >= input.privatePensionStartAge && financialPrivatePension > 0
-      ? Math.min(financialPrivatePension, financialPrivatePension * (input.privatePensionWithdrawRate / 100))
-      : 0;
-    financialPrivatePension -= privatePensionAnnual;
-
     // ── 현금흐름 집계 ──
     const income = selfSalaryAnnual + spouseSalaryAnnual + selfPensionAnnual + spousePensionAnnual
-                 + privatePensionAnnual + bridgeSideAnnual;
+                 + bridgeSideAnnual;
     const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual + medicalAnnual;
     const cashflowExclSaving = income - outflow;
     const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
 
-    // ── 자산 운용 (C5: 인출 전략 분기) ──
-    const r = rateFn(age);
+    // ── 자산 운용 (C5: 인출 전략 분기, 2-bucket) ──
+    const rInv = rateFn(age);                          // 투자성 — 스트레스 적용
+    const rSav = toReal(input.savingsReturnRate);      // 저축성 — 스트레스 미적용, 고정
 
     // 먼저 모든 버킷에 수익률 적용
-    financialRetirement     = financialRetirement     * (1 + r) + dcContribAnnual;
-    financialPrivatePension = financialPrivatePension * (1 + r);
-    financialCash           = financialCash           * (1 + r);
+    financialInvestments = financialInvestments * (1 + rInv) + dcContribAnnual;
+    financialSavings     = financialSavings     * (1 + rSav);
     house = input.hasHouse ? house * (1 + hg) : 0;
 
     // 퇴직 시점 4pct SWR 기준값 확정
     if (strategy === "4pct" && age === input.retireAge) {
-      const totalAtRetire = financialRetirement + financialPrivatePension + financialCash;
-      swrAnnual = totalAtRetire * 0.04;
+      swrAnnual = (financialSavings + financialInvestments) * 0.04;
+    }
+
+    // 2-bucket 인출 헬퍼: 저축성 → 투자성 순으로 deficit 충당
+    function withdrawFromBuckets(deficit) {
+      const fromSav = Math.min(Math.max(0, financialSavings), deficit);
+      financialSavings -= fromSav;
+      const rem = deficit - fromSav;
+      if (rem > 0) {
+        const fromInv = Math.min(Math.max(0, financialInvestments), rem);
+        financialInvestments -= fromInv;
+        const leftover = rem - fromInv;
+        if (leftover > 0) financialSavings -= leftover; // 음수로 소진 감지
+      }
     }
 
     // 전략별 현금흐름 적용
     if (strategy === "unified") {
-      // 기존: 모든 잉여/부족을 financialCash에 통합
-      financialCash += extraSavingAnnual + cashflowExclSaving;
+      // 통합: 모든 잉여/부족을 저축성에 통합
+      financialSavings += extraSavingAnnual + cashflowExclSaving;
 
     } else if (strategy === "bucket") {
-      // Bucket 전략: 잉여 → 현금 적립, 부족 → 현금→DC→개인연금 순서로 인출
+      // Bucket: 잉여 → 저축성, 부족 → 저축성 → 투자성 순 인출
       const net = extraSavingAnnual + cashflowExclSaving;
       if (net >= 0) {
-        financialCash += net;
+        financialSavings += net;
       } else {
-        let deficit = -net;
-        // 1) 현금에서 우선 인출
-        const fromCash = Math.min(Math.max(0, financialCash), deficit);
-        financialCash -= fromCash;
-        deficit -= fromCash;
-        // 2) 퇴직연금(DC/IRP)에서 인출
-        if (deficit > 0 && age >= input.retireAge) {
-          const fromRetire = Math.min(Math.max(0, financialRetirement), deficit);
-          financialRetirement -= fromRetire;
-          deficit -= fromRetire;
-        }
-        // 3) 개인연금에서 인출
-        if (deficit > 0 && age >= input.privatePensionStartAge) {
-          const fromPension = Math.min(Math.max(0, financialPrivatePension), deficit);
-          financialPrivatePension -= fromPension;
-          deficit -= fromPension;
-        }
-        // 4) 여전히 부족 → financialCash 음수로 표현 (소진 감지)
-        if (deficit > 0) financialCash -= deficit;
+        withdrawFromBuckets(-net);
       }
 
     } else if (strategy === "4pct") {
-      // 4% 규칙: 퇴직 후 매년 swrAnnual을 인출. 근로기는 unified와 동일
+      // 4% 룰: 퇴직 후 매년 swrAnnual 인출. 근로기는 unified와 동일
       if (age < input.retireAge) {
-        financialCash += extraSavingAnnual + cashflowExclSaving;
+        financialSavings += extraSavingAnnual + cashflowExclSaving;
       } else {
-        // 실제 인출액 = 고정 SWR (연금·소득으로 일부 충당된 만큼은 차감)
-        const incomeFromNonAssets = income; // 연금+근로+부수입
-        const livingOutflow = outflow;
-        const netNeed = Math.max(0, livingOutflow - incomeFromNonAssets);
-        // 인출은 필요액과 SWR 중 큰 값 (SWR이 안전 한도)
-        const withdrawal = Math.max(netNeed, Math.min(swrAnnual, financialCash + financialRetirement + financialPrivatePension));
-        // Bucket 방식으로 인출
-        let need = withdrawal - (incomeFromNonAssets - livingOutflow > 0 ? 0 : 0);
-        let actualWithdrawal = Math.min(withdrawal, Math.max(0, financialCash + financialRetirement + financialPrivatePension));
-        const fromCash4 = Math.min(Math.max(0, financialCash), actualWithdrawal);
-        financialCash -= fromCash4;
-        const rem4 = actualWithdrawal - fromCash4;
-        const fromRetire4 = Math.min(Math.max(0, financialRetirement), rem4);
-        financialRetirement -= fromRetire4;
-        const rem4b = rem4 - fromRetire4;
-        financialPrivatePension -= Math.min(Math.max(0, financialPrivatePension), rem4b);
-        financialCash += extraSavingAnnual;
+        const totalFinancial = financialSavings + financialInvestments;
+        const netNeed = Math.max(0, outflow - income);
+        const actualWithdrawal = Math.min(Math.max(netNeed, swrAnnual), totalFinancial);
+        withdrawFromBuckets(actualWithdrawal);
+        // 잉여 소득은 저축성에 추가
+        const surplusIncome = Math.max(0, income - outflow);
+        financialSavings += extraSavingAnnual + surplusIncome;
       }
 
     } else if (strategy === "vpw") {
-      // VPW (Variable Percentage Withdrawal): 매년 잔여 기대연수 기반 인출
-      // withdrawal_rate = PMT(r, remainingYears, -1) 역수 근사
-      // simplified: rate = r / (1 - (1+r)^-n) for remaining n years
-      financialCash += extraSavingAnnual;
+      // VPW: 잔여 기대연수 기반 비율 인출
+      financialSavings += extraSavingAnnual;
       if (age >= input.retireAge) {
         const remaining = Math.max(1, simEndAge - age);
-        const vpwRate = r > 0.0001
-          ? r / (1 - Math.pow(1 + r, -remaining))
+        const vpwRate = rInv > 0.0001
+          ? rInv / (1 - Math.pow(1 + rInv, -remaining))
           : 1 / remaining;
-        const totalFinancial = financialRetirement + financialPrivatePension + financialCash;
-        const vpwWithdrawal = totalFinancial * vpwRate;
-        // 생활비 대비 인출 조정: 실제 필요액과 VPW 중 큰 값
-        const actualNeed = Math.max(0, outflow - (income));
-        const withdrawal = Math.max(actualNeed, Math.min(vpwWithdrawal, totalFinancial));
-        // Bucket 방식으로 분배
-        const adjNet = (income - outflow);
-        if (adjNet >= 0) {
-          financialCash += adjNet;
+        const totalFinancial = financialSavings + financialInvestments;
+        const actualNeed = Math.max(0, outflow - income);
+        const withdrawal = Math.max(actualNeed, Math.min(vpwRate * totalFinancial, totalFinancial));
+        const net = income - outflow;
+        if (net >= 0) {
+          financialSavings += net;
         } else {
-          let vpwDef = -adjNet;
-          const fc = Math.min(Math.max(0, financialCash), vpwDef);
-          financialCash -= fc; vpwDef -= fc;
-          if (vpwDef > 0 && age >= input.retireAge) {
-            const fr = Math.min(Math.max(0, financialRetirement), vpwDef);
-            financialRetirement -= fr; vpwDef -= fr;
-          }
-          if (vpwDef > 0) { financialPrivatePension -= Math.min(Math.max(0, financialPrivatePension), vpwDef); }
+          withdrawFromBuckets(-net);
         }
       } else {
-        financialCash += cashflowExclSaving;
+        financialSavings += cashflowExclSaving;
       }
 
     } else {
       // fallback: unified
-      financialCash += extraSavingAnnual + cashflowExclSaving;
+      financialSavings += extraSavingAnnual + cashflowExclSaving;
     }
 
-    const financialTotal = financialRetirement + financialPrivatePension + financialCash;
+    const financialTotal = financialSavings + financialInvestments;
     const netWorth = financialTotal + house - mortgage;
 
     if (financialTotal <= 0 && depletionAge === null && age >= input.retireAge) {
@@ -644,9 +598,8 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       age, year,
       phase: selfIsWorking ? "work" : selfIsBridge ? "bridge" : "pension",
       selfAlive, spouseAlive,
-      financialRetirement: Math.round(financialRetirement),
-      financialPrivatePension: Math.round(financialPrivatePension),
-      financialCash: Math.round(financialCash),
+      financialSavings: Math.round(financialSavings),
+      financialInvestments: Math.round(financialInvestments),
       financialAssets: Math.round(financialTotal),
       houseValue: Math.round(house),
       mortgage: Math.round(mortgage),
@@ -655,7 +608,6 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       spouseSalaryMonthly:  Math.round(spouseSalaryAnnual / 12),
       selfPensionMonthly:   Math.round(selfPensionAnnual  / 12),
       spousePensionMonthly: Math.round(spousePensionAnnual / 12),
-      privatePensionMonthly: Math.round(privatePensionAnnual / 12),
       bridgeSideMonthly:    Math.round(bridgeSideAnnual   / 12),
       livingMonthly:        Math.round(livingAnnual       / 12),
       childMonthly:         Math.round(childAnnual        / 12),
@@ -685,19 +637,15 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
   return {
     yearlyAssetFlow: years,
     assetBucketsAtEnd: {
-      retirement:     lastYear.financialRetirement   ?? 0,
-      privatePension: lastYear.financialPrivatePension ?? 0,
-      cash:           lastYear.financialCash          ?? 0,
-      totalFinancial: lastYear.financialAssets        ?? 0,
+      savings:        lastYear.financialSavings     ?? 0,
+      investments:    lastYear.financialInvestments ?? 0,
+      totalFinancial: lastYear.financialAssets      ?? 0,
     },
     bridgeYears,
     bridgeShortfall:        Math.round(bridgeShortfall),
     totalAssetsAtRetirement: Math.round(totalAssetsAtRetirement),
     selfNpMonthly:    Math.round(selfNpMonthly),
     spouseNpMonthly:  Math.round(spouseNpMonthly),
-    privatePensionMonthly: Math.round(
-      years.find(y => y.privatePensionMonthly > 0)?.privatePensionMonthly ?? 0
-    ),
     readinessRatio: Math.round(readinessRatio),
     depletionAge,
     simEndAge,
@@ -782,7 +730,7 @@ function validateInput(input) {
     warnings.push({ key: "life_exp", level: "error", msg: `기대수명(${input.selfLifeExpectancy}세)이 퇴직 나이(${input.retireAge}세) 이하입니다.` });
   if (input.hasMortgage && input.mortgageBalance > 0 && input.monthlyMortgagePayment <= 0)
     warnings.push({ key: "mortgage", level: "warn", msg: "대출 잔액이 있으나 월 원리금이 0입니다. 대출이 상환되지 않습니다." });
-  if ((input.retirementBalance + input.privatePensionBalance + input.cashSavings) <= 0 && input.selfCurrentSalary <= 0)
+  if ((input.investmentBalance + input.savingsBalance) <= 0 && input.selfCurrentSalary <= 0)
     warnings.push({ key: "no_asset", level: "warn", msg: "금융자산과 소득이 모두 0입니다. 자산 항목을 확인해주세요." });
   if (input.investmentReturnRate > 0 && input.inflationRate >= input.investmentReturnRate)
     warnings.push({ key: "real_return", level: "warn", msg: `물가상승률(${input.inflationRate}%)이 투자수익률(${input.investmentReturnRate}%)보다 높아 실질수익률이 음수입니다.` });
@@ -810,7 +758,6 @@ const INSIGHT_CANDIDATES = [
                           downsizeRatio: 0.6,
                        }) },
   { key: "saving+30", label: "추가저축 +30만/월",    patch: (i) => ({ monthlyAddSaving: i.monthlyAddSaving + 30 }) },
-  { key: "private+1", label: "개인연금 인출률 +1%p", patch: (i) => ({ privatePensionWithdrawRate: Math.min(10, i.privatePensionWithdrawRate + 1) }) },
   { key: "spouse+3",  label: "배우자 은퇴 +3세",     patch: (i) => i.spouseEnabled ? ({ spouseRetireAge: Math.min(75, i.spouseRetireAge + 3) }) : ({}) },
 ];
 
@@ -1062,10 +1009,8 @@ function AssumptionsModal({ onClose }) {
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">자산·세제</h3>
             <table className="w-full">
               <tbody>
-                <Row label="DC 연간 적립" value="연봉 ÷ 12" note="매년 월 연봉만큼 DC 자동 적립. 회사 매칭·수수료 미반영." />
-                <Row label="퇴직금 세율" value="6.6%" note="근속연수 공제 후 분리과세 단순 적용. 실제는 근속에 따라 세금 크게 다름." />
-                <Row label="개인연금 기본 인출률" value={`${ar.privatePensionWithdrawRate}%/년`} note="잔액에서 매년 해당 비율만큼 인출. 실제 연금 수령 방식과 다를 수 있음." />
-                <Row label="개인연금 개시 나이" value={`${ar.privatePensionStartAge}세`} note="법정 최소 개시 나이 55세, 이 시뮬레이터 기본값 60세." />
+                <Row label="DC 연간 적립" value="연봉 ÷ 12" note="매년 월 연봉만큼 DC 자동 적립 (투자성 자산 버킷). 회사 매칭·수수료 미반영." />
+                <Row label="퇴직금 세율" value="6.6%" note="근속연수 공제 후 분리과세 단순 적용. 퇴직금은 저축성 자산 버킷에 입금." />
                 <Row label="건강보험료 추정" value="지역가입자 단순 근사" note={`소득 × ${p.healthInsurance.sideIncomeRate * 100}% + 금융자산 × ${p.healthInsurance.financialAssetRate * 100}% + 주택 × ${p.healthInsurance.houseAssetRate * 100}% (상한 ${p.healthInsurance.annualCap}만/년)`} />
                 <Row label="준비율 최대 표시" value={`${ar.readinessMaxRatio}%`} note="수명까지 자산이 남을 경우 최대 300%로 캡핑." />
               </tbody>
@@ -1110,9 +1055,8 @@ function SetupWizard({ initial, onComplete, onClose }) {
     childCount: (initial.children ?? []).length,
     selfCurrentSalary:   initial.selfCurrentSalary   ?? 8000,
     spouseCurrentSalary: initial.spouseCurrentSalary ?? 0,
-    cashSavings:        initial.cashSavings        ?? 2000,
-    retirementBalance:  initial.retirementBalance  ?? 5000,
-    privatePensionBalance: initial.privatePensionBalance ?? 3000,
+    savingsBalance:     initial.savingsBalance     ?? 2000,
+    investmentBalance:  initial.investmentBalance  ?? 5000,
     hasHouse: initial.hasHouse ?? true,
     housePrice: initial.housePrice ?? 80000,
     hasMortgage: initial.hasMortgage ?? true,
@@ -1174,9 +1118,8 @@ function SetupWizard({ initial, onComplete, onClose }) {
     // 3: 자산·주거
     <div key="step3">
       <p className="text-sm text-slate-500 mb-4">현재 보유 자산과 주거 현황을 입력해주세요.</p>
-      {num("cashSavings", "현금·투자 금융자산", 0, 50000, 500, "만원")}
-      {num("retirementBalance", "퇴직연금(DC/IRP) 잔액", 0, 50000, 500, "만원")}
-      {num("privatePensionBalance", "개인연금(연금저축) 잔액", 0, 30000, 500, "만원")}
+      {num("savingsBalance", "저축성 자산 (예금·MMF 등)", 0, 50000, 500, "만원")}
+      {num("investmentBalance", "투자성 자산 (DC/IRP·주식·ETF 등)", 0, 50000, 500, "만원")}
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm font-medium text-slate-700">주택 보유</span>
         <button onClick={() => set("hasHouse")(!draft.hasHouse)}
@@ -1236,9 +1179,8 @@ function SetupWizard({ initial, onComplete, onClose }) {
       spouseLifeExpectancy:  autoLifeExpectancy(draft.spouseCurrentAge),
       spousePensionStartAge: autoPensionStartAge(draft.spouseCurrentAge),
       spouseCurrentSalary: draft.spouseCurrentSalary,
-      cashSavings:         draft.cashSavings,
-      retirementBalance:   draft.retirementBalance,
-      privatePensionBalance: draft.privatePensionBalance,
+      savingsBalance:      draft.savingsBalance,
+      investmentBalance:   draft.investmentBalance,
       hasHouse:            draft.hasHouse,
       housePrice:          draft.hasHouse ? draft.housePrice : 0,
       hasMortgage:         draft.hasHouse && draft.hasMortgage,
@@ -1292,8 +1234,8 @@ function SetupWizard({ initial, onComplete, onClose }) {
 // 메인 앱
 // ============================================================
 
-const LS_KEY = "retirement-sim-v4";
-const LEGACY_LS_KEYS = ["retirement-sim-v3-stepwise", "retirement-sim-v2"];
+const LS_KEY = "retirement-sim-v5";
+const LEGACY_LS_KEYS = ["retirement-sim-v4", "retirement-sim-v3-stepwise", "retirement-sim-v2"];
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -1340,16 +1282,22 @@ function normalizeInput(raw = {}) {
     spouseNpInputMode:   raw.spouseNpInputMode    ?? "auto",
     spouseNpManualMonthly: raw.spouseNpManualMonthly ?? 0,
     postRetireSideIncome: raw.postRetireSideIncome ?? raw.sideIncomeSelf ?? KR_DEFAULTS.postRetireSideIncome,
-    retirementBalance:   raw.retirementBalance   ?? raw.currentDC ?? KR_DEFAULTS.retirementBalance,
-    privatePensionBalance: raw.privatePensionBalance ?? raw.currentPensionSavings ?? KR_DEFAULTS.privatePensionBalance,
-    cashSavings:         raw.cashSavings         ?? raw.insuranceValue ?? KR_DEFAULTS.cashSavings,
+    // v4→v5 bucket rename: retirementBalance→investmentBalance, cashSavings→savingsBalance
+    // 개인연금(privatePensionBalance)은 투자성 자산으로 통합
+    investmentBalance:   raw.investmentBalance
+      ?? (raw.retirementBalance != null ? raw.retirementBalance + (raw.privatePensionBalance ?? 0) : undefined)
+      ?? raw.currentDC
+      ?? KR_DEFAULTS.investmentBalance,
+    savingsBalance:      raw.savingsBalance
+      ?? raw.cashSavings
+      ?? raw.insuranceValue
+      ?? KR_DEFAULTS.savingsBalance,
+    savingsReturnRate:   raw.savingsReturnRate    ?? KR_DEFAULTS.savingsReturnRate,
     monthlyAddSaving:    raw.monthlyAddSaving     ?? raw.monthlyAdditionalSaving ?? KR_DEFAULTS.monthlyAddSaving,
     spouseEnabled:       raw.spouseEnabled        ?? ((raw.spouseMonthlyIncome ?? raw.spouseCurrentSalary ?? 0) > 0),
     spouseCurrentAge:    raw.spouseCurrentAge     ?? KR_DEFAULTS.spouseCurrentAge,
     hasHouse:            raw.hasHouse             ?? ((raw.housePrice ?? KR_DEFAULTS.housePrice) > 0),
     hasMortgage:         raw.hasMortgage          ?? ((raw.mortgageBalance ?? KR_DEFAULTS.mortgageBalance) > 0),
-    privatePensionStartAge:    raw.privatePensionStartAge    ?? ASSUMPTIONS.assetRules.privatePensionStartAge,
-    privatePensionWithdrawRate: raw.privatePensionWithdrawRate ?? ASSUMPTIONS.assetRules.privatePensionWithdrawRate,
     includeSeveranceLumpSum:   raw.includeSeveranceLumpSum   ?? ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     medicalCostMultiplier:     raw.medicalCostMultiplier     ?? 1.0,
     applyMedicalCost:          raw.applyMedicalCost          ?? true,
@@ -1387,6 +1335,13 @@ function normalizeInput(raw = {}) {
   delete normalized.monthlyAdditionalSaving;
   delete normalized.child1BirthYear;
   delete normalized.child2BirthYear;
+  // v4→v5 제거된 필드
+  delete normalized.retirementBalance;
+  delete normalized.cashSavings;
+  delete normalized.privatePensionBalance;
+  delete normalized.privatePensionStartAge;
+  delete normalized.privatePensionWithdrawRate;
+  delete normalized.applyPensionTax;
   return normalized;
 }
 
@@ -1420,7 +1375,7 @@ function loadInitial() {
     if (current) return { ...current, isNew: false };
     for (const key of LEGACY_LS_KEYS) {
       const migrated = readStored(key);
-      if (migrated) return { ...migrated, isNew: false };
+      if (migrated) return { ...migrated, isNew: false, wasLegacyMigrated: key === "retirement-sim-v4" };
     }
   } catch {}
   const base = makeScenario("현재", KR_DEFAULTS, 0);
@@ -1441,6 +1396,13 @@ function App() {
   const debugMode = useDebugMode(); // C9
   const [mobileView, setMobileView] = useState("results"); // "results" | "inputs"
   const isMobile = useIsMobile();
+  const [toast, setToast] = useState(() => initial.wasLegacyMigrated ? "v7 업데이트: 개인연금이 투자성 자산에 통합되었습니다. 자산 항목을 다시 확인해주세요." : null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify({ scenarios, activeId })); } catch {}
@@ -1556,6 +1518,8 @@ function App() {
   // C9: 디버그 콘솔 로그
   useEffect(() => {
     if (!debugMode) return;
+    const bEnd = activeResult.assetBucketsAtEnd;
+    const bTotal = bEnd.savings + bEnd.investments;
     console.group(`[RetireSim Debug] 시나리오: ${active.name}`);
     console.table({
       준비율: activeResult.readinessRatio + "%",
@@ -1564,6 +1528,8 @@ function App() {
       브릿지인출: fmt만원(activeResult.bridgeShortfall),
       본인연금월: fmt만원월(activeResult.selfNpMonthly),
       인출전략: i.withdrawalStrategy,
+      "종료_저축성": fmt만원(bEnd.savings) + (bTotal > 0 ? ` (${Math.round(bEnd.savings/bTotal*100)}%)` : ""),
+      "종료_투자성": fmt만원(bEnd.investments) + (bTotal > 0 ? ` (${Math.round(bEnd.investments/bTotal*100)}%)` : ""),
     });
     console.log("yearlyAssetFlow:", activeResult.yearlyAssetFlow);
     console.groupEnd();
@@ -1571,7 +1537,7 @@ function App() {
 
   // 입력 패널 요약값
   const assetSummary = fmt만원(
-    active.input.retirementBalance + active.input.privatePensionBalance + active.input.cashSavings +
+    active.input.investmentBalance + active.input.savingsBalance +
     (active.input.hasHouse ? active.input.housePrice : 0) -
     (active.input.hasHouse && active.input.hasMortgage ? active.input.mortgageBalance : 0)
   );
@@ -1606,9 +1572,8 @@ function App() {
   const bucketData = useMemo(() =>
     activeResult.yearlyAssetFlow.map(y => ({
       age:    y.age,
-      "현금·투자":    Math.max(0, y.financialCash),
-      "퇴직연금(DC)": Math.max(0, y.financialRetirement),
-      "개인연금":     Math.max(0, y.financialPrivatePension),
+      "저축성 자산":  Math.max(0, y.financialSavings),
+      "투자성 자산":  Math.max(0, y.financialInvestments),
       "주택(순)":    Math.max(0, y.houseValue - y.mortgage),
     })),
   [activeResult]);
@@ -1620,7 +1585,6 @@ function App() {
     "배우자 근로":    y.spouseSalaryMonthly,
     "본인 국민연금":  y.selfPensionMonthly,
     "배우자 국민연금": y.spousePensionMonthly,
-    "개인연금 인출":  y.privatePensionMonthly,
     "브릿지 월소득":  y.bridgeSideMonthly,
     "생활비":       -y.livingMonthly,
     "양육비":       -y.childMonthly,
@@ -1796,12 +1760,9 @@ function App() {
             {/* 자산 */}
             <Section title="자산" summary={assetSummary}>
               {advancedMode && (
-                <Slider label="퇴직연금 잔액(IRP/DC)" value={i.retirementBalance} {...UI_RANGES.retirementBalance} onChange={setInputField("retirementBalance")} format={fmt만원} hint="회사가 매년 연봉/12 자동 적립" changed={changedFrom("retirementBalance")} />
+                <Slider label="투자성 자산 (DC/IRP·주식·ETF)" value={i.investmentBalance} {...UI_RANGES.investmentBalance} onChange={setInputField("investmentBalance")} format={fmt만원} hint="회사가 매년 연봉/12 자동 적립 포함. 스트레스 테스트 적용." changed={changedFrom("investmentBalance")} />
               )}
-              {advancedMode && (
-                <Slider label="개인연금 잔액(연금저축/IRP)" value={i.privatePensionBalance} {...UI_RANGES.privatePensionBalance} onChange={setInputField("privatePensionBalance")} format={fmt만원} />
-              )}
-              <Slider label="현금·투자 금융자산" value={i.cashSavings} {...UI_RANGES.cashSavings} onChange={setInputField("cashSavings")} format={fmt만원} />
+              <Slider label="저축성 자산 (예금·MMF 등)" value={i.savingsBalance} {...UI_RANGES.savingsBalance} onChange={setInputField("savingsBalance")} format={fmt만원} hint="안정적 수익. 스트레스 테스트 미적용." />
               {advancedMode && <>
                 <Slider label="추가저축(근로기)" value={i.monthlyAddSaving} {...UI_RANGES.monthlyAddSaving} onChange={setInputField("monthlyAddSaving")} format={v => `${v}만/월`} />
                 <Toggle label="주택 보유" value={i.hasHouse} onChange={(v) => setInputPatch({ hasHouse: v })} />
@@ -1815,13 +1776,6 @@ function App() {
                 </>}
               </>}
             </Section>
-
-            {advancedMode && (
-              <Section title="개인연금 인출" summary={`${i.privatePensionStartAge}세 · ${i.privatePensionWithdrawRate.toFixed(1)}%`}>
-                <Slider label="인출 시작 나이" value={i.privatePensionStartAge} {...UI_RANGES.privatePensionStartAge} onChange={setInputField("privatePensionStartAge")} format={v => `${v}세`} />
-                <Slider label="연간 인출률" value={i.privatePensionWithdrawRate} {...UI_RANGES.privatePensionWithdrawRate} onChange={setInputField("privatePensionWithdrawRate")} format={v => `${v.toFixed(1)}%`} hint="매년 잔액 × 인출률만큼 현금흐름에 반영" />
-              </Section>
-            )}
 
             {/* 생활비 */}
             <Section title="생활비 (현재가치)" summary={`${i.bridgeLivingCost}/${i.retirementLivingCost}만`}>
@@ -1865,8 +1819,9 @@ function App() {
             )}
 
             {/* 시장 가정 */}
-            <Section title="시장 가정" summary={`수익률 ${i.investmentReturnRate.toFixed(1)}% / 물가 ${i.inflationRate.toFixed(1)}%`}>
-              <Slider label="투자수익률 (명목)" value={i.investmentReturnRate} {...UI_RANGES.investmentReturnRate} onChange={setInputField("investmentReturnRate")} format={v => `${v.toFixed(1)}%`} hint="내부적으로 실질률 변환 후 계산 (차트는 현재가치 기준)" />
+            <Section title="시장 가정" summary={`투자 ${i.investmentReturnRate.toFixed(1)}% / 저축 ${i.savingsReturnRate?.toFixed(1) ?? 3.0}% / 물가 ${i.inflationRate.toFixed(1)}%`}>
+              <Slider label="투자성 수익률 (명목)" value={i.investmentReturnRate} {...UI_RANGES.investmentReturnRate} onChange={setInputField("investmentReturnRate")} format={v => `${v.toFixed(1)}%`} hint="DC/IRP·주식·ETF 등 투자성 자산. 스트레스 테스트 적용." />
+              <Slider label="저축성 수익률 (명목)" value={i.savingsReturnRate ?? 3.0} {...UI_RANGES.savingsReturnRate} onChange={setInputField("savingsReturnRate")} format={v => `${v.toFixed(1)}%`} hint="예금·MMF 등 안정 자산. 시장 충격 미적용." />
               <Slider label="물가상승률 (기준)" value={i.inflationRate} {...UI_RANGES.inflationRate} onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
               {advancedMode && <>
                 <Slider label="수익률 밴드 ±" value={i.scenarioBandSpread} {...UI_RANGES.scenarioBandSpread} onChange={setInputField("scenarioBandSpread")} format={v => `±${v.toFixed(1)}%p`} />
@@ -1903,7 +1858,6 @@ function App() {
               <>
               <Section title="세제·건보·의료">
                 <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
-                <Toggle label="연금소득세 5.5%" value={i.applyPensionTax} onChange={setInputField("applyPensionTax")} hint="분리과세 가정" />
                 <Toggle label="퇴직금 일시금 별도 반영" value={i.includeSeveranceLumpSum} onChange={setInputField("includeSeveranceLumpSum")} hint="DC 매년 적립과 중복될 수 있어 기본값은 OFF" />
                 <Toggle label="노년기 의료비 반영" value={i.applyMedicalCost !== false} onChange={v => setInputField("applyMedicalCost")(v)} hint="생활비 섹션 배율 슬라이더와 연동" />
               </Section>
@@ -1916,8 +1870,8 @@ function App() {
                   퇴직 후 금융자산에서 생활비를 충당하는 방식을 선택합니다.
                 </p>
                 {[
-                  { value: "unified", label: "통합 풀",   desc: "현금·DC·개인연금을 하나의 풀로 운용. 단순하고 최적화 없음." },
-                  { value: "bucket",  label: "버킷 전략", desc: "현금 → DC → 개인연금 순으로 인출. 성장 자산을 오래 유지." },
+                  { value: "unified", label: "통합 풀",   desc: "저축성·투자성을 하나의 풀로 운용. 단순하고 최적화 없음." },
+                  { value: "bucket",  label: "버킷 전략", desc: "저축성 → 투자성 순으로 인출. 투자성 자산을 오래 유지." },
                   { value: "4pct",    label: "4% 룰",     desc: "퇴직 시 자산의 4%를 매년 고정 인출 (Trinity Study 기반)." },
                   { value: "vpw",     label: "VPW",       desc: "잔여 기대수명 기반 비율 인출. 자산소진 위험 최소화." },
                 ].map(opt => (
@@ -1946,6 +1900,15 @@ function App() {
 
         {/* 결과 패널 */}
         <section className={`lg:col-span-8 xl:col-span-9 space-y-5 ${isMobile && mobileView !== "results" ? "hidden" : ""}`}>
+
+          {/* 마이그레이션 토스트 */}
+          {toast && (
+            <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+              <span className="shrink-0 font-bold">ℹ</span>
+              <span className="flex-1">{toast}</span>
+              <button onClick={() => setToast(null)} className="text-blue-400 hover:text-blue-700 text-sm leading-none shrink-0">×</button>
+            </div>
+          )}
 
           {/* C9: 검증 경고 배너 */}
           {validationWarnings.length > 0 && (
@@ -2115,9 +2078,8 @@ function App() {
             <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
               <h2 className="text-sm font-semibold">자산 구성 변화 — <span style={{color: active.color}}>{active.name}</span></h2>
               <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-600"></span>현금·투자</span>
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span>퇴직연금</span>
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500"></span>개인연금</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400"></span>저축성</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span>투자성</span>
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span>주택(순)</span>
               </div>
             </div>
@@ -2129,9 +2091,8 @@ function App() {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={v => fmt만원(v)} width={60} />
                   <Tooltip formatter={(v, name) => [fmt만원(v), name]} labelFormatter={(age) => `${age}세`} contentStyle={{ fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Area type="monotone" dataKey="현금·투자"    stackId="b" stroke="#475569" fill="#94a3b8" fillOpacity={0.8} />
-                  <Area type="monotone" dataKey="퇴직연금(DC)" stackId="b" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.8} />
-                  <Area type="monotone" dataKey="개인연금"     stackId="b" stroke="#7c3aed" fill="#8b5cf6" fillOpacity={0.8} />
+                  <Area type="monotone" dataKey="저축성 자산"  stackId="b" stroke="#64748b" fill="#94a3b8" fillOpacity={0.8} />
+                  <Area type="monotone" dataKey="투자성 자산"  stackId="b" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.8} />
                   <Area type="monotone" dataKey="주택(순)"    stackId="b" stroke="#d97706" fill="#f59e0b" fillOpacity={0.8} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -2192,7 +2153,6 @@ function App() {
                   <Bar dataKey="배우자 근로"    stackId="a" fill="#34d399" />
                   <Bar dataKey="본인 국민연금"  stackId="a" fill="#3b82f6" />
                   <Bar dataKey="배우자 국민연금" stackId="a" fill="#60a5fa" />
-                  <Bar dataKey="개인연금 인출"  stackId="a" fill="#8b5cf6" />
                   <Bar dataKey="브릿지 월소득"  stackId="a" fill="#06b6d4" />
                   <Bar dataKey="생활비"        stackId="a" fill="#f59e0b" />
                   <Bar dataKey="양육비"        stackId="a" fill="#a855f7" />
@@ -2269,7 +2229,7 @@ function App() {
             퇴직금 일시금은 근속연수 기준 단순 계산 후 6.6% 과세 적용. 유족연금은 사망 배우자 연금의 50% 단순 가정.
             <b>노년기 의료비</b>: 50대 15만 → 65세 30만 → 75세 60만 → 85세 100만/월 기준, 의료물가는 일반물가보다 +1.5%p 상승 가정.
             <b>시퀀스 리스크</b>: 경미(-5%p,3년) / 중간(-10%p,5년) / 2008(-30%→반등) 프리셋 중 선택. 차트 토글로 표시.
-            <b>인출 전략</b>: 버킷=현금→DC→개인연금 순 인출. 4% 룰=퇴직자산×4% 고정. VPW=잔여기대연수 기반 비율 인출.
+            <b>인출 전략</b>: 버킷=저축성→투자성 순 인출. 4% 룰=퇴직자산×4% 고정. VPW=잔여기대연수 기반 비율 인출.
             <b>준비율·자산유지</b>는 본인·배우자 최대 수명 기준. <b>디버그</b>: URL에 ?debug=1 추가 시 상세 로그.
           </footer>
         </section>
