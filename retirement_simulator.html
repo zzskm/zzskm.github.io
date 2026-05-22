@@ -107,7 +107,62 @@ const ASSUMPTIONS = {
     readinessMaxRatio: 300,
     includeSeveranceLumpSumDefault: false,
   },
+  // 2024 한국 소득세 + 4대보험 단순 모델 (세전↔세후 변환용)
+  taxModel: {
+    // 종합소득세 누진 구간 (만원/년 기준 과세표준)
+    incomeBrackets: [
+      { upTo:  1400, rate: 0.06 },
+      { upTo:  5000, rate: 0.15 },
+      { upTo:  8800, rate: 0.24 },
+      { upTo: 15000, rate: 0.35 },
+      { upTo: 30000, rate: 0.38 },
+      { upTo: 50000, rate: 0.40 },
+      { upTo: Infinity, rate: 0.42 },
+    ],
+    earnedIncomeDeductionRate: 0.20,  // 근로소득공제 단순 근사 (20%)
+    localTaxRate: 0.10,               // 지방소득세 (소득세의 10%)
+    socialInsuranceRate: 0.092,       // 4대보험 합산 (국민연금4.5%+건강3.5%+고용0.9%+장기요양0.4%)
+  },
 };
+
+// ============================================================
+// 세전↔세후 변환 유틸 (입력 UI 레이어 전용 — 시뮬 코어는 net annual 사용)
+// ============================================================
+
+function grossToNetAnnual(grossAnnual, tm = ASSUMPTIONS.taxModel) {
+  if (!grossAnnual || grossAnnual <= 0) return 0;
+  const socialIns = grossAnnual * tm.socialInsuranceRate;
+  const taxBase   = Math.max(0, grossAnnual * (1 - tm.earnedIncomeDeductionRate) - socialIns);
+  let incomeTax = 0, prev = 0;
+  for (const b of tm.incomeBrackets) {
+    if (taxBase <= prev) break;
+    const slab = Math.min(taxBase, b.upTo) - prev;
+    incomeTax += slab * b.rate;
+    prev = b.upTo;
+    if (taxBase <= b.upTo) break;
+  }
+  const localTax = incomeTax * tm.localTaxRate;
+  return Math.max(0, grossAnnual - socialIns - incomeTax - localTax);
+}
+
+function netToGrossAnnual(netAnnual, tm = ASSUMPTIONS.taxModel) {
+  if (!netAnnual || netAnnual <= 0) return 0;
+  let lo = netAnnual, hi = netAnnual * 2.5;
+  for (let iter = 0; iter < 32; iter++) {
+    const mid = (lo + hi) / 2;
+    (grossToNetAnnual(mid, tm) < netAnnual) ? (lo = mid) : (hi = mid);
+  }
+  return Math.round((lo + hi) / 2);
+}
+
+function basisAnnualToNet(annualInBasis, basis) {
+  if (!annualInBasis || annualInBasis <= 0) return 0;
+  return basis === "gross" ? grossToNetAnnual(annualInBasis) : annualInBasis;
+}
+function netToBasisAnnual(netAnnual, basis) {
+  if (!netAnnual || netAnnual <= 0) return 0;
+  return basis === "gross" ? netToGrossAnnual(netAnnual) : netAnnual;
+}
 
 const UI_RANGES = {
   currentAge:               { min: 25, max: 70, step: 1 },
@@ -157,7 +212,8 @@ const PRESETS = {
     selfNpYears: 0,                // autoMode=true 시 자동 계산
     selfNpInputMode: "auto",       // "auto" | "manual"
     selfNpManualMonthly: 0,        // 만원/월 (manual 모드)
-    selfCurrentSalary: 8000,       // 만원/년
+    selfCurrentSalary: 8000,       // 만원/년 (항상 net annual)
+    selfSalaryBasis: "gross",      // "gross" | "net" (입력 UI 표시 모드)
     // 배우자
     spouseEnabled: false,
     spouseCurrentAge: 38,
@@ -168,7 +224,8 @@ const PRESETS = {
     spouseNpYears: 0,
     spouseNpInputMode: "auto",
     spouseNpManualMonthly: 0,
-    spouseCurrentSalary: 0,        // 만원/년
+    spouseCurrentSalary: 0,        // 만원/년 (항상 net annual)
+    spouseSalaryBasis: "gross",    // "gross" | "net" (입력 UI 표시 모드)
     // 퇴직 후 소득
     postRetireSideIncome: 0,       // 만원/월 (브릿지기간 본인)
     // 자산 (저축성: 예금·MMF 등 / 투자성: DC/IRP·주식·ETF 등)
@@ -882,6 +939,66 @@ function NumberInput({ label, value, onChange, suffix }) {
   );
 }
 
+// 세전/세후 토글 + 연봉/월급 양방향 연동 입력 컴포넌트
+function SalaryInput({ name, netAnnual, basis, onChangeNet, onChangeBasis }) {
+  const annualInBasis  = Math.round(netToBasisAnnual(netAnnual, basis));
+  const monthlyInBasis = Math.round(annualInBasis / 12);
+
+  const handleAnnualChange = (v) => {
+    const n = Number(v) || 0;
+    onChangeNet(basisAnnualToNet(n, basis));
+  };
+  const handleMonthlyChange = (v) => {
+    const n = Number(v) || 0;
+    onChangeNet(basisAnnualToNet(n * 12, basis));
+  };
+  const handleBasisChange = (newBasis) => {
+    // basis만 변경 — netAnnual은 그대로 유지 (표시값만 재계산됨)
+    onChangeBasis(newBasis);
+  };
+
+  return (
+    <div className="mb-3 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-600 font-medium">{name}</span>
+        <div className="flex text-[11px] rounded-md border border-slate-200 overflow-hidden">
+          {[{v:"gross",l:"세전"},{v:"net",l:"세후"}].map(opt => (
+            <button key={opt.v}
+              onClick={() => handleBasisChange(opt.v)}
+              className={`px-2 py-0.5 transition-colors ${basis === opt.v ? "bg-slate-900 text-white font-medium" : "bg-white text-slate-500 hover:bg-slate-50"}`}
+            >{opt.l}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-[10px] text-slate-400 mb-0.5">연봉 (만원/년)</label>
+          <input
+            type="number" step="100"
+            value={annualInBasis || ""}
+            onChange={e => handleAnnualChange(e.target.value)}
+            className="num w-full px-2 py-1 text-sm rounded border border-slate-200 bg-white focus:outline-none focus:border-slate-400"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] text-slate-400 mb-0.5">월급 (만원/월)</label>
+          <input
+            type="number" step="10"
+            value={monthlyInBasis || ""}
+            onChange={e => handleMonthlyChange(e.target.value)}
+            className="num w-full px-2 py-1 text-sm rounded border border-slate-200 bg-white focus:outline-none focus:border-slate-400"
+          />
+        </div>
+      </div>
+      {basis === "gross" && netAnnual > 0 && (
+        <p className="text-[10px] text-slate-400">
+          → 실수령 약 {fmt만원(netAnnual)}/년 ({Math.round(netAnnual / 12)}만/월)
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Toggle({ label, value, onChange, hint }) {
   return (
     <div className="mb-3 flex items-center justify-between">
@@ -1055,7 +1172,9 @@ function SetupWizard({ initial, onComplete, onClose }) {
     childCount: (initial.children ?? []).length,
     childAges: (initial.children ?? []).map(c => Math.max(0, CURRENT_YEAR - c.birthYear)),
     selfCurrentSalary:   initial.selfCurrentSalary   ?? 8000,
+    selfSalaryBasis:     initial.selfSalaryBasis     ?? "gross",
     spouseCurrentSalary: initial.spouseCurrentSalary ?? 0,
+    spouseSalaryBasis:   initial.spouseSalaryBasis   ?? "gross",
     savingsBalance:     initial.savingsBalance     ?? 2000,
     investmentBalance:  initial.investmentBalance  ?? 5000,
     hasHouse: initial.hasHouse ?? true,
@@ -1150,9 +1269,23 @@ function SetupWizard({ initial, onComplete, onClose }) {
     </div>,
     // 2: 소득
     <div key="step2">
-      <p className="text-sm text-slate-500 mb-4">현재 연봉을 입력해주세요 (세전 기준).</p>
-      {num("selfCurrentSalary", "본인 연봉", 0, 30000, 100, "만원")}
-      {draft.spouseEnabled && num("spouseCurrentSalary", "배우자 연봉", 0, 30000, 100, "만원")}
+      <p className="text-sm text-slate-500 mb-4">연봉을 입력해주세요.</p>
+      <SalaryInput
+        name="본인 연봉"
+        netAnnual={draft.selfCurrentSalary}
+        basis={draft.selfSalaryBasis ?? "gross"}
+        onChangeNet={v => setDraft(d => ({ ...d, selfCurrentSalary: v }))}
+        onChangeBasis={v => setDraft(d => ({ ...d, selfSalaryBasis: v }))}
+      />
+      {draft.spouseEnabled && (
+        <SalaryInput
+          name="배우자 연봉"
+          netAnnual={draft.spouseCurrentSalary}
+          basis={draft.spouseSalaryBasis ?? "gross"}
+          onChangeNet={v => setDraft(d => ({ ...d, spouseCurrentSalary: v }))}
+          onChangeBasis={v => setDraft(d => ({ ...d, spouseSalaryBasis: v }))}
+        />
+      )}
     </div>,
     // 3: 자산·주거
     <div key="step3">
@@ -1212,12 +1345,14 @@ function SetupWizard({ initial, onComplete, onClose }) {
       selfLifeExpectancy:  autoLifeExpectancy(draft.currentAge),
       selfPensionStartAge: autoPensionStartAge(draft.currentAge),
       selfCurrentSalary:   draft.selfCurrentSalary,
+      selfSalaryBasis:     draft.selfSalaryBasis ?? "gross",
       spouseEnabled:       draft.spouseEnabled,
       spouseCurrentAge:    draft.spouseCurrentAge,
       spouseRetireAge:     draft.spouseRetireAge,
       spouseLifeExpectancy:  autoLifeExpectancy(draft.spouseCurrentAge),
       spousePensionStartAge: autoPensionStartAge(draft.spouseCurrentAge),
       spouseCurrentSalary: draft.spouseCurrentSalary,
+      spouseSalaryBasis:   draft.spouseSalaryBasis ?? "gross",
       savingsBalance:      draft.savingsBalance,
       investmentBalance:   draft.investmentBalance,
       hasHouse:            draft.hasHouse,
@@ -1344,6 +1479,9 @@ function normalizeInput(raw = {}) {
     withdrawalStrategy:        raw.withdrawalStrategy        ?? "unified",
     // C1: 시퀀스 리스크 스트레스 테스트
     stressTest:                raw.stressTest                ?? "severe",
+    // PR3: 소득 입력 표시 모드 (net annual은 selfCurrentSalary에 저장, 이건 UI 전용)
+    selfSalaryBasis:           raw.selfSalaryBasis           ?? "gross",
+    spouseSalaryBasis:         raw.spouseSalaryBasis         ?? "gross",
     children,
   };
 
@@ -1750,12 +1888,24 @@ function App() {
 
             {/* 소득 */}
             <Section title="소득" defaultOpen summary={fmt만원(i.selfCurrentSalary)}>
-              <Slider label="본인 연봉" value={i.selfCurrentSalary} {...UI_RANGES.selfCurrentSalary} onChange={setInputField("selfCurrentSalary")} format={fmt만원} changed={changedFrom("selfCurrentSalary")} />
+              <SalaryInput
+                name="본인 연봉"
+                netAnnual={i.selfCurrentSalary}
+                basis={i.selfSalaryBasis ?? "gross"}
+                onChangeNet={setInputField("selfCurrentSalary")}
+                onChangeBasis={setInputField("selfSalaryBasis")}
+              />
               {advancedMode && <>
                 <Slider label="연봉 상승률 (명목)" value={i.salaryGrowthRate} {...UI_RANGES.salaryGrowthRate} onChange={setInputField("salaryGrowthRate")} format={v => `${v.toFixed(1)}%`} hint="내부적으로 물가 차감한 실질률로 계산" />
                 <Slider label="브릿지 소득 (퇴직~연금전)" value={i.postRetireSideIncome} {...UI_RANGES.postRetireSideIncome} onChange={setInputField("postRetireSideIncome")} format={v => `${v}만/월`} />
                 {i.spouseEnabled && (
-                  <Slider label="배우자 연봉" value={i.spouseCurrentSalary} {...UI_RANGES.spouseCurrentSalary} onChange={setInputField("spouseCurrentSalary")} format={fmt만원} />
+                  <SalaryInput
+                    name="배우자 연봉"
+                    netAnnual={i.spouseCurrentSalary}
+                    basis={i.spouseSalaryBasis ?? "gross"}
+                    onChangeNet={setInputField("spouseCurrentSalary")}
+                    onChangeBasis={setInputField("spouseSalaryBasis")}
+                  />
                 )}
                 {/* 국민연금 — 본인 */}
                 <div className="mt-1 mb-1">
