@@ -1,22 +1,22 @@
 {
-  "generatedAt": "2026-05-25T17:10:15Z",
+  "generatedAt": "2026-05-25T23:59:33Z",
   "current": {
-    "weightKg": 82.5,
-    "weightDate": "2026-05-23",
-    "weightMa7Kg": 81.83,
-    "weightMa14Kg": 82.56,
-    "weightEwmaKg": 82.79
+    "weightKg": 83.8,
+    "weightDate": "2026-05-26",
+    "weightMa7Kg": 82.33,
+    "weightMa14Kg": 82.7,
+    "weightEwmaKg": 82.89
   },
   "rolling": {
-    "weeklyLossRateKg": 0.2024,
+    "weeklyLossRateKg": 0.1566,
     "last7ExerciseMinutes": 136.0,
     "last7ExerciseCalories": 1864.0,
-    "last7StepsTotal": 54952,
-    "last7StepsAvg": 9159.0,
+    "last7StepsTotal": 55002,
+    "last7StepsAvg": 7857.0,
     "last7ActiveDays": 4,
-    "last7WeightRangeKg": 2.0,
+    "last7WeightRangeKg": 3.3,
     "last7SleepHoursAvg": null,
-    "last7RestingHrAvg": 56.7,
+    "last7RestingHrAvg": 56.6,
     "exerciseTrend": {
       "recent7Avg": 266.3,
       "prev21Avg": 289.4,
@@ -25,9 +25,9 @@
       "direction": "decreasing"
     },
     "lossRateDetail": {
-      "blended": 0.2024,
-      "ewmaSlope": 0.2031,
-      "ma7Slope": 0.2417,
+      "blended": 0.1566,
+      "ewmaSlope": 0.1983,
+      "ma7Slope": 0.1833,
       "kcalRate": 0.2644,
       "weights": {
         "ewma": 0.25,
@@ -41,45 +41,45 @@
         }
       },
       "windowSlopes": {
-        "3d": -0.0,
-        "7d": 0.2417,
-        "14d": 0.226,
-        "28d": 0.2031
+        "3d": -0.21,
+        "7d": 0.1833,
+        "14d": 0.2085,
+        "28d": 0.1983
       },
       "model": "multi_window_ewma_blend"
     }
   },
   "predictions": {
-    "oneMonthWeightKg": 82.09,
-    "threeMonthWeightKg": 81.17,
+    "oneMonthWeightKg": 82.33,
+    "threeMonthWeightKg": 81.51,
     "scenarios": {
       "optimistic": {
         "multiplier": 1.0,
-        "threeMonthWeightKg": 80.99,
+        "threeMonthWeightKg": 81.11,
         "assumedDailyKcal": 399.4,
         "weeklyKcalDelta": 932.0,
-        "extraWeeklyLossKg": 0.095,
-        "effectiveWeeklyLossKg": 0.2974,
+        "extraWeeklyLossKg": 0.0735,
+        "effectiveWeeklyLossKg": 0.2301,
         "label": "낙관",
         "description": "주2회 추가 운동 (회당 ~466kcal) 가정"
       },
       "base": {
         "multiplier": 0.8,
-        "threeMonthWeightKg": 81.17,
+        "threeMonthWeightKg": 81.51,
         "assumedDailyKcal": 266.3,
         "weeklyKcalDelta": 0.0,
         "extraWeeklyLossKg": 0.0,
-        "effectiveWeeklyLossKg": 0.2024,
+        "effectiveWeeklyLossKg": 0.1566,
         "label": "기준",
         "description": "현재 운동량 유지 기준 예측"
       },
       "conservative": {
         "multiplier": 0.6,
-        "threeMonthWeightKg": 81.76,
+        "threeMonthWeightKg": 82.05,
         "assumedDailyKcal": 133.2,
         "weeklyKcalDelta": -932.0,
-        "extraWeeklyLossKg": -0.095,
-        "effectiveWeeklyLossKg": 0.1074,
+        "extraWeeklyLossKg": -0.0735,
+        "effectiveWeeklyLossKg": 0.0831,
         "label": "보수적",
         "description": "주2회 운동 누락 (회당 ~466kcal) 가정"
       }
@@ -87,105 +87,105 @@
   },
   "goal": {
     "targetWeightKg": 80.0,
-    "remainingKg": 2.79,
-    "etaDays": 97,
-    "etaDate": "2026-08-31",
+    "remainingKg": 2.89,
+    "etaDays": 130,
+    "etaDate": "2026-10-03",
     "etaRangeDays": {
-      "min": 66,
-      "max": 182
+      "min": 88,
+      "max": 244
     },
     "etaRangeDates": {
-      "min": "2026-07-31",
-      "max": "2026-11-24"
+      "min": "2026-08-22",
+      "max": "2027-01-25"
     }
   },
   "lossIntensity": {
     "level": "conservative",
-    "weeklyKg": 0.202,
-    "weeklyPct": 0.24,
-    "dailyDeficitKcal": 223.0
+    "weeklyKg": 0.157,
+    "weeklyPct": 0.19,
+    "dailyDeficitKcal": 172.0
   },
   "plateau": {
     "detected": false,
     "startDate": null,
     "durationDays": 0,
-    "weeklyChangeDelta": 0.194,
+    "weeklyChangeDelta": 0.14,
     "type": null
   },
   "predictionCI": {
-    "stdResidual": 0.622,
+    "stdResidual": 0.658,
     "series": [
       {
         "date": "2026-06-02",
-        "central": 82.59,
-        "lower80": 81.79,
-        "upper80": 83.39
+        "central": 82.74,
+        "lower80": 81.9,
+        "upper80": 83.58
       },
       {
         "date": "2026-06-09",
-        "central": 82.41,
-        "lower80": 81.28,
-        "upper80": 83.54
+        "central": 82.59,
+        "lower80": 81.4,
+        "upper80": 83.78
       },
       {
         "date": "2026-06-16",
-        "central": 82.24,
-        "lower80": 80.86,
-        "upper80": 83.62
+        "central": 82.46,
+        "lower80": 81.0,
+        "upper80": 83.92
       },
       {
         "date": "2026-06-23",
-        "central": 82.09,
-        "lower80": 80.5,
-        "upper80": 83.68
+        "central": 82.33,
+        "lower80": 80.65,
+        "upper80": 84.01
       },
       {
         "date": "2026-06-30",
-        "central": 81.94,
-        "lower80": 80.16,
-        "upper80": 83.72
+        "central": 82.2,
+        "lower80": 80.32,
+        "upper80": 84.08
       },
       {
         "date": "2026-07-07",
-        "central": 81.81,
-        "lower80": 79.86,
-        "upper80": 83.76
+        "central": 82.09,
+        "lower80": 80.03,
+        "upper80": 84.15
       },
       {
         "date": "2026-07-14",
-        "central": 81.68,
-        "lower80": 79.57,
-        "upper80": 83.79
+        "central": 81.98,
+        "lower80": 79.75,
+        "upper80": 84.21
       },
       {
         "date": "2026-07-21",
-        "central": 81.56,
-        "lower80": 79.31,
-        "upper80": 83.81
+        "central": 81.87,
+        "lower80": 79.49,
+        "upper80": 84.25
       },
       {
         "date": "2026-07-28",
-        "central": 81.45,
-        "lower80": 79.06,
-        "upper80": 83.84
+        "central": 81.77,
+        "lower80": 79.24,
+        "upper80": 84.3
       },
       {
         "date": "2026-08-04",
-        "central": 81.35,
-        "lower80": 78.83,
-        "upper80": 83.87
+        "central": 81.68,
+        "lower80": 79.02,
+        "upper80": 84.34
       },
       {
         "date": "2026-08-11",
-        "central": 81.26,
-        "lower80": 78.62,
-        "upper80": 83.9
+        "central": 81.59,
+        "lower80": 78.8,
+        "upper80": 84.38
       },
       {
         "date": "2026-08-18",
-        "central": 81.17,
-        "lower80": 78.41,
-        "upper80": 83.93
+        "central": 81.51,
+        "lower80": 78.59,
+        "upper80": 84.43
       }
     ]
   },
@@ -200,97 +200,97 @@
       ]
     },
     "coverage": {
-      "measuredDays": 21,
+      "measuredDays": 22,
       "totalDays": 30,
-      "pct": 70.0
+      "pct": 73.0
     },
     "trendWindows": {
       "7d": {
-        "weeklyLossKg": 0.2417,
+        "weeklyLossKg": 0.1833,
         "points": 8
       },
       "14d": {
-        "weeklyLossKg": 0.226,
+        "weeklyLossKg": 0.2085,
         "points": 15
       },
       "28d": {
-        "weeklyLossKg": 0.2031,
+        "weeklyLossKg": 0.1983,
         "points": 29
       }
     },
-    "residualStdKg": 0.622,
+    "residualStdKg": 0.658,
     "backtest": {
       "7d": {
         "sampleCount": 40,
-        "biasKg": 0.272,
-        "maeKg": 0.565,
-        "rmseKg": 0.738,
+        "biasKg": 0.24,
+        "maeKg": 0.574,
+        "rmseKg": 0.746,
         "status": "ok"
       },
       "14d": {
         "sampleCount": 33,
-        "biasKg": 0.326,
-        "maeKg": 0.503,
-        "rmseKg": 0.804,
+        "biasKg": 0.287,
+        "maeKg": 0.521,
+        "rmseKg": 0.818,
         "status": "ok"
       },
       "28d": {
         "sampleCount": 19,
-        "biasKg": 0.341,
-        "maeKg": 0.419,
-        "rmseKg": 0.793,
+        "biasKg": 0.273,
+        "maeKg": 0.455,
+        "rmseKg": 0.822,
         "status": "ok"
       }
     },
     "kcalPerKg": 7700.0,
     "kcalPerKgSource": "body_fat",
     "calibration": {
-      "exerciseEfficiency": 0.785,
+      "exerciseEfficiency": 0.607,
       "samples": 27,
       "windowDays": 28,
-      "interpretation": "운동 효과의 79%만 실제 감량으로 이어졌습니다 — NEAT 감소·보상 섭취 가능성."
+      "interpretation": "운동 효과의 61%만 실제 감량으로 이어졌습니다 — NEAT 감소·보상 섭취 가능성."
     },
     "modelComparison": {
       "kalmanBacktest": {
         "7d": {
           "sampleCount": 40,
-          "biasKg": -0.02,
-          "maeKg": 0.607,
-          "rmseKg": 0.776,
+          "biasKg": -0.052,
+          "maeKg": 0.621,
+          "rmseKg": 0.788,
           "status": "ok"
         },
         "14d": {
           "sampleCount": 33,
-          "biasKg": 0.048,
-          "maeKg": 0.54,
-          "rmseKg": 0.838,
+          "biasKg": 0.009,
+          "maeKg": 0.577,
+          "rmseKg": 0.866,
           "status": "ok"
         },
         "28d": {
           "sampleCount": 19,
-          "biasKg": -0.154,
-          "maeKg": 0.737,
-          "rmseKg": 0.904,
+          "biasKg": -0.222,
+          "maeKg": 0.719,
+          "rmseKg": 0.891,
           "status": "ok"
         }
       },
       "perHorizon": {
         "7d": {
-          "v1MaeKg": 0.565,
-          "kalmanMaeKg": 0.607,
-          "deltaKg": -0.042,
-          "kalmanWins": false
-        },
-        "28d": {
-          "v1MaeKg": 0.419,
-          "kalmanMaeKg": 0.737,
-          "deltaKg": -0.318,
+          "v1MaeKg": 0.574,
+          "kalmanMaeKg": 0.621,
+          "deltaKg": -0.047,
           "kalmanWins": false
         },
         "14d": {
-          "v1MaeKg": 0.503,
-          "kalmanMaeKg": 0.54,
-          "deltaKg": -0.037,
+          "v1MaeKg": 0.521,
+          "kalmanMaeKg": 0.577,
+          "deltaKg": -0.056,
+          "kalmanWins": false
+        },
+        "28d": {
+          "v1MaeKg": 0.455,
+          "kalmanMaeKg": 0.719,
+          "deltaKg": -0.264,
           "kalmanWins": false
         }
       },
@@ -303,17 +303,18 @@
     ]
   },
   "insight": {
-    "headline": "느리지만 지속 가능한 페이스입니다. 장기 유지에 유리합니다.",
+    "headline": "오늘 83.8kg이지만 추세는 82.89kg, 수분 증가로 일시적 상승일 수 있어요.",
     "lines": [
+      "오늘 83.8kg이지만 추세는 82.89kg, 수분 증가로 일시적 상승일 수 있어요.",
       "느리지만 지속 가능한 페이스입니다. 장기 유지에 유리합니다."
     ]
   },
   "coverage": {
-    "last30Measured": 21,
+    "last30Measured": 22,
     "last30Total": 30,
-    "last30Pct": 70.0,
-    "lastMeasurementAt": "2026-05-23",
-    "daysSinceLastMeasurement": 3
+    "last30Pct": 73.0,
+    "lastMeasurementAt": "2026-05-26",
+    "daysSinceLastMeasurement": 0
   },
   "series": {
     "daily": [
@@ -615,7 +616,7 @@
       },
       {
         "date": "2026-05-26",
-        "valueKg": null
+        "valueKg": 83.8
       }
     ],
     "ma7": [
@@ -917,7 +918,7 @@
       },
       {
         "date": "2026-05-26",
-        "valueKg": 81.83
+        "valueKg": 82.33
       }
     ],
     "ma14": [
@@ -1219,7 +1220,7 @@
       },
       {
         "date": "2026-05-26",
-        "valueKg": 82.56
+        "valueKg": 82.7
       }
     ],
     "ewma": [
@@ -1521,135 +1522,135 @@
       },
       {
         "date": "2026-05-26",
-        "valueKg": 82.79
+        "valueKg": 82.89
       }
     ],
     "prediction": [
       {
         "date": "2026-05-26",
-        "valueKg": 82.79
+        "valueKg": 82.89
       },
       {
         "date": "2026-06-02",
-        "valueKg": 82.59
+        "valueKg": 82.74
       },
       {
         "date": "2026-06-09",
-        "valueKg": 82.41
+        "valueKg": 82.59
       },
       {
         "date": "2026-06-16",
-        "valueKg": 82.24
+        "valueKg": 82.46
       },
       {
         "date": "2026-06-23",
-        "valueKg": 82.09
+        "valueKg": 82.33
       },
       {
         "date": "2026-06-30",
-        "valueKg": 81.94
+        "valueKg": 82.2
       },
       {
         "date": "2026-07-07",
-        "valueKg": 81.81
+        "valueKg": 82.09
       },
       {
         "date": "2026-07-14",
-        "valueKg": 81.68
+        "valueKg": 81.98
       },
       {
         "date": "2026-07-21",
-        "valueKg": 81.56
+        "valueKg": 81.87
       },
       {
         "date": "2026-07-28",
-        "valueKg": 81.45
+        "valueKg": 81.77
       },
       {
         "date": "2026-08-04",
-        "valueKg": 81.35
+        "valueKg": 81.68
       },
       {
         "date": "2026-08-11",
-        "valueKg": 81.26
+        "valueKg": 81.59
       },
       {
         "date": "2026-08-18",
-        "valueKg": 81.17
+        "valueKg": 81.51
       }
     ],
     "predictionCI": [
       {
         "date": "2026-06-02",
-        "central": 82.59,
-        "lower80": 81.79,
-        "upper80": 83.39
+        "central": 82.74,
+        "lower80": 81.9,
+        "upper80": 83.58
       },
       {
         "date": "2026-06-09",
-        "central": 82.41,
-        "lower80": 81.28,
-        "upper80": 83.54
+        "central": 82.59,
+        "lower80": 81.4,
+        "upper80": 83.78
       },
       {
         "date": "2026-06-16",
-        "central": 82.24,
-        "lower80": 80.86,
-        "upper80": 83.62
+        "central": 82.46,
+        "lower80": 81.0,
+        "upper80": 83.92
       },
       {
         "date": "2026-06-23",
-        "central": 82.09,
-        "lower80": 80.5,
-        "upper80": 83.68
+        "central": 82.33,
+        "lower80": 80.65,
+        "upper80": 84.01
       },
       {
         "date": "2026-06-30",
-        "central": 81.94,
-        "lower80": 80.16,
-        "upper80": 83.72
+        "central": 82.2,
+        "lower80": 80.32,
+        "upper80": 84.08
       },
       {
         "date": "2026-07-07",
-        "central": 81.81,
-        "lower80": 79.86,
-        "upper80": 83.76
+        "central": 82.09,
+        "lower80": 80.03,
+        "upper80": 84.15
       },
       {
         "date": "2026-07-14",
-        "central": 81.68,
-        "lower80": 79.57,
-        "upper80": 83.79
+        "central": 81.98,
+        "lower80": 79.75,
+        "upper80": 84.21
       },
       {
         "date": "2026-07-21",
-        "central": 81.56,
-        "lower80": 79.31,
-        "upper80": 83.81
+        "central": 81.87,
+        "lower80": 79.49,
+        "upper80": 84.25
       },
       {
         "date": "2026-07-28",
-        "central": 81.45,
-        "lower80": 79.06,
-        "upper80": 83.84
+        "central": 81.77,
+        "lower80": 79.24,
+        "upper80": 84.3
       },
       {
         "date": "2026-08-04",
-        "central": 81.35,
-        "lower80": 78.83,
-        "upper80": 83.87
+        "central": 81.68,
+        "lower80": 79.02,
+        "upper80": 84.34
       },
       {
         "date": "2026-08-11",
-        "central": 81.26,
-        "lower80": 78.62,
-        "upper80": 83.9
+        "central": 81.59,
+        "lower80": 78.8,
+        "upper80": 84.38
       },
       {
         "date": "2026-08-18",
-        "central": 81.17,
-        "lower80": 78.41,
-        "upper80": 83.93
+        "central": 81.51,
+        "lower80": 78.59,
+        "upper80": 84.43
       }
     ],
     "steps": [
@@ -1771,7 +1772,7 @@
       },
       {
         "date": "2026-05-26",
-        "value": null
+        "value": 50
       }
     ],
     "exerciseMinutes": [
