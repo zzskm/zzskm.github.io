@@ -57,8 +57,48 @@
   .weeknav-btn:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
   .field.name-field input{width:200px;max-width:100%;}
   .lunch-range{display:flex;gap:6px;align-items:center;}
-  .lunch-range input[type=time]{width:110px;}
+  .lunch-range .ctp{width:110px;}
   .lunch-range .dash{color:var(--ink-faint);font-family:var(--mono);font-size:13px;}
+
+  /* custom time picker (30-min steps; replaces native type=time UI) */
+  .ctp{display:inline-block;position:relative;vertical-align:middle;}
+  .ctp__trigger{
+    display:flex;align-items:center;justify-content:center;gap:4px;width:100%;
+    font-family:var(--mono);font-size:14px;color:var(--ink);letter-spacing:0.06em;
+    background:var(--surface);border:1px solid var(--line);border-radius:6px;
+    padding:8px 10px;cursor:pointer;text-align:center;
+  }
+  .ctp__trigger:hover{border-color:var(--line-strong);}
+  .ctp__trigger:focus{outline:none;border-color:var(--line-strong);}
+  .ctp__trigger.is-open{border-color:var(--ink);}
+  .ctp__icon{font-size:12px;color:var(--ink-faint);line-height:1;}
+  .ctp--compact .ctp__trigger{font-size:12px;padding:2px 4px;border-radius:4px;background:var(--bg);}
+  .ctp--compact{width:88px;}
+  .timehelper .ctp--compact{width:90px;}
+  .ctp-panel{
+    position:fixed;z-index:1000;min-width:148px;
+    background:var(--surface);border:1px solid var(--line-strong);
+    border-radius:8px;box-shadow:0 8px 24px rgba(38,38,38,0.14);
+    padding:6px 4px;
+  }
+  .ctp-panel[hidden]{display:none;}
+  .ctp-panel__cols{display:flex;gap:4px;}
+  .ctp-panel__col{
+    flex:1;max-height:200px;overflow-y:auto;
+    display:flex;flex-direction:column;gap:2px;
+    scrollbar-width:thin;
+  }
+  .ctp-panel__opt{
+    font-family:var(--mono);font-size:13px;line-height:1;
+    padding:6px 10px;border:none;border-radius:4px;
+    background:transparent;color:var(--ink);cursor:pointer;
+    text-align:center;letter-spacing:0.04em;
+  }
+  .ctp-panel__opt:hover{background:var(--shade);}
+  .ctp-panel__opt.is-selected{background:var(--blue);color:#fff;}
+  .ctp-panel__sep{
+    min-height:6px;padding:0;pointer-events:none;user-select:none;
+  }
 
   /* preview that mimics docx — header table (blue top/bottom only) */
   .header-table{
@@ -93,12 +133,7 @@
     padding:2px 0;min-height:34px;
   }
   .line-row .time{display:flex;gap:3px;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-mute);}
-  .line-row .time input[type=time]{
-    font-family:var(--mono);font-size:12px;color:var(--ink);
-    background:var(--bg);border:1px solid var(--line);border-radius:4px;
-    padding:2px 4px;width:88px;
-  }
-  .line-row .time input[type=time]:focus{outline:none;border-color:var(--line-strong);}
+  .line-row .time .ctp{flex-shrink:0;}
   .line-row .time .dash{color:var(--ink-faint);}
   .line-row .text{
     min-width:0;word-break:break-word;cursor:text;
@@ -132,11 +167,7 @@
     display:flex;gap:6px;align-items:center;flex-wrap:wrap;
     margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
   }
-  .timehelper input[type=time]{
-    font-family:var(--mono);font-size:12px;color:var(--ink);
-    background:var(--bg);border:1px solid var(--line);border-radius:4px;
-    padding:4px 6px;width:90px;
-  }
+  .timehelper .ctp{flex-shrink:0;}
   .timehelper input[type=text]{
     font-family:var(--sans);font-size:13px;color:var(--ink);
     background:var(--bg);border:1px solid var(--line);border-radius:4px;
@@ -182,7 +213,7 @@
     .shell{padding:20px 14px 60px;}
     .date-cell{width:88px;font-size:12px;}
     textarea{font-size:13.5px;min-height:124px;}
-    .timehelper input[type=time]{width:80px;}
+    .timehelper .ctp--compact{width:80px;}
   }
 </style>
 </head>
@@ -215,14 +246,14 @@
     </div>
     <div class="field">
       <label>업무 시작</label>
-      <input type="time" id="workStartTime" value="09:00" step="600" />
+      <span id="workStartTime" class="ctp"></span>
     </div>
     <div class="field">
       <label>점심 시간</label>
       <div class="lunch-range">
-        <input type="time" id="lunchStart" value="12:00" step="600" />
+        <span id="lunchStart" class="ctp"></span>
         <span class="dash">–</span>
-        <input type="time" id="lunchEnd" value="13:00" step="600" />
+        <span id="lunchEnd" class="ctp"></span>
       </div>
     </div>
   </div>
@@ -272,9 +303,6 @@
   const $nameInput = document.getElementById("nameInput");
   const $filenameInput = document.getElementById("filenameInput");
   const $autoBtn = document.getElementById("autoBtn");
-  const $workStartTime = document.getElementById("workStartTime");
-  const $lunchStart = document.getElementById("lunchStart");
-  const $lunchEnd = document.getElementById("lunchEnd");
   const $prevWeekBtn = document.getElementById("prevWeekBtn");
   const $todayWeekBtn = document.getElementById("todayWeekBtn");
   const $nextWeekBtn = document.getElementById("nextWeekBtn");
@@ -364,11 +392,244 @@
       };
     });
   }
-  function addOneHour(hhmm){
-    const [h,m] = hhmm.split(":").map(Number);
-    const nh = (h + 1) % 24;
-    return `${pad2(nh)}:${pad2(m)}`;
+  const TIME_STEP_MINUTES = 30;
+  const TIME_STEP_SECONDS = TIME_STEP_MINUTES * 60;
+
+  function normalizeTimeToStep(hhmm, stepMinutes = TIME_STEP_MINUTES){
+    if (!hhmm) return "";
+    const [h, m] = hhmm.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return "";
+    const total = h * 60 + m;
+    const rounded = Math.round(total / stepMinutes) * stepMinutes;
+    const normalized = ((rounded % 1440) + 1440) % 1440;
+    return `${pad2(Math.floor(normalized / 60))}:${pad2(normalized % 60)}`;
   }
+
+  function addMinutes(hhmm, minutes){
+    const base = formatTimeHm(hhmm);
+    if (!base) return "";
+    const [h, m] = base.split(":").map(Number);
+    const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+    return `${pad2(Math.floor(total / 60))}:${pad2(total % 60)}`;
+  }
+
+  function addOneHour(hhmm){
+    return addMinutes(hhmm, 60);
+  }
+
+  // ───── custom time picker
+  function formatTimeHm(hhmm){
+    if (!hhmm) return "";
+    const [h, m] = String(hhmm).split(":").map(Number);
+    if (!Number.isFinite(h) || h < 0 || h > 23 || !Number.isFinite(m) || m < 0 || m > 59) return "";
+    return `${pad2(h)}:${pad2(m)}`;
+  }
+
+  function ctpBuildHoursFrom(fromHhmm){
+    const t = formatTimeHm(fromHhmm);
+    if (!t) return Array.from({ length: 24 }, (_, h) => pad2(h));
+    const startHour = Number(t.split(":")[0]);
+    return Array.from({ length: 24 }, (_, i) => pad2((startHour + i) % 24));
+  }
+
+  const CTP_MINUTE_FINE = [];
+  for (let m = 5; m < 60; m += 5) CTP_MINUTE_FINE.push(pad2(m));
+
+  const ctpPanel = document.createElement("div");
+  ctpPanel.className = "ctp-panel";
+  ctpPanel.hidden = true;
+  ctpPanel.setAttribute("role", "listbox");
+  ctpPanel.innerHTML = '<div class="ctp-panel__cols"><div class="ctp-panel__col" data-ctp-col="h"></div><div class="ctp-panel__col" data-ctp-col="m"></div></div>';
+  document.body.appendChild(ctpPanel);
+  const ctpColH = ctpPanel.querySelector('[data-ctp-col="h"]');
+  const ctpColM = ctpPanel.querySelector('[data-ctp-col="m"]');
+  let ctpOpenPicker = null;
+
+  function ctpParse(hhmm){
+    const n = formatTimeHm(hhmm || "");
+    if (!n) return { h: "09", m: "00" };
+    const [h, m] = n.split(":");
+    return { h, m };
+  }
+
+  function prevLineStartForDay(dayIdx, lineIdx){
+    const lines = state.days[dayIdx]?.lines || [];
+    for (let i = lineIdx - 1; i >= 0; i--){
+      if (lines[i].start) return lines[i].start;
+    }
+    return state.workStartTime || "09:00";
+  }
+
+  function lastLineStartForDay(dayIdx){
+    const lines = state.days[dayIdx]?.lines || [];
+    for (let i = lines.length - 1; i >= 0; i--){
+      if (lines[i].start) return lines[i].start;
+    }
+    return state.workStartTime || "09:00";
+  }
+
+  function ctpClose(){
+    ctpPanel.hidden = true;
+    if (ctpOpenPicker){
+      ctpOpenPicker._trigger.classList.remove("is-open");
+      ctpOpenPicker = null;
+    }
+  }
+
+  function ctpPosition(anchor){
+    const r = anchor.getBoundingClientRect();
+    const pw = ctpPanel.offsetWidth || 148;
+    let left = r.left;
+    let top = r.bottom + 4;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    if (top + 220 > window.innerHeight - 8) top = r.top - 4 - (ctpPanel.offsetHeight || 200);
+    ctpPanel.style.left = `${Math.max(8, left)}px`;
+    ctpPanel.style.top = `${Math.max(8, top)}px`;
+  }
+
+  function ctpRenderHourCol(colEl, hours, selected, onSelect){
+    colEl.innerHTML = "";
+    hours.forEach(v => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ctp-panel__opt" + (v === selected ? " is-selected" : "");
+      btn.textContent = v;
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", v === selected ? "true" : "false");
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onSelect(v);
+      });
+      colEl.appendChild(btn);
+    });
+    const sel = colEl.querySelector(".is-selected");
+    if (sel) sel.scrollIntoView({ block: "nearest" });
+  }
+
+  function ctpRenderMinuteCol(colEl, selected, onSelect){
+    colEl.innerHTML = "";
+    const addOpt = (v) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ctp-panel__opt" + (v === selected ? " is-selected" : "");
+      btn.textContent = v;
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", v === selected ? "true" : "false");
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onSelect(v);
+      });
+      colEl.appendChild(btn);
+    };
+    addOpt("00");
+    addOpt("30");
+    const sep = document.createElement("div");
+    sep.className = "ctp-panel__sep";
+    sep.textContent = "";
+    sep.setAttribute("aria-hidden", "true");
+    colEl.appendChild(sep);
+    CTP_MINUTE_FINE.forEach(addOpt);
+    const sel = colEl.querySelector(".is-selected");
+    if (sel) sel.scrollIntoView({ block: "nearest" });
+  }
+
+  function ctpOpen(picker){
+    ctpClose();
+    ctpOpenPicker = picker;
+    picker._trigger.classList.add("is-open");
+    const { h, m } = ctpParse(picker.value);
+    const getHours = () => ctpBuildHoursFrom(
+      typeof picker._hourFrom === "function" ? picker._hourFrom() : ""
+    );
+
+    const apply = (newH, newM) => {
+      const next = `${newH}:${newM}`;
+      if (picker.value !== next){
+        picker.value = next;
+        picker.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      ctpRenderHourCol(ctpColH, getHours(), newH, nh => apply(nh, newM));
+      ctpRenderMinuteCol(ctpColM, newM, nm => apply(newH, nm));
+    };
+
+    ctpRenderHourCol(ctpColH, getHours(), h, nh => apply(nh, m));
+    ctpRenderMinuteCol(ctpColM, m, nm => apply(h, nm));
+    ctpPanel.hidden = false;
+    ctpPosition(picker._trigger);
+    requestAnimationFrame(() => ctpPosition(picker._trigger));
+  }
+
+  document.addEventListener("click", (e) => {
+    if (ctpPanel.hidden) return;
+    if (ctpPanel.contains(e.target)) return;
+    if (ctpOpenPicker && ctpOpenPicker._trigger.contains(e.target)) return;
+    ctpClose();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") ctpClose();
+  });
+  window.addEventListener("resize", ctpClose);
+  window.addEventListener("scroll", ctpClose, true);
+
+  function createTimePicker(options = {}){
+    const { compact = false, hourFrom = null } = options;
+    const root = document.createElement("span");
+    root.className = "ctp" + (compact ? " ctp--compact" : "");
+    root._hourFrom = typeof hourFrom === "function" ? hourFrom : null;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ctp__trigger";
+    btn.setAttribute("aria-haspopup", "listbox");
+    const label = document.createElement("span");
+    label.className = "ctp__label";
+    const icon = document.createElement("span");
+    icon.className = "ctp__icon";
+    icon.textContent = "▾";
+    icon.setAttribute("aria-hidden", "true");
+    btn.append(label, icon);
+    root.appendChild(btn);
+    root._trigger = btn;
+
+    let _value = "";
+    Object.defineProperty(root, "value", {
+      get(){ return _value; },
+      set(v){
+        _value = formatTimeHm(v || "");
+        const p = ctpParse(_value);
+        label.textContent = _value ? `${p.h} : ${p.m}` : "-- : --";
+      }
+    });
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (ctpOpenPicker === root && !ctpPanel.hidden) ctpClose();
+      else ctpOpen(root);
+    });
+
+    return root;
+  }
+
+  function mountTimePicker(host, options = {}){
+    const picker = createTimePicker(options);
+    if (host.id) picker.id = host.id;
+    if (host.className){
+      host.className.split(/\s+/).forEach(c => {
+        if (c && c !== "ctp") picker.classList.add(c);
+      });
+    }
+    host.replaceWith(picker);
+    return picker;
+  }
+
+  const $workStartTime = mountTimePicker(document.getElementById("workStartTime"), {
+    hourFrom: () => ""
+  });
+  const $lunchStart = mountTimePicker(document.getElementById("lunchStart"), {
+    hourFrom: () => $workStartTime.value || state.workStartTime || "09:00"
+  });
+  const $lunchEnd = mountTimePicker(document.getElementById("lunchEnd"), {
+    hourFrom: () => $lunchStart.value || state.lunchStart || "12:00"
+  });
 
   // ───── state
   let state = {
@@ -465,7 +726,7 @@
     if (commit) ed.commit(); else ed.cancel();
   }
 
-  function renderLinesContainer(dayIdx, container){
+  function renderLinesContainer(dayIdx, container, onLineTimeChanged){
     container.innerHTML = "";
     const day = state.days[dayIdx];
     day.lines = day.lines || [];
@@ -477,12 +738,12 @@
       return;
     }
     day.lines.forEach((line, li) => {
-      const row = buildLineRow(dayIdx, li, container);
+      const row = buildLineRow(dayIdx, li, container, onLineTimeChanged);
       container.appendChild(row);
     });
   }
 
-  function buildLineRow(dayIdx, li, container){
+  function buildLineRow(dayIdx, li, container, onLineTimeChanged){
     const line = state.days[dayIdx].lines[li];
     const row = document.createElement("div");
     row.className = "line-row";
@@ -490,15 +751,30 @@
     // ── time column (always editable inputs)
     const timeEl = document.createElement("div");
     timeEl.className = "time";
-    const sIn = document.createElement("input"); sIn.type = "time"; sIn.step = "600"; sIn.value = line.start || "";
+    const sIn = createTimePicker({
+      compact: true,
+      hourFrom: () => prevLineStartForDay(dayIdx, li)
+    });
+    sIn.value = formatTimeHm(line.start || "");
     const tDash = document.createElement("span"); tDash.className = "dash"; tDash.textContent = "–";
-    const eIn = document.createElement("input"); eIn.type = "time"; eIn.step = "600"; eIn.value = line.end || "";
+    const eIn = createTimePicker({
+      compact: true,
+      hourFrom: () => sIn.value || prevLineStartForDay(dayIdx, li)
+    });
+    eIn.value = formatTimeHm(line.end || "");
     sIn.addEventListener("change", () => {
-      state.days[dayIdx].lines[li].start = sIn.value || "";
+      const normalized = formatTimeHm(sIn.value || "");
+      sIn.value = normalized;
+      state.days[dayIdx].lines[li].start = normalized;
       scheduleSave();
     });
     eIn.addEventListener("change", () => {
-      state.days[dayIdx].lines[li].end = eIn.value || "";
+      const normalized = formatTimeHm(eIn.value || "");
+      eIn.value = normalized;
+      state.days[dayIdx].lines[li].end = normalized;
+      if (typeof onLineTimeChanged === "function") {
+        onLineTimeChanged(normalized);
+      }
       scheduleSave();
     });
     timeEl.append(sIn, tDash, eIn);
@@ -546,7 +822,7 @@
       delBtn.addEventListener("click", () => {
         exitActiveEditor(true);
         state.days[dayIdx].lines.splice(li, 1);
-        renderLinesContainer(dayIdx, container);
+        renderLinesContainer(dayIdx, container, onLineTimeChanged);
         scheduleSave();
       });
       actions.appendChild(delBtn);
@@ -629,18 +905,45 @@
       const linesContainer = document.createElement("div");
       linesContainer.className = "lines";
       tdContent.appendChild(linesContainer);
-      renderLinesContainer(i, linesContainer);
 
       // time helper
       const helper = document.createElement("div");
       helper.className = "timehelper";
-      const defaultStart = state.workStartTime || "09:00";
-      const startI = document.createElement("input"); startI.type = "time"; startI.step = "600"; startI.value = defaultStart;
+      const defaultStart = normalizeTimeToStep(state.workStartTime || "09:00");
+      const startI = createTimePicker({
+        compact: true,
+        hourFrom: () => lastLineStartForDay(i)
+      });
+      startI.value = defaultStart;
       const dash = document.createElement("span"); dash.className = "dash"; dash.textContent = "–";
-      const endI = document.createElement("input"); endI.type = "time"; endI.step = "600"; endI.value = addOneHour(defaultStart);
+      const endI = createTimePicker({
+        compact: true,
+        hourFrom: () => startI.value || lastLineStartForDay(i)
+      });
+      endI.value = addOneHour(defaultStart);
       const textI = document.createElement("input"); textI.type = "text"; textI.placeholder = "내용";
       const urlI = document.createElement("input"); urlI.type = "text"; urlI.placeholder = "링크 (선택)";
       const addBtn = document.createElement("button"); addBtn.textContent = "+ 추가";
+
+      const syncHelperFromLineEnd = (lineEnd) => {
+        const nextStart = formatTimeHm(lineEnd);
+        if (!nextStart) return;
+        startI.value = nextStart;
+        endI.value = addOneHour(nextStart);
+      };
+
+      startI.addEventListener("change", () => {
+        startI.value = formatTimeHm(startI.value || "");
+        if (startI.value && (!endI.value || endI.value <= startI.value)) {
+          endI.value = addOneHour(startI.value);
+        }
+      });
+
+      endI.addEventListener("change", () => {
+        endI.value = formatTimeHm(endI.value || "");
+      });
+
+      renderLinesContainer(i, linesContainer, syncHelperFromLineEnd);
 
       const pushLine = (obj) => {
         state.days[i].lines = state.days[i].lines || [];
@@ -648,16 +951,28 @@
       };
       const doAdd = () => {
         exitActiveEditor(true);
-        const s = startI.value, e = endI.value, t = textI.value.trim(), u = urlI.value.trim();
+        const s = formatTimeHm(startI.value);
+        const e = formatTimeHm(endI.value);
+        const t = textI.value.trim();
+        const u = urlI.value.trim();
         if (!s || !e) return;
+        startI.value = s;
+        endI.value = e;
         pushLine({ start: s, end: e, text: t, url: u });
         // shift defaults — jump over lunch if next slot would land before/in lunch
         let nextStart = e;
         let nextEnd = addOneHour(nextStart);
-        const ls = state.lunchStart || "12:00";
-        const le = state.lunchEnd   || "13:00";
+        const ls = normalizeTimeToStep(state.lunchStart || "12:00");
+        const le = normalizeTimeToStep(state.lunchEnd   || "13:00");
         if (ls < le && nextStart < le && nextEnd > ls){
-          if (nextStart <= ls) pushLine({ start: ls, end: le, text: "점심식사", url: "" });
+          if (nextStart <= ls) {
+            const dayLines = state.days[i].lines;
+            const lastLine = dayLines[dayLines.length - 1];
+            if (lastLine && lastLine.end !== ls) {
+              lastLine.end = ls;
+            }
+            pushLine({ start: ls, end: le, text: "점심식사", url: "" });
+          }
           nextStart = le;
           nextEnd = addOneHour(le);
         }
@@ -666,7 +981,7 @@
         textI.value = "";
         urlI.value = "";
         textI.focus();
-        renderLinesContainer(i, linesContainer);
+        renderLinesContainer(i, linesContainer, syncHelperFromLineEnd);
         scheduleSave();
       };
       addBtn.addEventListener("click", doAdd);
@@ -773,17 +1088,20 @@
   });
 
   $workStartTime.addEventListener("change", () => {
-    state.workStartTime = $workStartTime.value || "09:00";
+    state.workStartTime = normalizeTimeToStep($workStartTime.value) || "09:00";
+    $workStartTime.value = state.workStartTime;
     renderDays();
     scheduleSave();
   });
 
   $lunchStart.addEventListener("change", () => {
-    state.lunchStart = $lunchStart.value || "12:00";
+    state.lunchStart = normalizeTimeToStep($lunchStart.value) || "12:00";
+    $lunchStart.value = state.lunchStart;
     scheduleSave();
   });
   $lunchEnd.addEventListener("change", () => {
-    state.lunchEnd = $lunchEnd.value || "13:00";
+    state.lunchEnd = normalizeTimeToStep($lunchEnd.value) || "13:00";
+    $lunchEnd.value = state.lunchEnd;
     scheduleSave();
   });
 
@@ -1053,9 +1371,9 @@
     }
     state.weekStart = toISO(mondayOf(parseISO(state.weekStart)));
     $nameInput.value = state.name || "";
-    $workStartTime.value = state.workStartTime || "09:00";
-    $lunchStart.value = state.lunchStart || "12:00";
-    $lunchEnd.value = state.lunchEnd || "13:00";
+    $workStartTime.value = normalizeTimeToStep(state.workStartTime || "09:00");
+    $lunchStart.value = normalizeTimeToStep(state.lunchStart || "12:00");
+    $lunchEnd.value = normalizeTimeToStep(state.lunchEnd || "13:00");
     rebuildDays();
     if (state.userEditedFilename && state.filename){
       $filenameInput.value = state.filename;
