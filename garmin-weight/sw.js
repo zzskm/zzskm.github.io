@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'gw-v3';
+const CACHE_VERSION = 'gw-v4-20260529';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -8,8 +8,10 @@ const DATA_CACHE = `${CACHE_VERSION}-data`;
 const SHELL_ASSETS = [
   './',
   './index.html',
-  './app.js',
-  './style.css',
+  './app.js?v=20260529',
+  './style.css?v=20260529',
+  './enhancements.js?v=20260529',
+  './enhancements.css?v=20260529',
   './config.json',
   './manifest.webmanifest',
   './icons/icon.svg',
@@ -49,19 +51,16 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // summary.json / config.json: network-first, fallback to cache
   if (isDataRequest(url) || url.pathname.endsWith('/config.json')) {
     event.respondWith(networkFirst(req, DATA_CACHE));
     return;
   }
 
-  // App shell: stale-while-revalidate
   if (isShellRequest(url)) {
     event.respondWith(staleWhileRevalidate(req, SHELL_CACHE));
     return;
   }
 
-  // Fonts + Chart.js CDN: cache-first
   if (isFontOrChartCDN(url)) {
     event.respondWith(cacheFirst(req, RUNTIME_CACHE));
     return;
