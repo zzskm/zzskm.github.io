@@ -3,7 +3,10 @@ name: yuc scrape
 on:
   workflow_dispatch:
   schedule:
-    - cron: "2 * * * *"
+    # KST 07:00~09:59 = UTC 22:00~00:59. 정각 부하 회피 + 출근시간 고빈도 수집.
+    - cron: "7,17,27,37,47,57 22,23,0 * * *"
+    # 그 외 시간은 매시간 1회만 확인. 이것도 정각은 피한다.
+    - cron: "23 1-21 * * *"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -15,7 +18,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -36,8 +39,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --disable-pip-version-check -r requirements.txt
 
       - name: Make folders
         run: |
@@ -52,18 +54,20 @@ jobs:
           fi
 
       - name: Add jitter
-        run: sleep $((RANDOM % 60))
+        run: sleep $((30 + RANDOM % 90))
 
       - name: Run scraper
         run: |
           echo "Starting scrape at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> yuc/artifacts/scrape.log
-          python yuc/scripts/scrape.py --log-level DEBUG >> yuc/artifacts/scrape.log 2>&1
+          python yuc/scripts/scrape.py --log-level DEBUG --allow-stale-success >> yuc/artifacts/scrape.log 2>&1
           echo "Duration: $SECONDS s" >> yuc/artifacts/scrape.log
         env:
           YUC_SOURCE_URL: https://park.yuc.co.kr/usersite/userSiteParkingLotInfo
           YUC_FRONTEND_URL: https://park.yuc.co.kr/views/parkinglot/info/info.html
           YUC_OUTPUT_CSV: yuc/parking_log.csv
+          YUC_STATUS_JSON: yuc/status.json
           YUC_TARGET_NAME: 수지노외 공영주차장
+          YUC_MAX_RETRIES: "2"
 
       - name: Upload artifacts
         if: always()
@@ -72,26 +76,24 @@ jobs:
           name: yuc-artifacts
           path: |
             yuc/parking_log.csv
+            yuc/status.json
             yuc/artifacts/scrape.log
           if-no-files-found: warn
 
       - name: Check for meaningful change
-        if: success()
         id: check
         run: |
-          LAST_VAL=$(tail -1 yuc/parking_log.csv | cut -d',' -f3)
-          PREV=$(git show HEAD:yuc/parking_log.csv | tail -1 | cut -d',' -f3)
-          if [ "$LAST_VAL" = "$PREV" ]; then
+          git add yuc/parking_log.csv yuc/status.json 2>/dev/null || true
+          if git diff --cached --quiet; then
             echo "skip=true" >> $GITHUB_OUTPUT
-            git checkout -- yuc/parking_log.csv
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Commit and push updated CSV
-        if: success() && steps.check.outputs.skip != 'true'
+      - name: Commit and push updated YUC data
+        if: steps.check.outputs.skip != 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: update parking_log.csv"
-          file_pattern: "yuc/parking_log.csv"
+          commit_message: "chore: update yuc data"
+          file_pattern: "yuc/parking_log.csv yuc/status.json"
           branch: ${{ github.ref_name }}
