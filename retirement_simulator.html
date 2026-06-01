@@ -54,6 +54,27 @@
 </head>
 <body>
 <div id="root"><div class="loading">로딩 중…</div></div>
+<div id="boot-error" class="loading" style="display:none" role="alert" aria-live="assertive">
+  앱을 불러오지 못했습니다. 네트워크 연결 또는 CDN 접근 상태를 확인한 뒤 새로고침해주세요.
+</div>
+<script>
+  (function () {
+    const timeoutId = setTimeout(() => window.showBootError(), 8000);
+    window.showBootError = function () {
+      const root = document.getElementById("root");
+      const fallback = document.getElementById("boot-error");
+      if (root) root.style.display = "none";
+      if (fallback) fallback.style.display = "flex";
+    };
+    window.addEventListener("retirement-sim-ready", () => clearTimeout(timeoutId), { once: true });
+    window.addEventListener("error", (event) => {
+      const target = event.target;
+      if (target && (target.tagName === "SCRIPT" || target.tagName === "LINK")) {
+        window.showBootError();
+      }
+    }, true);
+  })();
+</script>
 
 <script type="text/babel" data-type="module" data-presets="react">
 import React, { useState, useMemo, useEffect, useRef } from "react";
@@ -1462,13 +1483,13 @@ function AssumptionsModal({ onClose }) {
 
   return (
     <div className="wizard-overlay" onClick={onClose}>
-      <div className="wizard-card max-w-lg" onClick={e => e.stopPropagation()}>
+      <div className="wizard-card max-w-lg" role="dialog" aria-modal="true" aria-labelledby="assumptions-title" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-base font-semibold">모델 가정 ({a.version})</h2>
+            <h2 id="assumptions-title" className="text-base font-semibold">모델 가정 ({a.version})</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">시뮬레이션에 사용된 상수와 기준값입니다. 모두 단순화된 추정이며 실제 제도와 다를 수 있습니다.</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none ml-4">×</button>
+          <button onClick={onClose} aria-label="모델 가정 닫기" className="text-slate-400 hover:text-slate-600 text-xl leading-none ml-4">×</button>
         </div>
 
         <div className="space-y-4">
@@ -1525,7 +1546,7 @@ function AssumptionsModal({ onClose }) {
 
         <div className="mt-5 flex justify-between items-center">
           <a href="https://www.nps.or.kr" target="_blank" rel="noopener" className="text-[11px] text-slate-400 hover:text-slate-600 underline">국민연금공단 →</a>
-          <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-700">닫기</button>
+          <button onClick={onClose} aria-label="모델 가정 닫기" className="px-4 py-2 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-700">닫기</button>
         </div>
       </div>
     </div>
@@ -1761,14 +1782,14 @@ function SetupWizard({ initial, onComplete, onClose }) {
 
   return (
     <div className="wizard-overlay">
-      <div className="wizard-card">
+      <div className="wizard-card" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-base font-semibold">빠른 설정 마법사</h2>
+            <h2 id="wizard-title" className="text-base font-semibold">빠른 설정 마법사</h2>
             <p className="text-xs text-slate-400">{step + 1} / {WIZARD_STEPS.length} 단계 — {WIZARD_STEPS[step]}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">×</button>
+          <button onClick={onClose} aria-label="빠른 설정 닫기" className="text-slate-400 hover:text-slate-700 text-lg leading-none">×</button>
         </div>
         {/* 진행 바 */}
         <div className="flex gap-1 mb-5">
@@ -2273,9 +2294,23 @@ function App() {
           </div>
           {/* 모바일: 결과/입력 토글 */}
           {isMobile && (
-            <div className="mt-1.5 flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 w-fit">
-              <button onClick={() => setMobileView("results")} className={`px-3 py-1 rounded-md transition-all ${mobileView === "results" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500'}`}>결과</button>
-              <button onClick={() => setMobileView("inputs")} className={`px-3 py-1 rounded-md transition-all ${mobileView === "inputs" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500'}`}>입력</button>
+            <div className="mt-1.5 flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 w-fit" role="tablist" aria-label="모바일 보기 전환">
+              <button
+                id="results-tab"
+                role="tab"
+                aria-selected={mobileView === "results"}
+                aria-controls="results-panel"
+                onClick={() => setMobileView("results")}
+                className={`px-3 py-1 rounded-md transition-all ${mobileView === "results" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500'}`}
+              >결과</button>
+              <button
+                id="inputs-tab"
+                role="tab"
+                aria-selected={mobileView === "inputs"}
+                aria-controls="inputs-panel"
+                onClick={() => setMobileView("inputs")}
+                className={`px-3 py-1 rounded-md transition-all ${mobileView === "inputs" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500'}`}
+              >입력</button>
             </div>
           )}
           {/* 시나리오 탭 */}
@@ -2297,7 +2332,7 @@ function App() {
                     </span>
                   )}
                   {scenarios.length > 1 && (
-                    <button onClick={() => removeScenario(s.id)} className="text-[10px] text-slate-400 hover:text-red-500" title="삭제">×</button>
+                    <button onClick={() => removeScenario(s.id)} className="text-[10px] text-slate-400 hover:text-red-500" title="삭제" aria-label={`${s.name} 시나리오 삭제`}>×</button>
                   )}
                 </div>
               );
@@ -2315,7 +2350,12 @@ function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* 입력 패널 */}
-        <aside className={`lg:col-span-4 xl:col-span-3 ${isMobile && mobileView !== "inputs" ? "hidden" : ""}`}>
+        <aside
+          id="inputs-panel"
+          role={isMobile ? "tabpanel" : undefined}
+          aria-labelledby={isMobile ? "inputs-tab" : undefined}
+          className={`lg:col-span-4 xl:col-span-3 ${isMobile && mobileView !== "inputs" ? "hidden" : ""}`}
+        >
           <div className="lg:sticky lg:top-24 bg-white rounded-xl border border-slate-200 p-4 max-h-[calc(100vh-7rem)] overflow-y-auto">
             <div className="mb-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-2">
               <div>
@@ -2600,20 +2640,25 @@ function App() {
         </aside>
 
         {/* 결과 패널 */}
-        <section className={`lg:col-span-8 xl:col-span-9 space-y-5 ${isMobile && mobileView !== "results" ? "hidden" : ""}`}>
+        <section
+          id="results-panel"
+          role={isMobile ? "tabpanel" : undefined}
+          aria-labelledby={isMobile ? "results-tab" : undefined}
+          className={`lg:col-span-8 xl:col-span-9 space-y-5 ${isMobile && mobileView !== "results" ? "hidden" : ""}`}
+        >
 
           {/* 마이그레이션 토스트 */}
           {toast && (
-            <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+            <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800" role="status" aria-live="polite">
               <span className="shrink-0 font-bold">ℹ</span>
               <span className="flex-1">{toast}</span>
-              <button onClick={() => setToast(null)} className="text-blue-400 hover:text-blue-700 text-sm leading-none shrink-0">×</button>
+              <button onClick={() => setToast(null)} aria-label="알림 닫기" className="text-blue-400 hover:text-blue-700 text-sm leading-none shrink-0">×</button>
             </div>
           )}
 
           {/* C9: 검증 경고 배너 */}
           {validationWarnings.length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-1" role="alert" aria-live="polite">
               {validationWarnings.map(w => (
                 <div key={w.key} className={`flex items-start gap-2 text-xs ${w.level === "error" ? "text-red-700" : "text-amber-800"}`}>
                   <span className="shrink-0 font-bold">{w.level === "error" ? "⚠" : "!"}</span>
@@ -2714,7 +2759,7 @@ function App() {
                 )}
               </div>
             </div>
-            <div style={{ width: "100%", height: isMobile ? 220 : 360 }}>
+            <div style={{ width: "100%", height: isMobile ? 220 : 360 }} role="img" aria-label="자산 흐름 차트">
               <ResponsiveContainer>
                 <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
                   <CartesianGrid stroke="#f1f5f9" />
@@ -2823,7 +2868,7 @@ function App() {
                 <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span>대출</span>
               </div>
             </div>
-            <div style={{ width: "100%", height: isMobile ? 200 : 320 }}>
+            <div style={{ width: "100%", height: isMobile ? 200 : 320 }} role="img" aria-label="자산 구성 변화 차트">
               <ResponsiveContainer>
                 <ComposedChart data={bucketData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }} stackOffset="sign">
                   <CartesianGrid stroke="#f1f5f9" />
@@ -2883,7 +2928,7 @@ function App() {
           {/* 월 현금흐름 */}
           <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h2 className="text-sm font-semibold mb-2">월 현금흐름 — <span style={{color: active.color}}>{active.name}</span></h2>
-            <div style={{ width: "100%", height: isMobile ? 180 : 300 }}>
+            <div style={{ width: "100%", height: isMobile ? 180 : 300 }} role="img" aria-label="월 현금흐름 차트">
               <ResponsiveContainer>
                 <ComposedChart data={cashflowData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }} stackOffset="sign">
                   <CartesianGrid stroke="#f1f5f9" />
@@ -3026,7 +3071,13 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+try {
+  createRoot(document.getElementById("root")).render(<App />);
+  window.dispatchEvent(new Event("retirement-sim-ready"));
+} catch (error) {
+  console.error("Retirement simulator failed to start", error);
+  window.showBootError?.();
+}
 </script>
 </body>
 </html>
