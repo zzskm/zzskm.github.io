@@ -8,7 +8,8 @@ const DATA_CACHE = `${CACHE_VERSION}-data`;
 const SHELL_ASSETS = [
   './',
   './index.html',
-  './app.js?v=20260529',
+  './app.helpers.js?v=20260608',
+  './app.js?v=20260608',
   './style.css?v=20260529',
   './enhancements.js?v=20260529',
   './enhancements.css?v=20260529',
