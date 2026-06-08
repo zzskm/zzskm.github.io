@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'gw-v4-20260529';
+const CACHE_VERSION = 'gw-v5-20260608';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;

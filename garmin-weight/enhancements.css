@@ -59,6 +59,67 @@
   color: #991b1b;
 }
 
+.app.is-low-confidence .hero-metric--confidence,
+.app.is-low-confidence .bottom-card--quality {
+  border-color: rgba(185, 28, 28, 0.24);
+}
+
+.app.is-low-confidence #goalEta,
+.app.is-low-confidence #predictionConfidence {
+  color: #991b1b;
+}
+
+.insight-support {
+  margin-top: 6px;
+  color: rgba(38, 38, 38, 0.62);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.prediction-guard {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(185, 28, 28, 0.18);
+  border-radius: 12px;
+  background: rgba(185, 28, 28, 0.045);
+  color: rgba(38, 38, 38, 0.72);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scenarios.is-muted {
+  opacity: 0.74;
+}
+
+.scenarios.is-muted .scenario {
+  filter: grayscale(0.15);
+}
+
+.scenarios.is-muted .scenario-val {
+  color: rgba(38, 38, 38, 0.62);
+}
+
+.model-audit {
+  grid-column: 1 / -1;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(38, 38, 38, 0.14);
+}
+
+.model-audit-main {
+  margin-top: 3px;
+  color: #262626;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.model-audit-sub {
+  margin-top: 3px;
+  color: rgba(38, 38, 38, 0.54);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 720px) {
   .quality-grid {
     grid-template-columns: 1fr;
