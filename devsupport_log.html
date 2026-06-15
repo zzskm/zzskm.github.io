@@ -162,6 +162,55 @@
   .line-row .edit-mid input:focus{outline:none;border-color:var(--ink);}
   .iconbtn.disabled{opacity:0.35;pointer-events:none;cursor:default;}
   .lines-empty{color:var(--ink-faint);font-style:italic;font-size:13px;padding:4px 0;}
+  .lines-empty .empty-import-btn{
+    margin-top:6px;font-family:var(--sans);font-size:12px;font-weight:500;
+    padding:5px 9px;border:1px solid var(--line);border-radius:4px;
+    background:var(--surface);color:var(--ink);cursor:pointer;
+  }
+  .lines-empty .empty-import-btn:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+
+  .transfer-modal-backdrop{
+    position:fixed;inset:0;z-index:2000;
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;background:rgba(38,38,38,0.32);
+  }
+  .transfer-modal-backdrop[hidden]{display:none;}
+  .transfer-modal{
+    width:min(560px,100%);background:var(--surface);border:1px solid var(--line-strong);
+    border-radius:12px;box-shadow:0 18px 60px rgba(38,38,38,0.22);
+    padding:18px;
+  }
+  .transfer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
+  .transfer-head h2{font-size:16px;font-weight:600;letter-spacing:-0.01em;margin-top:2px;}
+  .modal-close{
+    font-size:22px;line-height:1;border:1px solid var(--line);background:var(--surface);
+    border-radius:6px;padding:0 8px;cursor:pointer;color:var(--ink-mute);
+  }
+  .modal-close:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .transfer-summary{
+    font-family:var(--sans);font-size:13px;line-height:1.55;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px;
+    word-break:break-word;
+  }
+  .transfer-mode{
+    display:flex;gap:8px;align-items:center;margin-bottom:12px;
+    font-family:var(--sans);font-size:13px;color:var(--ink);
+  }
+  .transfer-mode label{
+    display:flex;gap:6px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;
+  }
+  .transfer-mode label:has(input:checked){border-color:var(--ink);background:var(--ink);color:var(--bg);}
+  .transfer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
+  .transfer-day-btn{
+    min-height:62px;text-align:left;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);color:var(--ink);padding:10px;cursor:pointer;
+    font-family:var(--sans);line-height:1.35;
+  }
+  .transfer-day-btn:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .transfer-day-btn:disabled{opacity:0.38;cursor:default;background:var(--surface-2);color:var(--ink-faint);}
+  .transfer-day-btn strong{display:block;font-size:13px;margin-bottom:4px;}
+  .transfer-day-btn span{display:block;font-family:var(--mono);font-size:11px;color:currentColor;opacity:0.72;}
+  .transfer-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;}
 
   .timehelper{
     display:flex;gap:6px;align-items:center;flex-wrap:wrap;
@@ -290,6 +339,27 @@
   <p class="hint">💾 <b>HTML 저장</b>으로 이 페이지를 받아두면 로컬에서도 그대로 사용할 수 있어요.</p>
 </div>
 
+<div class="transfer-modal-backdrop" id="transferModal" hidden>
+  <div class="transfer-modal" role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+    <div class="transfer-head">
+      <div>
+        <div class="eyebrow">Dev Support</div>
+        <h2 id="transferTitle">로그 이동/복사</h2>
+      </div>
+      <button type="button" class="modal-close" id="transferCloseBtn" aria-label="닫기">×</button>
+    </div>
+    <div class="transfer-summary" id="transferSummary"></div>
+    <div class="transfer-mode" aria-label="이동 또는 복사 선택">
+      <label><input type="radio" name="transferMode" value="copy" checked /> 복사</label>
+      <label><input type="radio" name="transferMode" value="move" /> 이동</label>
+    </div>
+    <div class="transfer-grid" id="transferTargetGrid"></div>
+    <div class="transfer-actions">
+      <button type="button" class="btn ghost" id="transferCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (() => {
   const STORAGE_KEY = "devsupport_log_v2";
@@ -306,6 +376,11 @@
   const $prevWeekBtn = document.getElementById("prevWeekBtn");
   const $todayWeekBtn = document.getElementById("todayWeekBtn");
   const $nextWeekBtn = document.getElementById("nextWeekBtn");
+  const $transferModal = document.getElementById("transferModal");
+  const $transferCloseBtn = document.getElementById("transferCloseBtn");
+  const $transferCancelBtn = document.getElementById("transferCancelBtn");
+  const $transferSummary = document.getElementById("transferSummary");
+  const $transferTargetGrid = document.getElementById("transferTargetGrid");
 
   // ───── date helpers
   const pad2 = n => String(n).padStart(2,"0");
@@ -415,6 +490,14 @@
 
   function addOneHour(hhmm){
     return addMinutes(hhmm, 60);
+  }
+
+  function normalizeTimeRange(start, end){
+    const s = formatTimeHm(start || "");
+    const e = formatTimeHm(end || "");
+    if (!s && !e) return { start: "", end: "" };
+    if (s && (!e || e <= s)) return { start: s, end: addOneHour(s) };
+    return { start: s, end: e };
   }
 
   // ───── custom time picker
@@ -566,7 +649,10 @@
     ctpClose();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") ctpClose();
+    if (e.key === "Escape"){
+      if ($transferModal && !$transferModal.hidden) closeTransferModal();
+      ctpClose();
+    }
   });
   window.addEventListener("resize", ctpClose);
   window.addEventListener("scroll", ctpClose, true);
@@ -726,6 +812,168 @@
     if (commit) ed.commit(); else ed.cancel();
   }
 
+  let transferContext = null;
+  function cloneTransferLine(line){
+    return {
+      start: line.start || "",
+      end: line.end || "",
+      text: (line.text || "").trim(),
+      url: (line.url || "").trim()
+    };
+  }
+  function isTransferableLine(line){
+    return !!(line && line.start && line.end && (line.text || "").trim());
+  }
+  function describeTransferLine(line){
+    return `${formatTimeLabel(line)} ${(line.text || "").trim()}`.trim();
+  }
+  function transferModeLabel(mode){
+    return mode === "move" ? "이동" : "복사";
+  }
+  function getTransferMode(){
+    const checked = document.querySelector('input[name="transferMode"]:checked');
+    return checked ? checked.value : "copy";
+  }
+  function closeTransferModal(){
+    $transferModal.hidden = true;
+    transferContext = null;
+  }
+  function openTransferModal(dayIdx, lineIdx, targetDayIdx){
+    exitActiveEditor(true);
+    ctpClose();
+
+    const kind = lineIdx == null ? "empty" : "line";
+    if (kind === "line"){
+      if (dayIdx == null || lineIdx == null || !state.days[dayIdx] || !state.days[dayIdx].lines[lineIdx]){
+        alert("옮길 로그를 찾을 수 없습니다.");
+        return;
+      }
+      const sourceLine = state.days[dayIdx].lines[lineIdx];
+      if (!isTransferableLine(sourceLine)){
+        alert("시간과 내용이 모두 있는 로그만 이동/복사할 수 있습니다.");
+        return;
+      }
+      if (state.days.length < 2){
+        alert("이동/복사할 대상 날짜가 없습니다.");
+        return;
+      }
+      transferContext = { kind, sourceDayIdx: dayIdx, lineIdx, targetDayIdx: null };
+    } else {
+      if (targetDayIdx == null || !state.days[targetDayIdx]){
+        alert("가져올 대상 날짜를 찾을 수 없습니다.");
+        return;
+      }
+      const hasSource = state.days.some((d, i) => i !== targetDayIdx && (d.lines || []).some(isTransferableLine));
+      if (!hasSource){
+        alert("가져올 수 있는 로그가 현재 주차에 없습니다.");
+        return;
+      }
+      transferContext = { kind, sourceDayIdx: null, lineIdx: null, targetDayIdx };
+    }
+
+    $transferModal.hidden = false;
+    updateTransferSummary();
+    renderTransferTargets();
+  }
+  function updateTransferSummary(){
+    if (!transferContext) return;
+    const mode = transferModeLabel(getTransferMode());
+    if (transferContext.kind === "line"){
+      const source = state.days[transferContext.sourceDayIdx];
+      const line = source.lines[transferContext.lineIdx];
+      $transferSummary.textContent = `원본: ${source.label} ${describeTransferLine(line)}\n작업: ${mode}\n대상 날짜를 선택하면 로그가 대상 날짜의 마지막 줄 뒤에 추가됩니다.`;
+    } else {
+      const target = state.days[transferContext.targetDayIdx];
+      $transferSummary.textContent = `대상: ${target.label}\n작업: ${mode}\n선택한 날짜의 시간/내용이 있는 로그만 가져옵니다.`;
+    }
+  }
+  function renderTransferTargets(){
+    if (!$transferTargetGrid || !transferContext) return;
+    $transferTargetGrid.innerHTML = "";
+
+    const candidates = transferContext.kind === "line"
+      ? state.days
+          .map((d, idx) => ({ d, idx }))
+          .filter(item => item.idx !== transferContext.sourceDayIdx)
+      : state.days
+          .map((d, idx) => ({ d, idx }))
+          .filter(item => item.idx !== transferContext.targetDayIdx && (item.d.lines || []).some(isTransferableLine));
+
+    if (candidates.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "lines-empty";
+      empty.textContent = transferContext.kind === "line" ? "선택할 대상 날짜가 없습니다." : "선택할 가져오기 날짜가 없습니다.";
+      $transferTargetGrid.appendChild(empty);
+      return;
+    }
+
+    candidates.forEach(({ d, idx }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "transfer-day-btn";
+      const validCount = (d.lines || []).filter(isTransferableLine).length;
+      if (transferContext.kind === "empty" && validCount === 0) btn.disabled = true;
+      const strong = document.createElement("strong");
+      strong.textContent = d.label;
+      const span = document.createElement("span");
+      span.textContent = `${d.iso} · 가져올 수 있는 로그 ${validCount}개`;
+      btn.append(strong, span);
+      btn.addEventListener("click", () => applyTransferToSelectedDay(idx));
+      $transferTargetGrid.appendChild(btn);
+    });
+  }
+  function applyTransferToSelectedDay(selectedDayIdx){
+    if (!transferContext) return;
+    const mode = getTransferMode();
+    if (transferContext.kind === "line"){
+      transferLineToTarget(transferContext.sourceDayIdx, transferContext.lineIdx, selectedDayIdx, mode);
+    } else {
+      transferAllLinesFromSource(selectedDayIdx, transferContext.targetDayIdx, mode);
+    }
+  }
+  function transferLineToTarget(sourceDayIdx, lineIdx, targetDayIdx, mode){
+    const source = state.days[sourceDayIdx];
+    const target = state.days[targetDayIdx];
+    const line = source.lines[lineIdx];
+    if (!isTransferableLine(line)){
+      alert("시간과 내용이 모두 있는 로그만 이동/복사할 수 있습니다.");
+      return;
+    }
+    target.lines = target.lines || [];
+    target.lines.push(cloneTransferLine(line));
+    if (mode === "move"){
+      source.lines.splice(lineIdx, 1);
+    }
+    closeTransferModal();
+    renderDays();
+    scheduleSave();
+  }
+  function transferAllLinesFromSource(sourceDayIdx, targetDayIdx, mode){
+    const source = state.days[sourceDayIdx];
+    const target = state.days[targetDayIdx];
+    const validIndices = [];
+    const linesToTransfer = [];
+    (source.lines || []).forEach((line, idx) => {
+      if (isTransferableLine(line)){
+        validIndices.push(idx);
+        linesToTransfer.push(cloneTransferLine(line));
+      }
+    });
+    if (linesToTransfer.length === 0){
+      alert("시간과 내용이 모두 있는 로그만 가져올 수 있습니다.");
+      return;
+    }
+    target.lines = target.lines || [];
+    target.lines.push(...linesToTransfer);
+    if (mode === "move"){
+      const validIndexSet = new Set(validIndices);
+      source.lines = (source.lines || []).filter((_, idx) => !validIndexSet.has(idx));
+    }
+    closeTransferModal();
+    renderDays();
+    scheduleSave();
+  }
+
   function renderLinesContainer(dayIdx, container, onLineTimeChanged){
     container.innerHTML = "";
     const day = state.days[dayIdx];
@@ -735,6 +983,12 @@
       empty.className = "lines-empty";
       empty.textContent = "아래에서 시간/내용 입력 후 + 추가 하세요.";
       container.appendChild(empty);
+      const importBtn = document.createElement("button");
+      importBtn.type = "button";
+      importBtn.className = "empty-import-btn";
+      importBtn.textContent = "다른 날짜에서 가져오기";
+      importBtn.addEventListener("click", () => openTransferModal(null, null, dayIdx));
+      container.appendChild(importBtn);
       return;
     }
     day.lines.forEach((line, li) => {
@@ -763,17 +1017,23 @@
     });
     eIn.value = formatTimeHm(line.end || "");
     sIn.addEventListener("change", () => {
-      const normalized = formatTimeHm(sIn.value || "");
-      sIn.value = normalized;
-      state.days[dayIdx].lines[li].start = normalized;
+      const currentLine = state.days[dayIdx].lines[li];
+      const { start, end } = normalizeTimeRange(sIn.value, currentLine.end);
+      currentLine.start = start;
+      currentLine.end = end;
+      sIn.value = start;
+      eIn.value = end;
       scheduleSave();
     });
     eIn.addEventListener("change", () => {
-      const normalized = formatTimeHm(eIn.value || "");
-      eIn.value = normalized;
-      state.days[dayIdx].lines[li].end = normalized;
+      const currentLine = state.days[dayIdx].lines[li];
+      const { start, end } = normalizeTimeRange(currentLine.start, eIn.value);
+      currentLine.start = start;
+      currentLine.end = end;
+      sIn.value = start;
+      eIn.value = end;
       if (typeof onLineTimeChanged === "function") {
-        onLineTimeChanged(normalized);
+        onLineTimeChanged(end);
       }
       scheduleSave();
     });
@@ -813,6 +1073,17 @@
       openBtn.textContent = "↗";
       openBtn.style.textDecoration = "none";
       actions.appendChild(openBtn);
+
+      const transferBtn = document.createElement("button");
+      transferBtn.className = "iconbtn";
+      transferBtn.type = "button";
+      transferBtn.textContent = "이동";
+      transferBtn.title = "이동/복사";
+      transferBtn.addEventListener("click", () => {
+        exitActiveEditor(true);
+        openTransferModal(dayIdx, li);
+      });
+      actions.appendChild(transferBtn);
 
       const delBtn = document.createElement("button");
       delBtn.className = "iconbtn";
@@ -933,14 +1204,15 @@
       };
 
       startI.addEventListener("change", () => {
-        startI.value = formatTimeHm(startI.value || "");
-        if (startI.value && (!endI.value || endI.value <= startI.value)) {
-          endI.value = addOneHour(startI.value);
-        }
+        const { start, end } = normalizeTimeRange(startI.value, endI.value);
+        startI.value = start;
+        endI.value = end;
       });
 
       endI.addEventListener("change", () => {
-        endI.value = formatTimeHm(endI.value || "");
+        const { start, end } = normalizeTimeRange(startI.value, endI.value);
+        startI.value = start;
+        endI.value = end;
       });
 
       renderLinesContainer(i, linesContainer, syncHelperFromLineEnd);
@@ -951,16 +1223,15 @@
       };
       const doAdd = () => {
         exitActiveEditor(true);
-        const s = formatTimeHm(startI.value);
-        const e = formatTimeHm(endI.value);
+        const { start, end } = normalizeTimeRange(startI.value, endI.value);
         const t = textI.value.trim();
         const u = urlI.value.trim();
-        if (!s || !e) return;
-        startI.value = s;
-        endI.value = e;
-        pushLine({ start: s, end: e, text: t, url: u });
+        if (!start || !end) return;
+        startI.value = start;
+        endI.value = end;
+        pushLine({ start, end, text: t, url: u });
         // shift defaults — jump over lunch if next slot would land before/in lunch
-        let nextStart = e;
+        let nextStart = end;
         let nextEnd = addOneHour(nextStart);
         const ls = normalizeTimeToStep(state.lunchStart || "12:00");
         const le = normalizeTimeToStep(state.lunchEnd   || "13:00");
@@ -1116,6 +1387,18 @@
     state.userEditedFilename = false;
     refreshFilename(true);
     save();
+  });
+
+  $transferCloseBtn.addEventListener("click", closeTransferModal);
+  $transferCancelBtn.addEventListener("click", closeTransferModal);
+  document.querySelectorAll('input[name="transferMode"]').forEach(input => {
+    input.addEventListener("change", () => {
+      updateTransferSummary();
+      renderTransferTargets();
+    });
+  });
+  $transferModal.addEventListener("click", (e) => {
+    if (e.target === $transferModal) closeTransferModal();
   });
 
   document.getElementById("resetBtn").addEventListener("click", () => {
