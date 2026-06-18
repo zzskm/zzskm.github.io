@@ -200,6 +200,18 @@
     display:flex;gap:6px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;
   }
   .transfer-mode label:has(input:checked){border-color:var(--ink);background:var(--ink);color:var(--bg);}
+  .transfer-source{margin-bottom:12px;}
+  .transfer-source-title{font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;}
+  .transfer-source-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
+  .transfer-source-btn{
+    min-height:58px;text-align:left;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);color:var(--ink);padding:10px;cursor:pointer;
+    font-family:var(--sans);line-height:1.35;
+  }
+  .transfer-source-btn:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .transfer-source-btn.is-selected{border-color:var(--ink);}
+  .transfer-source-btn strong{display:block;font-size:13px;margin-bottom:4px;}
+  .transfer-source-btn span{display:block;font-family:var(--mono);font-size:11px;color:currentColor;opacity:0.72;}
   .transfer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
   .transfer-day-btn{
     min-height:62px;text-align:left;border:1px solid var(--line);border-radius:8px;
@@ -353,6 +365,10 @@
       <label><input type="radio" name="transferMode" value="copy" checked /> 복사</label>
       <label><input type="radio" name="transferMode" value="move" /> 이동</label>
     </div>
+    <div class="transfer-source" id="transferSource" hidden>
+      <div class="transfer-source-title">가져올 주차 선택</div>
+      <div class="transfer-source-grid" id="transferSourceGrid"></div>
+    </div>
     <div class="transfer-grid" id="transferTargetGrid"></div>
     <div class="transfer-actions">
       <button type="button" class="btn ghost" id="transferCancelBtn">취소</button>
@@ -380,6 +396,8 @@
   const $transferCloseBtn = document.getElementById("transferCloseBtn");
   const $transferCancelBtn = document.getElementById("transferCancelBtn");
   const $transferSummary = document.getElementById("transferSummary");
+  const $transferSource = document.getElementById("transferSource");
+  const $transferSourceGrid = document.getElementById("transferSourceGrid");
   const $transferTargetGrid = document.getElementById("transferTargetGrid");
 
   // ───── date helpers
@@ -417,6 +435,11 @@
   function rangeLabelFor(monday){
     const f = fridayOf(monday);
     return `${monday.getMonth()+1}/${monday.getDate()} ~ ${f.getMonth()+1}/${f.getDate()}`;
+  }
+  function previousWeekStartIso(weekStart = state.weekStart){
+    const m = parseISO(weekStart);
+    m.setDate(m.getDate() - 7);
+    return toISO(m);
   }
   function sanitize(s){ return (s || "").replace(/[\/\\:*?"<>|]/g, "_"); }
 
@@ -757,6 +780,64 @@
     while (out.length && isEmptyLine(out[out.length-1])) out.pop();
     return out;
   }
+  function normalizeStoredWeek(weekStart){
+    return (state.weeksByStart[weekStart] || []).map(day => ({
+      iso: day.iso,
+      label: day.label,
+      lines: day.lines
+        ? normalizeLines(day.lines)
+        : (typeof day.content === "string" ? parseContentToLines(day.content) : [])
+    }));
+  }
+  function getWeekDays(weekStart){
+    if (weekStart === state.weekStart){
+      return state.days.map(d => ({
+        iso: d.iso,
+        label: d.label,
+        lines: normalizeLines(d.lines)
+      }));
+    }
+    return normalizeStoredWeek(weekStart);
+  }
+  function getMutableWeekDays(weekStart){
+    if (weekStart === state.weekStart) return state.days;
+    const week = normalizeStoredWeek(weekStart);
+    state.weeksByStart[weekStart] = week;
+    return week;
+  }
+  function countTransferableLines(weekStart, excludeDayIdx = null){
+    let count = 0;
+    getWeekDays(weekStart).forEach((day, idx) => {
+      if (idx === excludeDayIdx) return;
+      (day.lines || []).forEach(line => {
+        if (isTransferableLine(line)) count++;
+      });
+    });
+    return count;
+  }
+  function getEmptySourceWeekOptions(targetDayIdx){
+    const options = [];
+    const currentCount = countTransferableLines(state.weekStart, targetDayIdx);
+    if (currentCount > 0){
+      options.push({
+        weekStart: state.weekStart,
+        label: "현재 주차",
+        range: rangeLabelFor(parseISO(state.weekStart)),
+        count: currentCount
+      });
+    }
+    const prevWeekStart = previousWeekStartIso(state.weekStart);
+    const prevCount = countTransferableLines(prevWeekStart);
+    if (prevCount > 0){
+      options.push({
+        weekStart: prevWeekStart,
+        label: "지난 주차",
+        range: rangeLabelFor(parseISO(prevWeekStart)),
+        count: prevCount
+      });
+    }
+    return options;
+  }
   function snapshotCurrentWeek(){
     if (!state.weekStart) return;
     state.weeksByStart[state.weekStart] = state.days.map(d => ({
@@ -834,6 +915,25 @@
     const checked = document.querySelector('input[name="transferMode"]:checked');
     return checked ? checked.value : "copy";
   }
+  function isPreviousWeekSourceSelected(){
+    return !!(transferContext && transferContext.kind === "empty" && transferContext.sourceWeekStart && transferContext.sourceWeekStart !== state.weekStart);
+  }
+  function updateTransferModeAvailability(){
+    const moveInput = document.querySelector('input[name="transferMode"][value="move"]');
+    const copyInput = document.querySelector('input[name="transferMode"][value="copy"]');
+    if (!moveInput) return;
+    if (isPreviousWeekSourceSelected()){
+      moveInput.disabled = true;
+      moveInput.checked = false;
+      if (copyInput) copyInput.checked = true;
+      const label = moveInput.closest("label");
+      if (label) label.style.opacity = "0.45";
+    } else {
+      moveInput.disabled = false;
+      const label = moveInput.closest("label");
+      if (label) label.style.opacity = "";
+    }
+  }
   function closeTransferModal(){
     $transferModal.hidden = true;
     transferContext = null;
@@ -857,18 +957,18 @@
         alert("이동/복사할 대상 날짜가 없습니다.");
         return;
       }
-      transferContext = { kind, sourceDayIdx: dayIdx, lineIdx, targetDayIdx: null };
+      transferContext = { kind, sourceDayIdx: dayIdx, sourceWeekStart: state.weekStart, lineIdx, targetDayIdx: null };
     } else {
       if (targetDayIdx == null || !state.days[targetDayIdx]){
         alert("가져올 대상 날짜를 찾을 수 없습니다.");
         return;
       }
-      const hasSource = state.days.some((d, i) => i !== targetDayIdx && (d.lines || []).some(isTransferableLine));
-      if (!hasSource){
-        alert("가져올 수 있는 로그가 현재 주차에 없습니다.");
+      const sourceOptions = getEmptySourceWeekOptions(targetDayIdx);
+      if (sourceOptions.length === 0){
+        alert("가져올 수 있는 로그가 현재 주차 또는 지난 주차에 없습니다.");
         return;
       }
-      transferContext = { kind, sourceDayIdx: null, lineIdx: null, targetDayIdx };
+      transferContext = { kind, sourceDayIdx: null, sourceWeekStart: sourceOptions[0].weekStart, lineIdx: null, targetDayIdx };
     }
 
     $transferModal.hidden = false;
@@ -884,20 +984,53 @@
       $transferSummary.textContent = `원본: ${source.label} ${describeTransferLine(line)}\n작업: ${mode}\n대상 날짜를 선택하면 로그가 대상 날짜의 마지막 줄 뒤에 추가됩니다.`;
     } else {
       const target = state.days[transferContext.targetDayIdx];
-      $transferSummary.textContent = `대상: ${target.label}\n작업: ${mode}\n선택한 날짜의 시간/내용이 있는 로그만 가져옵니다.`;
+      const sourceWeek = transferContext.sourceWeekStart || state.weekStart;
+      const modeText = sourceWeek !== state.weekStart ? `${mode} (지난 주차는 복사만 가능)` : mode;
+      $transferSummary.textContent = `대상: ${target.label}\n원본 주차: ${weekLabelFor(parseISO(sourceWeek))} (${rangeLabelFor(parseISO(sourceWeek))})\n작업: ${modeText}\n선택한 날짜의 시간/내용이 있는 로그만 가져옵니다.`;
     }
+  }
+  function renderTransferSourceOptions(){
+    if ($transferSource) $transferSource.hidden = true;
+    if ($transferSourceGrid) $transferSourceGrid.innerHTML = "";
+    if (!transferContext || transferContext.kind !== "empty") return;
+
+    const options = getEmptySourceWeekOptions(transferContext.targetDayIdx);
+    if (options.length === 0) return;
+
+    if ($transferSource) $transferSource.hidden = false;
+    options.forEach(option => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "transfer-source-btn" + (transferContext.sourceWeekStart === option.weekStart ? " is-selected" : "");
+      const strong = document.createElement("strong");
+      strong.textContent = option.label;
+      const span = document.createElement("span");
+      span.textContent = `${option.range} · 가져올 수 있는 로그 ${option.count}개`;
+      btn.append(strong, span);
+      btn.addEventListener("click", () => {
+        transferContext.sourceWeekStart = option.weekStart;
+        updateTransferModeAvailability();
+        updateTransferSummary();
+        renderTransferTargets();
+      });
+      $transferSourceGrid.appendChild(btn);
+    });
   }
   function renderTransferTargets(){
     if (!$transferTargetGrid || !transferContext) return;
     $transferTargetGrid.innerHTML = "";
+    renderTransferSourceOptions();
+    updateTransferModeAvailability();
+    updateTransferSummary();
 
+    const sourceWeekStart = transferContext.sourceWeekStart || state.weekStart;
     const candidates = transferContext.kind === "line"
       ? state.days
           .map((d, idx) => ({ d, idx }))
           .filter(item => item.idx !== transferContext.sourceDayIdx)
-      : state.days
+      : getWeekDays(sourceWeekStart)
           .map((d, idx) => ({ d, idx }))
-          .filter(item => item.idx !== transferContext.targetDayIdx && (item.d.lines || []).some(isTransferableLine));
+          .filter(item => (sourceWeekStart === state.weekStart ? item.idx !== transferContext.targetDayIdx : true) && (item.d.lines || []).some(isTransferableLine));
 
     if (candidates.length === 0){
       const empty = document.createElement("div");
@@ -912,7 +1045,6 @@
       btn.type = "button";
       btn.className = "transfer-day-btn";
       const validCount = (d.lines || []).filter(isTransferableLine).length;
-      if (transferContext.kind === "empty" && validCount === 0) btn.disabled = true;
       const strong = document.createElement("strong");
       strong.textContent = d.label;
       const span = document.createElement("span");
@@ -925,16 +1057,21 @@
   function applyTransferToSelectedDay(selectedDayIdx){
     if (!transferContext) return;
     const mode = getTransferMode();
+    const sourceWeekStart = transferContext.sourceWeekStart || state.weekStart;
+    if (sourceWeekStart !== state.weekStart && mode === "move"){
+      alert("지난 주차 로그는 복사만 가져올 수 있습니다.");
+      return;
+    }
     if (transferContext.kind === "line"){
-      transferLineToTarget(transferContext.sourceDayIdx, transferContext.lineIdx, selectedDayIdx, mode);
+      transferLineToTarget(sourceWeekStart, transferContext.sourceDayIdx, transferContext.lineIdx, selectedDayIdx, mode);
     } else {
-      transferAllLinesFromSource(selectedDayIdx, transferContext.targetDayIdx, mode);
+      transferAllLinesFromSource(sourceWeekStart, selectedDayIdx, transferContext.targetDayIdx, mode);
     }
   }
-  function transferLineToTarget(sourceDayIdx, lineIdx, targetDayIdx, mode){
-    const source = state.days[sourceDayIdx];
+  function transferLineToTarget(sourceWeekStart, sourceDayIdx, lineIdx, targetDayIdx, mode){
+    const source = sourceWeekStart === state.weekStart ? getMutableWeekDays(sourceWeekStart) : getWeekDays(sourceWeekStart);
     const target = state.days[targetDayIdx];
-    const line = source.lines[lineIdx];
+    const line = source[sourceDayIdx]?.lines?.[lineIdx];
     if (!isTransferableLine(line)){
       alert("시간과 내용이 모두 있는 로그만 이동/복사할 수 있습니다.");
       return;
@@ -942,18 +1079,22 @@
     target.lines = target.lines || [];
     target.lines.push(cloneTransferLine(line));
     if (mode === "move"){
-      source.lines.splice(lineIdx, 1);
+      source[sourceDayIdx].lines.splice(lineIdx, 1);
     }
     closeTransferModal();
     renderDays();
     scheduleSave();
   }
-  function transferAllLinesFromSource(sourceDayIdx, targetDayIdx, mode){
-    const source = state.days[sourceDayIdx];
+  function transferAllLinesFromSource(sourceWeekStart, sourceDayIdx, targetDayIdx, mode){
+    if (sourceWeekStart !== state.weekStart && mode === "move"){
+      alert("지난 주차 로그는 복사만 가져올 수 있습니다.");
+      return;
+    }
+    const source = sourceWeekStart === state.weekStart ? getMutableWeekDays(sourceWeekStart) : getWeekDays(sourceWeekStart);
     const target = state.days[targetDayIdx];
     const validIndices = [];
     const linesToTransfer = [];
-    (source.lines || []).forEach((line, idx) => {
+    (source[sourceDayIdx].lines || []).forEach((line, idx) => {
       if (isTransferableLine(line)){
         validIndices.push(idx);
         linesToTransfer.push(cloneTransferLine(line));
@@ -967,7 +1108,7 @@
     target.lines.push(...linesToTransfer);
     if (mode === "move"){
       const validIndexSet = new Set(validIndices);
-      source.lines = (source.lines || []).filter((_, idx) => !validIndexSet.has(idx));
+      source[sourceDayIdx].lines = stripTrailingEmpty((source[sourceDayIdx].lines || []).filter((_, idx) => !validIndexSet.has(idx)));
     }
     closeTransferModal();
     renderDays();
@@ -1341,9 +1482,9 @@
 
   // ───── events
   function shiftWeek(deltaDays){
-    const m = parseISO(state.weekStart);
+    const m = mondayOf(parseISO(state.weekStart));
     m.setDate(m.getDate() + deltaDays);
-    goToWeek(toISO(m));
+    goToWeek(toISO(mondayOf(m)));
   }
   $prevWeekBtn.addEventListener("click", () => shiftWeek(-7));
   $nextWeekBtn.addEventListener("click", () => shiftWeek(7));
@@ -1393,6 +1534,14 @@
   $transferCancelBtn.addEventListener("click", closeTransferModal);
   document.querySelectorAll('input[name="transferMode"]').forEach(input => {
     input.addEventListener("change", () => {
+      if (isPreviousWeekSourceSelected() && input.value === "move"){
+        const copyInput = document.querySelector('input[name="transferMode"][value="copy"]');
+        if (copyInput) copyInput.checked = true;
+        updateTransferSummary();
+        renderTransferTargets();
+        alert("지난 주차 로그는 복사만 가져올 수 있습니다.");
+        return;
+      }
       updateTransferSummary();
       renderTransferTargets();
     });
