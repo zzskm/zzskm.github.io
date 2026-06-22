@@ -83,6 +83,11 @@ classify_prediction_confidence = _modeling.classify_prediction_confidence
 classify_loss_intensity = _modeling.classify_loss_intensity
 detect_plateau = _modeling.detect_plateau
 build_insight = _modeling.build_insight
+data_quality_diagnostics = _modeling.data_quality_diagnostics
+model_trend_exposure = _modeling.model_trend_exposure
+run_generalized_backtest = _modeling.run_generalized_backtest
+apply_model_selection_gate = _modeling.apply_model_selection_gate
+compute_ci_calibration_replay = _modeling.compute_ci_calibration_replay
 
 
 def parse_args() -> argparse.Namespace:
@@ -751,6 +756,67 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         std_residual=prediction_ci.get("stdResidual"),
         backtests=backtest,
     )
+
+    data_quality = data_quality_diagnostics(rows)
+    trend_state = model_trend_exposure(loss_rate_detail.get("windowSlopes", {}).get("7d"), weekly_loss_rate)
+
+    if trend_state.get("predictionEnabled") is False:
+        one_month_weight = None
+        three_month_weight = None
+        if base_effective_loss <= 0:
+            eta_days = None
+            eta_date = None
+            eta_range_days = None
+            eta_range_dates = None
+
+    shadow_audit = run_generalized_backtest(
+        rows, ewma_series,
+        candidate_names=["flat_baseline", "ma7_baseline", "ewma_baseline", "linear_regression_28d", "linear_regression_56d", "linear_regression_84d", "weighted_linear_regression_56d", "robust_regression_56d", "kalman"],
+        train_window=trend_window,
+    )
+    shadow_audit_candidates = {k: v for k, v in shadow_audit.items() if k != "current_multi_window_ewma_blend"}
+    selection_gate = apply_model_selection_gate(shadow_audit_candidates, backtest)
+
+    ci_hit_series = prediction_ci.get("series") or []
+    spread_by_horizon: dict[int, float] = {}
+    for idx, row in enumerate(ci_hit_series, start=1):
+        if idx not in (1, 2, 4):
+            continue
+        lower = parse_float(row.get("lower80"))
+        upper = parse_float(row.get("upper80"))
+        central = parse_float(row.get("central"))
+        if lower is None or upper is None or central is None:
+            continue
+        spread_by_horizon[idx * 7] = max(abs(central - lower), abs(upper - central))
+
+    def central_fn(horizon_days: int, cutoff_ewma: float | None, cutoff_values_prefix: list[float | None]) -> float | None:
+        if cutoff_ewma is None or base_effective_loss <= 0:
+            return None
+        return _projected_weight(cutoff_ewma, base_effective_loss, max(round(horizon_days / 7), 1), target_weight)
+
+    def spread_fn(horizon_days: int) -> float | None:
+        return spread_by_horizon.get(horizon_days)
+
+    ci_calibration = compute_ci_calibration_replay(
+        rows,
+        ewma_series,
+        central_fn=central_fn,
+        spread_fn=spread_fn,
+        train_window=trend_window,
+    )
+
+    hit_rate = ci_calibration.get("hitRate", {})
+    if "hitRate" not in prediction_ci:
+        prediction_ci["hitRate"] = hit_rate
+    prediction_ci["calibration"] = {
+        "status": ci_calibration.get("status"),
+        "targetHitRate": 0.8,
+        "notes": [],
+    }
+
+    recent_window_change = loss_rate_detail.get("windowSlopes", {}).get("7d")
+    trend_display = model_trend_exposure(recent_window_change, weekly_loss_rate)
+
     model_diagnostics = {
         "model": "multi_window_ewma_blend + exp_decay + dynamic_kcal_per_kg + exercise_efficiency",
         "confidence": confidence,
@@ -759,13 +825,18 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "totalDays": len(last30),
             "pct": coverage_pct,
         },
+        "dataQuality": data_quality,
+        "trend": trend_display,
+        "selectedModel": selection_gate,
         "trendWindows": trend_windows,
         "residualStdKg": prediction_ci.get("stdResidual"),
         "backtest": backtest,
+        "modelAudit": shadow_audit_candidates,
         "kcalPerKg": round(kcal_to_kg, 0),
-        "kcalPerKgSource": kcal_source,  # "body_fat" | "bmi" | "default"
+        "kcalPerKgSource": kcal_source,
         "calibration": calibration,
-        "modelComparison": kalman_comparison,  # V1 vs Kalman backtest 비교
+        "modelComparison": kalman_comparison,
+        "ciCalibration": ci_calibration,
         "notes": [
             "기본 예측은 체중 추세 기반입니다.",
             "시나리오는 운동 효율 계수(NEAT·보상 섭취 보정)와 동적 kcal/kg 사용.",
