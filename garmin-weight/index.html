@@ -18,13 +18,6 @@
   <link rel="stylesheet" href="./style.css?v=20260623" />
 </head>
 <body>
-  <nav class="sidebar" id="sidebar" aria-label="사이드바">
-    <div class="sidebar-icon" title="홈">H</div>
-    <div class="sidebar-icon" title="추이">T</div>
-    <div class="sidebar-icon" title="활동">A</div>
-    <div class="sidebar-icon" title="설정">S</div>
-  </nav>
-  <button class="sidebar-toggle" id="sidebarToggle" aria-label="사이드바 열기" title="사이드바">☰</button>
   <div class="app" data-state="loading">
     <header class="topbar">
       <div class="brandmark">
@@ -324,17 +317,6 @@
     </footer>
   </div>
 
-  <script>
-    (function() {
-      var toggle = document.getElementById('sidebarToggle');
-      var sidebar = document.getElementById('sidebar');
-      if (toggle && sidebar) {
-        toggle.addEventListener('click', function() {
-          sidebar.classList.toggle('is-open');
-        });
-      }
-    })();
-  </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script defer src="./app.helpers.js?v=20260623"></script>
   <script defer src="./app.js?v=20260623"></script>
