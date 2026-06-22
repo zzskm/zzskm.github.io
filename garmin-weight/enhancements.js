@@ -1,9 +1,6 @@
 'use strict';
 
 (() => {
-  const SUMMARY_URL = './data/summary.json';
-  const LOW_CONFIDENCE_MEASUREMENT_TARGET_DAYS = 7;
-
   const $ = (id) => document.getElementById(id);
   const isFiniteNumber = (v) => Number.isFinite(Number(v));
   const fmtKg = (v, digits = 1) => isFiniteNumber(v) ? `${Number(v).toFixed(digits)}kg` : '–';
@@ -30,12 +27,8 @@
     return reasons.slice(0, 2).join(' · ');
   }
 
-  function confidenceLevel(summary) {
-    return summary?.modelDiagnostics?.confidence?.level || 'low';
-  }
-
   function isLowConfidence(summary) {
-    return confidenceLevel(summary) === 'low';
+    return summary?.modelDiagnostics?.confidence?.level === 'low';
   }
 
   function getSeriesValue(point) {
@@ -71,7 +64,10 @@
     const backtest14 = summary?.modelDiagnostics?.backtest?.['14d'];
     const seriesWarnings = inferSeriesQuality(summary);
 
-    setText('qualityStatus', confidence.label || '낮음');
+    const targets = ['qualityStatus', 'qualityCoverage', 'qualitySync', 'qualityBacktest', 'qualityReason'];
+    if (!targets.some(id => document.getElementById(id))) return;
+
+    setText('qualityStatus', (confidence.label || '낮음').toUpperCase());
     setText('qualityCoverage', `측정률 ${pct(coverage.last30Pct)}`);
     setText('qualitySync', formatDays(coverage.daysSinceLastMeasurement));
 
@@ -84,11 +80,6 @@
       ? seriesWarnings.slice(0, 2).join(' · ')
       : compactReasons(confidence.reasons);
     setText('qualityReason', reason);
-
-    const card = $('qualityCard');
-    if (card) {
-      card.dataset.level = confidence.level || 'low';
-    }
   }
 
   function renderScenarioSub(summary) {
@@ -99,17 +90,13 @@
       const sub = card.querySelector('.scenario-sub');
       if (!sub || !data) return;
 
-      const delta = isFiniteNumber(data.weeklyKcalDelta)
-        ? Number(data.weeklyKcalDelta)
-        : null;
+      const delta = isFiniteNumber(data.weeklyKcalDelta) ? Number(data.weeklyKcalDelta) : null;
       const kcalText = delta === null || Math.abs(delta) < 1
         ? '현재 운동량 유지'
         : `${delta > 0 ? '+' : '−'}주 ${Math.abs(Math.round(delta)).toLocaleString('ko-KR')} kcal`;
       sub.textContent = kcalText;
 
-      if (data.description) {
-        card.setAttribute('title', data.description);
-      }
+      if (data.description) card.setAttribute('title', data.description);
     });
   }
 
@@ -150,21 +137,7 @@
     const low = isLowConfidence(summary);
     const app = document.querySelector('.app');
     if (app) app.classList.toggle('is-low-confidence', low);
-
-    if (low) {
-      setText('goalEta', '측정 7일 더 필요');
-      setText('goalEtaDate', '최근 측정률이 낮아 목표일 예측은 보류합니다');
-      setText('goalSubtitle', buildLowConfidenceSubtitle(summary));
-      setPredictionVisibility(false);
-    }
-  }
-
-  function buildLowConfidenceSubtitle(summary) {
-    const current = summary?.current || {};
-    const coverage = summary?.coverage || {};
-    const trend = isFiniteNumber(current.weightEwmaKg) ? `추세 ${fmtKg(current.weightEwmaKg)}` : '추세 계산 중';
-    const measured = isFiniteNumber(coverage.last30Pct) ? `측정률 ${pct(coverage.last30Pct)}` : '측정률 부족';
-    return `${trend} · ${measured} · 목표일 예측 보류`;
+    if (low) setPredictionVisibility(false);
   }
 
   function renderInsightSupport(summary) {
@@ -188,25 +161,7 @@
 
   function renderModelExplanation(summary) {
     const confidence = summary?.modelDiagnostics?.confidence || {};
-    const calibration = summary?.modelDiagnostics?.calibration || {};
-    const kcalSource = summary?.modelDiagnostics?.kcalPerKgSource;
-
-    const sourceLabel = {
-      body_fat: '체지방률 기반',
-      bmi: 'BMI 기반',
-      default: '기본값 기반',
-    }[kcalSource] || '기본값 기반';
-
-    const modelSummary = confidence.level === 'low'
-      ? '측정률이 낮아 목표일 예측은 보류합니다.'
-      : '최근 체중 추세를 중심으로 계산합니다.';
-
-    const efficiency = isFiniteNumber(calibration.exerciseEfficiency)
-      ? `운동 효율 ${Math.round(Number(calibration.exerciseEfficiency) * 100)}%`
-      : '운동 시나리오는 참고용';
-
-    setText('modelSummary', modelSummary);
-    setText('modelCoverage', `${sourceLabel} · ${efficiency}`);
+    setText('modelSummary', confidence.level === 'low' ? '측정률이 낮아 목표일 예측은 보류합니다.' : '최근 체중 추세를 중심으로 계산합니다.');
   }
 
   function readMae(backtest, horizon) {
@@ -225,20 +180,10 @@
     ['7d', '14d', '28d'].forEach((horizon) => {
       const currentMae = readMae(backtest, horizon);
       const kalmanMae = readMae(kalman, horizon);
-      const values = {
-        current: currentMae,
-        kalman: kalmanMae,
-      };
+      const values = { current: currentMae, kalman: kalmanMae };
       const valid = Object.entries(values).filter(([, v]) => isFiniteNumber(v));
-      const winner = valid.length
-        ? valid.reduce((best, next) => Number(next[1]) < Number(best[1]) ? next : best)[0]
-        : null;
-      out[horizon] = {
-        currentMaeKg: currentMae,
-        kalmanMaeKg: kalmanMae,
-        winner,
-        note: '클라이언트 추정값. flat/MA7/EWMA baseline은 sync 단계 추가 필요.',
-      };
+      const winner = valid.length ? valid.reduce((best, next) => Number(next[1]) < Number(best[1]) ? next : best)[0] : null;
+      out[horizon] = { currentMaeKg: currentMae, kalmanMaeKg: kalmanMae, winner };
     });
 
     return out;
@@ -257,7 +202,6 @@
     }
 
     const comparison = inferBaselineComparison(summary);
-    const ciHitRate = summary?.predictionCI?.hitRate || {};
     const parts = ['7d', '14d', '28d'].map((horizon) => {
       const row = comparison[horizon] || {};
       const mae = isFiniteNumber(row.currentMaeKg) ? `${Number(row.currentMaeKg).toFixed(2)}kg` : '표본 부족';
@@ -265,33 +209,18 @@
       return `${horizon} ${mae}${win}`;
     });
 
-    const ciParts = ['7d', '14d', '28d']
-      .filter((horizon) => isFiniteNumber(ciHitRate[horizon]))
-      .map((horizon) => `${horizon} ${Math.round(Number(ciHitRate[horizon]) * 100)}%`);
-
     audit.innerHTML = `
       <p class="label">모델 검증</p>
-      <p class="model-audit-main">${parts.join(' · ')}</p>
-      <p class="model-audit-sub">${ciParts.length ? `80% 신뢰띠 적중률 ${ciParts.join(' · ')}` : '신뢰띠 적중률은 sync 단계 계산 필요'}</p>
+      <p class="model-audit-main" style="margin:6px 0 0;color:var(--ink);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;text-transform:uppercase;letter-spacing:0.03em;">${parts.join(' · ')}</p>
     `;
   }
 
   function renderPredictionGuard(summary) {
-    const panel = document.querySelector('.panel');
-    if (!panel) return;
-
-    let guard = $('predictionGuard');
-    if (!guard) {
-      guard = document.createElement('p');
-      guard.id = 'predictionGuard';
-      guard.className = 'prediction-guard';
-      const chart = panel.querySelector('.chart-wrap');
-      if (chart) panel.insertBefore(guard, chart);
-    }
-
+    const guard = $('predictionGuard');
+    if (!guard) return;
     if (isLowConfidence(summary)) {
       guard.hidden = false;
-      guard.textContent = '예측선은 기본 숨김입니다. 최근 측정률이 낮아 현재는 실제 체중과 추세를 먼저 봅니다.';
+      guard.querySelector('#predictionGuardText').textContent = '최근 측정률이 낮아 현재는 실제 체중과 추세를 먼저 봅니다.';
     } else {
       guard.hidden = true;
     }
@@ -305,25 +234,72 @@
     renderPredictionGuard(summary);
   }
 
-  async function init() {
-    try {
-      const res = await fetch(SUMMARY_URL, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`summary fetch failed: ${res.status}`);
-      const summary = await res.json();
-      renderQuality(summary);
-      renderScenarioSub(summary);
-      renderModelExplanation(summary);
-      renderSummaryMode(summary);
-    } catch (err) {
-      console.warn('[garmin-weight enhancements]', err);
-      setText('qualityStatus', '불러오기 실패');
-      setText('qualityReason', 'summary.json 확인 필요');
+  function renderDetails(s) {
+    const diagnostics = s.modelDiagnostics || {};
+    const trendWindows = diagnostics.trendWindows || {};
+    const tw = trendWindows;
+    const order = ['3d', '7d', '14d', '28d'];
+    const rows = order.map(k => ({ key: k, v: Number.isFinite(tw[k]?.weeklyLossKg) ? tw[k].weeklyLossKg : null })).filter(r => r.v !== null);
+    const maxAbs = rows.length ? Math.max(...rows.map(r => Math.abs(r.v)), 0.0001) : 1;
+    const trendBars = rows.map((r) => {
+      const pct = Math.min(100, (Math.abs(r.v) / maxAbs) * 100);
+      const sign = r.v >= 0 ? '+' : '−';
+      const recent = r.key === '3d' ? ' is-recent' : '';
+      return `<div class="windows-row${recent}"><span>${r.key}</span><span class="windows-bar-track"><span class="windows-bar-fill" style="width:${pct.toFixed(0)}%"></span></span><span class="windows-val">${sign}${Math.abs(r.v).toFixed(2)}</span></div>`;
+    }).join('');
+    const detailTrend = $('detailTrend');
+    if (detailTrend) detailTrend.innerHTML = trendBars ? `<div class="windows-bars">${trendBars}</div>` : '<p class="detail-note">Insufficient data</p>';
+
+    const coverage = diagnostics.coverage || s.coverage || {};
+    const confidence = diagnostics.confidence || {};
+    const backtest14 = diagnostics.backtest?.['14d'];
+    const detailQuality = $('detailQuality');
+    if (detailQuality) {
+      const dq = diagnostics.dataQuality || {};
+      const outliers = dq.outlierCandidates ?? 0;
+      const variancePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
+      const outlierLevel = outliers <= 3 ? 'LOW' : (outliers <= 8 ? 'MED' : 'HIGH');
+      const varianceLevel = variancePct >= 80 ? 'LOW' : (variancePct >= 50 ? 'MED' : 'HIGH');
+      const outlierWidth = Math.max(0, Math.min(100, outliers * 10));
+      const varianceWidth = Math.max(0, Math.min(100, variancePct));
+      detailQuality.innerHTML = `
+        <div class="quality-section">
+          <div class="quality-row">
+            <span class="quality-row-label">Noise</span>
+            <div class="quality-bar-track"><span class="quality-bar-fill" style="width:${outlierWidth.toFixed(0)}%"></span></div>
+            <span class="quality-val">${outlierLevel}${outliers > 0 ? ` ${outliers}` : ''}</span>
+          </div>
+          <div class="quality-row">
+            <span class="quality-row-label">Variance</span>
+            <div class="quality-bar-track"><span class="quality-bar-fill quality-bar-fill--accent" style="width:${varianceWidth.toFixed(0)}%"></span></div>
+            <span class="quality-val">${varianceLevel} ${variancePct.toFixed(0)}%</span>
+          </div>
+        </div>
+      `;
+    }
+
+    const diag = diagnostics;
+    const calib = diag.calibration || {};
+    const eff = calib.exerciseEfficiency;
+    const kcal = diag.kcalPerKg;
+    const src = diag.kcalPerKgSource;
+    const detailMetabolic = $('detailMetabolic');
+    if (detailMetabolic) detailMetabolic.innerHTML = `<p>Signal: ${Number.isFinite(eff) ? (eff < 0.7 ? 'Slow' : 'Standard') : '–'}</p><p>Signature: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}</p><p>${calib.interpretation || ''}</p>`;
+
+    const detailMae = $('detailMae');
+    if (detailMae) {
+      const bt7 = diagnostics.backtest?.['7d'];
+      const ciHitRate = s.predictionCI?.hitRate || {};
+      const ci7 = Number.isFinite(ciHitRate['7d']) ? `${Math.round(Number(ciHitRate['7d']) * 100)}%` : 'pending';
+      detailMae.innerHTML = `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);"><span>7d mae</span><span>${bt7?.status === 'ok' ? `${Number(bt7.maeKg).toFixed(2)}kg` : 'no sample'}</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);"><span>14d mae</span><span>${backtest14?.status === 'ok' ? `${Number(backtest14.maeKg).toFixed(2)}kg` : 'no sample'}</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;color:var(--accent);"><span>CI Hit Rate</span><span>${ci7}</span></div>`;
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  window.addEventListener('garmin-weight:summary-ready', (event) => {
+    renderQuality(event.detail.summary);
+    renderScenarioSub(event.detail.summary);
+    renderModelExplanation(event.detail.summary);
+    renderSummaryMode(event.detail.summary);
+    renderDetails(event.detail.summary);
+  });
 })();

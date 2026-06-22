@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-22T00:05:32Z",
+  "generatedAt": "2026-06-22T00:46:12Z",
   "current": {
     "weightKg": 82.3,
     "weightDate": "2026-06-22",
@@ -181,7 +181,17 @@
         "lower80": 80.3,
         "upper80": 85.82
       }
-    ]
+    ],
+    "hitRate": {
+      "7d": 0.821,
+      "14d": 0.883,
+      "28d": 0.957
+    },
+    "calibration": {
+      "status": "ok",
+      "targetHitRate": 0.8,
+      "notes": []
+    }
   },
   "modelDiagnostics": {
     "model": "multi_window_ewma_blend + exp_decay + dynamic_kcal_per_kg + exercise_efficiency",
@@ -198,6 +208,40 @@
       "measuredDays": 13,
       "totalDays": 30,
       "pct": 43.0
+    },
+    "dataQuality": {
+      "totalDays": 102,
+      "measuredDays": 63,
+      "recentWindowDays": 30,
+      "recentMeasuredDays": 13,
+      "recentTotalDays": 30,
+      "recentCoveragePct": 43.3,
+      "longestMissingStreak": 5,
+      "outlierCandidates": 7,
+      "usableForRegression": false,
+      "recentMeasurementCadence": 0.618,
+      "confidencePenalties": [
+        "recent_coverage_low",
+        "missing_streak_long"
+      ]
+    },
+    "trend": {
+      "direction": "losing",
+      "weeklyChangeKg": 0.003,
+      "weeklyLossRateKg": 0.003,
+      "predictionEnabled": true,
+      "disabledReason": null
+    },
+    "selectedModel": {
+      "name": "current",
+      "status": "kept_current",
+      "reason": "no_candidate",
+      "gate": {
+        "minSampleCount": 20,
+        "minImprovementKg": 0.05,
+        "minImprovementPct": 0.08,
+        "minHorizonWins": 2
+      }
     },
     "trendWindows": {
       "7d": {
@@ -237,6 +281,195 @@
         "status": "ok"
       }
     },
+    "modelAudit": {
+      "flat_baseline": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.602,
+          "rmseKg": 0.777,
+          "biasKg": 0.138,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.645,
+          "rmseKg": 0.861,
+          "biasKg": 0.218,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 0.726,
+          "rmseKg": 0.945,
+          "biasKg": 0.417,
+          "status": "ok"
+        }
+      },
+      "ma7_baseline": {
+        "7d": {
+          "sampleCount": 44,
+          "maeKg": 0.628,
+          "rmseKg": 0.775,
+          "biasKg": 0.041,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 41,
+          "maeKg": 0.638,
+          "rmseKg": 0.91,
+          "biasKg": 0.14,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 35,
+          "maeKg": 0.652,
+          "rmseKg": 0.924,
+          "biasKg": 0.257,
+          "status": "ok"
+        }
+      },
+      "ewma_baseline": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.602,
+          "rmseKg": 0.777,
+          "biasKg": 0.138,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.645,
+          "rmseKg": 0.861,
+          "biasKg": 0.218,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 0.726,
+          "rmseKg": 0.945,
+          "biasKg": 0.417,
+          "status": "ok"
+        }
+      },
+      "linear_regression_28d": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.633,
+          "rmseKg": 0.838,
+          "biasKg": 0.245,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.738,
+          "rmseKg": 0.97,
+          "biasKg": 0.524,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 1.366,
+          "rmseKg": 1.693,
+          "biasKg": 1.169,
+          "status": "ok"
+        }
+      },
+      "linear_regression_56d": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.661,
+          "rmseKg": 0.852,
+          "biasKg": 0.33,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.903,
+          "rmseKg": 1.111,
+          "biasKg": 0.636,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 1.441,
+          "rmseKg": 1.722,
+          "biasKg": 1.373,
+          "status": "ok"
+        }
+      },
+      "linear_regression_84d": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.654,
+          "rmseKg": 0.851,
+          "biasKg": 0.357,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.898,
+          "rmseKg": 1.105,
+          "biasKg": 0.68,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 1.476,
+          "rmseKg": 1.744,
+          "biasKg": 1.412,
+          "status": "ok"
+        }
+      },
+      "weighted_linear_regression_56d": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.64,
+          "rmseKg": 0.832,
+          "biasKg": 0.304,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.845,
+          "rmseKg": 1.065,
+          "biasKg": 0.596,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 1.398,
+          "rmseKg": 1.695,
+          "biasKg": 1.274,
+          "status": "ok"
+        }
+      },
+      "robust_regression_56d": {
+        "7d": {
+          "sampleCount": 67,
+          "maeKg": 0.657,
+          "rmseKg": 0.854,
+          "biasKg": 0.323,
+          "status": "ok"
+        },
+        "14d": {
+          "sampleCount": 60,
+          "maeKg": 0.894,
+          "rmseKg": 1.099,
+          "biasKg": 0.628,
+          "status": "ok"
+        },
+        "28d": {
+          "sampleCount": 46,
+          "maeKg": 1.415,
+          "rmseKg": 1.677,
+          "biasKg": 1.371,
+          "status": "ok"
+        }
+      },
+      "kalman": {
+        "error": "name 'Path' is not defined"
+      }
+    },
     "kcalPerKg": 7700.0,
     "kcalPerKgSource": "body_fat",
     "calibration": {
@@ -270,6 +503,12 @@
         }
       },
       "perHorizon": {
+        "14d": {
+          "v1MaeKg": 0.632,
+          "kalmanMaeKg": 0.79,
+          "deltaKg": -0.158,
+          "kalmanWins": false
+        },
         "7d": {
           "v1MaeKg": 0.621,
           "kalmanMaeKg": 0.729,
@@ -281,15 +520,18 @@
           "kalmanMaeKg": 0.931,
           "deltaKg": -0.372,
           "kalmanWins": false
-        },
-        "14d": {
-          "v1MaeKg": 0.632,
-          "kalmanMaeKg": 0.79,
-          "deltaKg": -0.158,
-          "kalmanWins": false
         }
       },
       "recommendKalman": false
+    },
+    "ciCalibration": {
+      "hitRate": {
+        "7d": 0.821,
+        "14d": 0.883,
+        "28d": 0.957
+      },
+      "status": "ok",
+      "samples": 3
     },
     "notes": [
       "기본 예측은 체중 추세 기반입니다.",
@@ -769,7 +1011,7 @@
       },
       {
         "date": "2026-03-24",
-        "valueKg": 84.67
+        "valueKg": 84.68
       },
       {
         "date": "2026-03-25",

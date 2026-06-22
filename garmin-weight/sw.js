@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'gw-v5-20260608';
+const CACHE_VERSION = 'gw-v6-20260623';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -8,11 +8,10 @@ const DATA_CACHE = `${CACHE_VERSION}-data`;
 const SHELL_ASSETS = [
   './',
   './index.html',
-  './app.helpers.js?v=20260608',
-  './app.js?v=20260608',
-  './style.css?v=20260529',
-  './enhancements.js?v=20260529',
-  './enhancements.css?v=20260529',
+  './app.helpers.js?v=20260623',
+  './app.js?v=20260623',
+  './style.css?v=20260623',
+  './enhancements.js?v=20260623',
   './config.json',
   './manifest.webmanifest',
   './icons/icon.svg',

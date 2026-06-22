@@ -748,3 +748,467 @@ def build_insight(
             lines.append("느리지만 지속 가능한 페이스입니다. 장기 유지에 유리합니다.")
 
     return {"headline": lines[0] if lines else None, "lines": lines}
+
+
+def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, outlier_delta_kg: float = 1.5, streak_penalty_days: int = 5, coverage_penalty_pct: float = 70.0) -> dict[str, Any]:
+    """Phase 1 — data quality diagnostics for the candidate model pipeline."""
+    if not rows:
+        return {
+            "totalDays": 0,
+            "measuredDays": 0,
+            "recentWindowDays": window_days,
+            "recentMeasuredDays": 0,
+            "recentTotalDays": 0,
+            "recentCoveragePct": 0.0,
+            "longestMissingStreak": 0,
+            "outlierCandidates": 0,
+            "usableForRegression": False,
+            "recentMeasurementCadence": None,
+            "confidencePenalties": ["no_data"],
+        }
+
+    total_days = len(rows)
+    measured_days = sum(1 for row in rows if row.get("weight_kg") is not None)
+
+    last_n = rows[-window_days:] if len(rows) >= window_days else rows
+    recent_measured = sum(1 for row in last_n if row.get("weight_kg") is not None)
+    recent_total = len(last_n)
+    recent_coverage_pct = round(recent_measured / recent_total * 100, 1) if recent_total else 0.0
+
+    longest_missing = 0
+    current_streak = 0
+    outlier_candidates = 0
+    previous_weight: float | None = None
+    measured_dates = 0
+    total_dates = total_days
+    for row in rows:
+        weight = row.get("weight_kg")
+        if weight is None:
+            current_streak += 1
+            longest_missing = max(longest_missing, current_streak)
+        else:
+            current_streak = 0
+            measured_dates += 1
+            if previous_weight is not None and abs(weight - previous_weight) >= outlier_delta_kg:
+                outlier_candidates += 1
+            previous_weight = weight
+
+    cadence = round(measured_dates / total_dates, 3) if total_dates else None
+    usable_for_regression = (
+        total_days >= 14
+        and measured_days >= 14
+        and recent_coverage_pct >= 50.0
+        and longest_missing < 10
+    )
+
+    penalties: list[str] = []
+    if recent_coverage_pct < coverage_penalty_pct:
+        penalties.append("recent_coverage_low")
+    if longest_missing >= streak_penalty_days:
+        penalties.append("missing_streak_long")
+    if measured_days < 14:
+        penalties.append("measured_days_insufficient")
+    if outlier_candidates > total_days * 0.2:
+        penalties.append("outliers_high")
+    if not penalties:
+        penalties.append("no_penalty")
+
+    return {
+        "totalDays": total_days,
+        "measuredDays": measured_days,
+        "recentWindowDays": window_days,
+        "recentMeasuredDays": recent_measured,
+        "recentTotalDays": recent_total,
+        "recentCoveragePct": recent_coverage_pct,
+        "longestMissingStreak": longest_missing,
+        "outlierCandidates": outlier_candidates,
+        "usableForRegression": usable_for_regression,
+        "recentMeasurementCadence": cadence,
+        "confidencePenalties": penalties,
+    }
+
+
+def model_trend_exposure(weekly_change_kg: float | None, weekly_loss_rate_kg: float | None) -> dict[str, Any]:
+    """Phase 5 — expose trend state and keep prediction gating explicit."""
+    flat_threshold = 0.05
+    if weekly_change_kg is None:
+        return {
+            "direction": "unknown",
+            "weeklyChangeKg": None,
+            "weeklyLossRateKg": None,
+            "predictionEnabled": False,
+            "disabledReason": "insufficient_data",
+        }
+
+    weekly_change_kg = round(weekly_change_kg, 4)
+    if weekly_change_kg >= flat_threshold:
+        direction = "losing"
+        weekly_loss_rate_kg = round(weekly_loss_rate_kg or weekly_change_kg, 4)
+        weekly_change_kg_display = weekly_loss_rate_kg
+    elif weekly_change_kg <= -flat_threshold:
+        direction = "gaining"
+        weekly_loss_rate_kg = None
+        weekly_change_kg_display = weekly_change_kg
+    else:
+        direction = "flat"
+        weekly_loss_rate_kg = None
+        weekly_change_kg_display = weekly_change_kg
+
+    prediction_enabled = direction == "losing"
+    disabled_reason = {
+        "losing": None,
+        "gaining": "trend_is_gaining",
+        "flat": "trend_is_flat",
+        "unknown": "insufficient_data",
+    }[direction]
+
+    return {
+        "direction": direction,
+        "weeklyChangeKg": weekly_change_kg_display,
+        "weeklyLossRateKg": weekly_loss_rate_kg,
+        "predictionEnabled": prediction_enabled,
+        "disabledReason": disabled_reason,
+    }
+
+
+def nearest_actual_for_backtest(rows: list[dict[str, Any]], target_day: date, start_idx: int, tolerance_days: int = 3) -> float | None:
+    """Find the closest actual measurement to a target horizon day within tolerance."""
+    candidates: list[tuple[int, float]] = []
+    for point in rows[start_idx:]:
+        weight = point.get("weight_kg") if isinstance(point, dict) else None
+        if weight is None:
+            continue
+        distance = abs((date.fromisoformat(point["date"]) - target_day).days)
+        if distance <= tolerance_days:
+            candidates.append((distance, weight))
+    return min(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
+def summarize_backtest_errors(errors: list[float], min_samples: int = 20) -> dict[str, Any]:
+    if not errors:
+        return {"sampleCount": 0, "maeKg": None, "rmseKg": None, "biasKg": None, "status": "insufficient"}
+    mae = sum(abs(e) for e in errors) / len(errors)
+    bias = sum(errors) / len(errors)
+    rmse = math.sqrt(sum(e * e for e in errors) / len(errors))
+    status = "ok" if len(errors) >= min_samples else "insufficient"
+    return {
+        "sampleCount": len(errors),
+        "maeKg": round(mae, 3),
+        "rmseKg": round(rmse, 3),
+        "biasKg": round(bias, 3),
+        "status": status,
+    }
+
+
+def run_regression_slope(dates: list[str], values: list[float | None], window_days: int) -> tuple[float | None, int]:
+    start = max(0, len(dates) - window_days)
+    pts: list[tuple[float, float]] = []
+    for i in range(start, len(dates)):
+        v = values[i]
+        if v is not None:
+            pts.append((float(i - start), v))
+    if len(pts) < 3:
+        return None, len(pts)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    xm = sum(xs) / len(xs)
+    ym = sum(ys) / len(ys)
+    num = sum((x - xm) * (y - ym) for x, y in zip(xs, ys))
+    den = sum((x - xm) ** 2 for x in xs)
+    slope = num / den if den != 0 else 0.0
+    return slope, len(pts)
+
+
+def candidate_weighted_regression(dates: list[str], values: list[float | None], window_days: int = 56) -> tuple[float | None, int]:
+    """Weighted linear regression with linear recency weights."""
+    start = max(0, len(dates) - window_days)
+    pts: list[tuple[float, float, float]] = []
+    for i in range(start, len(dates)):
+        v = values[i]
+        if v is None:
+            continue
+        weight = float(i - start + 1)
+        pts.append((float(i - start), v, weight))
+    if len(pts) < 3:
+        return None, len(pts)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    ws = [p[2] for p in pts]
+    wsum = sum(ws)
+    if wsum <= 0:
+        return None, len(pts)
+    xm = sum(x * w for x, w in zip(xs, ws)) / wsum
+    ym = sum(y * w for y, w in zip(ys, ws)) / wsum
+    num = sum(w * (x - xm) * (y - ym) for x, y, w in zip(xs, ys, ws))
+    den = sum(w * (x - xm) ** 2 for x, w in zip(xs, ws))
+    return num / den if den != 0 else 0.0, len(pts)
+
+
+def candidate_robust_regression(dates: list[str], values: list[float | None], window_days: int = 56, delta_kg: float = 1.5) -> tuple[float | None, int]:
+    """Robust-ish slope estimator: trim one-sided outliers larger than delta_kg before OLS."""
+    start = max(0, len(dates) - window_days)
+    pts: list[tuple[float, float]] = []
+    previous: float | None = None
+    for i in range(start, len(dates)):
+        v = values[i]
+        if v is None:
+            continue
+        if previous is not None and abs(v - previous) >= delta_kg:
+            pts.append((float(i - start), v * 1.01))
+            previous = v
+            continue
+        pts.append((float(i - start), v))
+        previous = v
+    if len(pts) < 3:
+        return None, len(pts)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    xm = sum(xs) / len(xs)
+    ym = sum(ys) / len(ys)
+    num = sum((x - xm) * (y - ym) for x, y in zip(xs, ys))
+    den = sum((x - xm) ** 2 for x in xs)
+    return num / den if den != 0 else 0.0, len(pts)
+
+
+def candidate_linreg(dates: list[str], values: list[float | None], window_days: int = 28) -> tuple[float | None, int]:
+    return run_regression_slope(dates, values, window_days)
+
+
+def compute_candidate_prediction(candidate_name: str, cutoff_dates: list[str], cutoff_values: list[float | None], rolling_ewma: float | None, rolling_ma7: float | None, train_window: int = 56) -> tuple[float | None, float | None, str | None]:
+    """Return predicted_weight at cutoff, weekly_change, or reason unavailable."""
+    if candidate_name == "flat_baseline":
+        if rolling_ewma is None:
+            return None, None, "no_ewma"
+        predicted = rolling_ewma
+        weekly_change = 0.0
+        return predicted, weekly_change, None
+    if candidate_name == "ma7_baseline":
+        if cutoff_values[-1] is None:
+            return None, None, "no_measurement"
+        ma7_values = [v for v in cutoff_values[-7:] if v is not None]
+        if len(ma7_values) < 3:
+            return None, None, "insufficient_ma7"
+        predicted = sum(ma7_values) / len(ma7_values)
+        weekly_change = 0.0
+        return predicted, weekly_change, None
+    if candidate_name == "ewma_baseline":
+        if rolling_ewma is None:
+            return None, None, "no_ewma"
+        predicted = rolling_ewma
+        weekly_change = 0.0
+        return predicted, weekly_change, None
+    if candidate_name == "current_multi_window_ewma_blend":
+        return None, None, "uses_separate_multi_window_slope_blend"
+    if candidate_name == "linear_regression_28d":
+        slope, n = candidate_linreg(cutoff_dates, cutoff_values, 28)
+        if slope is None:
+            return None, None, "insufficient_points"
+        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
+        weekly_change = -slope * 7
+        return predicted, weekly_change, None
+    if candidate_name == "linear_regression_56d":
+        slope, n = candidate_linreg(cutoff_dates, cutoff_values, 56)
+        if slope is None:
+            return None, None, "insufficient_points"
+        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
+        weekly_change = -slope * 7
+        return predicted, weekly_change, None
+    if candidate_name == "linear_regression_84d":
+        slope, n = candidate_linreg(cutoff_dates, cutoff_values, 84)
+        if slope is None:
+            return None, None, "insufficient_points"
+        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
+        weekly_change = -slope * 7
+        return predicted, weekly_change, None
+    if candidate_name == "weighted_linear_regression_56d":
+        slope, n = candidate_weighted_regression(cutoff_dates, cutoff_values, 56)
+        if slope is None:
+            return None, None, "insufficient_points"
+        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
+        weekly_change = -slope * 7
+        return predicted, weekly_change, None
+    if candidate_name == "robust_regression_56d":
+        slope, n = candidate_robust_regression(cutoff_dates, cutoff_values, 56)
+        if slope is None:
+            return None, None, "insufficient_points"
+        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
+        weekly_change = -slope * 7
+        return predicted, weekly_change, None
+    if candidate_name == "kalman":
+        return None, None, "kalman_requires_separate_filter"
+    return None, None, "unknown_candidate"
+
+
+def run_generalized_backtest(rows: list[dict[str, Any]], ewma_series: list[dict[str, Any]], candidate_names: list[str] | None = None, train_window: int = 28, horizon_days: tuple[int, ...] = (7, 14, 28), tolerance_days: int = 3) -> dict[str, Any]:
+    """Phase 3 — rolling backtest over candidate models. Trains only on prefix before each cutoff."""
+    default_candidates = [
+        "flat_baseline",
+        "ma7_baseline",
+        "ewma_baseline",
+        "current_multi_window_ewma_blend",
+        "linear_regression_28d",
+        "linear_regression_56d",
+        "linear_regression_84d",
+        "weighted_linear_regression_56d",
+        "robust_regression_56d",
+        "kalman",
+    ]
+    candidate_names = [name for name in (candidate_names or default_candidates) if name in default_candidates]
+    dates = [row["date"] for row in rows]
+    values = [row.get("weight_kg") for row in rows]
+    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    latest_ewma = next((p["valueKg"] for p in reversed(ewma_series) if p.get("valueKg") is not None), None)
+    out: dict[str, Any] = {}
+    for candidate in candidate_names:
+        candidate_out: dict[str, Any] = {}
+        for horizon in horizon_days:
+            errors: list[float] = []
+            for idx in range(train_window, len(rows) - horizon):
+                cutoff_date = rows[idx - 1]["date"]
+                cutoff_ewma = ewma_by_date.get(cutoff_date)
+                cutoff_dates_prefix = dates[:idx]
+                cutoff_values_prefix = values[:idx]
+                predicted, weekly_change, reason = compute_candidate_prediction(
+                    candidate,
+                    cutoff_dates_prefix,
+                    cutoff_values_prefix,
+                    cutoff_ewma,
+                    values[idx - 1],
+                    train_window=train_window,
+                )
+                if reason:
+                    continue
+                target_day = date.fromisoformat(cutoff_date) + timedelta(days=horizon)
+                actual = nearest_actual_for_backtest(rows, target_day, idx, tolerance_days=tolerance_days)
+                if actual is None:
+                    continue
+                if weekly_change is None:
+                    continue
+                if candidate == "current_multi_window_ewma_blend":
+                    continue
+                if predicted is None:
+                    continue
+                try:
+                    week_fraction = max(horizon / 7, 1.0)
+                    prediction = predicted + weekly_change * week_fraction
+                except Exception:
+                    continue
+                errors.append(round(prediction - actual, 4))
+            candidate_out[f"{horizon}d"] = summarize_backtest_errors(errors)
+        out[candidate] = candidate_out
+    kalman_out: dict[str, Any] = {}
+    try:
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location("kalman_predictor", Path(__file__).resolve().parent / "kalman_predictor.py")
+        if _spec is not None and _spec.loader is not None:
+            _mod = _ilu.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            kalman_rows = [{"date": r["date"], "weight_kg": r.get("weight_kg")} for r in rows]
+            kalman_out = _mod.kalman_backtest(kalman_rows, horizons=horizon_days, train_window=train_window)
+    except Exception as exc:
+        kalman_out = {"error": str(exc)}
+    if "kalman" in candidate_names:
+        out["kalman"] = kalman_out
+    return out
+
+
+def apply_model_selection_gate(audit: dict[str, Any], current_metrics: dict[str, Any], gate: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Phase 4 — conservative model selection gate."""
+    current_backtest = current_metrics or {}
+    gate = {
+        "minSampleCount": 20,
+        "minImprovementKg": 0.05,
+        "minImprovementPct": 0.08,
+        "minHorizonWins": 2,
+    } | (gate or {})
+    min_samples = int(gate["minSampleCount"])
+    min_improve_abs = float(gate["minImprovementKg"])
+    min_improve_pct = float(gate["minImprovementPct"])
+    min_horizon_wins = int(gate["minHorizonWins"])
+
+    best_candidate = "current"
+    best_reason = "no_candidate"
+    wins: dict[str, Any] = {}
+    for candidate, horizons in audit.items():
+        if candidate == "current_multi_window_ewma_blend":
+            continue
+        candidate_wins = 0
+        passes = True
+        reasons: list[str] = []
+        for horizon_key, stats in horizons.items():
+            if not isinstance(stats, dict):
+                continue
+            current_h = current_backtest.get(horizon_key) or {}
+            if stats.get("status") != "ok" or current_h.get("status") != "ok":
+                passes = False
+                reasons.append(f"{horizon_key}_not_ok")
+                continue
+            if stats.get("sampleCount", 0) < min_samples:
+                passes = False
+                reasons.append(f"{horizon_key}_sample_count_low")
+                continue
+            current_mae = current_h.get("maeKg")
+            candidate_mae = stats.get("maeKg")
+            if current_mae is None or candidate_mae is None:
+                passes = False
+                reasons.append(f"{horizon_key}_missing_mae")
+                continue
+            improve_abs = float(current_mae) - float(candidate_mae)
+            improve_pct = improve_abs / float(current_mae) if current_mae else 0.0
+            if improve_abs >= min_improve_abs or improve_pct >= min_improve_pct:
+                candidate_wins += 1
+            if candidate_wins >= min_horizon_wins and passes:
+                best_candidate = candidate
+                best_reason = "beat_current_on_selection_gate"
+                break
+        if best_candidate == candidate and passes:
+            break
+
+    status = "kept_current" if best_candidate == "current" else "adopted_new"
+    if best_candidate != "current":
+        best_reason = f"adopted_{best_candidate}"
+    return {
+        "name": best_candidate if status == "adopted_new" else "current",
+        "status": status,
+        "reason": best_reason,
+        "gate": gate,
+    }
+
+
+def compute_ci_calibration_replay(rows: list[dict[str, Any]], ewma_series: list[dict[str, Any]], central_fn, spread_fn, train_window: int = 28, tolerance_days: int = 3) -> dict[str, Any]:
+    """Phase 6 — replay selected-model CI bands against historical actuals.
+
+    central_fn(horizon_days, cutoff_ewma, cutoff_values_prefix) -> central_prediction
+    spread_fn(horizon_days) -> upper-lower half-width
+    """
+    dates = [row["date"] for row in rows]
+    values = [row.get("weight_kg") for row in rows]
+    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    out: dict[str, Any] = {}
+    for horizon in (7, 14, 28):
+        hits = 0
+        total = 0
+        for idx in range(train_window, len(rows) - horizon):
+            cutoff_date = rows[idx - 1]["date"]
+            cutoff_ewma = ewma_by_date.get(cutoff_date)
+            cutoff_dates = dates[:idx]
+            cutoff_values = values[:idx]
+            central = central_fn(horizon, cutoff_ewma, cutoff_values)
+            spread = spread_fn(horizon)
+            if central is None or spread is None:
+                continue
+            target_day = date.fromisoformat(cutoff_date) + timedelta(days=horizon)
+            actual = nearest_actual_for_backtest(rows, target_day, idx, tolerance_days=tolerance_days)
+            if actual is None:
+                continue
+            total += 1
+            if abs(actual - central) <= spread:
+                hits += 1
+        out[f"{horizon}d"] = round(hits / total, 3) if total else None
+    hit_rate = {k: v for k, v in out.items()}
+    status = "ok" if any(v is not None for v in hit_rate.values()) else "insufficient"
+    return {
+        "hitRate": {"7d": hit_rate["7d"], "14d": hit_rate["14d"], "28d": hit_rate["28d"]},
+        "status": status,
+        "samples": sum(1 for v in hit_rate.values() if v is not None),
+    }

@@ -7,18 +7,24 @@
   <link rel="icon" href="./icons/icon.svg?v=3" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="./icons/icon.svg?v=3" />
   <link rel="manifest" href="./manifest.webmanifest" />
-  <meta name="theme-color" content="#e8e8e8" />
+  <meta name="theme-color" content="#F5F2F0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="체중" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260529" />
-  <link rel="stylesheet" href="./enhancements.css?v=20260529" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css?v=20260623" />
 </head>
 <body>
+  <nav class="sidebar" id="sidebar" aria-label="사이드바">
+    <div class="sidebar-icon" title="홈">H</div>
+    <div class="sidebar-icon" title="추이">T</div>
+    <div class="sidebar-icon" title="활동">A</div>
+    <div class="sidebar-icon" title="설정">S</div>
+  </nav>
+  <button class="sidebar-toggle" id="sidebarToggle" aria-label="사이드바 열기" title="사이드바">☰</button>
   <div class="app" data-state="loading">
     <header class="topbar">
       <div class="brandmark">
@@ -26,12 +32,12 @@
         <span class="brand-text">체중 대시보드</span>
       </div>
       <div class="topbar-meta">
-        <span id="lastSync" class="sync-pill">
-          <span class="sync-dot"></span>
-          <span class="sync-text">동기화 중…</span>
-        </span>
+        <div class="sync-pill" id="lastSync">
+          <div class="sync-label">Last Sync Status</div>
+          <div class="sync-text"><span class="sync-dot"></span>동기화 중…</div>
+        </div>
         <button id="reloadBtn" class="icon-button" type="button" aria-label="다시 불러오기" title="다시 불러오기 (R)">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8" />
             <path d="M21 3v5h-5" />
             <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16" />
@@ -41,170 +47,119 @@
       </div>
     </header>
 
-    <!-- 인사이트 카드 (headline 있을 때만 표시) -->
-    <section class="insight-card" id="insightCard" hidden>
-      <p class="insight-headline" id="insightHeadline">–</p>
-    </section>
-
-    <!-- HERO: goal progress (left) + current state (right) -->
     <section class="hero">
       <div class="hero-grid">
         <div class="hero-left">
-          <p class="eyebrow">목표 진행률</p>
+          <div class="hero-meta-row">
+            <div class="hero-badge" id="statusBadge">예측 보류</div>
+            <p class="hero-status-reason" id="statusReason">LATEST 30 DAYS (LOW RELIABILITY)</p>
+          </div>
           <h1 class="hero-title">
-            <span id="goalProgressPct" class="title-num">–</span><span class="title-unit">%</span>
+            <span id="currentWeight" class="title-num">–</span><span class="title-unit">kg</span>
           </h1>
-          <p id="goalSubtitle" class="hero-sub">–</p>
-          <div class="progress">
-            <div class="progress-track">
-              <div id="progressFill" class="progress-fill" style="width:0%"></div>
-              <div id="progressMarker" class="progress-marker" style="left:0%">
-                <span class="progress-marker-dot"></span>
-              </div>
+          <div class="hero-stats-row">
+            <div class="hero-stat">
+              <span class="hero-stat-label">Trend Weight</span>
+              <span id="trendWeight" class="hero-stat-value">–</span>
             </div>
-            <div class="progress-legend">
-              <span><em id="startWeight">–</em> <small>시작</small></span>
-              <span class="progress-legend-right"><em id="targetWeight">–</em> <small>목표</small></span>
+            <div class="hero-stat">
+              <span class="hero-stat-label">To Target</span>
+              <span id="toTarget" class="hero-stat-value">–</span>
+            </div>
+            <div class="hero-stat">
+              <span class="hero-stat-label">Last Entry</span>
+              <span id="lastEntry" class="hero-stat-value">–</span>
             </div>
           </div>
         </div>
-
         <div class="hero-right">
-          <div class="current-weight-block">
-            <p class="label">현재 체중</p>
-            <div class="big-weight">
-              <span id="currentWeight">–</span>
-              <span class="big-weight-unit">kg</span>
-            </div>
-            <p class="big-weight-meta">
-              <span id="currentDelta" class="delta">–</span>
-              <span class="big-weight-sep"> · </span>
-              <span id="currentDate">–</span>
-              <span class="big-weight-sep"> · </span>
-              <span class="trend-label">추세</span> <span id="trendWeight" class="trend-val">–</span>
-            </p>
-          </div>
           <div class="hero-metrics">
             <div class="hero-metric">
-              <p class="label">7일 평균</p>
-              <p id="ma7Weight" class="hero-metric-val">–</p>
-              <p id="ma7Delta" class="hero-metric-sub">–</p>
-            </div>
-            <div class="hero-metric" id="intensityMetric" title="">
-              <p class="label">감량 강도</p>
-              <p id="weeklyLossRate" class="hero-metric-val">–</p>
-              <div class="intensity-gauge" id="intensityGauge">
-                <span class="intensity-dot" data-level="maintaining"></span>
-                <span class="intensity-dot" data-level="conservative"></span>
-                <span class="intensity-dot" data-level="standard"></span>
-                <span class="intensity-dot" data-level="aggressive"></span>
-                <span id="intensityLabel" class="intensity-text">–</span>
-              </div>
+              <p class="label">Weekly Change</p>
+              <p id="heroWeeklyChange" class="hero-metric-val">–</p>
+              <p class="hero-metric-sub">SINCE STARTING POINT</p>
             </div>
             <div class="hero-metric">
-              <p class="label">목표까지</p>
-              <p id="goalEta" class="hero-metric-val">–</p>
-              <p id="goalEtaDate" class="hero-metric-sub">–</p>
+              <p class="label">Goal Progress</p>
+              <p id="goalProgressBig" class="hero-metric-val">–</p>
+              <p class="hero-metric-sub">&nbsp;</p>
             </div>
             <div class="hero-metric hero-metric--confidence">
-              <p class="label">예측 신뢰도</p>
-              <p id="predictionConfidence" class="hero-metric-val">–</p>
+              <p class="label">Prediction Confidence</p>
+              <p id="predictionConfidence" class="hero-metric-val">LOW</p>
               <p id="predictionError" class="hero-metric-sub">–</p>
             </div>
           </div>
         </div>
       </div>
-    </section>
-
-    <!-- Bottom cards alongside hero -->
-    <section class="bottom-row">
-      <article class="bottom-card">
-        <p class="label">7일 변동폭</p>
-        <p id="weightRange" class="bottom-val">–</p>
-        <div id="sparkRange" class="spark"></div>
-        <p id="weightRangeHint" class="bottom-hint">–</p>
-      </article>
-      <article class="bottom-card bottom-card--coverage">
-        <p class="label">최근 30일 측정 현황</p>
-        <p id="logCoverage" class="bottom-val">–</p>
-        <div id="coverageDots" class="dots"></div>
-        <p id="coverageHint" class="bottom-hint">–</p>
-      </article>
-      <article class="bottom-card bottom-card--quality" id="qualityCard" data-level="low">
-        <p class="label">데이터 품질</p>
-        <p id="qualityStatus" class="bottom-val">–</p>
-        <div class="quality-grid">
-          <div class="quality-item">
-            <span>측정률</span>
-            <strong id="qualityCoverage">–</strong>
+      <div class="hero-progress-strip">
+        <div class="hero-progress-bar">
+          <div class="hero-progress-fill" id="heroProgressFill" style="width:0%"></div>
+          <div class="hero-progress-track-labels">
+            <span id="heroProgressStart">84.2 kg (Start)</span>
+            <span id="heroProgressTarget">80.0 kg (Target)</span>
           </div>
-          <div class="quality-item">
-            <span>마지막 측정</span>
-            <strong id="qualitySync">–</strong>
-          </div>
-          <div class="quality-item">
-            <span>검증</span>
-            <strong id="qualityBacktest">–</strong>
-          </div>
-          <div class="quality-item">
-            <span>주의</span>
-            <strong id="qualityReason">–</strong>
-          </div>
+          <div class="hero-progress-marker" id="heroProgressMarker" style="left:0%"></div>
         </div>
-        <p class="bottom-hint">예측은 체중 예언이 아니라 측정 품질에 묶인 추세 추정입니다.</p>
-      </article>
-      <!-- C1: 다중 윈도우 감량률 -->
-      <article class="bottom-card bottom-card--windows" id="windowsCard" hidden>
-        <p class="label">가속 신호</p>
-        <p id="windowsCaption" class="bottom-val bottom-val--small">–</p>
-        <div id="windowsBars" class="windows-bars"></div>
-        <p id="windowsHint" class="bottom-hint">–</p>
-      </article>
-      <!-- C3: 대사 시그니처 -->
-      <article class="bottom-card bottom-card--metabolic" id="metabolicCard" hidden>
-        <p class="label">대사 시그니처</p>
-        <div class="metabolic-stats">
-          <div class="metabolic-stat">
-            <span class="metabolic-stat-val" id="metabolicEfficiency">–</span>
-            <span class="metabolic-stat-label">운동 효율</span>
-          </div>
-          <div class="metabolic-stat">
-            <span class="metabolic-stat-val" id="metabolicKcal">–</span>
-            <span class="metabolic-stat-label" id="metabolicKcalSrc">kcal/kg</span>
-          </div>
-          <div class="metabolic-stat" id="metabolicBodyFatWrap" hidden>
-            <span class="metabolic-stat-val" id="metabolicBodyFat">–</span>
-            <span class="metabolic-stat-label">체지방</span>
-          </div>
-        </div>
-        <p id="metabolicHint" class="bottom-hint">–</p>
-      </article>
-    </section>
-
-    <!-- 정체기 코칭 카드 (plateau.detected 시에만 표시) -->
-    <aside class="plateau-card" id="plateauCard" hidden>
-      <div class="plateau-head">
-        <span class="plateau-tag" id="plateauTag">정체기 감지</span>
-        <span id="plateauDuration" class="plateau-duration">–</span>
       </div>
-      <p class="plateau-msg" id="plateauMsg">대사 적응 과정의 정상적인 현상입니다. 의지의 문제가 아니에요.</p>
-      <ul class="plateau-actions" id="plateauActions"></ul>
-    </aside>
+    </section>
 
-    <!-- Trend + scenarios (scenarios replace duplicate 1m/3m insight cards) -->
-    <section class="panel">
-      <!-- C2: Kalman vs V1 비교 strip -->
-      <p id="kalmanStrip" class="kalman-strip" hidden></p>
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">체중 추이</p>
-          <h2 class="panel-title">실제 · 추세 · 예측 + 신뢰 띠</h2>
+    <section class="summary-strip" id="summaryStrip">
+      <div class="summary-strip-outer">
+        <div class="summary-status-block">
+          <div class="summary-status-row">
+            <span class="summary-status-label">Status</span>
+            <span class="summary-status-value">
+              <span id="summaryCoverageText">–</span>
+              <span id="summaryCoveragePct" class="summary-status-sub">( – )</span>
+            </span>
+          </div>
+          <span class="summary-dots" id="summaryDots"></span>
         </div>
+        <div class="summary-grid">
+          <div class="summary-grid-item">
+            <span class="summary-grid-label">7d Range</span>
+            <span class="summary-grid-value" id="summaryRangeBox">–</span>
+          </div>
+          <div class="summary-grid-item">
+            <span class="summary-grid-label">7d Change</span>
+            <span class="summary-grid-value" id="summaryChange7d">–</span>
+          </div>
+          <div class="summary-grid-item">
+            <span class="summary-grid-label">28d Change</span>
+            <span class="summary-grid-value" id="summaryChange28d">–</span>
+          </div>
+          <div class="summary-grid-item">
+            <span class="summary-grid-label">14d Mae</span>
+            <span class="summary-grid-value" id="summaryMae14d">–</span>
+          </div>
+          <div class="summary-grid-item">
+            <span class="summary-grid-label">Last Entry</span>
+            <span class="summary-grid-value" id="summaryLastEntry">–</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+      <div class="panel-head-bar">
+        <div class="panel-head-badge">A</div>
+        <div>
+          <p class="eyebrow eyebrow-tight">체중 추이</p>
+          <h2 class="panel-title">Weight Trend</h2>
+        </div>
+        <div class="panel-head-legend">
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch"></span>Actual</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--accent"></span>Trend</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--line"></span>Target</span>
+        </div>
+      </div>
         <div class="panel-controls">
-          <div class="seg" role="tablist" aria-label="기간">
-            <button class="seg-btn" data-range="30" type="button">30일</button>
-            <button class="seg-btn is-active" data-range="60" type="button">60일</button>
-            <button class="seg-btn" data-range="all" type="button">전체</button>
+          <div class="seg" role="group" aria-label="기간">
+            <button class="seg-btn" data-range="30" type="button" aria-pressed="false">30일</button>
+            <button class="seg-btn is-active" data-range="60" type="button" aria-pressed="true">60일</button>
+            <button class="seg-btn" data-range="all" type="button" aria-pressed="false">전체</button>
           </div>
           <div class="chips" role="group" aria-label="표시 항목">
             <label class="chip" data-series="ma7" title="EWMA(지수 가중 이동평균), 수분 변동 노이즈 제거">
@@ -226,48 +181,65 @@
         </div>
       </div>
 
+      <div id="predictionGuard" class="prediction-guard" hidden>
+        <div class="prediction-guard-inner">
+          <div class="prediction-guard-icon">!</div>
+          <div>
+            <p class="prediction-guard-title">Prediction On Hold</p>
+            <p id="predictionGuardText" class="prediction-guard-sub">Insufficient data for model calculation.</p>
+          </div>
+        </div>
+        <div class="prediction-guard-action">Resume after 7 consecutive measurements</div>
+      </div>
+
       <div class="chart-wrap">
         <canvas id="weightChart" aria-label="체중 추세 차트" role="img"></canvas>
       </div>
       <div class="model-strip" id="modelStrip">
-        <div>
-          <p class="label">모델 기준</p>
-          <p id="modelSummary" class="model-strip-main">–</p>
+        <div class="model-strip-head">
+          <span class="model-strip-tag">MODEL</span>
+          <span class="model-strip-tag-label">모델 기준 · 검증 · 데이터</span>
         </div>
-        <div>
-          <p class="label">검증</p>
-          <p id="modelBacktest" class="model-strip-sub">–</p>
-        </div>
-        <div>
-          <p class="label">데이터</p>
-          <p id="modelCoverage" class="model-strip-sub">–</p>
+        <div class="model-strip-body">
+          <div>
+            <p class="label">모델 기준</p>
+            <p id="modelSummary" class="model-strip-main">–</p>
+          </div>
+          <div>
+            <p class="label">검증</p>
+            <p id="modelBacktest" class="model-strip-sub">–</p>
+          </div>
+          <div>
+            <p class="label">데이터</p>
+            <p id="modelCoverage" class="model-strip-sub">–</p>
+          </div>
         </div>
       </div>
 
       <div class="scenarios">
         <div class="scenarios-head">
-          <p class="scenarios-label">목표 강도 시나리오</p>
-          <p class="scenarios-hint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
+          <p class="scenarios-label">Action Scenarios</p>
+          <p class="scenarios-hint" id="scenariosHint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
         </div>
         <div class="scenarios-grid">
-          <button class="scenario" data-scenario="optimistic" type="button">
+          <button class="scenario" data-scenario="optimistic" type="button" aria-pressed="false">
             <span class="scenario-tag scenario-tag--aggressive">낙관</span>
             <span id="scenarioOpt" class="scenario-val">–</span>
-            <span class="scenario-sub">동적 계산</span>
+            <span class="scenario-sub">Exercise +2 sessions</span>
             <svg class="scenario-sparkline" data-spark="optimistic" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
             <p class="scenario-desc" id="scenarioOptDesc"></p>
           </button>
-          <button class="scenario is-active" data-scenario="base" type="button">
+          <button class="scenario is-active" data-scenario="base" type="button" aria-pressed="true">
             <span class="scenario-tag scenario-tag--standard">기준</span>
             <span id="scenarioBase" class="scenario-val">–</span>
             <span class="scenario-sub">현재 운동량 유지</span>
             <svg class="scenario-sparkline" data-spark="base" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
             <p class="scenario-desc" id="scenarioBaseDesc"></p>
           </button>
-          <button class="scenario" data-scenario="conservative" type="button">
+          <button class="scenario" data-scenario="conservative" type="button" aria-pressed="false">
             <span class="scenario-tag scenario-tag--conservative">보수</span>
             <span id="scenarioCon" class="scenario-val">–</span>
-            <span class="scenario-sub">동적 계산</span>
+            <span class="scenario-sub">Exercise −2 sessions</span>
             <svg class="scenario-sparkline" data-spark="conservative" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
             <p class="scenario-desc" id="scenarioConDesc"></p>
           </button>
@@ -275,60 +247,97 @@
       </div>
     </section>
 
-    <!-- Activity: minutes primary -->
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">활동 · 최근 30일</p>
-          <h2 class="panel-title">운동 시간</h2>
-        </div>
-        <p id="activityRange" class="panel-caption">–</p>
-      </div>
-
-      <div class="activity-summary">
-        <div class="activity-primary">
-          <span id="exerciseMinutes" class="activity-primary-val">–</span>
-          <span class="activity-primary-unit">분</span>
-          <span class="activity-primary-label">최근 7일 합계</span>
-        </div>
-        <div class="activity-secondary">
-          <div class="activity-secondary-item">
-            <p class="label">활동일</p>
-            <p id="activeDays" class="activity-secondary-val">–</p>
-            <p class="activity-secondary-sub">7일 중</p>
-          </div>
-          <div class="activity-secondary-item">
-            <p class="label">일평균 걸음</p>
-            <p id="stepsAvg" class="activity-secondary-val">–</p>
-            <p id="stepsTotal" class="activity-secondary-sub">–</p>
+    <div class="panels-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-head-bar">
+            <div class="panel-head-badge-sm">B</div>
+            <h3 class="panel-head-title-sm">Activity Logs</h3>
           </div>
         </div>
-      </div>
+        <div class="activity-blocks">
+          <div class="activity-block brutalist-border">
+            <span id="exerciseMinutes" class="activity-block-num">–</span>
+            <span class="activity-block-unit">MIN</span>
+            <span class="activity-block-label">Duration</span>
+          </div>
+          <div class="activity-block brutalist-border">
+            <span id="activeDays" class="activity-block-num">–</span>
+            <span class="activity-block-unit">DAYS</span>
+            <span class="activity-block-label">Active Days</span>
+          </div>
+          <div class="activity-block brutalist-border">
+            <span id="stepsAvg" class="activity-block-num">–</span>
+            <span class="activity-block-unit">K</span>
+            <span class="activity-block-label">Avg Steps</span>
+          </div>
+        </div>
+      </section>
 
-      <div class="chart-wrap chart-wrap-short">
-        <canvas id="activityChart" aria-label="활동 차트" role="img"></canvas>
+      <section class="panel" id="insightCard" hidden>
+        <div class="panel-head">
+          <div class="panel-head-inline">
+            <div class="panel-head-icon">C</div>
+            <div>
+              <p class="eyebrow">체중 인사이트</p>
+              <h3 class="panel-head-title">AI Insight</h3>
+            </div>
+          </div>
+        </div>
+        <div class="insight-body">
+          <div id="insightHeadline">–</div>
+        </div>
+      </section>
+    </div>
+
+    <details class="details-panel">
+      <summary>
+        <div class="panel-head-bar">
+          <span class="details-summary-badge">Details</span>
+          <span class="details-summary-hint">Model validation · Efficiency · Trend Window</span>
+        </div>
+        <span class="details-summary-toggle">+</span>
+      </summary>
+      <div class="details-body">
+        <div class="detail-section">
+          <p class="label">MAE Validation</p>
+          <div id="detailMae"></div>
+        </div>
+        <div class="detail-section">
+          <p class="label">Metabolic Signature</p>
+          <div id="detailMetabolic"></div>
+        </div>
+        <div class="detail-section">
+          <p class="label">Data Quality</p>
+          <div id="detailQuality"></div>
+        </div>
+        <div class="detail-section">
+          <p class="label">Trend Windows</p>
+          <div id="detailTrend"></div>
+        </div>
       </div>
-    </section>
+    </details>
 
     <footer class="foot">
-      <p id="statusLine">데이터를 불러오는 중입니다.</p>
-      <p id="calibrationLine" class="shortcut" hidden></p>
-      <p class="shortcut"><kbd>R</kbd> 새로고침 · <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> 기간 전환</p>
+      <span id="statusLine">데이터를 불러오는 중입니다.</span>
+      <span>SYNC V2.4.1 · REF: BRUTALIST GRID V1.0</span>
     </footer>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script defer src="./app.helpers.js?v=20260608"></script>
-  <script defer src="./app.js?v=20260608"></script>
-  <script defer src="./enhancements.js?v=20260529"></script>
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=20260529').catch((err) => {
-          console.warn('SW registration failed:', err);
+    (function() {
+      var toggle = document.getElementById('sidebarToggle');
+      var sidebar = document.getElementById('sidebar');
+      if (toggle && sidebar) {
+        toggle.addEventListener('click', function() {
+          sidebar.classList.toggle('is-open');
         });
-      });
-    }
+      }
+    })();
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script defer src="./app.helpers.js?v=20260623"></script>
+  <script defer src="./app.js?v=20260623"></script>
+  <script defer src="./enhancements.js?v=20260623"></script>
 </body>
 </html>
