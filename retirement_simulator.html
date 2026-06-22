@@ -54,6 +54,27 @@
 </head>
 <body>
 <div id="root"><div class="loading">로딩 중…</div></div>
+<div id="boot-error" class="loading" style="display:none" role="alert" aria-live="assertive">
+  앱을 불러오지 못했습니다. 네트워크 연결 또는 CDN 접근 상태를 확인한 뒤 새로고침해주세요.
+</div>
+<script>
+  (function () {
+    const timeoutId = setTimeout(() => window.showBootError(), 8000);
+    window.showBootError = function () {
+      const root = document.getElementById("root");
+      const fallback = document.getElementById("boot-error");
+      if (root) root.style.display = "none";
+      if (fallback) fallback.style.display = "flex";
+    };
+    window.addEventListener("retirement-sim-ready", () => clearTimeout(timeoutId), { once: true });
+    window.addEventListener("error", (event) => {
+      const target = event.target;
+      if (target && (target.tagName === "SCRIPT" || target.tagName === "LINK")) {
+        window.showBootError();
+      }
+    }, true);
+  })();
+</script>
 
 
 <script type="text/babel" data-type="module" data-presets="react">
@@ -3056,6 +3077,7 @@ try {
   window.dispatchEvent(new Event("retirement-sim-ready"));
 } catch (error) {
   console.error("Retirement simulator failed to start", error);
+  window.showBootError?.();
 }
 </script>
 </body>
