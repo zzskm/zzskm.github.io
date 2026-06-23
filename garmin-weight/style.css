@@ -979,10 +979,16 @@ kbd {
 }
 @media (max-width: 720px) {
   .app { padding: 20px 16px 32px; }
-  .topbar { padding: 0 16px 16px; margin: 0 -16px 16px; }
+  .topbar { padding: 0 16px 16px; margin: 0 -16px 16px; flex-wrap: wrap; gap: 10px; }
+  .brandmark { font-size: 20px; }
+  .topbar-meta { gap: 10px; width: 100%; justify-content: flex-end; }
+  .sync-pill { text-align: left; }
+  .sync-pill .sync-label { font-size: 9px; }
+  .sync-pill .sync-text { font-size: 11px; }
   .hero-title { font-size: clamp(60px, 16vw, 120px); }
   .hero-metric { padding: 20px; }
-  .hero-stats-row { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .hero-stats-row { grid-template-columns: repeat(3, 1fr); gap: 16px; padding-top: 20px; }
+  .hero-stat-label { font-size: 9px; letter-spacing: 0.1em; }
   .hero-stat-value { font-size: 18px; }
   .activity-blocks { grid-template-columns: 1fr; }
   .activity-block + .activity-block { border-left: 0; border-top: 1.5px solid var(--ink); }
@@ -994,6 +1000,12 @@ kbd {
   .model-strip-body > div { border-right: 0; border-bottom: 1.5px solid var(--ink); }
   .model-strip-body > div:last-child { border-bottom: 0; }
   .chart-wrap { height: 240px; }
+  .panel-head { flex-wrap: wrap; gap: 12px; }
+  .panel-head-legend { display: none; }
+  .panel-controls { gap: 8px; }
+  .seg-btn { padding: 8px 14px; font-size: 10px; }
+  .chip { padding: 6px 10px; font-size: 10px; }
+  .hero-metrics { grid-template-rows: auto; }
 }
 @media (max-width: 520px) {
   .hero-title { font-size: 64px; }
@@ -1009,8 +1021,15 @@ kbd {
 @media (max-width: 412px) {
   .app { padding: 14px 10px 24px; }
   .hero-title { font-size: 52px; }
-  .brandmark { font-size: 22px; }
+  .brandmark { font-size: 18px; gap: 8px; }
   .hero-metric { padding: 14px; }
+  .hero-left { padding: 24px; }
+  .hero-stats-row { grid-template-columns: repeat(3, 1fr); gap: 10px; padding-top: 16px; }
+  .hero-stat-value { font-size: 16px; }
+  .hero-stat-label { font-size: 8px; letter-spacing: 0.05em; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .seg-btn { padding: 6px 10px; font-size: 9px; letter-spacing: 0.05em; }
+  .chip { padding: 5px 8px; font-size: 9px; gap: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
