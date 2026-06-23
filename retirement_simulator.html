@@ -3035,7 +3035,7 @@ function App() {
               )}
               {i.withdrawalStrategy !== "bucket" && (
                 <li className="pt-2 mt-2 border-t border-slate-100 text-xs text-slate-500">
-                  인출 전략: <b className="text-slate-700">{{ bucket: "버킷 전략", "4pct": "4% 룰 (SWR)", vpw: "VPW" }[i.withdrawalStrategy]}</b> 적용 중 (고급 > 인출 전략에서 변경)
+                  인출 전략: <b className="text-slate-700">{{ bucket: "버킷 전략", "4pct": "4% 룰 (SWR)", vpw: "VPW" }[i.withdrawalStrategy]}</b> 적용 중 (고급 {'>'} 인출 전략에서 변경)
                 </li>
               )}
               {scenarios.length > 1 && (
