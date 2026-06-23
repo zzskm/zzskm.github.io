@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'gw-v6-20260623';
+const CACHE_VERSION = 'gw-v7-20260623';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -14,8 +14,8 @@ const SHELL_ASSETS = [
   './enhancements.js?v=20260623',
   './config.json',
   './manifest.webmanifest',
-  './icons/icon.svg',
-  './icons/icon-maskable.svg',
+  './icons/icon.svg?v=4',
+  './icons/icon-maskable.svg?v=4',
 ];
 
 self.addEventListener('install', (event) => {
