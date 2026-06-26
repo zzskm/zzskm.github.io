@@ -27,7 +27,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--input-csv", default=os.getenv("YUC_INPUT_CSV", "yuc/parking_log.csv"))
     p.add_argument("--output-json", default=os.getenv("YUC_OUTPUT_JSON", "yuc/daily_stats.json"))
-    p.add_argument("--exclude-dates", default=os.getenv("YUC_EXCLUDE_DATES", "yuc/excluded_dates.txt"))
+    p.add_argument("--target-name", default=os.getenv("YUC_TARGET_NAME", "수지노외 공영주차장"))
     return p.parse_args()
 
 
@@ -51,24 +51,6 @@ def load_csv(path: str) -> list[dict]:
                 continue
     
     return sorted(records, key=lambda x: x["t"])
-
-
-def load_excluded_dates(path: str) -> set[str]:
-    excluded = set()
-    if not os.path.exists(path):
-        return excluded
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            date_part = line.split()[0]
-            try:
-                dt.datetime.strptime(date_part, "%Y-%m-%d")
-                excluded.add(date_part)
-            except ValueError:
-                continue
-    return excluded
 
 
 def get_weekday(ts: dt.datetime) -> int:
@@ -97,7 +79,7 @@ def get_confidence(prev_gap_minutes: Optional[float]) -> str:
 
 def compute_quantiles(times: list[int]) -> dict:
     if not times:
-        return {"p10": None, "p25": None, "median": None, "p75": None, "p90": None, "included_days": 0}
+        return {"p10": None, "p25": None, "median": None, "p75": None, "p90": None, "included_days": 0, "minimum_required_days": MIN_VALID_DAYS}
     
     sorted_times = sorted(times)
     n = len(sorted_times)
@@ -119,7 +101,8 @@ def compute_quantiles(times: list[int]) -> dict:
         "median": percentile(50),
         "p75": percentile(75),
         "p90": percentile(90),
-        "included_days": n
+        "included_days": n,
+        "minimum_required_days": MIN_VALID_DAYS
     }
 
 
@@ -131,7 +114,7 @@ def compute_sample_gap(records: list[dict]) -> list[float]:
     return gaps
 
 
-def process_day(records: list[dict], excluded_dates: set[str]) -> Optional[dict]:
+def process_day(records: list[dict], target_name: str) -> Optional[dict]:
     morning_records = [r for r in records if is_morning(r["t"])]
     
     if not morning_records:
@@ -142,24 +125,10 @@ def process_day(records: list[dict], excluded_dates: set[str]) -> Optional[dict]
     weekday = get_weekday(first["t"])
     sample_count = len(morning_records)
     min_available = min(r["available"] for r in morning_records)
-    
-    exclude_reasons = []
-    
-    if date in excluded_dates:
-        exclude_reasons.append("manual_exclude")
-    
-    if weekday >= 5:
-        exclude_reasons.append("weekend")
-    
-    if sample_count < MIN_SAMPLES_MORNING:
-        exclude_reasons.append("insufficient_morning_samples")
-    
     max_gap = max(compute_sample_gap(morning_records)) if len(morning_records) > 1 else 0
-    if max_gap > 25:
-        exclude_reasons.append("large_sample_gap")
     
-    if min_available > LOW_THRESHOLD:
-        exclude_reasons.append("no_low_threshold_observed")
+    first_sample = morning_records[0]["t"].isoformat()
+    last_sample = morning_records[-1]["t"].isoformat()
     
     first_le_2 = None
     effective_full = None
@@ -167,10 +136,7 @@ def process_day(records: list[dict], excluded_dates: set[str]) -> Optional[dict]
     for i, r in enumerate(morning_records):
         if r["available"] <= LOW_THRESHOLD:
             prev_avail = morning_records[i - 1]["available"] if i > 0 else None
-            prev_gap = None
-            if i > 0:
-                prev_gap = (r["t"] - morning_records[i - 1]["t"]).total_seconds() / 60
-            
+            prev_gap = (r["t"] - morning_records[i - 1]["t"]).total_seconds() / 60 if i > 0 else None
             confidence = get_confidence(prev_gap)
             
             first_le_2 = {
@@ -193,27 +159,24 @@ def process_day(records: list[dict], excluded_dates: set[str]) -> Optional[dict]
             if not recovery_found:
                 effective_full = {
                     "observed_at": r["t"].isoformat(),
-                    "reason": "first_low_no_recovery",
-                }
-            else:
-                effective_full = {
-                    "observed_at": r["t"].isoformat(),
-                    "reason": "recovered",
                 }
             
             break
-    
-    if first_le_2 is None:
-        exclude_reasons.append("no_effective_full_observed")
     
     return {
         "date": date,
         "weekday": weekday,
         "sample_count": sample_count,
+        "max_gap_minutes": round(max_gap, 1) if max_gap > 0 else None,
+        "morning_coverage": {
+            "first_sample": first_sample,
+            "last_sample": last_sample
+        },
         "first_le_2": first_le_2,
         "effective_full": effective_full,
         "min_available_morning": min_available,
-        "exclude_reasons": exclude_reasons,
+        "included_in_first_low_summary": False,
+        "included_in_effective_full_summary": False,
     }
 
 
@@ -226,7 +189,7 @@ def main() -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     
-    excluded_dates = load_excluded_dates(args.exclude_dates)
+    latest_ts = max(r["t"] for r in records) if records else None
     
     by_date = {}
     for r in records:
@@ -238,40 +201,27 @@ def main() -> int:
     days = []
     first_low_times = []
     effective_full_times = []
-    exclusion_counts = {
-        "weekend": 0,
-        "holiday": 0,
-        "manual_exclude": 0,
-        "insufficient_morning_samples": 0,
-        "large_sample_gap": 0,
-        "no_low_threshold_observed": 0,
-        "no_effective_full_observed": 0,
-        "unknown_threshold_confidence": 0,
-    }
     
     for date_key in sorted(by_date.keys(), reverse=True):
-        day_data = process_day(by_date[date_key], excluded_dates)
+        day_data = process_day(by_date[date_key], args.target_name)
         if day_data:
             days.append(day_data)
-            has_any_exclusion = bool(day_data["exclude_reasons"])
             
-            for reason in day_data["exclude_reasons"]:
-                if reason in exclusion_counts:
-                    exclusion_counts[reason] += 1
+            weekday = day_data["weekday"]
+            if weekday >= 5:
+                continue
             
-            if day_data["first_le_2"]:
-                first_le_2 = day_data["first_le_2"]
+            first_le_2 = day_data["first_le_2"]
+            if first_le_2 and first_le_2["confidence"] in ("high", "medium"):
                 t = dt.datetime.fromisoformat(first_le_2["observed_at"])
                 time_mins = minutes_since_midnight(t)
-                if first_le_2["confidence"] in ("high", "medium"):
-                    if not has_any_exclusion and day_data["weekday"] < 5:
-                        first_low_times.append(time_mins)
-    
-    for day_data in days:
-        if day_data["effective_full"] and not day_data["exclude_reasons"]:
-            if day_data["weekday"] < 5:
-                t = dt.datetime.fromisoformat(day_data["effective_full"]["observed_at"])
-                effective_full_times.append(minutes_since_midnight(t))
+                first_low_times.append(time_mins)
+                day_data["included_in_first_low_summary"] = True
+            
+            effective_full = day_data["effective_full"]
+            if effective_full and first_le_2 and first_le_2["confidence"] in ("high", "medium"):
+                effective_full_times.append(minutes_since_midnight(dt.datetime.fromisoformat(effective_full["observed_at"])))
+                day_data["included_in_effective_full_summary"] = True
     
     first_low_summary = compute_quantiles(first_low_times)
     effective_full_summary = compute_quantiles(effective_full_times)
@@ -279,10 +229,24 @@ def main() -> int:
     output = {
         "schema_version": 2,
         "generated_at": dt.datetime.now(KST_TZ).isoformat(),
+        "target": args.target_name,
+        "source_latest_at": latest_ts.isoformat() if latest_ts else None,
+        "thresholds": {
+            "low": LOW_THRESHOLD,
+            "safe": SAFE_THRESHOLD,
+            "morning_start_hour": MORNING_START,
+            "morning_end_hour": MORNING_END,
+            "recovery_minutes": RECOVERY_MINUTES
+        },
+        "quality_policy": {
+            "min_morning_samples": MIN_SAMPLES_MORNING,
+            "max_allowed_gap_minutes": 25,
+            "minimum_valid_days_for_bands": MIN_VALID_DAYS,
+            "included_confidence": ["high", "medium"]
+        },
         "summary": {
             "first_low": first_low_summary,
             "effective_full": effective_full_summary,
-            "excluded_days": exclusion_counts,
         },
         "days": days,
     }

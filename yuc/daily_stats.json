@@ -1,32 +1,42 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-06-26T13:58:54.117024+09:00",
+  "generated_at": "2026-06-26T14:06:47.235233+09:00",
+  "target": "수지노외 공영주차장",
+  "source_latest_at": "2026-06-26T13:49:30+09:00",
+  "thresholds": {
+    "low": 2,
+    "safe": 5,
+    "morning_start_hour": 7,
+    "morning_end_hour": 11,
+    "recovery_minutes": 20
+  },
+  "quality_policy": {
+    "min_morning_samples": 3,
+    "max_allowed_gap_minutes": 25,
+    "minimum_valid_days_for_bands": 5,
+    "included_confidence": [
+      "high",
+      "medium"
+    ]
+  },
   "summary": {
     "first_low": {
-      "p10": 503,
-      "p25": 510,
-      "median": 522,
-      "p75": 533,
-      "p90": 540,
-      "included_days": 2
+      "p10": 519,
+      "p25": 524,
+      "median": 536,
+      "p75": 549,
+      "p90": 568,
+      "included_days": 32,
+      "minimum_required_days": 5
     },
     "effective_full": {
-      "p10": 508,
-      "p25": 522,
-      "median": 545,
+      "p10": 519,
+      "p25": 524,
+      "median": 536,
       "p75": 546,
-      "p90": 546,
-      "included_days": 3
-    },
-    "excluded_days": {
-      "weekend": 22,
-      "holiday": 0,
-      "manual_exclude": 3,
-      "insufficient_morning_samples": 0,
-      "large_sample_gap": 73,
-      "no_low_threshold_observed": 12,
-      "no_effective_full_observed": 12,
-      "unknown_threshold_confidence": 0
+      "p90": 570,
+      "included_days": 31,
+      "minimum_required_days": 5
     }
   },
   "days": [
@@ -34,6 +44,11 @@
       "date": "2026-06-26",
       "weekday": 4,
       "sample_count": 24,
+      "max_gap_minutes": 41.5,
+      "morning_coverage": {
+        "first_sample": "2026-06-26T07:09:05+09:00",
+        "last_sample": "2026-06-26T10:58:05+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-26T08:44:21+09:00",
         "interval_start": "2026-06-26T08:33:26+09:00",
@@ -43,18 +58,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-26T08:44:21+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-26T08:44:21+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-25",
       "weekday": 3,
       "sample_count": 22,
+      "max_gap_minutes": 36.4,
+      "morning_coverage": {
+        "first_sample": "2026-06-25T07:08:01+09:00",
+        "last_sample": "2026-06-25T10:44:46+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-25T08:57:08+09:00",
         "interval_start": "2026-06-25T08:49:08+09:00",
@@ -64,18 +82,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-25T08:57:08+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-25T08:57:08+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-24",
       "weekday": 2,
       "sample_count": 22,
+      "max_gap_minutes": 36.4,
+      "morning_coverage": {
+        "first_sample": "2026-06-24T07:20:09+09:00",
+        "last_sample": "2026-06-24T10:58:24+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-24T10:08:09+09:00",
         "interval_start": "2026-06-24T09:31:44+09:00",
@@ -85,18 +106,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-06-24T10:08:09+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-24T10:08:09+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-23",
       "weekday": 1,
       "sample_count": 19,
+      "max_gap_minutes": 36.5,
+      "morning_coverage": {
+        "first_sample": "2026-06-23T07:20:21+09:00",
+        "last_sample": "2026-06-23T10:57:45+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-23T09:31:49+09:00",
         "interval_start": "2026-06-23T08:58:15+09:00",
@@ -106,18 +130,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-06-23T09:31:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-23T09:31:49+09:00"
       },
       "min_available_morning": 1,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-22",
       "weekday": 0,
       "sample_count": 23,
+      "max_gap_minutes": 76.1,
+      "morning_coverage": {
+        "first_sample": "2026-06-22T07:08:02+09:00",
+        "last_sample": "2026-06-22T10:57:44+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-22T10:13:59+09:00",
         "interval_start": "2026-06-22T08:57:55+09:00",
@@ -127,32 +154,36 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-06-22T10:13:59+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-22T10:13:59+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-21",
       "weekday": 6,
       "sample_count": 22,
+      "max_gap_minutes": 36.4,
+      "morning_coverage": {
+        "first_sample": "2026-06-21T07:14:58+09:00",
+        "last_sample": "2026-06-21T10:50:08+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 3,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-20",
       "weekday": 5,
       "sample_count": 24,
+      "max_gap_minutes": 36.4,
+      "morning_coverage": {
+        "first_sample": "2026-06-20T07:08:37+09:00",
+        "last_sample": "2026-06-20T10:57:40+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-20T08:44:54+09:00",
         "interval_start": "2026-06-20T08:39:06+09:00",
@@ -162,19 +193,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-06-20T08:44:54+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-20T08:44:54+09:00"
       },
       "min_available_morning": 0,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-19",
       "weekday": 4,
       "sample_count": 19,
+      "max_gap_minutes": 43.1,
+      "morning_coverage": {
+        "first_sample": "2026-06-19T07:14:45+09:00",
+        "last_sample": "2026-06-19T10:57:49+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-19T08:44:24+09:00",
         "interval_start": "2026-06-19T08:38:52+09:00",
@@ -184,18 +217,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-06-19T08:44:24+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-19T08:44:24+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-18",
       "weekday": 3,
       "sample_count": 18,
+      "max_gap_minutes": 36.3,
+      "morning_coverage": {
+        "first_sample": "2026-06-18T07:08:56+09:00",
+        "last_sample": "2026-06-18T10:57:22+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-18T08:57:36+09:00",
         "interval_start": "2026-06-18T08:45:15+09:00",
@@ -205,18 +241,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-06-18T08:57:36+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-18T08:57:36+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-17",
       "weekday": 2,
       "sample_count": 24,
+      "max_gap_minutes": 70.0,
+      "morning_coverage": {
+        "first_sample": "2026-06-17T07:09:02+09:00",
+        "last_sample": "2026-06-17T10:49:13+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-17T10:27:48+09:00",
         "interval_start": "2026-06-17T10:20:53+09:00",
@@ -226,18 +265,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-17T10:27:48+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-17T10:27:48+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-16",
       "weekday": 1,
       "sample_count": 20,
+      "max_gap_minutes": 42.5,
+      "morning_coverage": {
+        "first_sample": "2026-06-16T07:08:05+09:00",
+        "last_sample": "2026-06-16T10:50:08+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-16T09:31:31+09:00",
         "interval_start": "2026-06-16T08:57:44+09:00",
@@ -247,18 +289,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-06-16T09:31:31+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-16T09:31:31+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-15",
       "weekday": 0,
       "sample_count": 20,
+      "max_gap_minutes": 83.8,
+      "morning_coverage": {
+        "first_sample": "2026-06-15T07:15:11+09:00",
+        "last_sample": "2026-06-15T10:57:47+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-15T08:44:21+09:00",
         "interval_start": "2026-06-15T08:33:59+09:00",
@@ -268,32 +313,36 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-15T08:44:21+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-15T08:44:21+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-14",
       "weekday": 6,
       "sample_count": 18,
+      "max_gap_minutes": 37.7,
+      "morning_coverage": {
+        "first_sample": "2026-06-14T07:09:27+09:00",
+        "last_sample": "2026-06-14T10:57:44+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 6,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-13",
       "weekday": 5,
       "sample_count": 22,
+      "max_gap_minutes": 36.5,
+      "morning_coverage": {
+        "first_sample": "2026-06-13T07:03:48+09:00",
+        "last_sample": "2026-06-13T10:57:37+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-13T08:20:03+09:00",
         "interval_start": "2026-06-13T08:14:45+09:00",
@@ -303,19 +352,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-06-13T08:20:03+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-13T08:20:03+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-12",
       "weekday": 4,
       "sample_count": 23,
+      "max_gap_minutes": 36.8,
+      "morning_coverage": {
+        "first_sample": "2026-06-12T07:08:26+09:00",
+        "last_sample": "2026-06-12T10:57:03+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-12T08:44:28+09:00",
         "interval_start": "2026-06-12T08:38:24+09:00",
@@ -325,31 +376,36 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-12T08:44:28+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-12T08:44:28+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-11",
       "weekday": 3,
       "sample_count": 22,
+      "max_gap_minutes": 42.4,
+      "morning_coverage": {
+        "first_sample": "2026-06-11T07:08:14+09:00",
+        "last_sample": "2026-06-11T10:49:35+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 5,
-      "exclude_reasons": [
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-10",
       "weekday": 2,
       "sample_count": 23,
+      "max_gap_minutes": 36.4,
+      "morning_coverage": {
+        "first_sample": "2026-06-10T07:08:33+09:00",
+        "last_sample": "2026-06-10T10:55:27+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-10T09:31:40+09:00",
         "interval_start": "2026-06-10T08:58:17+09:00",
@@ -359,18 +415,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-06-10T09:31:40+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-10T09:31:40+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-09",
       "weekday": 1,
       "sample_count": 24,
+      "max_gap_minutes": 41.6,
+      "morning_coverage": {
+        "first_sample": "2026-06-09T07:14:30+09:00",
+        "last_sample": "2026-06-09T10:57:52+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-09T08:43:59+09:00",
         "interval_start": "2026-06-09T08:38:07+09:00",
@@ -380,18 +439,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-06-09T08:43:59+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-09T08:43:59+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-08",
       "weekday": 0,
       "sample_count": 22,
+      "max_gap_minutes": 42.6,
+      "morning_coverage": {
+        "first_sample": "2026-06-08T07:08:03+09:00",
+        "last_sample": "2026-06-08T10:56:56+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-08T08:49:49+09:00",
         "interval_start": "2026-06-08T08:44:19+09:00",
@@ -401,18 +463,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-06-08T08:49:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-08T08:49:49+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-07",
       "weekday": 6,
       "sample_count": 21,
+      "max_gap_minutes": 70.7,
+      "morning_coverage": {
+        "first_sample": "2026-06-07T07:13:54+09:00",
+        "last_sample": "2026-06-07T10:58:21+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-07T10:08:02+09:00",
         "interval_start": "2026-06-07T08:57:23+09:00",
@@ -422,19 +487,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-06-07T10:08:02+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-07T10:08:02+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-06",
       "weekday": 5,
       "sample_count": 25,
+      "max_gap_minutes": 37.2,
+      "morning_coverage": {
+        "first_sample": "2026-06-06T07:09:19+09:00",
+        "last_sample": "2026-06-06T10:45:06+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-06T08:45:10+09:00",
         "interval_start": "2026-06-06T08:38:30+09:00",
@@ -444,20 +511,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-06T08:45:10+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-06T08:45:10+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "manual_exclude",
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-05",
       "weekday": 4,
       "sample_count": 20,
+      "max_gap_minutes": 36.9,
+      "morning_coverage": {
+        "first_sample": "2026-06-05T07:13:58+09:00",
+        "last_sample": "2026-06-05T10:57:24+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-05T08:33:30+09:00",
         "interval_start": "2026-06-05T08:14:54+09:00",
@@ -467,18 +535,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-06-05T08:33:30+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-05T08:33:30+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-04",
       "weekday": 3,
       "sample_count": 22,
+      "max_gap_minutes": 69.1,
+      "morning_coverage": {
+        "first_sample": "2026-06-04T07:08:39+09:00",
+        "last_sample": "2026-06-04T10:57:07+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-04T08:44:18+09:00",
         "interval_start": "2026-06-04T08:39:13+09:00",
@@ -488,18 +559,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-06-04T08:44:18+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-04T08:44:18+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-03",
       "weekday": 2,
       "sample_count": 20,
+      "max_gap_minutes": 36.7,
+      "morning_coverage": {
+        "first_sample": "2026-06-03T07:06:39+09:00",
+        "last_sample": "2026-06-03T10:56:57+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-03T08:57:35+09:00",
         "interval_start": "2026-06-03T08:49:01+09:00",
@@ -509,18 +583,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-03T08:57:35+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-03T08:57:35+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-06-02",
       "weekday": 1,
       "sample_count": 17,
+      "max_gap_minutes": 48.0,
+      "morning_coverage": {
+        "first_sample": "2026-06-02T07:14:08+09:00",
+        "last_sample": "2026-06-02T10:49:49+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-02T08:45:49+09:00",
         "interval_start": "2026-06-02T08:27:59+09:00",
@@ -530,18 +607,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-06-02T08:45:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-02T08:45:49+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-06-01",
       "weekday": 0,
       "sample_count": 20,
+      "max_gap_minutes": 42.7,
+      "morning_coverage": {
+        "first_sample": "2026-06-01T07:09:05+09:00",
+        "last_sample": "2026-06-01T10:45:04+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-06-01T08:39:02+09:00",
         "interval_start": "2026-06-01T08:32:52+09:00",
@@ -551,18 +631,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-06-01T08:39:02+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-06-01T08:39:02+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-31",
       "weekday": 6,
       "sample_count": 21,
+      "max_gap_minutes": 36.0,
+      "morning_coverage": {
+        "first_sample": "2026-05-31T07:08:00+09:00",
+        "last_sample": "2026-05-31T10:45:02+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-31T10:08:32+09:00",
         "interval_start": "2026-05-31T09:32:32+09:00",
@@ -572,19 +655,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-05-31T10:08:32+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-31T10:08:32+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-30",
       "weekday": 5,
       "sample_count": 19,
+      "max_gap_minutes": 72.0,
+      "morning_coverage": {
+        "first_sample": "2026-05-30T07:15:21+09:00",
+        "last_sample": "2026-05-30T10:56:55+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-30T07:15:21+09:00",
         "interval_start": "2026-05-30T07:15:21+09:00",
@@ -594,19 +679,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-05-30T07:15:21+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-30T07:15:21+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-29",
       "weekday": 4,
       "sample_count": 3,
+      "max_gap_minutes": 65.3,
+      "morning_coverage": {
+        "first_sample": "2026-05-29T09:01:45+09:00",
+        "last_sample": "2026-05-29T10:08:15+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-29T09:01:45+09:00",
         "interval_start": "2026-05-29T09:01:45+09:00",
@@ -616,18 +703,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-05-29T09:01:45+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-29T09:01:45+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-28",
       "weekday": 3,
       "sample_count": 14,
+      "max_gap_minutes": 71.0,
+      "morning_coverage": {
+        "first_sample": "2026-05-28T07:08:11+09:00",
+        "last_sample": "2026-05-28T10:33:15+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-28T09:02:33+09:00",
         "interval_start": "2026-05-28T08:44:11+09:00",
@@ -637,18 +727,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-28T09:02:33+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-28T09:02:33+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-27",
       "weekday": 2,
       "sample_count": 20,
+      "max_gap_minutes": 41.8,
+      "morning_coverage": {
+        "first_sample": "2026-05-27T07:07:38+09:00",
+        "last_sample": "2026-05-27T10:44:18+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-27T10:14:05+09:00",
         "interval_start": "2026-05-27T10:07:28+09:00",
@@ -658,18 +751,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-05-27T10:14:05+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-27T10:14:05+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-26",
       "weekday": 1,
       "sample_count": 19,
+      "max_gap_minutes": 18.3,
+      "morning_coverage": {
+        "first_sample": "2026-05-26T07:03:36+09:00",
+        "last_sample": "2026-05-26T09:18:51+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-26T09:05:57+09:00",
         "interval_start": "2026-05-26T09:04:56+09:00",
@@ -679,43 +775,51 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-05-26T09:05:57+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-26T09:05:57+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": []
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-25",
       "weekday": 0,
       "sample_count": 12,
+      "max_gap_minutes": 48.8,
+      "morning_coverage": {
+        "first_sample": "2026-05-25T07:27:03+09:00",
+        "last_sample": "2026-05-25T10:56:49+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 6,
-      "exclude_reasons": [
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-24",
       "weekday": 6,
       "sample_count": 10,
+      "max_gap_minutes": 48.6,
+      "morning_coverage": {
+        "first_sample": "2026-05-24T07:38:14+09:00",
+        "last_sample": "2026-05-24T10:56:53+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 5,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-23",
       "weekday": 5,
       "sample_count": 9,
+      "max_gap_minutes": 23.4,
+      "morning_coverage": {
+        "first_sample": "2026-05-23T07:32:59+09:00",
+        "last_sample": "2026-05-23T09:09:39+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-23T08:19:22+09:00",
         "interval_start": "2026-05-23T08:14:15+09:00",
@@ -725,18 +829,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-05-23T08:19:22+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-23T08:19:22+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-22",
       "weekday": 4,
       "sample_count": 12,
+      "max_gap_minutes": 78.9,
+      "morning_coverage": {
+        "first_sample": "2026-05-22T07:07:47+09:00",
+        "last_sample": "2026-05-22T10:48:58+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-22T08:56:48+09:00",
         "interval_start": "2026-05-22T08:49:11+09:00",
@@ -746,18 +853,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-05-22T08:56:48+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-22T08:56:48+09:00"
       },
       "min_available_morning": 1,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-21",
       "weekday": 3,
       "sample_count": 7,
+      "max_gap_minutes": 47.7,
+      "morning_coverage": {
+        "first_sample": "2026-05-21T07:19:45+09:00",
+        "last_sample": "2026-05-21T08:57:05+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-21T08:57:05+09:00",
         "interval_start": "2026-05-21T08:49:16+09:00",
@@ -767,18 +877,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-05-21T08:57:05+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-21T08:57:05+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-20",
       "weekday": 2,
       "sample_count": 17,
+      "max_gap_minutes": 37.8,
+      "morning_coverage": {
+        "first_sample": "2026-05-20T07:10:29+09:00",
+        "last_sample": "2026-05-20T10:57:14+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-20T09:17:56+09:00",
         "interval_start": "2026-05-20T09:12:47+09:00",
@@ -788,18 +901,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-05-20T09:17:56+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-20T09:17:56+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-19",
       "weekday": 1,
       "sample_count": 18,
+      "max_gap_minutes": 48.0,
+      "morning_coverage": {
+        "first_sample": "2026-05-19T07:07:44+09:00",
+        "last_sample": "2026-05-19T10:57:20+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-19T08:43:36+09:00",
         "interval_start": "2026-05-19T08:33:07+09:00",
@@ -809,18 +925,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-05-19T08:43:36+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-19T08:43:36+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-18",
       "weekday": 0,
       "sample_count": 17,
+      "max_gap_minutes": 56.1,
+      "morning_coverage": {
+        "first_sample": "2026-05-18T07:13:21+09:00",
+        "last_sample": "2026-05-18T10:56:59+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-18T10:14:04+09:00",
         "interval_start": "2026-05-18T09:17:55+09:00",
@@ -830,32 +949,36 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-05-18T10:14:04+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-18T10:14:04+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-17",
       "weekday": 6,
       "sample_count": 15,
+      "max_gap_minutes": 41.2,
+      "morning_coverage": {
+        "first_sample": "2026-05-17T07:08:01+09:00",
+        "last_sample": "2026-05-17T10:57:00+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 5,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-16",
       "weekday": 5,
       "sample_count": 11,
+      "max_gap_minutes": 23.9,
+      "morning_coverage": {
+        "first_sample": "2026-05-16T07:13:54+09:00",
+        "last_sample": "2026-05-16T09:01:54+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-16T09:01:54+09:00",
         "interval_start": "2026-05-16T08:38:03+09:00",
@@ -865,18 +988,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-16T09:01:54+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-16T09:01:54+09:00"
       },
       "min_available_morning": 1,
-      "exclude_reasons": [
-        "weekend"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-15",
       "weekday": 4,
       "sample_count": 10,
+      "max_gap_minutes": 23.3,
+      "morning_coverage": {
+        "first_sample": "2026-05-15T07:03:43+09:00",
+        "last_sample": "2026-05-15T09:01:47+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-15T08:19:24+09:00",
         "interval_start": "2026-05-15T08:08:00+09:00",
@@ -886,16 +1012,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-05-15T08:19:24+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-15T08:19:24+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": []
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-14",
       "weekday": 3,
       "sample_count": 13,
+      "max_gap_minutes": 108.3,
+      "morning_coverage": {
+        "first_sample": "2026-05-14T07:08:12+09:00",
+        "last_sample": "2026-05-14T10:57:16+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-14T08:49:23+09:00",
         "interval_start": "2026-05-14T08:43:37+09:00",
@@ -905,18 +1036,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-05-14T08:49:23+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-14T08:49:23+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-13",
       "weekday": 2,
       "sample_count": 16,
+      "max_gap_minutes": 67.6,
+      "morning_coverage": {
+        "first_sample": "2026-05-13T07:13:42+09:00",
+        "last_sample": "2026-05-13T10:56:51+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-13T09:19:02+09:00",
         "interval_start": "2026-05-13T09:17:02+09:00",
@@ -926,18 +1060,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-05-13T09:19:02+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-13T09:19:02+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-12",
       "weekday": 1,
       "sample_count": 13,
+      "max_gap_minutes": 23.2,
+      "morning_coverage": {
+        "first_sample": "2026-05-12T07:08:06+09:00",
+        "last_sample": "2026-05-12T09:29:38+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-12T09:07:38+09:00",
         "interval_start": "2026-05-12T08:49:10+09:00",
@@ -947,16 +1084,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-12T09:07:38+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-12T09:07:38+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": []
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-11",
       "weekday": 0,
       "sample_count": 14,
+      "max_gap_minutes": 65.9,
+      "morning_coverage": {
+        "first_sample": "2026-05-11T07:13:48+09:00",
+        "last_sample": "2026-05-11T10:27:15+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-11T09:08:28+09:00",
         "interval_start": "2026-05-11T09:07:50+09:00",
@@ -966,18 +1108,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-05-11T09:08:28+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-11T09:08:28+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-05-10",
       "weekday": 6,
       "sample_count": 14,
+      "max_gap_minutes": 39.0,
+      "morning_coverage": {
+        "first_sample": "2026-05-10T07:08:21+09:00",
+        "last_sample": "2026-05-10T10:37:40+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-10T10:37:40+09:00",
         "interval_start": "2026-05-10T10:13:37+09:00",
@@ -987,19 +1132,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-10T10:37:40+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-10T10:37:40+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-09",
       "weekday": 5,
       "sample_count": 15,
+      "max_gap_minutes": 42.2,
+      "morning_coverage": {
+        "first_sample": "2026-05-09T07:07:39+09:00",
+        "last_sample": "2026-05-09T10:57:01+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-09T08:48:39+09:00",
         "interval_start": "2026-05-09T08:37:30+09:00",
@@ -1009,19 +1156,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-05-09T08:48:39+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-09T08:48:39+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-08",
       "weekday": 4,
       "sample_count": 16,
+      "max_gap_minutes": 48.1,
+      "morning_coverage": {
+        "first_sample": "2026-05-08T07:07:43+09:00",
+        "last_sample": "2026-05-08T10:56:37+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-08T10:26:51+09:00",
         "interval_start": "2026-05-08T10:13:37+09:00",
@@ -1031,31 +1180,36 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-08T10:26:51+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-08T10:26:51+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-07",
       "weekday": 3,
       "sample_count": 11,
+      "max_gap_minutes": 71.2,
+      "morning_coverage": {
+        "first_sample": "2026-05-07T07:32:54+09:00",
+        "last_sample": "2026-05-07T10:48:58+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 3,
-      "exclude_reasons": [
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-06",
       "weekday": 2,
       "sample_count": 15,
+      "max_gap_minutes": 43.8,
+      "morning_coverage": {
+        "first_sample": "2026-05-06T07:08:08+09:00",
+        "last_sample": "2026-05-06T10:56:27+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-06T09:30:01+09:00",
         "interval_start": "2026-05-06T09:01:52+09:00",
@@ -1065,32 +1219,36 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-05-06T09:30:01+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-06T09:30:01+09:00"
       },
       "min_available_morning": 1,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-05",
       "weekday": 1,
       "sample_count": 12,
+      "max_gap_minutes": 55.7,
+      "morning_coverage": {
+        "first_sample": "2026-05-05T07:05:32+09:00",
+        "last_sample": "2026-05-05T10:44:01+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 9,
-      "exclude_reasons": [
-        "manual_exclude",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-04",
       "weekday": 0,
       "sample_count": 9,
+      "max_gap_minutes": 104.3,
+      "morning_coverage": {
+        "first_sample": "2026-05-04T07:26:30+09:00",
+        "last_sample": "2026-05-04T10:56:57+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-04T08:57:21+09:00",
         "interval_start": "2026-05-04T08:32:43+09:00",
@@ -1100,32 +1258,36 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-04T08:57:21+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-04T08:57:21+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-03",
       "weekday": 6,
       "sample_count": 14,
+      "max_gap_minutes": 58.5,
+      "morning_coverage": {
+        "first_sample": "2026-05-03T07:34:12+09:00",
+        "last_sample": "2026-05-03T10:33:26+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 9,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-02",
       "weekday": 5,
       "sample_count": 10,
+      "max_gap_minutes": 52.1,
+      "morning_coverage": {
+        "first_sample": "2026-05-02T07:14:16+09:00",
+        "last_sample": "2026-05-02T10:43:24+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-05-02T08:37:46+09:00",
         "interval_start": "2026-05-02T08:14:28+09:00",
@@ -1135,33 +1297,36 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-05-02T08:37:46+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-05-02T08:37:46+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-05-01",
       "weekday": 4,
       "sample_count": 12,
+      "max_gap_minutes": 70.7,
+      "morning_coverage": {
+        "first_sample": "2026-05-01T07:07:53+09:00",
+        "last_sample": "2026-05-01T10:57:11+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 4,
-      "exclude_reasons": [
-        "manual_exclude",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-30",
       "weekday": 3,
       "sample_count": 13,
+      "max_gap_minutes": 42.2,
+      "morning_coverage": {
+        "first_sample": "2026-04-30T07:13:37+09:00",
+        "last_sample": "2026-04-30T10:08:08+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-30T08:48:49+09:00",
         "interval_start": "2026-04-30T08:44:28+09:00",
@@ -1171,18 +1336,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-04-30T08:48:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-30T08:48:49+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-29",
       "weekday": 2,
       "sample_count": 12,
+      "max_gap_minutes": 48.6,
+      "morning_coverage": {
+        "first_sample": "2026-04-29T07:03:25+09:00",
+        "last_sample": "2026-04-29T10:37:57+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-29T09:14:52+09:00",
         "interval_start": "2026-04-29T09:06:59+09:00",
@@ -1191,19 +1359,20 @@
         "available": 2,
         "confidence": "medium"
       },
-      "effective_full": {
-        "observed_at": "2026-04-29T09:14:52+09:00",
-        "reason": "recovered"
-      },
+      "effective_full": null,
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-28",
       "weekday": 1,
       "sample_count": 15,
+      "max_gap_minutes": 40.8,
+      "morning_coverage": {
+        "first_sample": "2026-04-28T07:08:18+09:00",
+        "last_sample": "2026-04-28T10:48:51+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-28T10:07:44+09:00",
         "interval_start": "2026-04-28T09:26:55+09:00",
@@ -1213,18 +1382,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-04-28T10:07:44+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-28T10:07:44+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-27",
       "weekday": 0,
       "sample_count": 17,
+      "max_gap_minutes": 54.1,
+      "morning_coverage": {
+        "first_sample": "2026-04-27T07:19:51+09:00",
+        "last_sample": "2026-04-27T10:57:23+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-27T08:49:18+09:00",
         "interval_start": "2026-04-27T08:43:49+09:00",
@@ -1234,32 +1406,36 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-04-27T08:49:18+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-27T08:49:18+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-26",
       "weekday": 6,
       "sample_count": 18,
+      "max_gap_minutes": 40.4,
+      "morning_coverage": {
+        "first_sample": "2026-04-26T07:29:35+09:00",
+        "last_sample": "2026-04-26T10:48:34+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 6,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-25",
       "weekday": 5,
       "sample_count": 15,
+      "max_gap_minutes": 43.1,
+      "morning_coverage": {
+        "first_sample": "2026-04-25T07:07:23+09:00",
+        "last_sample": "2026-04-25T10:51:59+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-25T08:56:47+09:00",
         "interval_start": "2026-04-25T08:43:59+09:00",
@@ -1269,19 +1445,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-04-25T08:56:47+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-25T08:56:47+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-24",
       "weekday": 4,
       "sample_count": 17,
+      "max_gap_minutes": 43.8,
+      "morning_coverage": {
+        "first_sample": "2026-04-24T07:20:30+09:00",
+        "last_sample": "2026-04-24T10:57:12+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-24T09:30:13+09:00",
         "interval_start": "2026-04-24T09:22:02+09:00",
@@ -1291,18 +1469,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-04-24T09:30:13+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-24T09:30:13+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-23",
       "weekday": 3,
       "sample_count": 18,
+      "max_gap_minutes": 36.8,
+      "morning_coverage": {
+        "first_sample": "2026-04-23T07:07:49+09:00",
+        "last_sample": "2026-04-23T10:44:21+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-23T08:57:32+09:00",
         "interval_start": "2026-04-23T08:48:59+09:00",
@@ -1312,18 +1493,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-04-23T08:57:32+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-23T08:57:32+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-22",
       "weekday": 2,
       "sample_count": 18,
+      "max_gap_minutes": 38.6,
+      "morning_coverage": {
+        "first_sample": "2026-04-22T07:27:21+09:00",
+        "last_sample": "2026-04-22T10:27:22+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-22T09:03:49+09:00",
         "interval_start": "2026-04-22T08:48:58+09:00",
@@ -1333,18 +1517,21 @@
         "confidence": "low"
       },
       "effective_full": {
-        "observed_at": "2026-04-22T09:03:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-22T09:03:49+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-21",
       "weekday": 1,
       "sample_count": 10,
+      "max_gap_minutes": 120.4,
+      "morning_coverage": {
+        "first_sample": "2026-04-21T07:14:07+09:00",
+        "last_sample": "2026-04-21T10:57:18+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-21T08:48:39+09:00",
         "interval_start": "2026-04-21T08:20:00+09:00",
@@ -1354,18 +1541,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-04-21T08:48:39+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-21T08:48:39+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-20",
       "weekday": 0,
       "sample_count": 10,
+      "max_gap_minutes": 32.8,
+      "morning_coverage": {
+        "first_sample": "2026-04-20T07:08:23+09:00",
+        "last_sample": "2026-04-20T09:17:52+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-20T08:38:08+09:00",
         "interval_start": "2026-04-20T08:32:43+09:00",
@@ -1375,32 +1565,36 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-04-20T08:38:08+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-20T08:38:08+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-19",
       "weekday": 6,
       "sample_count": 13,
+      "max_gap_minutes": 65.8,
+      "morning_coverage": {
+        "first_sample": "2026-04-19T07:20:15+09:00",
+        "last_sample": "2026-04-19T10:44:18+09:00"
+      },
       "first_le_2": null,
       "effective_full": null,
       "min_available_morning": 3,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap",
-        "no_low_threshold_observed",
-        "no_effective_full_observed"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-18",
       "weekday": 5,
       "sample_count": 11,
+      "max_gap_minutes": 71.5,
+      "morning_coverage": {
+        "first_sample": "2026-04-18T07:14:25+09:00",
+        "last_sample": "2026-04-18T10:27:32+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-18T09:02:03+09:00",
         "interval_start": "2026-04-18T08:56:39+09:00",
@@ -1410,19 +1604,21 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-04-18T09:02:03+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-18T09:02:03+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-17",
       "weekday": 4,
       "sample_count": 16,
+      "max_gap_minutes": 64.2,
+      "morning_coverage": {
+        "first_sample": "2026-04-17T07:19:55+09:00",
+        "last_sample": "2026-04-17T10:57:04+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-17T09:03:50+09:00",
         "interval_start": "2026-04-17T08:56:40+09:00",
@@ -1432,18 +1628,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-04-17T09:03:50+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-17T09:03:50+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-16",
       "weekday": 3,
       "sample_count": 15,
+      "max_gap_minutes": 43.1,
+      "morning_coverage": {
+        "first_sample": "2026-04-16T07:14:27+09:00",
+        "last_sample": "2026-04-16T10:56:40+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-16T08:38:46+09:00",
         "interval_start": "2026-04-16T08:27:29+09:00",
@@ -1453,18 +1652,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-04-16T08:38:46+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-16T08:38:46+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-15",
       "weekday": 2,
       "sample_count": 11,
+      "max_gap_minutes": 40.9,
+      "morning_coverage": {
+        "first_sample": "2026-04-15T07:08:02+09:00",
+        "last_sample": "2026-04-15T10:48:39+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-15T10:19:42+09:00",
         "interval_start": "2026-04-15T10:07:43+09:00",
@@ -1474,18 +1676,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-04-15T10:19:42+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-15T10:19:42+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-14",
       "weekday": 1,
       "sample_count": 14,
+      "max_gap_minutes": 55.6,
+      "morning_coverage": {
+        "first_sample": "2026-04-14T07:07:48+09:00",
+        "last_sample": "2026-04-14T10:57:29+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-14T09:25:49+09:00",
         "interval_start": "2026-04-14T08:49:32+09:00",
@@ -1495,18 +1700,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-04-14T09:25:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-14T09:25:49+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-13",
       "weekday": 0,
       "sample_count": 13,
+      "max_gap_minutes": 43.9,
+      "morning_coverage": {
+        "first_sample": "2026-04-13T07:08:18+09:00",
+        "last_sample": "2026-04-13T10:44:08+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-13T09:12:49+09:00",
         "interval_start": "2026-04-13T09:02:47+09:00",
@@ -1516,18 +1724,21 @@
         "confidence": "medium"
       },
       "effective_full": {
-        "observed_at": "2026-04-13T09:12:49+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-13T09:12:49+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-04-12",
       "weekday": 6,
       "sample_count": 16,
+      "max_gap_minutes": 48.1,
+      "morning_coverage": {
+        "first_sample": "2026-04-12T07:14:14+09:00",
+        "last_sample": "2026-04-12T10:19:58+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-12T10:19:58+09:00",
         "interval_start": "2026-04-12T09:31:50+09:00",
@@ -1537,19 +1748,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-04-12T10:19:58+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-12T10:19:58+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-11",
       "weekday": 5,
       "sample_count": 14,
+      "max_gap_minutes": 48.7,
+      "morning_coverage": {
+        "first_sample": "2026-04-11T07:13:58+09:00",
+        "last_sample": "2026-04-11T10:19:55+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-11T10:19:55+09:00",
         "interval_start": "2026-04-11T09:31:15+09:00",
@@ -1559,19 +1772,21 @@
         "confidence": "unknown"
       },
       "effective_full": {
-        "observed_at": "2026-04-11T10:19:55+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-11T10:19:55+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "weekend",
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": false,
+      "included_in_effective_full_summary": false
     },
     {
       "date": "2026-04-10",
       "weekday": 4,
       "sample_count": 21,
+      "max_gap_minutes": 62.4,
+      "morning_coverage": {
+        "first_sample": "2026-04-10T07:14:03+09:00",
+        "last_sample": "2026-04-10T10:48:44+09:00"
+      },
       "first_le_2": {
         "observed_at": "2026-04-10T09:02:41+09:00",
         "interval_start": "2026-04-10T08:56:56+09:00",
@@ -1581,13 +1796,11 @@
         "confidence": "high"
       },
       "effective_full": {
-        "observed_at": "2026-04-10T09:02:41+09:00",
-        "reason": "first_low_no_recovery"
+        "observed_at": "2026-04-10T09:02:41+09:00"
       },
       "min_available_morning": 2,
-      "exclude_reasons": [
-        "large_sample_gap"
-      ]
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     }
   ]
 }

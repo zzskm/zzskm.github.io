@@ -4,12 +4,10 @@ on:
   workflow_dispatch:
   schedule:
     # KST 07:30-09:59: every 5-10 min during morning rush
-    # UTC 22:30=07:30, UTC 00:59=09:59
-    - cron: "0,5,10,15,20,25,30,35,40,45,50,55 22 * * *"
+    # UTC+9: 22:30=07:30, 00:59=09:59
+    - cron: "30,35,40,45,50,55 22 * * *"
     - cron: "0,10,20,30,40,50 23 * * *"
     - cron: "0,10,20,30,40,50 0 * * *"
-    # KST 18:00-20:00: evening commuters
-    - cron: "0,10,20,30,40,50 9,10 * * *"
     # Other hours: hourly, avoiding exact hour
     - cron: "23 1-8,12-21 * * *"
 
@@ -79,7 +77,7 @@ jobs:
           python yuc/scripts/build_stats.py \
             --input-csv yuc/parking_log.csv \
             --output-json yuc/daily_stats.json \
-            --exclude-dates yuc/excluded_dates.txt || echo "Stats generation skipped"
+            --target-name "수지노외 공영주차장"
 
       - name: Upload artifacts
         if: always()
