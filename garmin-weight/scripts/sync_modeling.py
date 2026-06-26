@@ -781,6 +781,24 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
     previous_weight: float | None = None
     measured_dates = 0
     total_dates = total_days
+
+    recent_measured_weights: list[float] = []
+    for row in last_n:
+        w = row.get("weight_kg")
+        if w is not None:
+            recent_measured_weights.append(float(w))
+
+    diffs: list[float] = []
+    for i in range(1, len(recent_measured_weights)):
+        diffs.append(abs(recent_measured_weights[i] - recent_measured_weights[i - 1]))
+
+    adaptive_delta = outlier_delta_kg
+    if len(diffs) >= 3:
+        mean_diff = sum(diffs) / len(diffs)
+        variance = sum((d - mean_diff) ** 2 for d in diffs) / len(diffs)
+        std_diff = variance ** 0.5
+        adaptive_delta = max(outlier_delta_kg, std_diff * 2)
+
     for row in rows:
         weight = row.get("weight_kg")
         if weight is None:
@@ -789,7 +807,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
         else:
             current_streak = 0
             measured_dates += 1
-            if previous_weight is not None and abs(weight - previous_weight) >= outlier_delta_kg:
+            if previous_weight is not None and abs(weight - previous_weight) >= adaptive_delta:
                 outlier_candidates += 1
             previous_weight = weight
 

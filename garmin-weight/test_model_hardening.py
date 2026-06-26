@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 from scripts.sync_modeling import (
     apply_model_selection_gate,
+    compute_candidate_prediction,
     data_quality_diagnostics,
     model_trend_exposure,
     nearest_actual_for_backtest,
@@ -27,7 +28,7 @@ def test_data_quality_flags_low_coverage_and_streak():
 
 
 def test_candidate_predictions_include_regression_candidates():
-    dates = [date(2026, 5, 1) + timedelta(days=i).isoformat() for i in range(60)]
+    dates = [(date(2026, 5, 1) + timedelta(days=i)).isoformat() for i in range(60)]
     values = [80.0 + i * 0.01 for i in range(60)]
     cutoff_dates = dates[:40]
     cutoff_values = values[:40]

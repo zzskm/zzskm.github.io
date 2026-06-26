@@ -135,8 +135,6 @@
 
   function applyConfidenceMode(summary) {
     const low = isLowConfidence(summary);
-    const app = document.querySelector('.app');
-    if (app) app.classList.toggle('is-low-confidence', low);
     if (low) setPredictionVisibility(false);
   }
 
@@ -301,5 +299,6 @@
     renderModelExplanation(event.detail.summary);
     renderSummaryMode(event.detail.summary);
     renderDetails(event.detail.summary);
+    if (typeof renderModelStrip === 'function') renderModelStrip(event.detail.summary);
   });
 })();
