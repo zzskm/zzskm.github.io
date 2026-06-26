@@ -150,10 +150,11 @@ def process_day(records: list[dict], target_name: str) -> Optional[dict]:
             
             recovery_found = False
             for j in range(i + 1, len(morning_records)):
+                elapsed = (morning_records[j]["t"] - r["t"]).total_seconds() / 60
+                if elapsed > RECOVERY_MINUTES:
+                    break
                 if morning_records[j]["available"] >= SAFE_THRESHOLD:
                     recovery_found = True
-                    break
-                if (morning_records[j]["t"] - r["t"]).total_seconds() > RECOVERY_MINUTES * 60:
                     break
             
             if not recovery_found:
@@ -209,6 +210,10 @@ def main() -> int:
             
             weekday = day_data["weekday"]
             if weekday >= 5:
+                continue
+            
+            max_gap = day_data["max_gap_minutes"] or 0
+            if max_gap > 25:
                 continue
             
             first_le_2 = day_data["first_le_2"]
