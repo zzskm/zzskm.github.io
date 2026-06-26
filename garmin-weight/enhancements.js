@@ -208,8 +208,18 @@
     });
 
     audit.innerHTML = `
-      <p class="label">모델 검증</p>
-      <p class="model-audit-main" style="margin:6px 0 0;color:var(--ink);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;text-transform:uppercase;letter-spacing:0.03em;">${parts.join(' · ')}</p>
+      <p class="audit-label">모델 검증</p>
+      <div class="model-audit-grid">
+        <div class="audit-cell">
+          <p class="audit-value">${parts[0]}</p>
+        </div>
+        <div class="audit-cell">
+          <p class="audit-value">${parts[1]}</p>
+        </div>
+        <div class="audit-cell">
+          <p class="audit-value">${parts[2]}</p>
+        </div>
+      </div>
     `;
   }
 
