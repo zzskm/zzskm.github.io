@@ -267,7 +267,7 @@
       const outliers = dq.outlierCandidates ?? 0;
       const variancePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
       const outlierLevel = outliers <= 3 ? '낮음' : (outliers <= 8 ? '중간' : '높음');
-      const varianceLevel = variancePct >= 80 ? '낮음' : (variancePct >= 50 ? '중간' : '높음');
+      const varianceLevel = variancePct >= 80 ? '좋음' : (variancePct >= 50 ? '보통' : '부족');
       const outlierWidth = Math.max(0, Math.min(100, outliers * 10));
       const varianceWidth = Math.max(0, Math.min(100, variancePct));
       detailQuality.innerHTML = `
@@ -292,7 +292,7 @@
     const kcal = diag.kcalPerKg;
     const src = diag.kcalPerKgSource;
     const detailMetabolic = $('detailMetabolic');
-    if (detailMetabolic) detailMetabolic.innerHTML = `<p>감량 반응: ${Number.isFinite(eff) ? (eff < 0.7 ? '천천히' : '안정적') : '–'}</p><p>1kg 변화 기준: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}</p><p>${calib.interpretation || ''}</p>`;
+    if (detailMetabolic) detailMetabolic.innerHTML = `<p>감량 반응: ${Number.isFinite(eff) ? (eff < 0.7 ? '운동 대비 변화 느림' : '운동 대비 변화 안정적') : '–'}</p><p>1kg 변화 기준: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}</p><p>${calib.interpretation || ''}</p>`;
 
     const detailMae = $('detailMae');
     if (detailMae) {

@@ -195,6 +195,9 @@ body {
 .detail-row-accent {
   color: var(--accent);
 }
+.detail-row-accent .detail-row-value {
+  color: var(--accent);
+}
 
 /* ====================== BOTTOM PANELS GRID ====================== */
 .panels-grid {
@@ -963,7 +966,7 @@ body {
   gap: 12px;
   margin-top: 12px;
 }
-@media (max-width: 520px) {
+@media (max-width: 720px) {
   .model-audit-grid {
     grid-template-columns: 1fr;
   }
