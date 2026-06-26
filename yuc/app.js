@@ -4,8 +4,8 @@
   const AUTO_REFRESH_MS = 60 * 1000;
   const DEFAULT_CSV = "./parking_log.csv";
   const KST_TZ = "Asia/Seoul";
+  const MIN_VALID_DAYS = 5;
 
-  // ---------- utils ----------
   const fmtTimeLabel = new Intl.DateTimeFormat("ko-KR", {
     timeZone: KST_TZ, month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: 'h23'
@@ -46,7 +46,6 @@
     };
   }
 
-  // ---------- parse ----------
   function downsample(data, intervalMs = 5 * 60 * 1000) {
     if (data.length <= 100) return data;
     const out = [];
@@ -125,7 +124,6 @@
     };
   }
 
-  // ---------- chart ----------
   function fmtXTick(d, endDate) {
     if (d.getTime() === endDate.getTime()) return "24:00";
     return d3.timeFormat("%H:%M")(d);
@@ -147,6 +145,7 @@
     g.append("g").attr("class", "lines");
     g.append("g").attr("class", "end-marks");
     g.append("g").attr("class", "legend");
+    g.append("g").attr("class", "bands");
 
     d3.select("body").selectAll(".tooltip").remove();
     const tooltip = d3.select("body").append("div")
@@ -161,7 +160,7 @@
     return { container, svg, g, tooltip };
   }
 
-  function renderChart(ctx, data) {
+  function renderChart(ctx, data, statsData) {
     const { container, svg, g, tooltip } = ctx;
     const { todayArr, yestArr, d7MinMax } = data;
 
@@ -210,7 +209,6 @@
     const area = d3.area().curve(d3.curveMonotoneX)
       .x(d => x(d.t)).y0(d => y(d.min)).y1(d => y(d.max));
 
-    // 7-day range area
     const areaSel = g.select(".areas").selectAll("path.area.d7range")
       .data(pD7.length ? [pD7] : []);
     areaSel.exit().remove();
@@ -222,7 +220,34 @@
       .merge(areaSel)
       .attr("d", area);
 
-    // Lines: yesterday (bg) then today (fg)
+    if (statsData && statsData.summary) {
+      const eff = statsData.summary.effective_full;
+      
+      if (eff && eff.median !== null && eff.included_days >= MIN_VALID_DAYS) {
+        const bandG = g.select(".bands");
+        
+        const p10 = eff.p10, p90 = eff.p90;
+        const median = eff.median;
+        
+        const bandArea = d3.area()
+          .x(d => x(new Date(baseDate.getTime() + d * 60000)))
+          .y0(height)
+          .y1(y(0));
+        
+        const bandData = [];
+        for (let m = p10; m <= p90; m++) {
+          bandData.push(m);
+        }
+        
+        bandG.selectAll("path.band-p10-p90").remove();
+        bandG.append("path")
+          .attr("class", "band-p10-p90")
+          .attr("d", bandArea(bandData))
+          .attr("fill", "var(--green)")
+          .attr("opacity", 0.1);
+      }
+    }
+
     const lineGroups = [
       { key: "어제", data: pYest, cls: "yesterday", colorVar: "var(--blue)", width: 1.5, opacity: 0.8 },
       { key: "오늘", data: pToday, cls: "today", colorVar: "var(--orange)", width: 4, opacity: 1 }
@@ -244,7 +269,6 @@
         .attr("d", line);
     });
 
-    // Today hover tooltip
     const todayPath = linesG.select("path.line.today");
     if (!todayPath.empty() && pToday.length) {
       const showAt = (event, d) => {
@@ -273,7 +297,6 @@
         .on("mouseout touchend", hide);
     }
 
-    // End label/dot for today
     const endG = g.select(".end-marks");
     const last = pToday.length ? pToday[pToday.length - 1] : null;
     const endLabelSel = endG.selectAll("text.end-label.today").data(last ? [last] : []);
@@ -300,7 +323,6 @@
       .attr("aria-label", d => `오늘 마지막 값: ${d.v} 대, 시간: ${fmtTimeOnly.format(d.t)}`)
       .attr("opacity", 0.95);
 
-    // Legend
     const legendItems = [
       { key: "오늘", cls: "today", colorVar: "var(--orange)", sw: 3, fill: "none", op: 1 },
       { key: "어제", cls: "yesterday", colorVar: "var(--blue)", sw: 1.5, fill: "none", op: 1 },
@@ -328,14 +350,59 @@
       .attr("opacity", d => d.op);
     itemAll.select("text").text(d => d.key);
 
-    // raise today on top
     linesG.select("path.line.today").raise();
     endG.selectAll(".end-label.today, .end-dot.today").raise();
   }
 
-  // ---------- loader + app ----------
+  function renderSummary(statsData) {
+    const panel = document.getElementById("summary-panel");
+    if (!panel) return;
+
+    if (!statsData || !statsData.summary) {
+      panel.innerHTML = "<div class='summary-empty'>통계 준비 중</div>";
+      return;
+    }
+
+    const summary = statsData.summary;
+    const eff = summary.effective_full;
+    const firstLow = summary.first_low;
+    const validDays = eff.included_days || firstLow.included_days || 0;
+
+    if (validDays < MIN_VALID_DAYS) {
+      panel.innerHTML = `<div class='summary-empty'>데이터 수집 중 (${validDays}/${MIN_VALID_DAYS}일)</div>`;
+      return;
+    }
+
+    const formatTime = (mins) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
+
+    const effMedian = eff.median !== null ? formatTime(eff.median) : "-";
+    const firstLowMedian = firstLow.median !== null ? formatTime(firstLow.median) : "-";
+
+    panel.innerHTML = `
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span class="label">평일 위험</span>
+          <span class="value">${effMedian}</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">초반 경보</span>
+          <span class="value">${firstLowMedian}</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">유효 데이터</span>
+          <span class="value">${validDays}일</span>
+        </div>
+      </div>
+    `;
+  }
+
   let chartCtx = null;
   let cachedData = null;
+  let statsData = null;
   let failCount = 0;
   let retryTimer = null;
 
@@ -344,31 +411,47 @@
     if (el) el.textContent = text;
   }
 
-  function buildStatusLine(data) {
+  function buildStatusLine(data, statsData) {
     const latest = data.latestT ? fmtTimeLabel.format(data.latestT) : "N/A";
-    return `${LOT_NAME} · 오늘 ${data.todayArr.length}개 · 어제 ${data.yestArr.length}개 · 7일 min-max ${data.d7MinMax.length}개 · 최신: ${latest}`;
+    let status = `${LOT_NAME} · 오늘 ${data.todayArr.length}개 · 최신: ${latest}`;
+    if (statsData && statsData.summary) {
+      const validDays = statsData.summary.effective_full.included_days || 0;
+      status += ` · 통계:${validDays}일`;
+    }
+    return status;
   }
 
-  async function loadAndRender(path = DEFAULT_CSV) {
+  async function loadAndRender() {
     try {
       if (!cachedData) setStatus("데이터 불러오는 중…");
-      const resp = await fetch(path, { cache: "no-store" });
-      if (!resp.ok) throw new Error(`CSV 로딩 실패: ${resp.status}`);
-      const text = await resp.text();
+      
+      const [csvRes, statsRes] = await Promise.allSettled([
+        fetch(DEFAULT_CSV, { cache: "no-store" }),
+        fetch("./daily_stats.json", { cache: "no-store" })
+      ]);
 
-      const data = parseCSV(text);
-      cachedData = data;
+      if (csvRes.status === "fulfilled" && csvRes.value.ok) {
+        const text = await csvRes.value.text();
+        const data = parseCSV(text);
+        cachedData = data;
+        renderChart(chartCtx, data, statsData);
+      }
+
+      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
+        statsData = await statsRes.value.json();
+        renderSummary(statsData);
+      } else {
+        renderSummary(null);
+      }
+
       failCount = 0;
-      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-
-      renderChart(chartCtx, data);
-      setStatus(buildStatusLine(data));
+      if (cachedData) setStatus(buildStatusLine(cachedData, statsData));
     } catch (e) {
       failCount += 1;
       console.error(e);
       setStatus(`로딩 실패(${failCount}): ${e.message} · 5초 후 재시도`);
       if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = setTimeout(() => loadAndRender(path), 5000);
+      retryTimer = setTimeout(() => loadAndRender(), 5000);
     }
   }
 
@@ -379,7 +462,6 @@
     const reloadBtn = document.getElementById("reloadBtn");
     reloadBtn && reloadBtn.addEventListener("click", () => loadAndRender());
 
-    // polling that respects tab visibility
     setInterval(() => {
       if (document.visibilityState === "visible") loadAndRender();
     }, AUTO_REFRESH_MS);
@@ -388,12 +470,10 @@
       if (document.visibilityState === "visible") loadAndRender();
     });
 
-    // resize re-renders from cache (no re-parse)
     window.addEventListener("resize", debounce(() => {
-      if (cachedData) renderChart(chartCtx, cachedData);
+      if (cachedData) renderChart(chartCtx, cachedData, statsData);
     }, 200));
 
-    // dismiss tooltip on outside tap (mobile)
     document.addEventListener("touchstart", (e) => {
       if (!chartEl.contains(e.target)) {
         chartCtx.tooltip.style("opacity", 0);
