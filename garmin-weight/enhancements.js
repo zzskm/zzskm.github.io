@@ -256,7 +256,7 @@
       return `<div class="windows-row${recent}"><span>${r.key}</span><span class="windows-bar-track"><span class="windows-bar-fill" style="width:${pct.toFixed(0)}%"></span></span><span class="windows-val">${sign}${Math.abs(r.v).toFixed(2)}</span></div>`;
     }).join('');
     const detailTrend = $('detailTrend');
-    if (detailTrend) detailTrend.innerHTML = trendBars ? `<div class="windows-bars">${trendBars}</div>` : '<p class="detail-note">Insufficient data</p>';
+    if (detailTrend) detailTrend.innerHTML = trendBars ? `<div class="windows-bars">${trendBars}</div>` : '<p class="detail-note">표본 부족</p>';
 
     const coverage = diagnostics.coverage || s.coverage || {};
     const confidence = diagnostics.confidence || {};
@@ -266,19 +266,19 @@
       const dq = diagnostics.dataQuality || {};
       const outliers = dq.outlierCandidates ?? 0;
       const variancePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
-      const outlierLevel = outliers <= 3 ? 'LOW' : (outliers <= 8 ? 'MED' : 'HIGH');
-      const varianceLevel = variancePct >= 80 ? 'LOW' : (variancePct >= 50 ? 'MED' : 'HIGH');
+      const outlierLevel = outliers <= 3 ? '낮음' : (outliers <= 8 ? '중간' : '높음');
+      const varianceLevel = variancePct >= 80 ? '낮음' : (variancePct >= 50 ? '중간' : '높음');
       const outlierWidth = Math.max(0, Math.min(100, outliers * 10));
       const varianceWidth = Math.max(0, Math.min(100, variancePct));
       detailQuality.innerHTML = `
         <div class="quality-section">
           <div class="quality-row">
-            <span class="quality-row-label">Noise</span>
+            <span class="quality-row-label">이상치</span>
             <div class="quality-bar-track"><span class="quality-bar-fill" style="width:${outlierWidth.toFixed(0)}%"></span></div>
             <span class="quality-val">${outlierLevel}${outliers > 0 ? ` ${outliers}` : ''}</span>
           </div>
           <div class="quality-row">
-            <span class="quality-row-label">Variance</span>
+            <span class="quality-row-label">측정률</span>
             <div class="quality-bar-track"><span class="quality-bar-fill quality-bar-fill--accent" style="width:${varianceWidth.toFixed(0)}%"></span></div>
             <span class="quality-val">${varianceLevel} ${variancePct.toFixed(0)}%</span>
           </div>
@@ -292,14 +292,14 @@
     const kcal = diag.kcalPerKg;
     const src = diag.kcalPerKgSource;
     const detailMetabolic = $('detailMetabolic');
-    if (detailMetabolic) detailMetabolic.innerHTML = `<p>Signal: ${Number.isFinite(eff) ? (eff < 0.7 ? 'Slow' : 'Standard') : '–'}</p><p>Signature: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}</p><p>${calib.interpretation || ''}</p>`;
+    if (detailMetabolic) detailMetabolic.innerHTML = `<p>감량 반응: ${Number.isFinite(eff) ? (eff < 0.7 ? '천천히' : '안정적') : '–'}</p><p>1kg 변화 기준: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}</p><p>${calib.interpretation || ''}</p>`;
 
     const detailMae = $('detailMae');
     if (detailMae) {
       const bt7 = diagnostics.backtest?.['7d'];
       const ciHitRate = s.predictionCI?.hitRate || {};
-      const ci7 = Number.isFinite(ciHitRate['7d']) ? `${Math.round(Number(ciHitRate['7d']) * 100)}%` : 'pending';
-      detailMae.innerHTML = `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);"><span>7d mae</span><span>${bt7?.status === 'ok' ? `${Number(bt7.maeKg).toFixed(2)}kg` : 'no sample'}</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);"><span>14d mae</span><span>${backtest14?.status === 'ok' ? `${Number(backtest14.maeKg).toFixed(2)}kg` : 'no sample'}</span></div><div style="display:flex;justify-content:space-between;padding:8px 0;color:var(--accent);"><span>CI Hit Rate</span><span>${ci7}</span></div>`;
+      const ci7 = Number.isFinite(ciHitRate['7d']) ? `${Math.round(Number(ciHitRate['7d']) * 100)}%` : '검증 대기';
+      detailMae.innerHTML = `<div class="detail-row"><span class="detail-row-label">7일 예측 오차</span><span class="detail-row-value">${bt7?.status === 'ok' ? `${Number(bt7.maeKg).toFixed(2)}kg` : '표본 부족'}</span></div><div class="detail-row"><span class="detail-row-label">14일 예측 오차</span><span class="detail-row-value">${backtest14?.status === 'ok' ? `${Number(backtest14.maeKg).toFixed(2)}kg` : '표본 부족'}</span></div><div class="detail-row detail-row-accent"><span class="detail-row-label">신뢰구간 적중률</span><span class="detail-row-value">${ci7}</span></div>`;
     }
   }
 
