@@ -178,11 +178,11 @@
         <div class="prediction-guard-inner">
           <div class="prediction-guard-icon">!</div>
           <div>
-            <p class="prediction-guard-title">Prediction On Hold</p>
-            <p id="predictionGuardText" class="prediction-guard-sub">Insufficient data for model calculation.</p>
+            <p class="prediction-guard-title">예측 보류</p>
+            <p id="predictionGuardText" class="prediction-guard-sub">최근 측정률이 낮아 현재는 실제 체중과 추세를 먼저 봅니다.</p>
           </div>
         </div>
-        <div class="prediction-guard-action">Resume after 7 consecutive measurements</div>
+        <span class="prediction-guard-note">연속 7회 측정 후 예측 재개</span>
       </div>
 
       <div class="chart-wrap">
@@ -292,26 +292,26 @@
     <details class="details-panel">
       <summary>
         <div class="panel-head-bar">
-          <span class="details-summary-badge">Details</span>
-          <span class="details-summary-hint">Model validation · Efficiency · Trend Window</span>
+          <span class="details-summary-badge">상세 정보</span>
+          <span class="details-summary-hint">예측 정확도 · 체중 감량 효과 · 데이터 품질</span>
         </div>
         <span class="details-summary-toggle">+</span>
       </summary>
       <div class="details-body">
         <div class="detail-section">
-          <p class="label">MAE Validation</p>
+          <p class="label">예측 오차</p>
           <div id="detailMae"></div>
         </div>
         <div class="detail-section">
-          <p class="label">Metabolic Signature</p>
+          <p class="label">감량 반응</p>
           <div id="detailMetabolic"></div>
         </div>
         <div class="detail-section">
-          <p class="label">Data Quality</p>
+          <p class="label">데이터 품질</p>
           <div id="detailQuality"></div>
         </div>
         <div class="detail-section">
-          <p class="label">Trend Windows</p>
+          <p class="label">기간별 추세</p>
           <div id="detailTrend"></div>
         </div>
       </div>

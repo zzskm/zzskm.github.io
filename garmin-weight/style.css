@@ -153,7 +153,6 @@ body {
   margin: 0 0 4px;
   font-size: 14px;
   font-weight: 900;
-  text-transform: uppercase;
   color: var(--ink);
 }
 .prediction-guard-sub {
@@ -161,18 +160,13 @@ body {
   font-size: 11px;
   font-weight: 700;
   color: var(--muted);
+}
+.prediction-guard-note {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-.prediction-guard-action {
-  padding: 8px 14px;
-  background: var(--ink);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  white-space: nowrap;
 }
 .prediction-guard-inner {
   display: flex;
@@ -789,7 +783,7 @@ body {
   gap: 6px;
   padding: 28px 20px;
   border: 0;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--ink);
   background: var(--panel-alt);
   text-align: center;
   cursor: pointer;
@@ -851,7 +845,7 @@ body {
   gap: 6px;
   align-items: flex-start;
   background: var(--panel-alt);
-  border: 1px solid var(--line);
+  border: 1px solid var(--ink);
 }
 .activity-block-num {
   font-family: var(--sans);
@@ -935,6 +929,43 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
+}
+.model-audit {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.model-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.audit-cell {
+  padding: 12px;
+  background: var(--panel-alt);
+  border: 1px solid var(--ink);
+}
+.audit-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.audit-value {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.audit-sub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 4px;
 }
 .insight-body {
   padding: 20px 24px;
@@ -1054,7 +1085,8 @@ body {
   .seg-btn { padding: 7px 12px; font-size: 10px; }
   .chip { padding: 5px 8px; font-size: 10px; }
   .scenarios-grid { grid-template-columns: 1fr; }
-  .scenario { padding: 16px 12px; border-right: 1px solid var(--line); }
+  .scenario { padding: 16px 12px; border-right: 0; border-bottom: 1px solid var(--ink); }
+  .scenario:last-child { border-bottom: 0; }
   .hero-metrics { grid-template-columns: repeat(3, 1fr); }
   .hero-metric { padding: 14px; }
 }
