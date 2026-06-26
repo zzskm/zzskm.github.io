@@ -220,6 +220,20 @@ body {
   display: grid;
   gap: 16px;
 }
+.dashboard-grid .panel,
+.dashboard-rail .panel {
+  margin-top: 0;
+  border-top: 2px solid var(--ink);
+}
+.dashboard-rail .scenarios-grid {
+  grid-template-columns: 1fr;
+}
+.dashboard-rail .activity-blocks {
+  grid-template-columns: 1fr;
+}
+.model-panel .model-strip-head {
+  display: none;
+}
 
 /* ====================== DETAILS SUMMARY ====================== */
 .details-summary-badge {
