@@ -21,7 +21,7 @@
   <div class="app" data-state="loading">
     <header class="topbar">
       <div class="brandmark">
-        <span class="dot"></span>
+        <div class="brand-icon"></div>
         <span class="brand-text">체중 대시보드</span>
       </div>
       <div class="topbar-meta">
@@ -188,23 +188,29 @@
       <div class="chart-wrap">
         <canvas id="weightChart" aria-label="체중 추세 차트" role="img"></canvas>
       </div>
+      <div class="chart-legend-mobile" aria-hidden="true">
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--actual"></span>Actual</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--trend"></span>Trend</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--target"></span>Target</span>
+      </div>
+      <div class="panel-stack-gap"></div>
       <div class="model-strip" id="modelStrip">
         <div class="model-strip-head">
           <span class="model-strip-tag">MODEL</span>
-          <span class="model-strip-tag-label">모델 기준 · 검증 · 데이터</span>
+          <span class="model-strip-tag-label">신뢰도 · 추세 · 검증</span>
         </div>
         <div class="model-strip-body">
-          <div>
-            <p class="label">모델 기준</p>
-            <p id="modelSummary" class="model-strip-main">–</p>
+          <div class="model-strip-cell model-strip-cell--confidence">
+            <p class="label">모델 신뢰도</p>
+            <p id="modelConfidence" class="model-strip-main">–</p>
           </div>
-          <div>
+          <div class="model-strip-cell model-strip-cell--trend">
+            <p class="label">추세 (주간 감량)</p>
+            <p id="modelTrend" class="model-strip-sub">–</p>
+          </div>
+          <div class="model-strip-cell model-strip-cell--validate">
             <p class="label">검증</p>
-            <p id="modelBacktest" class="model-strip-sub">–</p>
-          </div>
-          <div>
-            <p class="label">데이터</p>
-            <p id="modelCoverage" class="model-strip-sub">–</p>
+            <p id="modelValidate" class="model-strip-sub">–</p>
           </div>
         </div>
       </div>
@@ -313,7 +319,10 @@
 
     <footer class="foot">
       <span id="statusLine">데이터를 불러오는 중입니다.</span>
-      <span>SYNC V2.4.1 · REF: BRUTALIST GRID V1.0</span>
+      <span>
+        <span class="kbd-hint">SYNC V2.4.1 · REF: BRUTALIST GRID V1.0</span>
+        <span class="kbd-hint-shortcuts">단축키: <kbd>R</kbd> 새로고침 · <kbd>1</kbd> 30일 · <kbd>2</kbd> 60일 · <kbd>3</kbd> 전체</span>
+      </span>
     </footer>
   </div>
 

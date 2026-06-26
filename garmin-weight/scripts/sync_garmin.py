@@ -556,12 +556,21 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     current_ma14 = ma14_by_date.get(latest_date)
     current_ewma = ewma_values[-1] if ewma_values else None
 
+    kcal_to_kg_default = parse_float(config.get("kcalToKgFactor")) or 7700.0
+    height_cm = parse_float(config.get("heightCm"))
+    body_fat_pct: float | None = None
+    for r in reversed(rows[-14:] if len(rows) > 14 else rows):
+        v = parse_float(r.get("body_fat_percent"))
+        if v is not None:
+            body_fat_pct = v
+            break
+    kcal_to_kg, kcal_source = kcal_per_kg(body_fat_pct, current_weight, height_cm, default=kcal_to_kg_default)
+
     # EWMA slope 중심 + MA7 보조 감량률. 운동 kcal은 기본 예측에서 제외한다.
     trend_window = int(config.get("exerciseTrendWindow") or 28)
-    kcal_to_kg_pre = parse_float(config.get("kcalToKgFactor")) or 7700.0
     loss_rate_detail = compute_weekly_loss_rate(
         ewma_series, ma7_by_date, rows, latest_date,
-        window=trend_window, kcal_to_kg=kcal_to_kg_pre,
+        window=trend_window, kcal_to_kg=kcal_to_kg,
     )
     weekly_loss_rate = loss_rate_detail["blended"]
 
@@ -585,19 +594,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "last7SleepHoursAvg": round_or_none(mean(sleep_values), 2) if sleep_values else None,
         "last7RestingHrAvg": round_or_none(mean(rhr_values), 1) if rhr_values else None,
     }
-
-    # --- 운동 칼로리 추이 ---
-    kcal_to_kg_default = parse_float(config.get("kcalToKgFactor")) or 7700.0
-    height_cm = parse_float(config.get("heightCm"))
-    # body_fat: 최근 14일 내 마지막 유효값 사용 (체중계가 매일 측정 안 할 수 있음)
-    body_fat_pct: float | None = None
-    for r in reversed(rows[-14:] if len(rows) > 14 else rows):
-        v = parse_float(r.get("body_fat_percent"))
-        if v is not None:
-            body_fat_pct = v
-            break
-    # Phase 2: 동적 kcal_per_kg — body_fat > BMI > default 우선순위
-    kcal_to_kg, kcal_source = kcal_per_kg(body_fat_pct, current_weight, height_cm, default=kcal_to_kg_default)
 
     trend_window = int(config.get("exerciseTrendWindow") or 28)
     exercise_trend = build_exercise_trend(rows, window=trend_window)
@@ -631,7 +627,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             # P3: 시나리오 3개월 예측도 지수 감쇠 사용
             three_month_proj = _projected_weight(prediction_start, max(effective_loss, 0.0), 12, target_weight)
             scenarios[name] = {
-                "multiplier": sdef.get("multiplier", 0.8),  # 호환용 유지
+                "multiplier": round(effective_loss / base_trend_loss, 2) if base_trend_loss > 0 else 1.0,
                 "threeMonthWeightKg": round_or_none(three_month_proj, 2),
                 "assumedDailyKcal": assumed_daily,
                 "weeklyKcalDelta": round_or_none(extra_weekly_kcal, 1),
@@ -759,6 +755,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     data_quality = data_quality_diagnostics(rows)
     trend_state = model_trend_exposure(loss_rate_detail.get("windowSlopes", {}).get("7d"), weekly_loss_rate)
+
+    if confidence.get("level") == "low":
+        trend_state["predictionEnabled"] = False
+        if not trend_state.get("disabledReason"):
+            trend_state["disabledReason"] = "low_confidence"
 
     if trend_state.get("predictionEnabled") is False:
         one_month_weight = None

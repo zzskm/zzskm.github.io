@@ -9,7 +9,7 @@
     config: null,
     range: 60,
     scenario: 'base',
-    visible: { ma7: true, ma14: false, prediction: false },
+    visible: { ma7: true, ma14: true, prediction: true },
     chart: null,
   };
 
@@ -160,13 +160,54 @@
     Object.entries(scenarios).forEach(([key, cfg]) => {
       const svg = document.querySelector(`.scenario-sparkline[data-spark="${key}"]`);
       if (!svg) return;
+      const scenarioBtn = document.querySelector(`.scenario[data-scenario="${key}"]`);
+      const isActive = scenarioBtn && scenarioBtn.classList.contains('is-active');
+      const strokeColor = isActive ? '#ffffff' : cfg.color;
       const n = vals.length;
       const toX = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - 2 * PAD);
       const toY = (v) => H - PAD - ((v - minV) / range) * (H - 2 * PAD);
       const actualPts = vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-      const paths = `<polyline points="${actualPts}" stroke="${cfg.color}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const paths = `<polyline points="${actualPts}" stroke="${strokeColor}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
       svg.innerHTML = paths;
     });
+  }
+
+  function renderModelStrip(s) {
+    const diag = s.modelDiagnostics || {};
+    const confidence = diag.confidence || {};
+    const trend = diag.trendWindows || {};
+    const backtest = diag.backtest || {};
+    const quality = diag.dataQuality || {};
+
+    const confEl = el('modelConfidence');
+    if (confEl) {
+      const level = confidence.level || 'low';
+      const score = confidence.score ?? '–';
+      const selected = diag.selectedModel?.name || 'current';
+      confEl.textContent = `${level.toUpperCase()} · ${score}점 · ${selected}`;
+      confEl.className = `model-strip-main model-strip-main--${level}`;
+    }
+
+    const trendEl = el('modelTrend');
+    if (trendEl) {
+      const parts = ['7d', '14d', '28d'].map((k) => {
+        const v = trend[k]?.weeklyLossKg;
+        return Number.isFinite(v) ? `${k} ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}/w` : `${k} –`;
+      });
+      trendEl.textContent = parts.join('  ');
+    }
+
+    const valEl = el('modelValidate');
+    if (valEl) {
+      const mae = backtest['14d'];
+      const maeText = mae?.status === 'ok' && Number.isFinite(mae.maeKg)
+        ? `14d MAE ${mae.maeKg.toFixed(2)}kg`
+        : '14d 표본 부족';
+      const cov = Number.isFinite(quality.recentCoveragePct)
+        ? ` · 측정 ${quality.recentCoveragePct.toFixed(0)}%`
+        : '';
+      valEl.textContent = maeText + cov;
+    }
   }
 
   function drawCoverageDots(id, last30) {
@@ -176,7 +217,8 @@
     host.innerHTML = last30.map((p) => {
       const has = Number.isFinite(p.valueKg);
       const cls = has ? (p.date === todayIso ? 'dot-cell has-today' : 'dot-cell has') : 'dot-cell';
-      return `<span class="${cls}" title="${p.date}${has ? ' · ' + p.valueKg.toFixed(1) + 'kg' : ' · 기록 없음'}"></span>`;
+      const ariaLabel = `${p.date}${has ? ' · ' + p.valueKg.toFixed(1) + 'kg' : ' · 기록 없음'}`;
+      return `<span class="${cls}" role="img" aria-label="${ariaLabel}" title="${ariaLabel}"></span>`;
     }).join('');
   }
 
