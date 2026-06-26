@@ -126,20 +126,17 @@
             <span class="summary-grid-label">14d Mae</span>
             <span class="summary-grid-value" id="summaryMae14d">–</span>
           </div>
-          <div class="summary-grid-item">
-            <span class="summary-grid-label">Last Entry</span>
-            <span class="summary-grid-value" id="summaryLastEntry">–</span>
-          </div>
         </div>
       </div>
     </section>
 
-    <section class="panel">
+    <div class="dashboard-grid">
+      <section class="panel chart-panel">
       <div class="panel-head">
       <div class="panel-head-bar">
         <div class="panel-head-badge">A</div>
         <div>
-          <p class="eyebrow eyebrow-tight">체중 추이</p>
+          <p class="eyebrow eyebrow-tight">체중 추세</p>
           <h2 class="panel-title">Weight Trend</h2>
         </div>
         <div class="panel-head-legend">
@@ -193,65 +190,55 @@
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--trend"></span>Trend</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--target"></span>Target</span>
       </div>
-      <div class="panel-stack-gap"></div>
-      <div class="model-strip" id="modelStrip">
-        <div class="model-strip-head">
-          <span class="model-strip-tag">MODEL</span>
-          <span class="model-strip-tag-label">신뢰도 · 추세 · 검증</span>
-        </div>
-        <div class="model-strip-body">
-          <div class="model-strip-cell model-strip-cell--confidence">
-            <p class="label">모델 신뢰도</p>
-            <p id="modelConfidence" class="model-strip-main">–</p>
-          </div>
-          <div class="model-strip-cell model-strip-cell--trend">
-            <p class="label">추세 (주간 감량)</p>
-            <p id="modelTrend" class="model-strip-sub">–</p>
-          </div>
-          <div class="model-strip-cell model-strip-cell--validate">
-            <p class="label">검증</p>
-            <p id="modelValidate" class="model-strip-sub">–</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="scenarios">
-        <div class="scenarios-head">
-          <p class="scenarios-label">Action Scenarios</p>
-          <p class="scenarios-hint" id="scenariosHint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
-        </div>
-        <div class="scenarios-grid">
-          <button class="scenario" data-scenario="optimistic" type="button" aria-pressed="false">
-            <span class="scenario-tag scenario-tag--aggressive">낙관</span>
-            <span id="scenarioOpt" class="scenario-val">–</span>
-            <span class="scenario-sub">Exercise +2 sessions</span>
-            <svg class="scenario-sparkline" data-spark="optimistic" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
-            <p class="scenario-desc" id="scenarioOptDesc"></p>
-          </button>
-          <button class="scenario is-active" data-scenario="base" type="button" aria-pressed="true">
-            <span class="scenario-tag scenario-tag--standard">기준</span>
-            <span id="scenarioBase" class="scenario-val">–</span>
-            <span class="scenario-sub">현재 운동량 유지</span>
-            <svg class="scenario-sparkline" data-spark="base" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
-            <p class="scenario-desc" id="scenarioBaseDesc"></p>
-          </button>
-          <button class="scenario" data-scenario="conservative" type="button" aria-pressed="false">
-            <span class="scenario-tag scenario-tag--conservative">보수</span>
-            <span id="scenarioCon" class="scenario-val">–</span>
-            <span class="scenario-sub">Exercise −2 sessions</span>
-            <svg class="scenario-sparkline" data-spark="conservative" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
-            <p class="scenario-desc" id="scenarioConDesc"></p>
-          </button>
-        </div>
-      </div>
     </section>
 
-    <div class="panels-grid">
-      <section class="panel">
+    <aside class="dashboard-rail">
+      <section class="panel scenarios-panel">
         <div class="panel-head">
           <div class="panel-head-bar">
-            <div class="panel-head-badge-sm">B</div>
-            <h3 class="panel-head-title-sm">Activity Logs</h3>
+            <div class="panel-head-badge">S</div>
+            <div>
+              <p class="eyebrow eyebrow-tight">행동 시나리오</p>
+              <h3 class="panel-head-title">Action Scenarios</h3>
+            </div>
+          </div>
+          <p class="scenarios-hint" id="scenariosHint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
+        </div>
+        <div class="scenarios">
+          <div class="scenarios-grid">
+            <button class="scenario" data-scenario="optimistic" type="button" aria-pressed="false">
+              <span class="scenario-tag scenario-tag--aggressive">낙관</span>
+              <span id="scenarioOpt" class="scenario-val">–</span>
+              <span class="scenario-sub">Exercise +2 sessions</span>
+              <svg class="scenario-sparkline" data-spark="optimistic" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <p class="scenario-desc" id="scenarioOptDesc"></p>
+            </button>
+            <button class="scenario is-active" data-scenario="base" type="button" aria-pressed="true">
+              <span class="scenario-tag scenario-tag--standard">기준</span>
+              <span id="scenarioBase" class="scenario-val">–</span>
+              <span class="scenario-sub">현재 운동량 유지</span>
+              <svg class="scenario-sparkline" data-spark="base" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <p class="scenario-desc" id="scenarioBaseDesc"></p>
+            </button>
+            <button class="scenario" data-scenario="conservative" type="button" aria-pressed="false">
+              <span class="scenario-tag scenario-tag--conservative">보수</span>
+              <span id="scenarioCon" class="scenario-val">–</span>
+              <span class="scenario-sub">Exercise −2 sessions</span>
+              <svg class="scenario-sparkline" data-spark="conservative" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <p class="scenario-desc" id="scenarioConDesc"></p>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel activity-panel">
+        <div class="panel-head">
+          <div class="panel-head-inline">
+            <div class="panel-head-icon">A</div>
+            <div>
+              <p class="eyebrow">체중 인사이트</p>
+              <h3 class="panel-head-title">Activity Logs</h3>
+            </div>
           </div>
         </div>
         <div class="activity-blocks">
@@ -273,20 +260,35 @@
         </div>
       </section>
 
-      <section class="panel" id="insightCard" hidden>
+      <section class="panel model-panel">
         <div class="panel-head">
-          <div class="panel-head-inline">
-            <div class="panel-head-icon">C</div>
-            <div>
-              <p class="eyebrow">체중 인사이트</p>
-              <h3 class="panel-head-title">AI Insight</h3>
+          <div class="panel-head-bar">
+            <div class="panel-head-badge-sm">M</div>
+            <h4 class="panel-head-title-sm">Model Diagnostics</h4>
+          </div>
+        </div>
+        <div class="model-strip" id="modelStrip">
+          <div class="model-strip-head">
+            <span class="model-strip-tag">MODEL</span>
+            <span class="model-strip-tag-label">신뢰도 · 추세 · 검증</span>
+          </div>
+          <div class="model-strip-body">
+            <div class="model-strip-cell model-strip-cell--confidence">
+              <p class="label">모델 신뢰도</p>
+              <p id="modelConfidence" class="model-strip-main">–</p>
+            </div>
+            <div class="model-strip-cell model-strip-cell--trend">
+              <p class="label">추세 (주간 감량)</p>
+              <p id="modelTrend" class="model-strip-sub">–</p>
+            </div>
+            <div class="model-strip-cell model-strip-cell--validate">
+              <p class="label">검증</p>
+              <p id="modelValidate" class="model-strip-sub">–</p>
             </div>
           </div>
         </div>
-        <div class="insight-body">
-          <div id="insightHeadline">–</div>
-        </div>
       </section>
+    </aside>
     </div>
 
     <details class="details-panel">
