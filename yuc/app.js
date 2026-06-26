@@ -226,25 +226,40 @@
       if (eff && eff.median !== null && eff.included_days >= MIN_VALID_DAYS) {
         const bandG = g.select(".bands");
         
-        const p10 = eff.p10, p90 = eff.p90;
-        const median = eff.median;
-        
         const bandArea = d3.area()
           .x(d => x(new Date(baseDate.getTime() + d * 60000)))
           .y0(height)
-          .y1(y(0));
-        
-        const bandData = [];
-        for (let m = p10; m <= p90; m++) {
-          bandData.push(m);
-        }
+          .y1(d => y(1));
         
         bandG.selectAll("path.band-p10-p90").remove();
+        const outerData = [];
+        for (let m = eff.p10; m <= eff.p90; m += 1) outerData.push(m);
         bandG.append("path")
           .attr("class", "band-p10-p90")
-          .attr("d", bandArea(bandData))
+          .attr("d", bandArea(outerData))
           .attr("fill", "var(--green)")
-          .attr("opacity", 0.1);
+          .attr("opacity", 0.12);
+        
+        bandG.selectAll("path.band-p25-p75").remove();
+        const innerData = [];
+        for (let m = eff.p25; m <= eff.p75; m += 1) innerData.push(m);
+        bandG.append("path")
+          .attr("class", "band-p25-p75")
+          .attr("d", bandArea(innerData))
+          .attr("fill", "var(--green)")
+          .attr("opacity", 0.18);
+        
+        bandG.selectAll("line.median").remove();
+        bandG.append("line")
+          .attr("class", "median")
+          .attr("x1", x(new Date(baseDate.getTime() + eff.median * 60000)))
+          .attr("x2", x(new Date(baseDate.getTime() + eff.median * 60000)))
+          .attr("y1", 0)
+          .attr("y2", height)
+          .attr("stroke", "var(--green)")
+          .attr("stroke-width", 2)
+          .attr("stroke-dasharray", "4 2")
+          .attr("opacity", 0.7);
       }
     }
 
@@ -430,18 +445,21 @@
         fetch("./daily_stats.json", { cache: "no-store" })
       ]);
 
+      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
+        statsData = await statsRes.value.json();
+      } else {
+        statsData = null;
+      }
+      
+      renderSummary(statsData);
+
       if (csvRes.status === "fulfilled" && csvRes.value.ok) {
         const text = await csvRes.value.text();
         const data = parseCSV(text);
         cachedData = data;
         renderChart(chartCtx, data, statsData);
-      }
-
-      if (statsRes.status === "fulfilled" && statsRes.value.ok) {
-        statsData = await statsRes.value.json();
-        renderSummary(statsData);
-      } else {
-        renderSummary(null);
+      } else if (cachedData) {
+        renderChart(chartCtx, cachedData, statsData);
       }
 
       failCount = 0;
