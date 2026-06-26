@@ -180,6 +180,49 @@ h1 {
   border-radius: 4px;
 }
 
+/* Summary Panel */
+.summary-panel {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  background: var(--grid);
+  border-radius: 8px;
+}
+
+.summary-item .label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.summary-item .value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.summary-empty {
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  padding: 8px;
+}
+
 /* 모바일 반응형 조정 */
 @media (max-width: 480px) {
   body {
@@ -195,9 +238,17 @@ h1 {
     font-size: 10px;
     padding: 4px 8px;
   }
-  /* 변경: 모바일 다크 모드에서 범례 텍스트 크기 및 위치 조정 */
+  .summary-panel {
+    padding: 8px;
+  }
+  .summary-item {
+    padding: 6px;
+  }
+  .summary-item .value {
+    font-size: 16px;
+  }
   .legend-item text {
-    font-size: 10px; /* 모바일에서 범례 텍스트 축소 */
+    font-size: 10px;
     fill: var(--fg);
   }
 }
