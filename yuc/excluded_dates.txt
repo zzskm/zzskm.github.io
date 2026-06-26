@@ -1,15 +1,5 @@
 # yuc/excluded_dates.txt
-# Dates excluded from parking statistics
-# Format: YYYY-MM-DD # description
-
-# Korean public holidays 2026
-2026-01-01  # New Year's Day
-2026-03-09  # Hangover Day
-2026-05-01  # Children's Day
-2026-05-05  # Buddha's Birthday
-2026-06-06  # Sea Day
-2026-08-15  # Liberation Day
-2026-09-27  # National Foundation Day
-2026-10-03  # Hangwaengjeong
-2026-10-09  # Single Day
-2026-12-25  # Christmas
+# Reserved for future manual exclusions of abnormal parking days.
+# Days that reached threshold but were abnormal (holidays, events, maintenance, etc.) can be added here.
+# One ISO date per line (e.g., "2026-01-01").
+# Currently unused - all exclusions are handled by sample quality filters.
