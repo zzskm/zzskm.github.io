@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "target": "YUC parking lot",
+  "source_latest_at": null,
+  "thresholds": {
+    "low": 2,
+    "safe": 5,
+    "morning_start": "07:00",
+    "morning_end": "11:00"
+  },
+  "exclude_policy": {
+    "weekdays_only": true,
+    "manual_exclude_dates": [],
+    "min_morning_samples": 4,
+    "summary_requires_first_le_2": true,
+    "summary_requires_known_confidence": true
+  },
+  "summary": {
+    "p10": null,
+    "p25": null,
+    "median": null,
+    "p75": null,
+    "p90": null,
+    "included_days": 0,
+    "excluded_days": 0
+  },
+  "days": []
+}
