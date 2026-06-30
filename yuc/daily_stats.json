@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-06-30T09:32:47.658273+09:00",
+  "generated_at": "2026-06-30T10:08:44.935093+09:00",
   "target": "수지노외 공영주차장",
-  "source_latest_at": "2026-06-30T09:32:47+09:00",
+  "source_latest_at": "2026-06-30T10:08:44+09:00",
   "thresholds": {
     "low": 2,
     "safe": 5,
@@ -43,15 +43,24 @@
     {
       "date": "2026-06-30",
       "weekday": 1,
-      "sample_count": 12,
+      "sample_count": 13,
       "max_gap_minutes": 40.3,
       "morning_coverage": {
         "first_sample": "2026-06-30T07:14:10+09:00",
-        "last_sample": "2026-06-30T09:32:47+09:00"
+        "last_sample": "2026-06-30T10:08:44+09:00"
       },
-      "first_le_2": null,
-      "effective_full": null,
-      "min_available_morning": 4,
+      "first_le_2": {
+        "observed_at": "2026-06-30T10:08:44+09:00",
+        "interval_start": "2026-06-30T09:32:47+09:00",
+        "interval_end": "2026-06-30T10:08:44+09:00",
+        "previous_available": 4,
+        "available": 2,
+        "confidence": "unknown"
+      },
+      "effective_full": {
+        "observed_at": "2026-06-30T10:08:44+09:00"
+      },
+      "min_available_morning": 2,
       "included_in_first_low_summary": false,
       "included_in_effective_full_summary": false
     },
