@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-07-02T08:53:36.349404+09:00",
+  "generated_at": "2026-07-02T08:57:19.188779+09:00",
   "target": "수지노외 공영주차장",
-  "source_latest_at": "2026-07-02T08:53:36+09:00",
+  "source_latest_at": "2026-07-02T08:57:19+09:00",
   "thresholds": {
     "low": 2,
     "safe": 5,
@@ -21,21 +21,21 @@
   },
   "summary": {
     "first_low": {
-      "p10": 503,
-      "p25": 510,
-      "median": 522,
-      "p75": 533,
-      "p90": 540,
-      "included_days": 2,
+      "p10": 506,
+      "p25": 518,
+      "median": 537,
+      "p75": 541,
+      "p90": 543,
+      "included_days": 3,
       "minimum_required_days": 5
     },
     "effective_full": {
-      "p10": 503,
-      "p25": 510,
-      "median": 522,
-      "p75": 533,
-      "p90": 540,
-      "included_days": 2,
+      "p10": 506,
+      "p25": 518,
+      "median": 537,
+      "p75": 541,
+      "p90": 543,
+      "included_days": 3,
       "minimum_required_days": 5
     }
   },
@@ -43,17 +43,26 @@
     {
       "date": "2026-07-02",
       "weekday": 3,
-      "sample_count": 14,
+      "sample_count": 15,
       "max_gap_minutes": 12.9,
       "morning_coverage": {
         "first_sample": "2026-07-02T07:09:10+09:00",
-        "last_sample": "2026-07-02T08:53:36+09:00"
+        "last_sample": "2026-07-02T08:57:19+09:00"
       },
-      "first_le_2": null,
-      "effective_full": null,
-      "min_available_morning": 3,
-      "included_in_first_low_summary": false,
-      "included_in_effective_full_summary": false
+      "first_le_2": {
+        "observed_at": "2026-07-02T08:57:19+09:00",
+        "interval_start": "2026-07-02T08:53:36+09:00",
+        "interval_end": "2026-07-02T08:57:19+09:00",
+        "previous_available": 3,
+        "available": 2,
+        "confidence": "high"
+      },
+      "effective_full": {
+        "observed_at": "2026-07-02T08:57:19+09:00"
+      },
+      "min_available_morning": 2,
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-07-01",
