@@ -84,7 +84,7 @@
   .ctp-panel[hidden]{display:none;}
   .ctp-panel__cols{display:flex;gap:4px;}
   .ctp-panel__col{
-    flex:1;max-height:200px;overflow-y:auto;
+    flex:1;max-height:360px;overflow-y:auto;
     display:flex;flex-direction:column;gap:2px;
     scrollbar-width:thin;
   }
@@ -523,6 +523,14 @@
     return { start: s, end: e };
   }
 
+  function getDurationMinutes(start, end){
+    if (!start || !end) return 60;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    if (!Number.isFinite(sh) || !Number.isFinite(eh)) return 60;
+    return Math.max(60, (eh * 60 + em) - (sh * 60 + sm));
+  }
+
   // ───── custom time picker
   function formatTimeHm(hhmm){
     if (!hhmm) return "";
@@ -588,7 +596,7 @@
     let left = r.left;
     let top = r.bottom + 4;
     if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
-    if (top + 220 > window.innerHeight - 8) top = r.top - 4 - (ctpPanel.offsetHeight || 200);
+    if (top + 380 > window.innerHeight - 8) top = r.top - 4 - (ctpPanel.offsetHeight || 360);
     ctpPanel.style.left = `${Math.max(8, left)}px`;
     ctpPanel.style.top = `${Math.max(8, top)}px`;
   }
@@ -678,7 +686,6 @@
     }
   });
   window.addEventListener("resize", ctpClose);
-  window.addEventListener("scroll", ctpClose, true);
 
   function createTimePicker(options = {}){
     const { compact = false, hourFrom = null } = options;
@@ -1157,6 +1164,26 @@
       hourFrom: () => sIn.value || prevLineStartForDay(dayIdx, li)
     });
     eIn.value = formatTimeHm(line.end || "");
+    function cascadeFrom(fromIdx){
+      const lines = state.days[dayIdx].lines;
+      for (let i = fromIdx + 1; i < lines.length; i++) {
+        const prev = lines[i - 1];
+        const cur = lines[i];
+        if (!prev.end) break;
+        if (!cur.start && !cur.end) continue;
+        const dur = getDurationMinutes(cur.start, cur.end);
+        cur.start = prev.end;
+        cur.end = addMinutes(cur.start, dur);
+        const row = container.children[i];
+        if (row) {
+          const picks = row.querySelectorAll('.time > .ctp');
+          if (picks.length >= 2) {
+            picks[0].value = cur.start;
+            picks[1].value = cur.end;
+          }
+        }
+      }
+    }
     sIn.addEventListener("change", () => {
       const currentLine = state.days[dayIdx].lines[li];
       const { start, end } = normalizeTimeRange(sIn.value, currentLine.end);
@@ -1164,6 +1191,10 @@
       currentLine.end = end;
       sIn.value = start;
       eIn.value = end;
+      cascadeFrom(li);
+      if (typeof onLineTimeChanged === "function") {
+        onLineTimeChanged(end);
+      }
       scheduleSave();
     });
     eIn.addEventListener("change", () => {
@@ -1173,6 +1204,7 @@
       currentLine.end = end;
       sIn.value = start;
       eIn.value = end;
+      cascadeFrom(li);
       if (typeof onLineTimeChanged === "function") {
         onLineTimeChanged(end);
       }
@@ -1225,6 +1257,26 @@
         openTransferModal(dayIdx, li);
       });
       actions.appendChild(transferBtn);
+
+      const insBtn = document.createElement("button");
+      insBtn.className = "iconbtn";
+      insBtn.type = "button";
+      insBtn.textContent = "+";
+      insBtn.title = "위에 삽입";
+      insBtn.addEventListener("click", () => {
+        exitActiveEditor(true);
+        const lines = state.days[dayIdx].lines;
+        let prevEnd = null;
+        for (let i = li - 1; i >= 0; i--) {
+          if (lines[i].end) { prevEnd = lines[i].end; break; }
+        }
+        const start = formatTimeHm(prevEnd) || normalizeTimeToStep(state.workStartTime || "09:00");
+        const end = addOneHour(start);
+        lines.splice(li, 0, { start, end, text: "", url: "" });
+        renderLinesContainer(dayIdx, container, onLineTimeChanged);
+        scheduleSave();
+      });
+      actions.appendChild(insBtn);
 
       const delBtn = document.createElement("button");
       delBtn.className = "iconbtn";
