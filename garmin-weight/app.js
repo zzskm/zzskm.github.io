@@ -60,6 +60,10 @@
     const lastVal = last ? last.valueKg : null;
     setText('currentWeight', fmtKgBare(s.current?.weightKg));
 
+    // weeklyLossKg 계열은 양수 = 감량. 표시할 땐 체중 변화 방향(감량 = −)으로 뒤집는다.
+    setText('heroWeeklyChange', Number.isFinite(weeklyChange) ? `${weeklyChange > 0 ? '−' : '+'}${Math.abs(weeklyChange).toFixed(2)} kg/w` : '–');
+    setText('predictionConfidence', confidenceLabel);
+    setText('predictionError', bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `±${bt14.maeKg.toFixed(2)} kg (14D MAE)` : '–');
     setText('trendWeight', Number.isFinite(trendKg) ? `${trendKg.toFixed(1)} kg` : '–');
     setText('toTarget', Number.isFinite(s.goal?.remainingKg) ? `${s.goal.remainingKg.toFixed(1)} kg` : '–');
     {
@@ -83,8 +87,8 @@
     const badge = el('statusBadge');
     const reason = el('statusReason');
     if (badge) {
-      badge.textContent = confidenceLevel === 'low' ? '예측 보류' : (weeklyChange < -0.05 ? '감량 중' : '유지');
-      badge.className = `hero-badge hero-badge--${confidenceLevel === 'low' ? 'paused' : (weeklyChange < -0.05 ? 'losing' : 'neutral')}`;
+      badge.textContent = confidenceLevel === 'low' ? '예측 보류' : (weeklyChange > 0.05 ? '감량 중' : '유지');
+      badge.className = `hero-badge hero-badge--${confidenceLevel === 'low' ? 'paused' : (weeklyChange > 0.05 ? 'losing' : 'neutral')}`;
     }
     if (reason) {
       reason.textContent = confidenceLevel === 'low'
@@ -113,8 +117,9 @@
 
     const trend7 = trendWindows['7d']?.weeklyLossKg;
     const trend28 = trendWindows['28d']?.weeklyLossKg;
-    const trend7Text = Number.isFinite(trend7) ? `${trend7 >= 0 ? '+' : '−'}${Math.abs(trend7).toFixed(2)}/w` : '–';
-    const trend28Text = Number.isFinite(trend28) ? `${trend28 >= 0 ? '+' : '−'}${Math.abs(trend28).toFixed(2)}/w` : '–';
+    // 표시 컨벤션: 체중 변화 방향 (감량 = −). weeklyLossKg는 양수 = 감량.
+    const trend7Text = Number.isFinite(trend7) ? `${trend7 > 0 ? '−' : '+'}${Math.abs(trend7).toFixed(2)}/w` : '–';
+    const trend28Text = Number.isFinite(trend28) ? `${trend28 > 0 ? '−' : '+'}${Math.abs(trend28).toFixed(2)}/w` : '–';
     const maeText = bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `${bt14.maeKg.toFixed(2)} kg` : '–';
     setText('summaryChange7d', trend7Text);
     setText('summaryChange28d', trend28Text);
@@ -124,7 +129,7 @@
     const minutes = s.rolling?.last7ExerciseMinutes ?? 0;
     setText('exerciseMinutes', Math.round(minutes));
     setText('activeDays', `${s.rolling?.last7ActiveDays ?? 0}`);
-    setText('stepsAvg', (s.rolling?.last7StepsAvg ?? 0) >= 1000 ? `${((s.rolling?.last7StepsAvg ?? 0) / 1000).toFixed(1)}K` : `${Math.round(s.rolling?.last7StepsAvg ?? 0)}`);
+    setText('stepsAvg', ((s.rolling?.last7StepsAvg ?? 0) / 1000).toFixed(1));
 
     const sc = s.predictions?.scenarios || {};
     setText('scenarioOpt', sc.optimistic ? fmtKgBare(sc.optimistic.threeMonthWeightKg) : '–');
@@ -144,6 +149,7 @@
     if (insightCard) insightCard.hidden = !(s.insight?.headline);
 
     renderScenarioSparklines(s);
+    renderModelStrip(s);
   }
 
   function renderScenarioSparklines(s) {
@@ -192,7 +198,7 @@
     if (trendEl) {
       const parts = ['7d', '14d', '28d'].map((k) => {
         const v = trend[k]?.weeklyLossKg;
-        return Number.isFinite(v) ? `${k} ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}/w` : `${k} –`;
+        return Number.isFinite(v) ? `${k} ${v > 0 ? '−' : '+'}${Math.abs(v).toFixed(2)}/w` : `${k} –`;
       });
       trendEl.textContent = parts.join('  ');
     }
@@ -260,7 +266,7 @@
     const canvas = el('weightChart');
     if (!canvas) return false;
     if (!window.Chart) return false;
-    state.chart = new Chart(canvas, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false } });
+    state.chart = new Chart(canvas, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { tooltip: { filter: (item) => !String(item.dataset.label || '').startsWith('ci') } }, scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 8 } } } } });
     return true;
   }
 
@@ -382,7 +388,7 @@
 
       const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
       const cov = state.summary.coverage;
-      const covText = cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '';
+      const covText = cov ? `<span class="sync-cov"> · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)</span>` : '';
       const daysSince = cov?.daysSinceLastMeasurement;
       const stale = Number.isFinite(daysSince) && daysSince >= 3;
       const lowCoverage = cov && cov.last30Pct < 70;

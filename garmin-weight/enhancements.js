@@ -3,83 +3,9 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const isFiniteNumber = (v) => Number.isFinite(Number(v));
-  const fmtKg = (v, digits = 1) => isFiniteNumber(v) ? `${Number(v).toFixed(digits)}kg` : '–';
-
-  function setText(id, value) {
-    const node = $(id);
-    if (node) node.textContent = value;
-  }
-
-  function pct(value) {
-    return isFiniteNumber(value) ? `${Math.round(Number(value))}%` : '–';
-  }
-
-  function formatDays(days) {
-    if (!isFiniteNumber(days)) return '측정 없음';
-    const n = Number(days);
-    if (n <= 0) return '오늘 측정';
-    if (n === 1) return '1일 전 측정';
-    return `${n}일 전 측정`;
-  }
-
-  function compactReasons(reasons) {
-    if (!Array.isArray(reasons) || reasons.length === 0) return '신뢰도 저하 사유 없음';
-    return reasons.slice(0, 2).join(' · ');
-  }
 
   function isLowConfidence(summary) {
     return summary?.modelDiagnostics?.confidence?.level === 'low';
-  }
-
-  function getSeriesValue(point) {
-    if (!point) return null;
-    if (isFiniteNumber(point.valueKg)) return Number(point.valueKg);
-    if (isFiniteNumber(point.value)) return Number(point.value);
-    return null;
-  }
-
-  function summarizeMissing(series, label) {
-    const points = Array.isArray(series) ? series.slice(-30) : [];
-    if (!points.length) return null;
-    const missing = points.filter((p) => !isFiniteNumber(getSeriesValue(p))).length;
-    if (missing < 10) return null;
-    return `${label} ${missing}/30일 누락`;
-  }
-
-  function inferSeriesQuality(summary) {
-    const warnings = [];
-    const s = summary?.series || {};
-    const stepWarn = summarizeMissing(s.steps, '걸음');
-    if (stepWarn) warnings.push(stepWarn);
-    const exerciseWarn = summarizeMissing(s.exerciseMinutes, '운동 시간');
-    if (exerciseWarn) warnings.push(exerciseWarn);
-    const dailyWarn = summarizeMissing(s.daily, '체중');
-    if (dailyWarn) warnings.push(dailyWarn);
-    return warnings;
-  }
-
-  function renderQuality(summary) {
-    const coverage = summary?.coverage || {};
-    const confidence = summary?.modelDiagnostics?.confidence || {};
-    const backtest14 = summary?.modelDiagnostics?.backtest?.['14d'];
-    const seriesWarnings = inferSeriesQuality(summary);
-
-    const targets = ['qualityStatus', 'qualityCoverage', 'qualitySync', 'qualityBacktest', 'qualityReason'];
-    if (!targets.some(id => document.getElementById(id))) return;
-
-    setText('qualityStatus', (confidence.label || '낮음').toUpperCase());
-    setText('qualityCoverage', `측정률 ${pct(coverage.last30Pct)}`);
-    setText('qualitySync', formatDays(coverage.daysSinceLastMeasurement));
-
-    const backtestText = backtest14?.status === 'ok' && isFiniteNumber(backtest14.maeKg)
-      ? `14일 오차 ${Number(backtest14.maeKg).toFixed(2)}kg`
-      : '14일 검증 표본 부족';
-    setText('qualityBacktest', backtestText);
-
-    const reason = seriesWarnings.length
-      ? seriesWarnings.slice(0, 2).join(' · ')
-      : compactReasons(confidence.reasons);
-    setText('qualityReason', reason);
   }
 
   function renderScenarioSub(summary) {
@@ -136,30 +62,6 @@
   function applyConfidenceMode(summary) {
     const low = isLowConfidence(summary);
     if (low) setPredictionVisibility(false);
-  }
-
-  function renderInsightSupport(summary) {
-    const card = $('insightCard');
-    if (!card || !isLowConfidence(summary)) return;
-
-    let support = card.querySelector('.insight-support');
-    if (!support) {
-      support = document.createElement('p');
-      support.className = 'insight-support';
-      card.appendChild(support);
-    }
-
-    const current = summary?.current || {};
-    const currentWeight = fmtKg(current.weightKg);
-    const trendWeight = fmtKg(current.weightEwmaKg);
-    const reasons = summary?.modelDiagnostics?.confidence?.reasons || [];
-    const reason = reasons[0] ? ` · ${reasons[0]}` : '';
-    support.textContent = `오늘 ${currentWeight}, 추세 ${trendWeight}. 예측보다 측정 누적이 우선입니다${reason}`;
-  }
-
-  function renderModelExplanation(summary) {
-    const confidence = summary?.modelDiagnostics?.confidence || {};
-    setText('modelSummary', confidence.level === 'low' ? '측정률이 낮아 목표일 예측은 보류합니다.' : '최근 체중 추세를 중심으로 계산합니다.');
   }
 
   function readMae(backtest, horizon) {
@@ -236,7 +138,6 @@
 
   function renderSummaryMode(summary) {
     applyConfidenceMode(summary);
-    renderInsightSupport(summary);
     renderScenarioState(summary);
     renderModelAudit(summary);
     renderPredictionGuard(summary);
@@ -251,7 +152,7 @@
     const maxAbs = rows.length ? Math.max(...rows.map(r => Math.abs(r.v)), 0.0001) : 1;
     const trendBars = rows.map((r) => {
       const pct = Math.min(100, (Math.abs(r.v) / maxAbs) * 100);
-      const sign = r.v >= 0 ? '+' : '−';
+      const sign = r.v > 0 ? '−' : '+';
       const recent = r.key === '3d' ? ' is-recent' : '';
       return `<div class="windows-row${recent}"><span>${r.key}</span><span class="windows-bar-track"><span class="windows-bar-fill" style="width:${pct.toFixed(0)}%"></span></span><span class="windows-val">${sign}${Math.abs(r.v).toFixed(2)}</span></div>`;
     }).join('');
@@ -304,11 +205,8 @@
   }
 
   window.addEventListener('garmin-weight:summary-ready', (event) => {
-    renderQuality(event.detail.summary);
     renderScenarioSub(event.detail.summary);
-    renderModelExplanation(event.detail.summary);
     renderSummaryMode(event.detail.summary);
     renderDetails(event.detail.summary);
-    if (typeof renderModelStrip === 'function') renderModelStrip(event.detail.summary);
   });
 })();
