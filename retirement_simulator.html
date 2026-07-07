@@ -91,14 +91,26 @@ import {
 // ============================================================
 
 const ASSUMPTIONS = {
-  version: "kr-v4-2026-05",
+  version: "kr-v5-2026-07",
   krPolicy: {
     pensionReplacementRate: 0.40,       // 국민연금 단순 소득대체율
     pensionAValueMonthly: 300,          // 만원/월, 국민연금 A값 단순 가정
-    pensionTaxRate: 0.055,              // 연금소득세 단순 분리과세율
+    npMaxBaseMonthly: 617,              // 만원/월 — 기준소득월액 상한 (B값 캡, 2024)
+    pensionTaxRate: 0.055,              // 연금소득세 — 노령연금에 적용 (유족·기초연금 비과세)
     maxNpYears: 40,                     // 국민연금 최대 가입연수
     contributionStartAge: 25,           // 자동 가입연수/퇴직급여 계산 기준 나이
     survivorPensionRatio: 0.50,         // 유족연금 단순 가정: 사망자 NP의 50%
+    survivorOverlapRatio: 0.30,         // 본인 노령연금 선택 시 유족연금 중복 지급률
+    basicPension: {                     // 기초연금 단순 모델 (2025 기준)
+      monthlyFull: 34,                  // 만원/월 — 기준연금액
+      coupleReductionRate: 0.20,        // 부부 각 20% 감액
+      incomeThresholdSingle: 228,       // 만/월 — 소득인정액 선정기준 (단독)
+      incomeThresholdCouple: 365,       // 만/월 — 소득인정액 선정기준 (부부)
+      assetBasicDeduction: 13500,       // 만원 — 기본재산 공제 (대도시 기준)
+      assetConversionRate: 0.04,        // 재산 → 연소득 환산율
+      workIncomeDeduction: 112,         // 만/월 — 근로소득 공제
+      workIncomeRate: 0.7,              // 공제 후 반영률
+    },
     healthInsurance: {
       sideIncomeRate: 0.07,             // 지역가입자 단순 추정 (실제 산식과 다름)
       financialAssetRate: 0.0008,
@@ -162,6 +174,10 @@ const ASSUMPTIONS = {
     earnedIncomeDeductionRate: 0.20,  // 근로소득공제 단순 근사 (20%)
     localTaxRate: 0.10,               // 지방소득세 (소득세의 10%)
     socialInsuranceRate: 0.092,       // 4대보험 합산 (국민연금4.5%+건강3.5%+고용0.9%+장기요양0.4%)
+  },
+  monteCarlo: {
+    runs: 300,                        // 시뮬레이션 횟수 (고정 시드 — 재현 가능. ponytail: 응답성 위해 300, 정밀도 필요 시 500+)
+    defaultVolatility: 12,            // 연 수익률 표준편차 (명목 %p, 혼합 포트폴리오 가정)
   },
 };
 
@@ -229,12 +245,14 @@ const UI_RANGES = {
   houseInflationRate:       { min: 0, max: 10, step: 0.1 },  // 명목 %
   mortgageBalance:          { min: 0, max: 100000, step: 500 },
   monthlyMortgagePayment:   { min: 0, max: 500, step: 10 },
+  mortgageRate:             { min: 0, max: 10, step: 0.1 },  // 명목 %
   housingMaintenance:       { min: 0, max: 100, step: 1 },   // 만/월
   monthlyRent:              { min: 0, max: 300, step: 5 },   // 만/월
   deposit:                  { min: 0, max: 200000, step: 1000 }, // 만원
   investmentReturnRate:     { min: 0, max: 12, step: 0.1 },  // 명목 %
   inflationRate:            { min: 0, max: 8, step: 0.1 },
   scenarioBandSpread:       { min: 0, max: 4, step: 0.1 },
+  returnVolatility:         { min: 0, max: 30, step: 0.5 },  // 명목 %p — 몬테카를로 표준편차
   workingLivingCost:        { min: 50, max: 800, step: 10 },
   bridgeLivingCost:         { min: 50, max: 800, step: 10 },
   retirementLivingCost:     { min: 50, max: 600, step: 10 },
@@ -286,6 +304,7 @@ const PRESETS = {
     hasMortgage: true,
     mortgageBalance: 18000,
     monthlyMortgagePayment: 140,
+    mortgageRate: 4.0,               // 명목 % — 주택대출 금리
     // 전세/월세 모드 전용
     deposit: 0,                      // 만원 (보증금)
     monthlyRent: 0,                  // 만/월 (월세)
@@ -293,6 +312,7 @@ const PRESETS = {
     investmentReturnRate: 6.0,
     inflationRate: 2.5,
     scenarioBandSpread: 2.0,
+    returnVolatility: 12.0,        // 명목 %p — 몬테카를로 연 수익률 표준편차
     salaryGrowthRate: 3.5,         // 명목 %
     // 생활비 — 3인 가구 평균 (자녀비 자동 계산 별도)
     workingLivingCost: 300,
@@ -313,6 +333,7 @@ const PRESETS = {
     // 세제
     includeSeveranceLumpSum: ASSUMPTIONS.assetRules.includeSeveranceLumpSumDefault,
     applyHealthInsurance: true,
+    applyBasicPension: true,
     // C5: 인출 전략
     withdrawalStrategy: "bucket",     // "bucket" | "4pct" | "vpw"
     // C1: 시퀀스 리스크 스트레스 테스트
@@ -335,6 +356,13 @@ function autoPensionStartAge(currentAge) {
   if (birthYear >= 1965) return 64;
   if (birthYear >= 1961) return 63;
   return 62;
+}
+
+// 조기(−6%/년, 최대 5년)·연기(+7.2%/년, 최대 5년) 수령 계수
+function pensionClaimFactor(startAge, legalAge) {
+  const diff = (startAge ?? legalAge) - legalAge;
+  if (diff < 0) return Math.max(0.70, 1 + 0.06 * diff);
+  return Math.min(1.36, 1 + 0.072 * diff);
 }
 
 // 퇴직 나이 기준 자동 가입연수
@@ -377,17 +405,18 @@ function npYearsFor(input, person, assumptions = ASSUMPTIONS) {
 
 function estimatedPensionMonthlyFor(input, person, assumptions = ASSUMPTIONS) {
   const policy = assumptions.krPolicy;
+  // B값: 세전 월소득 기준 + 기준소득월액 상한 (저장값은 세후 연봉이므로 역산)
+  const bValue = (netAnnual) => Math.min(netToGrossAnnual(netAnnual ?? 0) / 12, policy.npMaxBaseMonthly);
   if (person === "spouse") {
     if (input.spouseNpInputMode === "manual") return input.spouseNpManualMonthly ?? 0;
-    const salary = input.spouseCurrentSalary ?? 0;
-    const avgMonthly = (policy.pensionAValueMonthly + salary / 12) / 2;
+    const avgMonthly = (policy.pensionAValueMonthly + bValue(input.spouseCurrentSalary)) / 2;
     const years = npYearsFor(input, "spouse", assumptions);
     const replacement = years < 10 ? 0 : policy.pensionReplacementRate * (years / policy.maxNpYears);
     return replacement * avgMonthly;
   }
   // self
   if (input.selfNpInputMode === "manual") return input.selfNpManualMonthly ?? 0;
-  const avgMonthly = (policy.pensionAValueMonthly + input.selfCurrentSalary / 12) / 2;
+  const avgMonthly = (policy.pensionAValueMonthly + bValue(input.selfCurrentSalary)) / 2;
   const years = npYearsFor(input, "self", assumptions);
   const replacement = years < 10 ? 0 : policy.pensionReplacementRate * (years / policy.maxNpYears);
   return replacement * avgMonthly;
@@ -461,7 +490,8 @@ function healthInsuranceYearly(financial, house, sideIncomeAnnual, assumptions =
 // 핵심 시뮬레이션 (v4 — 본인/배우자 분리, 명목→실질 변환)
 // ============================================================
 
-function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS) {
+function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS, opts = {}) {
+  const lite = !!opts.lite;  // 몬테카를로용 — 연도별 상세 row 생략, 고갈/준비율만 계산
   const policy = assumptions.krPolicy;
 
   // ── 명목 → 실질 변환 ──────────────────────────────────────
@@ -474,9 +504,15 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
   const sg = toReal(input.salaryGrowthRate);
   const hg = toReal(input.houseInflationRate);
 
-  // ── 본인/배우자 국민연금 ───────────────────────────────────
-  const selfNpMonthly    = estimatedPensionMonthlyFor(input, "self",   assumptions);
-  const spouseNpMonthly  = estimatedPensionMonthlyFor(input, "spouse", assumptions);
+  // ── 본인/배우자 국민연금 (조기 −6%·연기 +7.2%/년 계수 반영) ──
+  const selfNpMonthly    = estimatedPensionMonthlyFor(input, "self",   assumptions)
+    * pensionClaimFactor(input.selfPensionStartAge, autoPensionStartAge(input.currentAge));
+  const spouseNpMonthly  = estimatedPensionMonthlyFor(input, "spouse", assumptions)
+    * pensionClaimFactor(input.spousePensionStartAge ?? 65, autoPensionStartAge(input.spouseCurrentAge ?? input.currentAge));
+
+  // ── 세전 연봉 (DC 적립·퇴직금은 세전 기준) / 주택대출 실질 금리 ──
+  const selfGrossAnnual0 = netToGrossAnnual(input.selfCurrentSalary);
+  const mReal = (1 + (input.mortgageRate ?? 4) / 100) / (1 + inflRate) - 1;
 
   // ── 시뮬레이션 종료 나이 (self 기준) ──────────────────────
   const selfLE   = input.selfLifeExpectancy;
@@ -558,16 +594,23 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     const selfSalaryAnnual   = selfIsWorking   ? input.selfCurrentSalary   * Math.pow(1 + sg, t) : 0;
     const spouseSalaryAnnual = spouseIsWorking ? (input.spouseCurrentSalary ?? 0) * Math.pow(1 + sg, t) : 0;
 
-    // ── DC 적립 (본인 근로기만) ──
+    // ── DC 적립 (본인 근로기만, 세전 연봉 기준) ──
     const dcContribAnnual = selfIsWorking
-      ? selfSalaryAnnual / assumptions.assetRules.dcAnnualContributionSalaryDivisor : 0;
+      ? (selfGrossAnnual0 * Math.pow(1 + sg, t)) / assumptions.assetRules.dcAnnualContributionSalaryDivisor : 0;
 
-    // ── 국민연금 (세후) ──
+    // ── 국민연금 — 노령연금에 연금소득세, 유족연금은 택일(본인+유족30% vs 유족100%)·비과세·개시나이 무관 ──
     const selfIsPension   = selfAlive   && age       >= input.selfPensionStartAge;
     const spouseIsPension = spouseAlive && spouseAge >= (input.spousePensionStartAge ?? 65);
 
-    let selfPensionAnnual   = selfIsPension   ? (selfNpMonthly   + (selfAlive ? selfSurvivorNpBonus : 0))  * 12 : 0;
-    let spousePensionAnnual = spouseIsPension ? (spouseNpMonthly + spouseSurvivorNpBonus) * 12 : 0;
+    const npTaxKeep = 1 - policy.pensionTaxRate;
+    const npPayout = (alive, ownEligible, ownMonthly, survivorMonthly) => {
+      if (!alive) return 0;
+      const own = ownEligible ? ownMonthly * npTaxKeep : 0;
+      if (survivorMonthly > 0) return Math.max(own + survivorMonthly * policy.survivorOverlapRatio, survivorMonthly) * 12;
+      return own * 12;
+    };
+    let selfPensionAnnual   = npPayout(selfAlive,   selfIsPension,   selfNpMonthly,   selfSurvivorNpBonus);
+    let spousePensionAnnual = npPayout(spouseAlive, spouseIsPension, spouseNpMonthly, spouseSurvivorNpBonus);
 
     // ── 브릿지 소득 (본인 퇴직 후, 연금 개시 전) ──
     const selfIsRetired = selfAlive && !selfIsWorking;
@@ -588,7 +631,8 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
 
     const childAnnual = isAnyoneAlive ? childCostYearly(input, year, assumptions) : 0;
 
-    // ── 대출 상환 (자가 모드만) ──
+    // ── 대출 상환 (자가 모드만) — 이자 부과 후 상환 (실질 기준) ──
+    if (isOwn() && input.hasMortgage && mortgage > 0) mortgage *= (1 + mReal);
     const mortgagePaid = (isOwn() && input.hasMortgage)
       ? Math.min(mortgage, input.monthlyMortgagePayment * 12) : 0;
     mortgage = Math.max(0, mortgage - mortgagePaid);
@@ -638,10 +682,10 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     const medicalAnnual = (input.applyMedicalCost !== false)
       ? (selfMedical + spouseMedical) * (input.medicalCostMultiplier ?? 1.0) : 0;
 
-    // ── 퇴직금 일시금 ──
+    // ── 퇴직금 일시금 (퇴직 시점 세전 월급 기준) ──
     if (!severancePaid && age === input.retireAge && selfAlive) {
       const yearsWorked = Math.max(0, input.retireAge - policy.contributionStartAge);
-      const grossSeverance = (input.selfCurrentSalary / 12) * yearsWorked;
+      const grossSeverance = (selfGrossAnnual0 * Math.pow(1 + sg, t) / 12) * yearsWorked;
       // 퇴직소득세 단순 적용 (근속연수공제 후 6.6% 단순 가정)
       const severanceTax = grossSeverance * 0.066;
       financialSavings += grossSeverance - severanceTax;
@@ -661,9 +705,26 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     const maintAnnual = isAnyoneAlive ? curMaintenance * 12 : 0;
     const rentAnnual  = (isAnyoneAlive && isRent()) ? curMonthlyRent * 12 : 0;
 
+    // ── 기초연금 (65세+, 소득인정액 하위 단순 추정) ──
+    let basicPensionAnnual = 0;
+    if (input.applyBasicPension !== false) {
+      const bp = policy.basicPension;
+      const bothAlive = selfAlive && spouseAlive;
+      const assetRecog = Math.max(0, financialSavings + financialInvestments + house + curDeposit - bp.assetBasicDeduction) * bp.assetConversionRate / 12;
+      const workRecog  = Math.max(0, (selfSalaryAnnual + spouseSalaryAnnual + bridgeSideAnnual) / 12 - bp.workIncomeDeduction) * bp.workIncomeRate;
+      const recognized = assetRecog + workRecog + (selfPensionAnnual + spousePensionAnnual) / 12;
+      if (recognized <= (bothAlive ? bp.incomeThresholdCouple : bp.incomeThresholdSingle)) {
+        const per = bp.monthlyFull * (bothAlive ? 1 - bp.coupleReductionRate : 1);
+        // 국민연금 연계 감액 단순화: NP가 기준연금액 1.5배 초과 시 절반
+        const selfBp   = (selfAlive   && age       >= 65) ? per * (selfNpMonthly   > bp.monthlyFull * 1.5 ? 0.5 : 1) : 0;
+        const spouseBp = (spouseAlive && spouseAge >= 65) ? per * (spouseNpMonthly > bp.monthlyFull * 1.5 ? 0.5 : 1) : 0;
+        basicPensionAnnual = (selfBp + spouseBp) * 12;
+      }
+    }
+
     // ── 현금흐름 집계 ──
     const income = selfSalaryAnnual + spouseSalaryAnnual + selfPensionAnnual + spousePensionAnnual
-                 + bridgeSideAnnual;
+                 + bridgeSideAnnual + basicPensionAnnual;
     const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual + medicalAnnual
                   + maintAnnual + rentAnnual + jeonseTopUpAnnual;
     const cashflowExclSaving = income - outflow;
@@ -696,6 +757,14 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       }
     }
 
+    // 목표 인출액 중 지출 초과분을 버킷에서 꺼내 저축성에 보관 (소멸 방지 — 투자성→현금화 효과)
+    function cashOutExcess(targetWithdrawal, spent) {
+      const excess = Math.max(0, targetWithdrawal - spent);
+      const available = Math.max(0, financialSavings) + Math.max(0, financialInvestments);
+      const move = Math.min(excess, available);
+      if (move > 0) { withdrawFromBuckets(move); financialSavings += move; }
+    }
+
     // 전략별 현금흐름 적용
     if (strategy === "bucket") {
       // Bucket: 잉여 → 저축성, 부족 → 저축성 → 투자성 순 인출
@@ -707,36 +776,29 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       }
 
     } else if (strategy === "4pct") {
-      // 4% 룰: 퇴직 후 매년 swrAnnual 인출. 근로기는 bucket과 동일
+      // 4% 룰: 퇴직 후 매년 swrAnnual 인출 — 지출 초과분은 저축성 버킷에 보관. 근로기는 bucket과 동일
       if (age < input.retireAge) {
         financialSavings += extraSavingAnnual + cashflowExclSaving;
       } else {
-        const totalFinancial = financialSavings + financialInvestments;
         const netNeed = Math.max(0, outflow - income);
-        const actualWithdrawal = Math.min(Math.max(netNeed, swrAnnual), totalFinancial);
-        withdrawFromBuckets(actualWithdrawal);
-        // 잉여 소득은 저축성에 추가
-        const surplusIncome = Math.max(0, income - outflow);
-        financialSavings += extraSavingAnnual + surplusIncome;
+        withdrawFromBuckets(netNeed);
+        cashOutExcess(swrAnnual, netNeed);
+        financialSavings += extraSavingAnnual + Math.max(0, income - outflow);
       }
 
     } else if (strategy === "vpw") {
-      // VPW: 잔여 기대연수 기반 비율 인출
+      // VPW: 잔여 기대연수 기반 비율 인출 — 지출 초과분은 저축성 버킷에 보관
       financialSavings += extraSavingAnnual;
       if (age >= input.retireAge) {
         const remaining = Math.max(1, simEndAge - age);
         const vpwRate = rInv > 0.0001
           ? rInv / (1 - Math.pow(1 + rInv, -remaining))
           : 1 / remaining;
-        const totalFinancial = financialSavings + financialInvestments;
+        const totalFinancial = Math.max(0, financialSavings) + Math.max(0, financialInvestments);
         const actualNeed = Math.max(0, outflow - income);
-        const withdrawal = Math.max(actualNeed, Math.min(vpwRate * totalFinancial, totalFinancial));
-        const net = income - outflow;
-        if (net >= 0) {
-          financialSavings += net;
-        } else {
-          withdrawFromBuckets(-net);
-        }
+        withdrawFromBuckets(actualNeed);
+        cashOutExcess(Math.min(vpwRate * totalFinancial, totalFinancial), actualNeed);
+        financialSavings += Math.max(0, income - outflow);
       } else {
         financialSavings += cashflowExclSaving;
       }
@@ -782,12 +844,10 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     const financialTotalFinal = financialSavings + financialInvestments;
     const netWorth = financialTotalFinal + house - mortgage + curDeposit;
 
-    if (financialTotalFinal <= 0 && depletionAge === null && age >= input.retireAge) {
-      depletionAge = age;
-    }
-
     if (selfIsBridge && cashflowExclSaving < 0) bridgeShortfall += -cashflowExclSaving;
     if (age === input.retireAge) totalAssetsAtRetirement = financialTotalFinal;
+
+    if (lite) { years.push({ age, financialAssets: Math.round(financialTotalFinal) }); continue; }
 
     years.push({
       age, year,
@@ -807,6 +867,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
       spouseSalaryMonthly:  Math.round(spouseSalaryAnnual / 12),
       selfPensionMonthly:   Math.round(selfPensionAnnual  / 12),
       spousePensionMonthly: Math.round(spousePensionAnnual / 12),
+      basicPensionMonthly:  Math.round(basicPensionAnnual  / 12),
       bridgeSideMonthly:    Math.round(bridgeSideAnnual   / 12),
       livingMonthly:        Math.round(livingAnnual       / 12),
       childMonthly:         Math.round(childAnnual        / 12),
@@ -820,6 +881,12 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     });
   }
 
+  // 자산 고갈 나이: 끝까지 회복하지 못한 음수 구간의 시작 (퇴직 전 파산 포함)
+  for (let k = years.length - 1; k >= 0; k--) {
+    if (years[k].financialAssets > 0) break;
+    depletionAge = years[k].age;
+  }
+
   const bridgeYears = Math.max(0, input.selfPensionStartAge - input.retireAge);
 
   let readinessRatio;
@@ -829,7 +896,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     readinessRatio = Math.min(assumptions.assetRules.readinessMaxRatio,
       100 + (totalAssetsAtRetirement > 0 ? (margin / totalAssetsAtRetirement) * 100 : 0));
   } else {
-    const survived = depletionAge - input.retireAge;
+    const survived = Math.max(0, depletionAge - input.retireAge);
     const need = simEndAge - input.retireAge;  // 부부 최대 수명 기준
     readinessRatio = need > 0 ? (survived / need) * 100 : 0;
   }
@@ -851,7 +918,7 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS)
     readinessRatio: Math.round(readinessRatio),
     depletionAge,
     simEndAge,
-    childEventList: childEvents(input),
+    childEventList: lite ? [] : childEvents(input),
     downsizeEvents,
     assumptionVersion: assumptions.version,
   };
@@ -919,6 +986,53 @@ function runScenarioBand(input, assumptions = ASSUMPTIONS) {
 }
 
 // ============================================================
+// C10: 몬테카를로 — 연도별 정규분포 수익률, 고정 시드 (재현 가능)
+// ============================================================
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function runMonteCarlo(input, assumptions = ASSUMPTIONS) {
+  const mc = assumptions.monteCarlo;
+  const mean = input.investmentReturnRate;
+  const vol  = input.returnVolatility ?? mc.defaultVolatility;
+  const inflRate = input.inflationRate / 100;
+  let success = 0;
+  const depletionAges = [];
+  const finalAssets = [];
+  for (let i = 0; i < mc.runs; i++) {
+    const rand = mulberry32(0x51ab1e + i * 7919);
+    const normal = () => {
+      const u1 = Math.max(rand(), 1e-9), u2 = rand();
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    };
+    // 연도별 명목 수익률 무작위 추출 (하한 −95% — 파산 초과 방지)
+    const rateFn = () => (1 + Math.max(-95, mean + vol * normal()) / 100) / (1 + inflRate) - 1;
+    const res = calculateScenario(input, rateFn, assumptions, { lite: true });
+    if (res.depletionAge === null) success++;
+    else depletionAges.push(res.depletionAge);
+    finalAssets.push(res.yearlyAssetFlow[res.yearlyAssetFlow.length - 1]?.financialAssets ?? 0);
+  }
+  depletionAges.sort((a, b) => a - b);
+  finalAssets.sort((a, b) => a - b);
+  const pct = (arr, p) => arr.length ? arr[Math.min(arr.length - 1, Math.floor(arr.length * p))] : null;
+  return {
+    runs: mc.runs,
+    successRate: Math.round((success / mc.runs) * 100),
+    medianDepletionAge: pct(depletionAges, 0.5),
+    p10Final: pct(finalAssets, 0.10),
+    p50Final: pct(finalAssets, 0.50),
+    p90Final: pct(finalAssets, 0.90),
+  };
+}
+
+// ============================================================
 // C9: 입력 정합성 검증
 // ============================================================
 
@@ -953,6 +1067,16 @@ function validateInput(input) {
   if ((input.housingMode === "jeonse" || input.housingMode === "monthly_rent")
       && (input.deposit ?? 0) === 0 && input.housingMode === "jeonse")
     warnings.push({ key: "jeonse_no_deposit", level: "warn", msg: "전세 모드인데 보증금이 0입니다. 보증금을 입력해주세요." });
+  // 조기수령 한도 (법정 개시 −5년까지)
+  const legalPensionAge = autoPensionStartAge(input.currentAge);
+  if (input.selfPensionStartAge < legalPensionAge - 5)
+    warnings.push({ key: "early_pension", level: "warn", msg: `국민연금 조기수령은 법정 개시(${legalPensionAge}세)의 5년 전까지만 가능합니다. 감액 하한(−30%)으로 계산됩니다.` });
+  // 원리금이 이자에 못 미치는 경우 (실질 기준)
+  if (input.housingMode === "own" && input.hasMortgage && input.mortgageBalance > 0 && input.monthlyMortgagePayment > 0) {
+    const mRealChk = (1 + (input.mortgageRate ?? 4) / 100) / (1 + (input.inflationRate ?? 0) / 100) - 1;
+    if (input.monthlyMortgagePayment * 12 <= input.mortgageBalance * mRealChk)
+      warnings.push({ key: "mortgage_interest", level: "warn", msg: "월 원리금이 대출 이자보다 적어 잔액이 줄지 않습니다. 원리금 또는 금리를 확인해주세요." });
+  }
   return warnings;
 }
 
@@ -1379,8 +1503,23 @@ function diagnoseRootCause(input, result) {
   return "전반적 소득 대비 지출 균형 부족";
 }
 
-function ResultBanner({ input, result, npMonthly }) {
-  const v = getVerdict(result);
+function mcVerdict(rate) {
+  if (rate >= 95) return { icon: "\u{1F389}", text: "매우 안정", tone: "emerald" };
+  if (rate >= 90) return { icon: "✓",  text: "안정적", tone: "emerald" };
+  if (rate >= 75) return { icon: "⚠",  text: "경계",   tone: "amber" };
+  return               { icon: "⚠⚠", text: "위험",   tone: "red" };
+}
+
+function ResultBanner({ input, result, npMonthly, mc }) {
+  if (!mc) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-400">
+        성공확률 계산 중…
+      </div>
+    );
+  }
+  const v = mcVerdict(mc.successRate);
+  const det = getVerdict(result);
   const cause = diagnoseRootCause(input, result);
   const toneMap = {
     emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
@@ -1392,11 +1531,16 @@ function ResultBanner({ input, result, npMonthly }) {
   return (
     <div className={`rounded-xl border p-4 ${parts[0]} ${parts[1]}`}>
       <div className="flex items-baseline gap-3 flex-wrap">
-        <div className="text-3xl font-bold num">{result.readinessRatio}%</div>
-        <div className={`text-sm font-semibold ${parts[2]}`}>{v.icon} {v.text}</div>
+        <div className="text-3xl font-bold num">{mc.successRate}%</div>
+        <div className={`text-sm font-semibold ${parts[2]}`}>{v.icon} 성공확률 — {v.text}</div>
       </div>
       <div className="mt-1 text-xs text-slate-600">
-        본인 국민연금 {fmt만원월(npMonthly)} · 시뮬 종료 {result.simEndAge}세
+        몬테카를로 {mc.runs}회 · 수익률 변동성 ±{(input.returnVolatility ?? 12).toFixed(0)}%
+        {mc.medianDepletionAge != null && <> · 실패 시 중앙 고갈 <b>{mc.medianDepletionAge}세</b></>}
+        {" "}· 중간 시나리오: {det.text} (준비율 {result.readinessRatio}%)
+      </div>
+      <div className="mt-0.5 text-xs text-slate-500 num">
+        최종 금융자산 분포 — 하위10% {fmt만원(mc.p10Final)} · 중앙 {fmt만원(mc.p50Final)} · 상위10% {fmt만원(mc.p90Final)} · 본인 국민연금 {fmt만원월(npMonthly)}
       </div>
       {cause && (
         <div className="mt-2 text-xs text-slate-700 border-t border-slate-200 pt-2">
@@ -1501,9 +1645,12 @@ function AssumptionsModal({ onClose }) {
               <tbody>
                 <Row label="소득대체율 (완전 가입 기준)" value={`${p.pensionReplacementRate * 100}%`} note="가입연수 40년 기준 단순 비례 적용. 실제는 연도별 하향 조정 중." />
                 <Row label="A값 (평균 월소득)" value={`${p.pensionAValueMonthly}만/월`} note="2024년 A값 299만원 기준 단순화. 매년 임금상승률로 인상." />
+                <Row label="기준소득월액 상한 (B값)" value={`${p.npMaxBaseMonthly}만/월`} note="세전 월소득 기준 상한 적용 (2024)." />
+                <Row label="조기/연기 수령" value="−6% · +7.2% /년" note="법정 개시연령 대비 조기 최대 −30%, 연기 최대 +36%. 시뮬레이션에 반영." />
                 <Row label="최대 가입연수" value={`${p.maxNpYears}년`} note="법정 최대 40년 (자동 계산 시 퇴직나이−25로 추정)." />
-                <Row label="연금소득세" value={`${p.pensionTaxRate * 100}%`} note="분리과세 5.5% (지방세 포함). 소득 수준·과세 방식에 따라 다름." />
-                <Row label="유족연금" value={`사망자 NP × ${p.survivorPensionRatio * 100}%`} note="사망한 배우자의 국민연금 50% 단순 적용. 실제는 중복 지급 제한 있음." />
+                <Row label="연금소득세" value={`${p.pensionTaxRate * 100}%`} note="노령연금 수령액에 적용. 유족·기초연금은 비과세." />
+                <Row label="유족연금" value={`사망자 NP × ${p.survivorPensionRatio * 100}%`} note="본인 노령연금과 중복 시 '본인+유족 30%' vs '유족 100%' 중 큰 쪽 선택. 개시 나이 무관." />
+                <Row label="기초연금" value={`월 ${p.basicPension.monthlyFull}만 (부부 각 −${p.basicPension.coupleReductionRate * 100}%)`} note={`65세+ 소득인정액 단독 ${p.basicPension.incomeThresholdSingle}만/부부 ${p.basicPension.incomeThresholdCouple}만 이하 시 지급. NP가 기준액 1.5배 초과 시 절반 감액.`} />
                 <Row label="가입 시작 나이 (자동)" value={`${p.contributionStartAge}세`} note="'자동 계산' 모드에서 퇴직나이 − 25로 가입연수 추정." />
               </tbody>
             </table>
@@ -1525,8 +1672,9 @@ function AssumptionsModal({ onClose }) {
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">자산·세제</h3>
             <table className="w-full">
               <tbody>
-                <Row label="DC 연간 적립" value="연봉 ÷ 12" note="매년 월 연봉만큼 DC 자동 적립 (투자성 자산 버킷). 회사 매칭·수수료 미반영." />
-                <Row label="퇴직금 세율" value="6.6%" note="근속연수 공제 후 분리과세 단순 적용. 퇴직금은 저축성 자산 버킷에 입금." />
+                <Row label="DC 연간 적립" value="세전 연봉 ÷ 12" note="매년 세전 월급만큼 DC 자동 적립 (투자성 자산 버킷). 회사 매칭·수수료 미반영." />
+                <Row label="퇴직금 세율" value="6.6%" note="퇴직 시점 세전 월급 × 근속연수 기준. 분리과세 단순 적용, 저축성 버킷에 입금." />
+                <Row label="주택대출 이자" value="입력 금리 적용" note="잔액에 매년 이자 부과 후 원리금 상환 (실질 기준 환산)." />
                 <Row label="건강보험료 추정" value="지역가입자 단순 근사" note={`소득 × ${p.healthInsurance.sideIncomeRate * 100}% + 금융자산 × ${p.healthInsurance.financialAssetRate * 100}% + 주택 × ${p.healthInsurance.houseAssetRate * 100}% (상한 ${p.healthInsurance.annualCap}만/년)`} />
                 <Row label="준비율 최대 표시" value={`${ar.readinessMaxRatio}%`} note="수명까지 자산이 남을 경우 최대 300%로 캡핑." />
               </tbody>
@@ -1534,9 +1682,10 @@ function AssumptionsModal({ onClose }) {
           </div>
           {/* 시퀀스 리스크 */}
           <div>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">시퀀스 리스크 프리셋</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">시퀀스 리스크 · 몬테카를로</h3>
             <table className="w-full">
               <tbody>
+                <Row label="몬테카를로" value={`${a.monteCarlo.runs}회 · 정규분포`} note="매년 수익률을 평균=투자수익률, 표준편차=변동성으로 무작위 추출 (고정 시드, 투자성 자산만). 성공확률 = 수명까지 자산이 유지된 비율." />
                 <Row label="경미 (Mild)" value="−5%p, 3년" note="퇴직 직후 3년간 수익률 -5%p. 2001년 닷컴 버블 수준." />
                 <Row label="중간 (Severe)" value="−10%p, 5년" note="퇴직 직후 5년간 수익률 -10%p. 2008년 금융위기 장기 침체 수준." />
                 <Row label="2008 스타일" value="−30% → +10% 2년" note="첫해 -30%p 폭락, 이후 2년 +10%p 반등, 이후 정상. 최악의 순서 리스크." />
@@ -1982,7 +2131,7 @@ function loadInitial() {
 }
 
 function App() {
-  const initial = loadInitial();
+  const [initial] = useState(loadInitial);
   const [scenarios, setScenarios] = useState(initial.scenarios);
   const [activeId, setActiveId] = useState(initial.activeId);
   const [advancedMode, setAdvancedMode] = useState(false);
@@ -2134,6 +2283,13 @@ function App() {
   const activeResult = activeBand.mid;
   const insights = useMemo(() => findBestInsights(active.input, activeResult), [active.input, activeResult]);
 
+  // C10: 몬테카를로 — 렌더 밖에서 디바운스 계산 (입력 안정화 300ms 후 1회, 활성 시나리오만)
+  const [mcResult, setMcResult] = useState(null);
+  useEffect(() => {
+    const t = setTimeout(() => setMcResult(runMonteCarlo(active.input)), 300);
+    return () => clearTimeout(t);
+  }, [active.input]);
+
   // 기본값 대비 변경 여부 헬퍼 (슬라이더 강조 표시용)
   const normalizedDefaults = useMemo(() => normalizeInput(KR_DEFAULTS), []);
   const changedFrom = (field) => {
@@ -2248,6 +2404,7 @@ function App() {
     "배우자 근로":    y.spouseSalaryMonthly,
     "본인 국민연금":  y.selfPensionMonthly,
     "배우자 국민연금": y.spousePensionMonthly,
+    "기초연금":       y.basicPensionMonthly ?? 0,
     "브릿지 월소득":  y.bridgeSideMonthly,
     "생활비":       -y.livingMonthly,
     "양육비":       -y.childMonthly,
@@ -2374,7 +2531,7 @@ function App() {
               <Slider label="현재 나이" value={i.currentAge} {...UI_RANGES.currentAge} onChange={setInputField("currentAge")} format={v => `${v}세`} changed={changedFrom("currentAge")} />
               <Slider label="퇴직 나이" value={i.retireAge} min={i.currentAge} max={UI_RANGES.retireAge.max} step={UI_RANGES.retireAge.step} onChange={setInputField("retireAge")} format={v => `${v}세`} changed={changedFrom("retireAge")} />
               {advancedMode && <>
-                <Slider label="국민연금 개시 나이" value={i.selfPensionStartAge} {...UI_RANGES.selfPensionStartAge} onChange={setInputField("selfPensionStartAge")} format={v => `${v}세`} hint={`자동: ${autoPensionStartAge(i.currentAge)}세 (출생연도 기준)`} />
+                <Slider label="국민연금 개시 나이" value={i.selfPensionStartAge} {...UI_RANGES.selfPensionStartAge} onChange={setInputField("selfPensionStartAge")} format={v => `${v}세`} hint={`법정 ${autoPensionStartAge(i.currentAge)}세 · 조기 −6%/연기 +7.2%/년 → 수령액 ×${pensionClaimFactor(i.selfPensionStartAge, autoPensionStartAge(i.currentAge)).toFixed(2)}`} />
                 <Slider label="기대수명 (본인)" value={i.selfLifeExpectancy} {...UI_RANGES.selfLifeExpectancy} onChange={setInputField("selfLifeExpectancy")} format={v => `${v}세`} hint={`자동: ${autoLifeExpectancy(i.currentAge)}세`} />
               </>}
             </Section>
@@ -2387,7 +2544,7 @@ function App() {
                   <Slider label="배우자 현재 나이" value={i.spouseCurrentAge} {...UI_RANGES.spouseCurrentAge} onChange={setInputField("spouseCurrentAge")} format={v => `${v}세`} />
                   <Slider label="배우자 퇴직 나이" value={i.spouseRetireAge} {...UI_RANGES.spouseRetireAge} onChange={setInputField("spouseRetireAge")} format={v => `${v}세`} />
                   <Slider label="배우자 기대수명" value={i.spouseLifeExpectancy} {...UI_RANGES.spouseLifeExpectancy} onChange={setInputField("spouseLifeExpectancy")} format={v => `${v}세`} />
-                  <Slider label="배우자 국민연금 개시" value={i.spousePensionStartAge} {...UI_RANGES.spousePensionStartAge} onChange={setInputField("spousePensionStartAge")} format={v => `${v}세`} />
+                  <Slider label="배우자 국민연금 개시" value={i.spousePensionStartAge} {...UI_RANGES.spousePensionStartAge} onChange={setInputField("spousePensionStartAge")} format={v => `${v}세`} hint={`법정 ${autoPensionStartAge(i.spouseCurrentAge)}세 → 수령액 ×${pensionClaimFactor(i.spousePensionStartAge, autoPensionStartAge(i.spouseCurrentAge)).toFixed(2)}`} />
                 </>}
               </Section>
             )}
@@ -2455,7 +2612,7 @@ function App() {
             {/* 자산 */}
             <Section title="자산" summary={assetSummary}>
               {advancedMode && (
-                <Slider label="투자성 자산 (DC/IRP·주식·ETF)" value={i.investmentBalance} {...UI_RANGES.investmentBalance} onChange={setInputField("investmentBalance")} format={fmt만원} hint="회사가 매년 연봉/12 자동 적립 포함. 스트레스 테스트 적용." changed={changedFrom("investmentBalance")} />
+                <Slider label="투자성 자산 (DC/IRP·주식·ETF)" value={i.investmentBalance} {...UI_RANGES.investmentBalance} onChange={setInputField("investmentBalance")} format={fmt만원} hint="회사가 매년 세전 연봉/12 자동 적립 포함. 스트레스 테스트 적용." changed={changedFrom("investmentBalance")} />
               )}
               <Slider label="저축성 자산 (예금·MMF 등)" value={i.savingsBalance} {...UI_RANGES.savingsBalance} onChange={setInputField("savingsBalance")} format={fmt만원} hint="안정적 수익. 스트레스 테스트 미적용." />
               {advancedMode && <>
@@ -2486,6 +2643,7 @@ function App() {
                   {i.hasMortgage && <>
                     <Slider label="대출 잔액" value={i.mortgageBalance} {...UI_RANGES.mortgageBalance} onChange={setInputField("mortgageBalance")} format={fmt만원} />
                     <Slider label="월 원리금" value={i.monthlyMortgagePayment} {...UI_RANGES.monthlyMortgagePayment} onChange={setInputField("monthlyMortgagePayment")} format={v => `${v}만/월`} />
+                    <Slider label="대출 금리" value={i.mortgageRate ?? 4.0} {...UI_RANGES.mortgageRate} onChange={setInputField("mortgageRate")} format={v => `${v.toFixed(1)}%`} hint="잔액에 이자 부과 (실질 기준 환산)" />
                   </>}
                 </>}
                 {/* 전세 전용 */}
@@ -2550,6 +2708,7 @@ function App() {
               <Slider label="물가상승률 (기준)" value={i.inflationRate} {...UI_RANGES.inflationRate} onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
               {advancedMode && <>
                 <Slider label="수익률 밴드 ±" value={i.scenarioBandSpread} {...UI_RANGES.scenarioBandSpread} onChange={setInputField("scenarioBandSpread")} format={v => `±${v.toFixed(1)}%p`} />
+                <Slider label="수익률 변동성 (몬테카를로)" value={i.returnVolatility ?? 12} {...UI_RANGES.returnVolatility} onChange={setInputField("returnVolatility")} format={v => `±${v.toFixed(1)}%`} hint="연 수익률 표준편차. 주식 위주 15~20 / 혼합 10~12 / 채권 위주 5~8" />
                 {i.housingMode === "own" && <Slider label="주택 상승률" value={i.houseInflationRate} {...UI_RANGES.houseInflationRate} onChange={setInputField("houseInflationRate")} format={v => `${v.toFixed(1)}%`} />}
                 {i.housingMode !== "own" && (
                   <div className="mb-3">
@@ -2601,6 +2760,7 @@ function App() {
               <>
               <Section title="세제·건보·의료">
                 <Toggle label="건강보험료 적용" value={i.applyHealthInsurance} onChange={setInputField("applyHealthInsurance")} hint="퇴직 후 지역가입자 단순 추정" />
+                <Toggle label="기초연금 반영" value={i.applyBasicPension !== false} onChange={setInputField("applyBasicPension")} hint="65세+ 소득인정액 하위 단순 추정 (월 최대 34만, 부부 각 −20%)" />
                 <Toggle label="퇴직금 일시금 별도 반영" value={i.includeSeveranceLumpSum} onChange={setInputField("includeSeveranceLumpSum")} hint="DC 매년 적립과 중복될 수 있어 기본값은 OFF" />
                 <Toggle label="노년기 의료비 반영" value={i.applyMedicalCost !== false} onChange={v => setInputField("applyMedicalCost")(v)} hint="생활비 섹션 배율 슬라이더와 연동" />
               </Section>
@@ -2676,11 +2836,12 @@ function App() {
               <div>준비율: {activeResult.readinessRatio}% | 자산소진: {activeResult.depletionAge ?? "없음"} | 인출전략: {i.withdrawalStrategy}</div>
               <div>퇴직시자산: {fmt만원(activeResult.totalAssetsAtRetirement)} | 브릿지인출: {fmt만원(activeResult.bridgeShortfall)}</div>
               <div>시뮬종료나이: {activeResult.simEndAge} | 가입연수: {npYearsFor(i)}년</div>
+              <div>MC 성공확률: {mcResult ? `${mcResult.successRate}%` : "계산 중"} | 실패 중앙 고갈: {mcResult?.medianDepletionAge ?? "없음"} | P50 최종: {fmt만원(mcResult?.p50Final)}</div>
               <div className="text-violet-400">console에 상세 데이터 출력됨 (F12)</div>
             </div>
           )}
 
-          <ResultBanner input={i} result={activeResult} npMonthly={activeResult.selfNpMonthly} />
+          <ResultBanner input={i} result={activeResult} npMonthly={activeResult.selfNpMonthly} mc={mcResult} />
 
           {/* 요약 카드 */}
           <div className="grid grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] gap-3">
@@ -2691,7 +2852,7 @@ function App() {
               color={(() => { const w = getVerdict(activeResult).weight; return w === "strong" ? "blue" : w === "ok" ? "green" : (w === "tight" || w === "marginal") ? "amber" : "red"; })()}
               sub={activeResult.depletionAge ? `⚠ ${activeResult.depletionAge}세 자산소진` : "✓ 수명까지 유지"}
               large
-              title="수명까지 자산이 유지되면 100%+, 자산이 소진되면 그 비율에 따라 낮아집니다. 100% 이상이면 안전, 150% 이상이면 여유 있음."
+              title="중간 시나리오(고정 수익률) 기준. 수명까지 자산이 유지되면 100%+, 자산이 소진되면 그 비율에 따라 낮아집니다. 수익률 변동을 고려한 확률은 상단 성공확률 참고."
             />
             <SummaryCard
               label="브릿지 기간"
@@ -2965,6 +3126,7 @@ function App() {
                   <Bar dataKey="배우자 근로"    stackId="a" fill="#34d399" />
                   <Bar dataKey="본인 국민연금"  stackId="a" fill="#3b82f6" />
                   <Bar dataKey="배우자 국민연금" stackId="a" fill="#60a5fa" />
+                  <Bar dataKey="기초연금"      stackId="a" fill="#818cf8" />
                   <Bar dataKey="브릿지 월소득"  stackId="a" fill="#06b6d4" />
                   <Bar dataKey="생활비"        stackId="a" fill="#f59e0b" />
                   <Bar dataKey="양육비"        stackId="a" fill="#a855f7" />
@@ -3048,10 +3210,12 @@ function App() {
           </details>
 
           <footer className="text-[11px] text-slate-400 pb-8 leading-relaxed">
-            ※ 수익률·연봉상승률·주택상승률은 모두 연 % 기준 입력. 차트는 현재가치(오늘 돈) 기준 표시.
-            국민연금은 A값(300만) 단순 추정. 건강보험료/세제는 단순 추정. DC는 매년 연봉/12 적립 가정.
-            퇴직금 일시금은 근속연수 기준 단순 계산 후 6.6% 과세 적용. 유족연금은 사망 배우자 연금의 50% 단순 가정.
+            ※ 수익률·연봉상승률·주택상승률·대출금리는 모두 연 % 기준 입력. 차트는 현재가치(오늘 돈) 기준 표시.
+            국민연금은 A값(300만)·기준소득월액 상한(617만) 단순 추정, 조기 −6%·연기 +7.2%/년 계수와 연금소득세 5.5% 반영.
+            기초연금은 소득인정액 단순 추정 (월 최대 34만, 부부 각 −20%). 건강보험료/세제는 단순 추정. DC는 매년 세전 연봉/12 적립 가정.
+            퇴직금 일시금은 퇴직 시점 세전 월급 × 근속연수 기준 6.6% 과세. 유족연금은 '본인+유족 30%' vs '유족 100%' 택일. 주택대출은 입력 금리로 이자 부과.
             <b>노년기 의료비</b>: 50대 15만 → 65세 30만 → 75세 60만 → 85세 100만/월 기준, 의료물가는 일반물가보다 +1.5%p 상승 가정.
+            <b>성공확률</b>: 몬테카를로 300회에서 수명까지 자산이 유지된 비율. 수익률 변동성 슬라이더(고급 {'>'} 시장 가정)로 조정.
             <b>시퀀스 리스크</b>: 경미(-5%p,3년) / 중간(-10%p,5년) / 2008(-30%→반등) 프리셋 중 선택. 차트 토글로 표시.
             <b>인출 전략</b>: 버킷=저축성→투자성 순 인출. 4% 룰=퇴직자산×4% 고정. VPW=잔여기대연수 기반 비율 인출.
             <b>준비율·자산유지</b>는 본인·배우자 최대 수명 기준. <b>디버그</b>: URL에 ?debug=1 추가 시 상세 로그.
