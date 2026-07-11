@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-11T15:59:50Z",
+  "generatedAt": "2026-07-11T23:46:44Z",
   "current": {
     "weightKg": 81.5,
     "weightDate": "2026-07-10",
@@ -10,25 +10,25 @@
   "rolling": {
     "weeklyLossRateKg": 0.2971,
     "last7ExerciseMinutes": 74.0,
-    "last7ExerciseCalories": 1185.0,
-    "last7StepsTotal": 33750,
-    "last7StepsAvg": 5625.0,
+    "last7ExerciseCalories": 1284.0,
+    "last7StepsTotal": 35989,
+    "last7StepsAvg": 5141.0,
     "last7ActiveDays": 5,
     "last7WeightRangeKg": 0.6,
     "last7SleepHoursAvg": null,
-    "last7RestingHrAvg": 58.3,
+    "last7RestingHrAvg": 58.6,
     "exerciseTrend": {
-      "recent7Avg": 169.3,
+      "recent7Avg": 183.4,
       "prev21Avg": 298.9,
-      "deltaPct": -0.434,
-      "slopePerDay": -5.97,
+      "deltaPct": -0.386,
+      "slopePerDay": -5.29,
       "direction": "decreasing"
     },
     "lossRateDetail": {
       "blended": 0.2971,
       "ewmaSlope": 0.2589,
       "ma7Slope": 0.3958,
-      "kcalRate": 0.2394,
+      "kcalRate": 0.2458,
       "weights": {
         "ewma": 0.25,
         "ma7": 0.3,
@@ -54,19 +54,19 @@
     "threeMonthWeightKg": null,
     "scenarios": {
       "optimistic": {
-        "multiplier": 1.32,
+        "multiplier": 1.34,
         "threeMonthWeightKg": 79.5,
-        "assumedDailyKcal": 254.0,
-        "weeklyKcalDelta": 593.0,
-        "extraWeeklyLossKg": 0.0944,
-        "effectiveWeeklyLossKg": 0.3915,
+        "assumedDailyKcal": 275.1,
+        "weeklyKcalDelta": 642.0,
+        "extraWeeklyLossKg": 0.1009,
+        "effectiveWeeklyLossKg": 0.398,
         "label": "낙관",
-        "description": "주2회 추가 운동 (회당 ~296kcal) 가정"
+        "description": "주2회 추가 운동 (회당 ~321kcal) 가정"
       },
       "base": {
         "multiplier": 1.0,
         "threeMonthWeightKg": 79.83,
-        "assumedDailyKcal": 169.3,
+        "assumedDailyKcal": 183.4,
         "weeklyKcalDelta": 0.0,
         "extraWeeklyLossKg": 0.0,
         "effectiveWeeklyLossKg": 0.2971,
@@ -74,14 +74,14 @@
         "description": "현재 운동량 유지 기준 예측"
       },
       "conservative": {
-        "multiplier": 0.68,
-        "threeMonthWeightKg": 80.39,
-        "assumedDailyKcal": 84.6,
-        "weeklyKcalDelta": -593.0,
-        "extraWeeklyLossKg": -0.0944,
-        "effectiveWeeklyLossKg": 0.2027,
+        "multiplier": 0.66,
+        "threeMonthWeightKg": 80.43,
+        "assumedDailyKcal": 91.7,
+        "weeklyKcalDelta": -642.0,
+        "extraWeeklyLossKg": -0.1009,
+        "effectiveWeeklyLossKg": 0.1962,
         "label": "보수적",
-        "description": "주2회 운동 누락 (회당 ~296kcal) 가정"
+        "description": "주2회 운동 누락 (회당 ~321kcal) 가정"
       }
     }
   },
@@ -91,12 +91,12 @@
     "etaDays": 100,
     "etaDate": "2026-10-20",
     "etaRangeDays": {
-      "min": 76,
-      "max": 147
+      "min": 75,
+      "max": 152
     },
     "etaRangeDates": {
-      "min": "2026-09-26",
-      "max": "2026-12-06"
+      "min": "2026-09-25",
+      "max": "2026-12-11"
     }
   },
   "lossIntensity": {
@@ -480,10 +480,10 @@
     "kcalPerKg": 7700.0,
     "kcalPerKgSource": "body_fat",
     "calibration": {
-      "exerciseEfficiency": 1.226,
-      "samples": 27,
+      "exerciseEfficiency": 1.21,
+      "samples": 28,
       "windowDays": 28,
-      "interpretation": "운동 효과가 기대보다 큽니다 (123%) — 식이 통제도 기여 중."
+      "interpretation": "운동 효과가 기대보다 큽니다 (121%) — 식이 통제도 기여 중."
     },
     "modelComparison": {
       "kalmanBacktest": {
@@ -510,12 +510,6 @@
         }
       },
       "perHorizon": {
-        "14d": {
-          "v1MaeKg": 0.641,
-          "kalmanMaeKg": 0.878,
-          "deltaKg": -0.237,
-          "kalmanWins": false
-        },
         "7d": {
           "v1MaeKg": 0.61,
           "kalmanMaeKg": 0.747,
@@ -526,6 +520,12 @@
           "v1MaeKg": 0.576,
           "kalmanMaeKg": 0.984,
           "deltaKg": -0.408,
+          "kalmanWins": false
+        },
+        "14d": {
+          "v1MaeKg": 0.641,
+          "kalmanMaeKg": 0.878,
+          "deltaKg": -0.237,
           "kalmanWins": false
         }
       },
@@ -2764,11 +2764,11 @@
       },
       {
         "date": "2026-07-11",
-        "value": 4456
+        "value": 6501
       },
       {
         "date": "2026-07-12",
-        "value": null
+        "value": 194
       }
     ],
     "exerciseMinutes": [
@@ -3008,11 +3008,11 @@
       },
       {
         "date": "2026-07-11",
-        "value": 179.0
+        "value": 274.0
       },
       {
         "date": "2026-07-12",
-        "value": 0
+        "value": 4.0
       }
     ]
   }
