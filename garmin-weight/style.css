@@ -208,17 +208,26 @@ body {
   margin-top: 16px;
   align-items: start;
 }
+.dash-main,
 .dashboard-rail {
   display: grid;
   gap: 16px;
+  align-content: start;
 }
-.dashboard-grid .panel,
-.dashboard-rail .panel {
+.dashboard-grid .panel {
   margin-top: 0;
   border-top: 2px solid var(--ink);
 }
 .model-panel .model-strip-head {
   display: none;
+}
+/* mobile (< 1080px): flatten wrappers so panel order = chart → scenarios → tiles → model */
+@media (max-width: 1079px) {
+  .dash-main, .dashboard-rail { display: contents; }
+  .chart-panel { order: 1; }
+  .scenarios-panel { order: 2; }
+  .tiles-panel { order: 3; }
+  .model-panel { order: 4; }
 }
 
 /* ====================== DETAILS SUMMARY ====================== */
@@ -1110,11 +1119,21 @@ body {
   .brandmark { font-size: 32px; }
   .brand-icon { width: 40px; height: 40px; }
   .dashboard-grid { grid-template-columns: minmax(0, 2fr) minmax(320px, 0.9fr); }
-  /* hero: giant number left, stat-cells as a 2-col right rail */
-  .hero-main { display: grid; grid-template-columns: 1.4fr 1fr; align-items: stretch; }
-  .hero-title { margin: 0; border-right: 2px solid var(--ink); display: flex; align-items: center; }
+  /* hero: number hugs its content (no dead space), stat-cells fill the rest */
+  .hero-main { display: grid; grid-template-columns: auto 1fr; align-items: stretch; }
+  .hero-title {
+    margin: 0;
+    padding: 24px 40px;
+    border-right: 2px solid var(--ink);
+    display: flex;
+    align-items: center;
+    font-size: clamp(96px, 11vw, 168px);
+    white-space: nowrap;
+  }
   .stat-cells { border-top: 0; align-content: stretch; }
-  .stat-cell-value { font-size: 20px; }
+  .stat-cell { padding: 14px 18px; justify-content: center; }
+  .stat-cell-value { font-size: 24px; }
+  .stat-cell-label { font-size: 10px; }
   /* rail scenarios stack vertically when the rail is narrow */
   .dashboard-rail .scenarios-grid { grid-template-columns: 1fr; }
   .dashboard-rail .scenario { border-right: 0; border-bottom: 1px solid var(--ink); }
