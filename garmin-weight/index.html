@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260707" />
+  <link rel="stylesheet" href="./style.css?v=20260724" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -41,47 +41,41 @@
     </header>
 
     <section class="hero">
-      <div class="hero-grid">
-        <div class="hero-left">
-          <div class="hero-meta-row">
-            <div class="hero-badge" id="statusBadge">예측 보류</div>
-            <p class="hero-status-reason" id="statusReason">LATEST 30 DAYS (LOW RELIABILITY)</p>
+      <div class="hero-top">
+        <span class="hero-badge" id="statusBadge">예측 보류</span>
+        <span class="hero-status-reason" id="statusReason">LATEST 30 DAYS (LOW RELIABILITY)</span>
+        <span class="hero-last">최근 <b id="lastEntry">–</b></span>
+      </div>
+      <div class="hero-main">
+        <h1 class="hero-title">
+          <span id="currentWeight" class="title-num">–</span><span class="title-unit">kg</span>
+        </h1>
+        <div class="stat-cells">
+          <div class="stat-cell">
+            <span class="stat-cell-label">Trend Weight</span>
+            <span id="trendWeight" class="stat-cell-value">–</span>
           </div>
-          <h1 class="hero-title">
-            <span id="currentWeight" class="title-num">–</span><span class="title-unit">kg</span>
-          </h1>
-          <div class="hero-stats-row">
-            <div class="hero-stat">
-              <span class="hero-stat-label">Trend Weight</span>
-              <span id="trendWeight" class="hero-stat-value">–</span>
-            </div>
-            <div class="hero-stat">
-              <span class="hero-stat-label">To Target</span>
-              <span id="toTarget" class="hero-stat-value">–</span>
-            </div>
-            <div class="hero-stat">
-              <span class="hero-stat-label">Last Entry</span>
-              <span id="lastEntry" class="hero-stat-value">–</span>
-            </div>
+          <div class="stat-cell">
+            <span class="stat-cell-label">Weekly Change</span>
+            <span id="heroWeeklyChange" class="stat-cell-value">–</span>
           </div>
-        </div>
-        <div class="hero-right">
-          <div class="hero-metrics">
-            <div class="hero-metric">
-              <p class="label">Weekly Change</p>
-              <p id="heroWeeklyChange" class="hero-metric-val">–</p>
-              <p class="hero-metric-sub">RECENT BLENDED TREND</p>
-            </div>
-            <div class="hero-metric">
-              <p class="label">Goal Progress</p>
-              <p id="goalProgressBig" class="hero-metric-val">–</p>
-              <p class="hero-metric-sub">&nbsp;</p>
-            </div>
-            <div class="hero-metric hero-metric--confidence">
-              <p class="label">Prediction Confidence</p>
-              <p id="predictionConfidence" class="hero-metric-val">LOW</p>
-              <p id="predictionError" class="hero-metric-sub">–</p>
-            </div>
+          <div class="stat-cell">
+            <span class="stat-cell-label">To Target</span>
+            <span id="toTarget" class="stat-cell-value">–</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-cell-label">Target ETA</span>
+            <span id="etaValue" class="stat-cell-value">–</span>
+            <span id="etaSub" class="stat-cell-sub">–</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-cell-label">Goal Progress</span>
+            <span id="goalProgressBig" class="stat-cell-value">–</span>
+          </div>
+          <div class="stat-cell stat-cell--confidence">
+            <span class="stat-cell-label">Confidence</span>
+            <span id="predictionConfidence" class="stat-cell-value">LOW</span>
+            <span id="predictionError" class="stat-cell-sub">–</span>
           </div>
         </div>
       </div>
@@ -97,36 +91,11 @@
       </div>
     </section>
 
-    <section class="summary-strip" id="summaryStrip">
-      <div class="summary-strip-outer">
-        <div class="summary-status-block">
-          <div class="summary-status-row">
-            <span class="summary-status-label">Status</span>
-            <span class="summary-status-value">
-              <span id="summaryCoverageText">–</span>
-              <span id="summaryCoveragePct" class="summary-status-sub">( – )</span>
-            </span>
-          </div>
-          <span class="summary-dots" id="summaryDots"></span>
-        </div>
-        <div class="summary-grid">
-          <div class="summary-grid-item">
-            <span class="summary-grid-label">7d Range</span>
-            <span class="summary-grid-value" id="summaryRangeBox">–</span>
-          </div>
-          <div class="summary-grid-item">
-            <span class="summary-grid-label">7d Change</span>
-            <span class="summary-grid-value" id="summaryChange7d">–</span>
-          </div>
-          <div class="summary-grid-item">
-            <span class="summary-grid-label">28d Change</span>
-            <span class="summary-grid-value" id="summaryChange28d">–</span>
-          </div>
-          <div class="summary-grid-item">
-            <span class="summary-grid-label">14d Mae</span>
-            <span class="summary-grid-value" id="summaryMae14d">–</span>
-          </div>
-        </div>
+    <section class="insight-strip" id="insightCard" hidden>
+      <span class="insight-tag">INSIGHT</span>
+      <div class="insight-text">
+        <p class="insight-headline" id="insightHeadline"></p>
+        <p class="insight-lines" id="insightLines"></p>
       </div>
     </section>
 
@@ -231,31 +200,47 @@
         </div>
       </section>
 
-      <section class="panel activity-panel">
+      <section class="panel tiles-panel">
         <div class="panel-head">
           <div class="panel-head-inline">
-            <div class="panel-head-icon">A</div>
+            <div class="panel-head-icon">B</div>
             <div>
-              <p class="eyebrow">운동 · 걸음</p>
-              <h3 class="panel-head-title">Activity Logs</h3>
+              <p class="eyebrow">체성분 · 활동</p>
+              <h3 class="panel-head-title">Body &amp; Activity</h3>
             </div>
           </div>
         </div>
-        <div class="activity-blocks">
-          <div class="activity-block brutalist-border">
-            <span id="exerciseMinutes" class="activity-block-num">–</span>
-            <span class="activity-block-unit">MIN</span>
-            <span class="activity-block-label">Duration</span>
+        <div class="tiles">
+          <div class="tile">
+            <span class="tile-label">체지방률</span>
+            <span class="tile-num" id="bodyFat">–</span>
+            <span class="tile-unit">%</span>
+            <span class="tile-sub" id="bodyFatDelta"></span>
           </div>
-          <div class="activity-block brutalist-border">
-            <span id="activeDays" class="activity-block-num">–</span>
-            <span class="activity-block-unit">DAYS</span>
-            <span class="activity-block-label">Active Days</span>
+          <div class="tile">
+            <span class="tile-label">내장지방</span>
+            <span class="tile-num" id="visceralFat">–</span>
+            <span class="tile-unit">LV</span>
           </div>
-          <div class="activity-block brutalist-border">
-            <span id="stepsAvg" class="activity-block-num">–</span>
-            <span class="activity-block-unit">K</span>
-            <span class="activity-block-label">Avg Steps</span>
+          <div class="tile">
+            <span class="tile-label">안정심박</span>
+            <span class="tile-num" id="restingHr">–</span>
+            <span class="tile-unit">BPM</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">운동시간</span>
+            <span class="tile-num" id="exerciseMinutes">–</span>
+            <span class="tile-unit">MIN · 7D</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">활동일수</span>
+            <span class="tile-num" id="activeDays">–</span>
+            <span class="tile-unit">DAYS · 7D</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">평균걸음</span>
+            <span class="tile-num" id="stepsAvg">–</span>
+            <span class="tile-unit">K · 7D</span>
           </div>
         </div>
       </section>
@@ -265,6 +250,34 @@
           <div class="panel-head-bar">
             <div class="panel-head-badge-sm">M</div>
             <h4 class="panel-head-title-sm">Model Diagnostics</h4>
+          </div>
+        </div>
+        <div class="coverage-block">
+          <div class="coverage-head">
+            <span class="coverage-label">Coverage</span>
+            <span class="coverage-value">
+              <span id="summaryCoverageText">–</span>
+              <span id="summaryCoveragePct" class="coverage-sub">( – )</span>
+            </span>
+          </div>
+          <span class="summary-dots" id="summaryDots"></span>
+        </div>
+        <div class="coverage-grid">
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">7d Range</span>
+            <span class="coverage-cell-value" id="summaryRangeBox">–</span>
+          </div>
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">7d Change</span>
+            <span class="coverage-cell-value" id="summaryChange7d">–</span>
+          </div>
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">28d Change</span>
+            <span class="coverage-cell-value" id="summaryChange28d">–</span>
+          </div>
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">14d MAE</span>
+            <span class="coverage-cell-value" id="summaryMae14d">–</span>
           </div>
         </div>
         <div class="model-strip" id="modelStrip">
@@ -329,8 +342,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script defer src="./app.helpers.js?v=20260623"></script>
-  <script defer src="./app.js?v=20260707"></script>
-  <script defer src="./enhancements.js?v=20260707"></script>
+  <script defer src="./app.helpers.js?v=20260724"></script>
+  <script defer src="./app.js?v=20260724"></script>
+  <script defer src="./enhancements.js?v=20260724"></script>
+  <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>
