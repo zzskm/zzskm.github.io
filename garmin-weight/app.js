@@ -66,6 +66,19 @@
     setText('predictionError', bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `±${bt14.maeKg.toFixed(2)} kg (14D MAE)` : '–');
     setText('trendWeight', Number.isFinite(trendKg) ? `${trendKg.toFixed(1)} kg` : '–');
     setText('toTarget', Number.isFinite(s.goal?.remainingKg) ? `${s.goal.remainingKg.toFixed(1)} kg` : '–');
+
+    setText('etaValue', fmtEta(s.goal));
+    {
+      const etaDate = s.goal?.etaDate ? fmtDateShort(s.goal.etaDate) : null;
+      const etaRange = fmtEtaRange(s.goal);
+      setText('etaSub', etaDate ? (etaRange ? `${etaDate} · ${etaRange}` : etaDate) : '–');
+    }
+
+    setText('bodyFat', Number.isFinite(current.bodyFatPercent) ? current.bodyFatPercent.toFixed(1) : '–');
+    setText('bodyFatDelta', Number.isFinite(current.bodyFatDelta30d)
+      ? `${current.bodyFatDelta30d > 0 ? '+' : ''}${current.bodyFatDelta30d.toFixed(1)}%p / 30d` : '');
+    setText('visceralFat', Number.isFinite(current.visceralFat) ? String(current.visceralFat) : '–');
+    setText('restingHr', Number.isFinite(rolling.last7RestingHrAvg) ? String(Math.round(rolling.last7RestingHrAvg)) : '–');
     {
       const elLast = el('lastEntry');
       if (elLast) {
@@ -124,7 +137,6 @@
     setText('summaryChange7d', trend7Text);
     setText('summaryChange28d', trend28Text);
     setText('summaryMae14d', maeText);
-    setText('summaryLastEntry', last?.date ? fmtDateShort(last.date) : '–');
 
     const minutes = s.rolling?.last7ExerciseMinutes ?? 0;
     setText('exerciseMinutes', Math.round(minutes));
@@ -147,6 +159,8 @@
 
     const insightCard = el('insightCard');
     if (insightCard) insightCard.hidden = !(s.insight?.headline);
+    setText('insightHeadline', s.insight?.headline ?? '');
+    setText('insightLines', (s.insight?.lines || []).join(' '));
 
     renderScenarioSparklines(s);
     renderModelStrip(s);

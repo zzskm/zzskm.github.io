@@ -556,6 +556,29 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     current_ma14 = ma14_by_date.get(latest_date)
     current_ewma = ewma_values[-1] if ewma_values else None
 
+    def _latest_with_delta(key: str, delta_days: int = 30, digits: int = 1):
+        """최신 유효값과 delta_days 이전 값과의 차이. 값이 없으면 (None, None)."""
+        latest = latest_day = None
+        for r in reversed(rows):
+            v = parse_float(r.get(key))
+            if v is not None:
+                latest, latest_day = v, r["date"]
+                break
+        if latest is None:
+            return None, None
+        cutoff = (date.fromisoformat(latest_day) - timedelta(days=delta_days)).isoformat()
+        past = None
+        for r in reversed(rows):
+            if r["date"] <= cutoff:
+                v = parse_float(r.get(key))
+                if v is not None:
+                    past = v
+                    break
+        return round(latest, digits), (round(latest - past, digits) if past is not None else None)
+
+    body_fat_percent_val, body_fat_delta_30d = _latest_with_delta("body_fat_percent")
+    visceral_fat_val, _ = _latest_with_delta("visceral_fat", digits=0)
+
     kcal_to_kg_default = parse_float(config.get("kcalToKgFactor")) or 7700.0
     height_cm = parse_float(config.get("heightCm"))
     body_fat_pct: float | None = None
@@ -853,6 +876,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "weightMa7Kg": current_ma7,
             "weightMa14Kg": current_ma14,
             "weightEwmaKg": current_ewma,
+            "bodyFatPercent": body_fat_percent_val,
+            "bodyFatDelta30d": body_fat_delta_30d,
+            "visceralFat": visceral_fat_val,
         },
         "rolling": rolling,
         "predictions": {
