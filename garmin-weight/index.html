@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260724" />
+  <link rel="stylesheet" href="./style.css?v=20260724b" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -100,6 +100,7 @@
     </section>
 
     <div class="dashboard-grid">
+      <div class="dash-main">
       <section class="panel chart-panel">
       <div class="panel-head">
       <div class="panel-head-bar">
@@ -160,6 +161,64 @@
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--target"></span>Target</span>
       </div>
     </section>
+
+      <section class="panel model-panel">
+        <div class="panel-head">
+          <div class="panel-head-bar">
+            <div class="panel-head-badge-sm">M</div>
+            <h4 class="panel-head-title-sm">Model Diagnostics</h4>
+          </div>
+        </div>
+        <div class="coverage-block">
+          <div class="coverage-head">
+            <span class="coverage-label">Coverage</span>
+            <span class="coverage-value">
+              <span id="summaryCoverageText">–</span>
+              <span id="summaryCoveragePct" class="coverage-sub">( – )</span>
+            </span>
+          </div>
+          <span class="summary-dots" id="summaryDots"></span>
+        </div>
+        <div class="coverage-grid">
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">7d Range</span>
+            <span class="coverage-cell-value" id="summaryRangeBox">–</span>
+          </div>
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">7d Change</span>
+            <span class="coverage-cell-value" id="summaryChange7d">–</span>
+          </div>
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">28d Change</span>
+            <span class="coverage-cell-value" id="summaryChange28d">–</span>
+          </div>
+          <div class="coverage-cell">
+            <span class="coverage-cell-label">14d MAE</span>
+            <span class="coverage-cell-value" id="summaryMae14d">–</span>
+          </div>
+        </div>
+        <div class="model-strip" id="modelStrip">
+          <div class="model-strip-head">
+            <span class="model-strip-tag">MODEL</span>
+            <span class="model-strip-tag-label">신뢰도 · 추세 · 검증</span>
+          </div>
+          <div class="model-strip-body">
+            <div class="model-strip-cell model-strip-cell--confidence">
+              <p class="label">모델 신뢰도</p>
+              <p id="modelConfidence" class="model-strip-main">–</p>
+            </div>
+            <div class="model-strip-cell model-strip-cell--trend">
+              <p class="label">추세 (주간 변화)</p>
+              <p id="modelTrend" class="model-strip-sub">–</p>
+            </div>
+            <div class="model-strip-cell model-strip-cell--validate">
+              <p class="label">검증</p>
+              <p id="modelValidate" class="model-strip-sub">–</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <aside class="dashboard-rail">
       <section class="panel scenarios-panel">
@@ -241,63 +300,6 @@
             <span class="tile-label">평균걸음</span>
             <span class="tile-num" id="stepsAvg">–</span>
             <span class="tile-unit">K · 7D</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel model-panel">
-        <div class="panel-head">
-          <div class="panel-head-bar">
-            <div class="panel-head-badge-sm">M</div>
-            <h4 class="panel-head-title-sm">Model Diagnostics</h4>
-          </div>
-        </div>
-        <div class="coverage-block">
-          <div class="coverage-head">
-            <span class="coverage-label">Coverage</span>
-            <span class="coverage-value">
-              <span id="summaryCoverageText">–</span>
-              <span id="summaryCoveragePct" class="coverage-sub">( – )</span>
-            </span>
-          </div>
-          <span class="summary-dots" id="summaryDots"></span>
-        </div>
-        <div class="coverage-grid">
-          <div class="coverage-cell">
-            <span class="coverage-cell-label">7d Range</span>
-            <span class="coverage-cell-value" id="summaryRangeBox">–</span>
-          </div>
-          <div class="coverage-cell">
-            <span class="coverage-cell-label">7d Change</span>
-            <span class="coverage-cell-value" id="summaryChange7d">–</span>
-          </div>
-          <div class="coverage-cell">
-            <span class="coverage-cell-label">28d Change</span>
-            <span class="coverage-cell-value" id="summaryChange28d">–</span>
-          </div>
-          <div class="coverage-cell">
-            <span class="coverage-cell-label">14d MAE</span>
-            <span class="coverage-cell-value" id="summaryMae14d">–</span>
-          </div>
-        </div>
-        <div class="model-strip" id="modelStrip">
-          <div class="model-strip-head">
-            <span class="model-strip-tag">MODEL</span>
-            <span class="model-strip-tag-label">신뢰도 · 추세 · 검증</span>
-          </div>
-          <div class="model-strip-body">
-            <div class="model-strip-cell model-strip-cell--confidence">
-              <p class="label">모델 신뢰도</p>
-              <p id="modelConfidence" class="model-strip-main">–</p>
-            </div>
-            <div class="model-strip-cell model-strip-cell--trend">
-              <p class="label">추세 (주간 변화)</p>
-              <p id="modelTrend" class="model-strip-sub">–</p>
-            </div>
-            <div class="model-strip-cell model-strip-cell--validate">
-              <p class="label">검증</p>
-              <p id="modelValidate" class="model-strip-sub">–</p>
-            </div>
           </div>
         </div>
       </section>
