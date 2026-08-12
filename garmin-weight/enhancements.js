@@ -51,19 +51,6 @@
     }
   }
 
-  function setPredictionVisibility(enabled) {
-    const predictionChip = document.querySelector('.chip[data-series="prediction"] input');
-    if (predictionChip && predictionChip.checked !== enabled) {
-      predictionChip.checked = enabled;
-      predictionChip.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-  }
-
-  function applyConfidenceMode(summary) {
-    const low = isLowConfidence(summary);
-    if (low) setPredictionVisibility(false);
-  }
-
   function readMae(backtest, horizon) {
     const value = backtest?.[horizon]?.maeKg;
     return isFiniteNumber(value) ? Number(value) : null;
@@ -129,15 +116,26 @@
     const guard = $('predictionGuard');
     if (!guard) return;
     if (isLowConfidence(summary)) {
+      const diagnostics = summary?.modelDiagnostics || {};
+      const reasons = (diagnostics.confidence?.reasons || []).filter(Boolean);
       guard.hidden = false;
-      guard.querySelector('#predictionGuardText').textContent = '최근 측정률이 낮아 현재는 실제 체중과 추세를 먼저 봅니다.';
+      guard.querySelector('.prediction-guard-title').textContent = '참고용 예측';
+      guard.querySelector('#predictionGuardText').textContent = reasons.length
+        ? reasons.join(' · ')
+        : '최근 측정률이 낮아 예측 신뢰도가 낮습니다.';
+      const note = $('predictionGuardNote');
+      if (note) {
+        const score = diagnostics.confidence?.score ?? 0;
+        const measured = diagnostics.coverage?.measuredDays ?? '–';
+        const total = diagnostics.coverage?.totalDays ?? 30;
+        note.textContent = `신뢰도 ${score}/6 · 측정 ${measured}/${total}일`;
+      }
     } else {
       guard.hidden = true;
     }
   }
 
   function renderSummaryMode(summary) {
-    applyConfidenceMode(summary);
     renderScenarioState(summary);
     renderModelAudit(summary);
     renderPredictionGuard(summary);

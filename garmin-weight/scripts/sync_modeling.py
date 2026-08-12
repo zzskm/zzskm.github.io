@@ -873,13 +873,9 @@ def model_trend_exposure(weekly_change_kg: float | None, weekly_loss_rate_kg: fl
         weekly_loss_rate_kg = None
         weekly_change_kg_display = weekly_change_kg
 
-    prediction_enabled = direction == "losing"
-    disabled_reason = {
-        "losing": None,
-        "gaining": "trend_is_gaining",
-        "flat": "trend_is_flat",
-        "unknown": "insufficient_data",
-    }[direction]
+    # ponytail: direction is information, not a gate — confidence + CI communicate uncertainty
+    prediction_enabled = direction != "unknown"
+    disabled_reason = "insufficient_data" if direction == "unknown" else None
 
     return {
         "direction": direction,

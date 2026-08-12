@@ -625,8 +625,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     con_pct = parse_float(pct_deltas.get("conservative")) or -0.30
 
     recent7_avg_kcal = exercise_trend["recent7Avg"] or 0.0
-    # 체중 증가 추세(음수)는 0으로 클리핑: 예측선이 현재 수준보다 위로 올라가지 않도록
-    base_trend_loss = max(weekly_loss_rate, 0.0) if weekly_loss_rate is not None else 0.0
+    base_trend_loss = weekly_loss_rate if weekly_loss_rate is not None else 0.0
 
     # Phase 1A: 운동 효율 캘리브레이션 (kcal_to_kg는 위에서 정한 동적 값 사용)
     calibration = compute_calibration(rows, weekly_loss_rate, kcal_to_kg, window=trend_window)
@@ -648,7 +647,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             effective_loss = base_trend_loss + extra_weekly_loss_kg
             assumed_daily = round_or_none(recent7_avg_kcal + extra_weekly_kcal / 7.0, 1)
             # P3: 시나리오 3개월 예측도 지수 감쇠 사용
-            three_month_proj = _projected_weight(prediction_start, max(effective_loss, 0.0), 12, target_weight)
+            three_month_proj = _projected_weight(prediction_start, effective_loss, 12, target_weight)
             scenarios[name] = {
                 "multiplier": round(effective_loss / base_trend_loss, 2) if base_trend_loss > 0 else 1.0,
                 "threeMonthWeightKg": round_or_none(three_month_proj, 2),
@@ -666,7 +665,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     # P3: 1/3개월 예측도 지수 감쇠 외삽으로 통일
     one_month_weight = None
     three_month_weight = None
-    if prediction_start is not None and base_effective_loss > 0:
+    if prediction_start is not None:
         one_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 4, target_weight), 2)
         three_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 12, target_weight), 2)
 
@@ -777,21 +776,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     )
 
     data_quality = data_quality_diagnostics(rows)
-    trend_state = model_trend_exposure(loss_rate_detail.get("windowSlopes", {}).get("7d"), weekly_loss_rate)
-
-    if confidence.get("level") == "low":
-        trend_state["predictionEnabled"] = False
-        if not trend_state.get("disabledReason"):
-            trend_state["disabledReason"] = "low_confidence"
-
-    if trend_state.get("predictionEnabled") is False:
-        one_month_weight = None
-        three_month_weight = None
-        if base_effective_loss <= 0:
-            eta_days = None
-            eta_date = None
-            eta_range_days = None
-            eta_range_dates = None
 
     shadow_audit = run_generalized_backtest(
         rows, ewma_series,

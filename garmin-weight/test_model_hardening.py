@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from scripts.sync_modeling import (
+    _projected_weight,
     apply_model_selection_gate,
     compute_candidate_prediction,
     data_quality_diagnostics,
@@ -61,11 +62,21 @@ def test_selection_gate_blocks_single_horizon_win():
     assert result["name"] == "current"
 
 
-def test_negative_trend_disables_prediction():
+def test_gaining_trend_keeps_prediction_enabled():
     trend = model_trend_exposure(weekly_change_kg=-0.2, weekly_loss_rate_kg=None)
     assert trend["direction"] == "gaining"
+    assert trend["predictionEnabled"] is True
+    assert trend["disabledReason"] is None
+
+
+def test_unknown_trend_disables_prediction():
+    trend = model_trend_exposure(weekly_change_kg=None, weekly_loss_rate_kg=None)
     assert trend["predictionEnabled"] is False
-    assert "trend_is_gaining" in trend["disabledReason"]
+    assert trend["disabledReason"] == "insufficient_data"
+
+
+def test_projected_weight_gaining_is_linear_upward():
+    assert _projected_weight(83.0, -0.2, 4, target_weight=78.0) == 83.8
 
 
 def test_backtest_actual_matching():

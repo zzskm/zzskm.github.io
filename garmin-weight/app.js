@@ -99,14 +99,13 @@
 
     const badge = el('statusBadge');
     const reason = el('statusReason');
+    const trendDir = diagnostics.trend?.direction;
     if (badge) {
-      badge.textContent = confidenceLevel === 'low' ? '예측 보류' : (weeklyChange > 0.05 ? '감량 중' : '유지');
-      badge.className = `hero-badge hero-badge--${confidenceLevel === 'low' ? 'paused' : (weeklyChange > 0.05 ? 'losing' : 'neutral')}`;
+      badge.textContent = trendDir === 'losing' ? '감량 중' : trendDir === 'gaining' ? '증량 중' : '유지';
+      badge.className = `hero-badge hero-badge--${trendDir === 'losing' ? 'losing' : trendDir === 'gaining' ? 'gaining' : 'neutral'}`;
     }
     if (reason) {
-      reason.textContent = confidenceLevel === 'low'
-        ? `LATEST 30 DAYS (LOW RELIABILITY)`
-        : `MONITORING TREND`;
+      reason.textContent = confidenceLevel === 'low' ? 'LOW RELIABILITY · PROVISIONAL' : 'MONITORING TREND';
     }
 
     if (startVal && lastVal && Number.isFinite(target)) {
