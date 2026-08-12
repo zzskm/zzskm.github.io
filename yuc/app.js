@@ -16,8 +16,8 @@
 
   // 그리기 순서: 옛날 → 오늘 (오늘이 맨 위)
   const SERIES = [
-    { daysAgo: 3, key: "3일 전", cls: "d3ago", color: "var(--gray)", width: 1, opacity: 0.5 },
-    { daysAgo: 2, key: "2일 전", cls: "d2ago", color: "var(--purple)", width: 1, opacity: 0.6 },
+    { daysAgo: 3, key: "3일 전", cls: "d3ago", color: "var(--gray)", width: 1, opacity: 0.35 },
+    { daysAgo: 2, key: "2일 전", cls: "d2ago", color: "var(--purple)", width: 1, opacity: 0.45 },
     { daysAgo: 1, key: "어제", cls: "yesterday", color: "var(--blue)", width: 1.5, opacity: 0.8 },
     { daysAgo: 0, key: "오늘", cls: "today", color: "var(--orange)", width: 4, opacity: 1 }
   ];
@@ -257,8 +257,9 @@
     const { dayArrs, d7MinMax, fill } = data;
 
     const W = container.clientWidth || window.innerWidth || 1000;
-    const H = Math.max(200, W * 0.6);
     const isSmall = W < 480;
+    // 값 범위가 0~20 수준이라 데스크톱에서 비율만 따르면 세로로 지나치게 길어짐
+    const H = isSmall ? Math.max(240, W * 0.75) : Math.min(Math.max(260, W * 0.40), 400);
     const margin = { top: 16, right: isSmall ? 12 : 48, bottom: 44, left: isSmall ? 32 : 48 };
     // 가로 스크롤이 생기지 않도록 컨테이너 폭을 넘지 않게 함
     const width = Math.max(160, W - margin.left - margin.right);
@@ -327,7 +328,7 @@
         .attr("y", 0)
         .attr("height", height)
         .attr("fill", "var(--danger)")
-        .attr("opacity", 0.12);
+        .attr("opacity", 0.18);
 
       bandG.append("line")
         .attr("class", "median")
@@ -336,16 +337,19 @@
         .attr("y1", 0)
         .attr("y2", height)
         .attr("stroke", "var(--danger)")
-        .attr("stroke-width", 2)
+        .attr("stroke-width", 2.5)
         .attr("stroke-dasharray", "4 3")
-        .attr("opacity", 0.6);
+        .attr("opacity", 0.85);
 
-      bandG.append("text")
+      const label = bandG.append("text")
         .attr("class", "band-label")
-        .attr("x", atMin(fill.median) + 4)
         .attr("y", 12)
         .attr("fill", "var(--danger)")
-        .text("만차 예상");
+        .text(`만차 예상 ${fmtMinutes(fill.median)}`);
+      // 우측 끝에서 잘리면 중앙선 왼쪽으로 옮김
+      const labelW = label.node().getComputedTextLength();
+      const mx = atMin(fill.median);
+      label.attr("x", mx + 4 + labelW > width ? mx - 4 - labelW : mx + 4);
     }
 
     const linesG = g.select(".lines");
@@ -472,12 +476,17 @@
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
+  const LEVELS = {
+    "now-low": "혼잡",
+    "now-mid": "보통",
+    "now-ok": "여유"
+  };
   function nowLevelClass(v) {
     return v <= LOW ? "now-low" : v <= SAFE ? "now-mid" : "now-ok";
   }
 
-  function renderNow(data) {
-    const panel = document.getElementById("now-panel");
+  function renderHero(data) {
+    const panel = document.getElementById("hero");
     if (!panel) return;
 
     const lr = data.latestReal;
@@ -486,63 +495,53 @@
       return;
     }
 
+    const level = nowLevelClass(lr.v);
     const ageMin = Math.round((Date.now() - lr.t.getTime()) / 60000);
     const ageText = ageMin < 1 ? "방금 전" : `${ageMin}분 전`;
     const staleText = ageMin > STALE_MINUTES ? " · <b>오래된 데이터</b>" : "";
 
     const now = new Date();
     const hb = data.d7MinMax[hourKST(now)];
-    const rangeText = hb ? `이 시간대 최근 7일 <b>${hb.min}~${hb.max}대</b>` : "";
-
     const f = data.fill;
-    let fillText = "";
+
+    let fillCol;
     if (f && f.median !== null) {
       // "HH:MM" → 자정 기준 분 (30분 오프셋 표준시 브라우저에서도 KST 기준 유지)
       const [nh, nm] = fmtTimeOnly.format(now).split(":").map(Number);
       const nowMin = nh * 60 + nm;
-      const window = `${fmtMinutes(f.p25)}~${fmtMinutes(f.p75)}`;
-      if (nowMin < f.p25) {
-        fillText = `만차 예상 <b>${window}</b> · 약 ${Math.round(f.median - nowMin)}분 남음`;
-      } else if (nowMin <= f.p75) {
-        fillText = `지금이 만차 시간대 <b>(${window})</b>`;
-      } else {
-        fillText = `만차 예상 시간대 <b>${window}</b> 지남`;
-      }
-    }
-
-    panel.innerHTML = `
-      <div class="now-num ${nowLevelClass(lr.v)}">${lr.v}<span class="now-unit">대</span></div>
-      <div class="now-meta">
-        <div>현재 남은 자리 · ${ageText} (${fmtTimeOnly.format(lr.t)} 기준)${staleText}</div>
-        <div>${rangeText}</div>
-        ${fillText ? `<div>${fillText}</div>` : ""}
-      </div>
-    `;
-  }
-
-  function renderSummary(data) {
-    const panel = document.getElementById("summary-panel");
-    if (!panel) return;
-
-    const f = data && data.fill;
-    if (!f || f.median === null) {
+      const eta = nowMin < f.p25 ? `약 ${Math.round(f.median - nowMin)}분 남음`
+        : nowMin <= f.p75 ? "지금이 만차 시간대"
+          : "예상 시간대 지남";
+      fillCol = `
+        <div class="hero-col">
+          <span class="k">만차 예상 (평일 오전)</span>
+          <span class="big">${fmtMinutes(f.median)}</span>
+          <span class="sub">${fmtMinutes(f.p25)}~${fmtMinutes(f.p75)} · ${eta}</span>
+        </div>`;
+    } else {
       const n = f ? f.filledDays : 0;
-      panel.innerHTML = `<div class='summary-empty'>만차 통계 수집 중 (평일 ${n}/${MIN_FILL_DAYS}일)</div>`;
-      return;
+      fillCol = `
+        <div class="hero-col">
+          <span class="k">만차 예상</span>
+          <span class="sub">통계 수집 중 (평일 ${n}/${MIN_FILL_DAYS}일)</span>
+        </div>`;
     }
 
+    const facts = [
+      f && f.median !== null ? `만차 빈도 <b>${f.totalDays}일 중 ${f.filledDays}일</b> (${LOW}대 이하)` : "",
+      hb ? `이 시간대 최근 7일 <b>${hb.min}~${hb.max}대</b>` : "",
+      `${ageText} · ${fmtTimeOnly.format(lr.t)} 기준${staleText}`
+    ].filter(Boolean);
+
     panel.innerHTML = `
-      <div class="summary-grid">
-        <div class="summary-item">
-          <span class="label">만차 예상 (평일 오전)</span>
-          <span class="value">${fmtMinutes(f.median)}<span class="range">${fmtMinutes(f.p25)}~${fmtMinutes(f.p75)}</span></span>
-        </div>
-        <div class="summary-item">
-          <span class="label">만차 빈도</span>
-          <span class="value">${f.totalDays}일 중 ${f.filledDays}일<span class="range">${LOW}대 이하 기준</span></span>
-        </div>
+      <div class="hero-now">
+        <div class="now-num ${level}">${lr.v}<span class="now-unit">대</span></div>
+        <span class="pill ${level}">${LEVELS[level]}</span>
       </div>
-      <div class="summary-badge">최근 평일 ${f.totalDays}일 기준 · 수집 간격이 넓어 ±10분 오차 가능</div>
+      ${fillCol}
+      <div class="hero-col facts">
+        ${facts.map(t => `<span>${t}</span>`).join("")}
+      </div>
     `;
   }
 
@@ -590,8 +589,7 @@
       if (res.ok) cachedData = parseCSV(await res.text());
 
       if (cachedData) {
-        renderNow(cachedData);
-        renderSummary(cachedData);
+        renderHero(cachedData);
         renderChart(chartCtx, cachedData);
         setStatus(buildStatusLine(cachedData));
       }
