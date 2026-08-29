@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-28T23:57:05Z",
+  "generatedAt": "2026-08-29T03:59:21Z",
   "current": {
     "weightKg": 83.8,
     "weightDate": "2026-08-27",
@@ -12,26 +12,26 @@
   },
   "rolling": {
     "weeklyLossRateKg": null,
-    "last7ExerciseMinutes": 119.0,
-    "last7ExerciseCalories": 1957.0,
-    "last7StepsTotal": 46741,
-    "last7StepsAvg": 6677.0,
-    "last7ActiveDays": 5,
+    "last7ExerciseMinutes": 126.0,
+    "last7ExerciseCalories": 2077.0,
+    "last7StepsTotal": 49060,
+    "last7StepsAvg": 7009.0,
+    "last7ActiveDays": 6,
     "last7WeightRangeKg": 1.1,
     "last7SleepHoursAvg": null,
-    "last7RestingHrAvg": 64.0,
+    "last7RestingHrAvg": 61.6,
     "exerciseTrend": {
-      "recent7Avg": 279.6,
+      "recent7Avg": 296.7,
       "prev21Avg": 269.2,
-      "deltaPct": 0.038,
-      "slopePerDay": -0.76,
-      "direction": "stable"
+      "deltaPct": 0.102,
+      "slopePerDay": 0.13,
+      "direction": "increasing"
     },
     "lossRateDetail": {
       "blended": -0.2043,
       "ewmaSlope": -0.2115,
       "ma7Slope": -0.2067,
-      "kcalRate": 0.2401,
+      "kcalRate": 0.2479,
       "weights": {
         "ewma": 0.25,
         "ma7": 0.3,
@@ -58,18 +58,18 @@
     "scenarios": {
       "optimistic": {
         "multiplier": 1.0,
-        "threeMonthWeightKg": 83.91,
-        "assumedDailyKcal": 419.5,
-        "weeklyKcalDelta": 979.0,
-        "extraWeeklyLossKg": 0.1271,
-        "effectiveWeeklyLossKg": -0.0772,
+        "threeMonthWeightKg": 83.81,
+        "assumedDailyKcal": 445.0,
+        "weeklyKcalDelta": 1038.0,
+        "extraWeeklyLossKg": 0.1348,
+        "effectiveWeeklyLossKg": -0.0695,
         "label": "낙관",
-        "description": "주2회 추가 운동 (회당 ~489kcal) 가정"
+        "description": "주2회 추가 운동 (회당 ~519kcal) 가정"
       },
       "base": {
         "multiplier": 1.0,
         "threeMonthWeightKg": 85.43,
-        "assumedDailyKcal": 279.6,
+        "assumedDailyKcal": 296.7,
         "weeklyKcalDelta": 0.0,
         "extraWeeklyLossKg": 0.0,
         "effectiveWeeklyLossKg": -0.2043,
@@ -78,13 +78,13 @@
       },
       "conservative": {
         "multiplier": 1.0,
-        "threeMonthWeightKg": 86.96,
-        "assumedDailyKcal": 139.7,
-        "weeklyKcalDelta": -979.0,
-        "extraWeeklyLossKg": -0.1271,
-        "effectiveWeeklyLossKg": -0.3314,
+        "threeMonthWeightKg": 87.05,
+        "assumedDailyKcal": 148.4,
+        "weeklyKcalDelta": -1038.0,
+        "extraWeeklyLossKg": -0.1348,
+        "effectiveWeeklyLossKg": -0.3391,
         "label": "보수적",
-        "description": "주2회 운동 누락 (회당 ~489kcal) 가정"
+        "description": "주2회 운동 누락 (회당 ~519kcal) 가정"
       }
     }
   },
@@ -520,16 +520,16 @@
         }
       },
       "perHorizon": {
-        "28d": {
-          "v1MaeKg": 0.785,
-          "kalmanMaeKg": 1.239,
-          "deltaKg": -0.454,
-          "kalmanWins": false
-        },
         "14d": {
           "v1MaeKg": 0.608,
           "kalmanMaeKg": 0.85,
           "deltaKg": -0.242,
+          "kalmanWins": false
+        },
+        "28d": {
+          "v1MaeKg": 0.785,
+          "kalmanMaeKg": 1.239,
+          "deltaKg": -0.454,
           "kalmanWins": false
         },
         "7d": {
@@ -3545,7 +3545,7 @@
       },
       {
         "date": "2026-08-29",
-        "value": 145
+        "value": 2464
       }
     ],
     "exerciseMinutes": [
@@ -3667,7 +3667,7 @@
       },
       {
         "date": "2026-08-29",
-        "value": 0
+        "value": 7.0
       }
     ],
     "exerciseCaloriesDaily": [
@@ -3789,7 +3789,7 @@
       },
       {
         "date": "2026-08-29",
-        "value": 2.0
+        "value": 122.0
       }
     ]
   }
