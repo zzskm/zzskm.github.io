@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Preview</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#0e1014; --panel:#14171d; --panel2:#181c23; --line:#262b35;
+    --text:#dde2ea; --dim:#8b94a3; --accent:#4f8cff; --accent2:#7db0ff;
+    --wave:#3a4252; --wave-play:#4f8cff; --danger:#ff6b6b;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body { margin:0; font:14px/1.45 "Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--text);
+         display:grid; grid-template-rows:auto 1fr; overflow:hidden; }
+  button { font:inherit; color:inherit; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#2c3340; border-radius:5px; border:2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background:#3a4252; }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  /* ================= TOP : waveform + transport ================= */
+  #top { background:linear-gradient(180deg,#12151b,#0e1014); border-bottom:1px solid var(--line);
+         padding:14px 16px 10px; display:flex; flex-direction:column; gap:10px; }
+  #wave-wrap { position:relative; height:110px; background:var(--panel); border:1px solid var(--line);
+               border-radius:10px; cursor:pointer; overflow:hidden; }
+  #wave { width:100%; height:100%; display:block; }
+  #wave-msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+              color:var(--dim); font-size:13px; pointer-events:none; letter-spacing:.02em; }
+  #cursor { position:absolute; top:0; bottom:0; width:1px; background:#fff8; pointer-events:none; display:none; }
+
+  #transport { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  #play { width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; font-size:17px;
+          background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center;
+          transition:transform .1s, background .15s; flex-shrink:0; }
+  #play:hover { background:var(--accent2); transform:scale(1.05); }
+  .tbtn { height:32px; padding:0 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel);
+          cursor:pointer; font-size:12.5px; color:var(--dim); transition:all .15s; }
+  .tbtn:hover { border-color:var(--accent); color:var(--text); }
+  .tbtn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #meta { flex:1; min-width:140px; overflow:hidden; }
+  #now { font-weight:600; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #time { font-family:Consolas,monospace; font-size:12px; color:var(--dim); }
+  .ctl { display:flex; gap:7px; align-items:center; font-size:12px; color:var(--dim); }
+  .badge { font-family:Consolas,monospace; font-size:12px; padding:3px 8px; border:1px solid var(--line);
+           border-radius:6px; background:var(--panel); color:var(--text); min-width:52px; text-align:center; }
+  input[type=range] { accent-color:var(--accent); width:90px; }
+  #pick { height:32px; padding:0 14px; border-radius:8px; border:none; background:var(--panel2);
+          border:1px solid var(--line); cursor:pointer; font-size:12.5px; transition:all .15s; }
+  #pick:hover { border-color:var(--accent); }
+
+  /* ================= BOTTOM : dirs | files | crate ================= */
+  #bottom { display:grid; grid-template-columns:230px 1fr 310px; overflow:hidden; }
+  .pane { overflow-y:auto; border-right:1px solid var(--line); background:var(--bg); }
+  #crate { border-right:none; display:flex; flex-direction:column; background:var(--panel); }
+  .pane-head { position:sticky; top:0; z-index:1; background:var(--panel2); padding:8px 14px;
+               font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+               color:var(--dim); border-bottom:1px solid var(--line); }
+  .active .pane-head { color:var(--accent); }
+  #path { font-family:Consolas,monospace; font-size:12px; color:var(--dim); padding:7px 14px;
+          border-bottom:1px solid var(--line); word-break:break-all; background:var(--bg); }
+  #filter { display:block; width:calc(100% - 20px); margin:8px 10px; padding:6px 10px; border-radius:7px;
+            border:1px solid var(--line); background:var(--panel); color:var(--text); font:12.5px inherit; outline:none; }
+  #filter:focus { border-color:var(--accent); }
+  #filter::placeholder { color:var(--dim); }
+
+  .row { padding:6px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;
+         border-left:2px solid transparent; transition:background .1s; }
+  .row .ico { width:18px; text-align:center; flex-shrink:0; opacity:.8; font-size:12px; }
+  .row .lbl { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row:hover { background:#ffffff08; }
+  .row.sel { background:#ffffff0d; border-left-color:var(--dim); }
+  .active .row.sel { background:#4f8cff26; border-left-color:var(--accent); }
+  .row.playing { color:var(--accent2); }
+  .row.playing .lbl::after { content:"  ♪"; }
+  .addbtn { border:1px solid var(--line); background:transparent; border-radius:6px; cursor:pointer;
+            padding:0 7px; height:22px; color:var(--dim); font-size:13px; opacity:0; transition:all .15s; flex-shrink:0; }
+  .row:hover .addbtn, .row.sel .addbtn { opacity:1; }
+  .addbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .addbtn.added { opacity:1; color:var(--accent); border-color:transparent; cursor:default; }
+
+  .empty { padding:26px 16px; color:var(--dim); font-size:13px; line-height:2; }
+  kbd { font-family:Consolas,monospace; font-size:11px; background:var(--panel2); border:1px solid var(--line);
+        border-bottom-width:2px; padding:1px 5px; border-radius:4px; color:var(--text); }
+
+  body.drag::after { content:"📂  폴더를 여기에 놓으세요"; position:fixed; inset:10px; z-index:99;
+      display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:600;
+      background:#0e1014e6; color:var(--accent2); border:2px dashed var(--accent); border-radius:14px;
+      pointer-events:none; }
+
+  /* crate */
+  #crate-list { flex:1; overflow-y:auto; }
+  .crate-item { padding:10px 14px; border-bottom:1px solid var(--line); }
+  .crate-item .top { display:flex; gap:8px; align-items:center; }
+  .crate-item .name { flex:1; font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis;
+                      white-space:nowrap; cursor:default; }
+  .crate-item .del { border:none; background:transparent; cursor:pointer; color:var(--dim); font-size:14px;
+                     padding:2px 4px; border-radius:4px; }
+  .crate-item .del:hover { color:var(--danger); background:#ff6b6b1a; }
+  .crate-item textarea { width:100%; margin-top:6px; resize:vertical; min-height:30px; font:12.5px/1.4 inherit;
+      font-family:inherit; background:var(--bg); color:var(--text); border:1px solid var(--line);
+      border-radius:6px; padding:5px 8px; outline:none; }
+  .crate-item textarea:focus { border-color:var(--accent); }
+  #crate-foot { padding:10px 14px; border-top:1px solid var(--line); display:flex; gap:8px; background:var(--panel2); }
+  #crate-foot button { flex:1; padding:8px; cursor:pointer; border-radius:8px; border:1px solid var(--line);
+                       background:var(--panel); font-size:12.5px; transition:all .15s; }
+  #export { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  #export:hover { background:var(--accent2); }
+  #clear:hover { border-color:var(--danger); color:var(--danger); }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div id="wave-wrap">
+    <canvas id="wave"></canvas>
+    <div id="cursor"></div>
+    <div id="wave-msg">파일을 재생하면 waveform이 표시됩니다</div>
+  </div>
+  <div id="transport">
+    <button id="play" title="재생/일시정지 (Space)">▶</button>
+    <div id="meta">
+      <div id="now">재생 중인 파일 없음</div>
+      <div id="time">0:00 / 0:00</div>
+    </div>
+    <button id="loop" class="tbtn on" title="현재 곡 반복">∞ 반복</button>
+    <div class="ctl">배속 <span id="rate" class="badge">1.00×</span></div>
+    <div class="ctl">🔊 <input id="vol" type="range" min="0" max="1" step="0.05" value="1"></div>
+    <button id="pick">📁 폴더 선택</button>
+    <input id="dir" type="file" webkitdirectory directory multiple hidden>
+  </div>
+</div>
+
+<div id="bottom">
+  <div id="dirs" class="pane">
+    <div class="pane-head">Directory</div>
+    <div id="dir-list"></div>
+  </div>
+  <div id="files" class="pane active">
+    <div class="pane-head" id="files-head">Files</div>
+    <div id="path">폴더를 선택하세요</div>
+    <input id="filter" placeholder="🔍 파일명 필터…  (Enter/↓ 목록으로, Esc 초기화)" autocomplete="off">
+    <div id="file-list">
+      <div class="empty">
+        <b>📁 폴더 선택</b> 버튼을 누르거나 폴더를 창에 <b>드래그&드롭</b> 하세요.<br>
+        <kbd>Tab</kbd> 패널 전환 &nbsp; <kbd>↑↓</kbd>/<kbd>j k</kbd> 이동 &nbsp; <kbd>Enter</kbd> 진입/재생 &nbsp;
+        <kbd>a</kbd> 크레이트 담기 &nbsp; <kbd>⌫</kbd> 상위 폴더<br>
+        <kbd>Space</kbd> 재생/정지 &nbsp; <kbd>← →</kbd> 5초 탐색 &nbsp; <kbd>[ ]</kbd> 배속 &nbsp; <kbd>0</kbd> 배속 리셋
+      </div>
+    </div>
+  </div>
+  <div id="crate">
+    <div class="pane-head" id="crate-head">Crate · 0</div>
+    <div id="crate-list"><div class="empty">파일 행의 <b>＋</b> 버튼 또는 <kbd>a</kbd> 키로 담고,<br>메모를 적은 뒤 폴더로 내보내세요.<br>(파일 복사본 + 색인 crate.csv)</div></div>
+    <div id="crate-foot">
+      <button id="export">폴더로 내보내기</button>
+      <button id="clear">비우기</button>
+    </div>
+  </div>
+</div>
+
+<audio id="audio"></audio>
+
+<script>
+const AUDIO_EXT = new Set(["mp3","wav","ogg","oga","m4a","flac","aac","opus","weba","webm"]);
+const $ = s => document.querySelector(s);
+const audio = $("#audio");
+const canvas = $("#wave"), cx = canvas.getContext("2d");
+
+let tree = new Map();
+let cwd = "";
+let dirRows = [], fileRows = [];
+let selDir = 0, selFile = 0;
+let activePane = "files";
+let playingKey = null, curURL = null;
+let peaks = [];
+let crate = [];            // [{key, name, path, memo}]
+let filter = "";           // 현재 폴더 파일명 필터 (소문자)
+
+const dirOf = r => { const i = r.lastIndexOf("/"); return i<0 ? "" : r.slice(0,i); };
+$("#pick").onclick = () => $("#dir").click();
+$("#dir").onchange = e => buildTree([...e.target.files].map(f => ({file:f, rel:f.webkitRelativePath||f.name})));
+
+// items: [{file, rel}]  rel = "root/sub/song.mp3" (webkitdirectory 또는 drop entry.fullPath)
+function buildTree(items){
+  tree = new Map();
+  const ensure = d => { if(!tree.has(d)) tree.set(d,{dirs:new Set(),files:[]}); return tree.get(d); };
+  ensure("");
+  for(const {file, rel} of items){
+    const rp = rel.includes("/") ? rel.slice(rel.indexOf("/")+1) : rel;   // drop root folder name
+    if(!rp) continue;
+    const ext = rp.slice(rp.lastIndexOf(".")+1).toLowerCase();
+    const d = dirOf(rp);
+    let acc = "";
+    for(const part of d ? d.split("/") : []){ const parent=acc; acc = acc?acc+"/"+part:part; ensure(parent).dirs.add(acc); ensure(acc); }
+    if(AUDIO_EXT.has(ext)) ensure(d).files.push({name: rp.slice(rp.lastIndexOf("/")+1), file, key:rp});
+  }
+  cwd = ""; selDir = 0; selFile = 0; activePane = "files"; render();
+}
+
+// ---- drag & drop a folder to open ----
+// 1순위: File System Access API 핸들 (Chrome/Edge — file:// 페이지의 filesystem: URI 제약을 안 탐)
+async function readHandle(handle, path, out){
+  if(handle.kind === "file"){
+    try { out.push({ file: await handle.getFile(), rel: path }); } catch(e){ /* 개별 실패는 건너뜀 */ }
+  } else if(handle.kind === "directory"){
+    for await(const child of handle.values()) await readHandle(child, path + "/" + child.name, out);
+  }
+}
+// 2순위: 구식 webkitGetAsEntry (파일 하나 실패해도 전체는 계속)
+async function readEntry(entry, out){
+  if(entry.isFile){
+    try {
+      const file = await new Promise((res,rej) => entry.file(res,rej));
+      out.push({ file, rel: entry.fullPath.replace(/^\//,"") });
+    } catch(e){ /* file:// 등에서 개별 파일 읽기 실패 — 건너뜀 */ }
+  } else if(entry.isDirectory){
+    const reader = entry.createReader();
+    let batch;
+    do {                                       // readEntries returns in batches; loop until empty
+      batch = await new Promise((res,rej) => reader.readEntries(res,rej));
+      for(const e of batch) await readEntry(e, out);
+    } while(batch.length);
+  }
+}
+document.addEventListener("dragenter", e => { e.preventDefault(); document.body.classList.add("drag"); });
+document.addEventListener("dragover", e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";          // 명시하지 않으면 일부 환경에서 drop 거부
+  document.body.classList.add("drag");
+});
+document.addEventListener("dragleave", e => { if(!e.relatedTarget) document.body.classList.remove("drag"); });
+document.addEventListener("drop", async e => {
+  e.preventDefault(); document.body.classList.remove("drag");
+  try {
+    // DataTransfer는 이벤트 핸들러가 yield하면 무효화 — 핸들/entry/File을 모두 동기적으로 먼저 확보
+    const items = [...e.dataTransfer.items];
+    const handlePromises = items.map(i => i.getAsFileSystemHandle ? i.getAsFileSystemHandle().catch(()=>null) : null);
+    const entries = items.map(i => i.webkitGetAsEntry ? i.webkitGetAsEntry() : null);
+    const looseFiles = [...e.dataTransfer.files];
+
+    const out = [];
+    if(handlePromises.some(Boolean)){
+      for(const p of handlePromises){ const h = await p; if(h) await readHandle(h, h.name, out); }
+    }
+    if(!out.length && entries.some(Boolean)){
+      for(const entry of entries) if(entry) await readEntry(entry, out);
+    }
+    if(!out.length && looseFiles.length){
+      looseFiles.forEach(f => out.push({file:f, rel:f.name}));   // 최후 폴백: 개별 파일
+    }
+    if(out.length) buildTree(out);
+    else $("#path").textContent = "드롭에서 파일을 읽지 못했습니다 — 📁 폴더 선택 버튼을 사용해 주세요";
+  } catch(err){
+    $("#path").textContent = "드롭 실패: " + err.message + " — 📁 폴더 선택 버튼을 사용해 주세요";
+  }
+});
+
+function render(){
+  const node = tree.get(cwd) || {dirs:new Set(), files:[]};
+  dirRows = [];
+  if(cwd !== "") dirRows.push({type:"up", label:".."});
+  [...node.dirs].sort().forEach(d => dirRows.push({type:"dir", label:d.slice(d.lastIndexOf("/")+1), path:d}));
+  let files = [...node.files].sort((a,b)=>a.name.localeCompare(b.name));
+  if(filter) files = files.filter(f => f.name.toLowerCase().includes(filter));
+  fileRows = files.map(f => ({type:"file", label:f.name, ...f}));
+
+  selDir = Math.min(selDir, Math.max(0,dirRows.length-1));
+  selFile = Math.min(selFile, Math.max(0,fileRows.length-1));
+
+  $("#files-head").textContent = "Files · " + fileRows.length + (filter ? " / "+node.files.length : "");
+  $("#path").textContent = "/" + cwd;
+  paintList("#dir-list", dirRows, selDir, "dirs", "하위 폴더 없음");
+  paintList("#file-list", fileRows, selFile, "files", filter ? "일치하는 파일 없음" : "오디오 파일 없음");
+  $("#files").classList.toggle("active", activePane==="files");
+  $("#dirs").classList.toggle("active", activePane==="dirs");
+}
+
+const ICONS = { up:"⬆", dir:"📁", file:"🎵" };
+function paintList(sel, rows, cur, pane, emptyMsg){
+  const box = $(sel);
+  if(rows.length === 0){ box.innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
+  box.innerHTML = "";
+  rows.forEach((r,i) => {
+    const el = document.createElement("div");
+    el.className = "row " + r.type + (i===cur?" sel":"") + (r.type==="file" && r.key===playingKey?" playing":"");
+    const ico = document.createElement("span"); ico.className="ico"; ico.textContent = ICONS[r.type];
+    const lbl = document.createElement("span"); lbl.className="lbl"; lbl.textContent = r.label;
+    el.append(ico, lbl);
+    if(r.type === "file"){
+      const inCrate = crate.some(c => c.key === r.key);
+      const add = document.createElement("button");
+      add.className = "addbtn" + (inCrate ? " added" : "");
+      add.textContent = inCrate ? "✓" : "＋";
+      add.title = inCrate ? "크레이트에 있음" : "크레이트에 담기";
+      add.onclick = ev => { ev.stopPropagation(); addToCrate(r); };
+      el.appendChild(add);
+    }
+    el.onclick = () => { activePane=pane; if(pane==="dirs") selDir=i; else selFile=i; activate(); };
+    box.appendChild(el);
+  });
+  const selEl = box.querySelector(".row.sel");
+  if(selEl) selEl.scrollIntoView({block:"nearest"});
+}
+
+function activate(){
+  if(activePane === "dirs"){
+    const r = dirRows[selDir]; if(!r) return;
+    cwd = r.type==="up" ? dirOf(cwd) : r.path; selDir = 0; render();
+  } else {
+    const r = fileRows[selFile]; if(r) play(r);
+  }
+}
+
+async function play(r){
+  if(curURL) URL.revokeObjectURL(curURL);
+  curURL = URL.createObjectURL(r.file);
+  audio.src = curURL; audio.play().catch(()=>{});
+  playingKey = r.key; $("#now").textContent = r.label;
+  render();
+  drawWaveform(r.file);
+}
+
+// repeat current track by default; when loop is OFF, auto-advance to next
+$("#loop").onclick = () => { audio.loop = !audio.loop; $("#loop").classList.toggle("on", audio.loop); };
+audio.loop = true;
+audio.onended = () => {
+  if(audio.loop) return;
+  const idx = fileRows.findIndex(x => x.key===playingKey);
+  const next = fileRows.slice(idx+1).find(x => x.type==="file");
+  if(next){ selFile = fileRows.indexOf(next); activePane="files"; play(next); }
+};
+audio.onplay  = () => { $("#play").textContent = "⏸"; startTick(); };
+audio.onpause = () => { $("#play").textContent = "▶"; paintWave(); };
+audio.onseeked = paintWave;
+audio.onloadedmetadata = () => { $("#time").textContent = fmt(0)+" / "+fmt(audio.duration); paintWave(); };
+$("#play").onclick = () => { if(!curURL) return; audio.paused ? audio.play().catch(()=>{}) : audio.pause(); };
+$("#vol").oninput = e => audio.volume = +e.target.value;
+
+// 파일명 필터 (현재 폴더 대상). 입력 중엔 전역 단축키가 안 먹으므로 여기서 목록 이동 진입 처리
+$("#filter").oninput = e => { filter = e.target.value.trim().toLowerCase(); selFile = 0; render(); };
+$("#filter").onkeydown = e => {
+  if(e.key === "Enter" || e.key === "ArrowDown"){ e.target.blur(); activePane = "files"; render(); e.preventDefault(); }
+  else if(e.key === "Escape"){ e.target.value = ""; filter = ""; selFile = 0; render(); }
+};
+
+const fmt = s => isFinite(s) ? Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0") : "0:00";
+
+// ---- crate ----
+function addToCrate(r){
+  if(crate.some(c => c.key === r.key)) return;   // dedupe
+  crate.push({ key:r.key, name:r.name, path:r.key, memo:"", file:r.file });  // file: 내보내기 복사용
+  renderCrate(); render();
+}
+function renderCrate(){
+  $("#crate-head").textContent = "Crate · " + crate.length;
+  const list = $("#crate-list");
+  if(!crate.length){ list.innerHTML = '<div class="empty">파일 행의 <b>＋</b> 버튼 또는 <kbd>a</kbd> 키로 담고,<br>메모를 적은 뒤 폴더로 내보내세요.<br>(파일 복사본 + 색인 crate.csv)</div>'; return; }
+  list.innerHTML = "";
+  crate.forEach((c,i) => {
+    const item = document.createElement("div"); item.className = "crate-item";
+    const top = document.createElement("div"); top.className = "top";
+    const name = document.createElement("span"); name.className="name"; name.textContent=c.name; name.title="/"+c.path;
+    const del = document.createElement("button"); del.className="del"; del.textContent="✕"; del.title="빼기";
+    del.onclick = () => { crate.splice(i,1); renderCrate(); render(); };
+    top.append(name, del);
+    const ta = document.createElement("textarea"); ta.placeholder="메모…"; ta.value=c.memo;
+    ta.oninput = e => c.memo = e.target.value;
+    item.append(top, ta); list.appendChild(item);
+  });
+}
+$("#clear").onclick = () => { if(crate.length && confirm("크레이트를 비울까요?")){ crate=[]; renderCrate(); render(); } };
+$("#export").onclick = exportCrate;
+
+function csvEsc(v){ v = String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; }
+const toCsv = rows => "﻿" + rows.map(r => r.map(csvEsc).join(",")).join("\r\n");   // BOM: Excel 한글
+const crateRows = copyNames => [["파일명","원본경로","복사본","메모"],
+  ...crate.map((c,i) => [c.name, "/"+c.path, copyNames[i], c.memo||""])];
+
+// 같은 파일명 충돌 시 "name (2).ext" 로 번호 부여
+function uniqueName(name, used){
+  if(!used.has(name)){ used.add(name); return name; }
+  const dot = name.lastIndexOf("."), base = dot<0?name:name.slice(0,dot), ext = dot<0?"":name.slice(dot);
+  let i = 2, n; do { n = `${base} (${i})${ext}`; i++; } while(used.has(n));
+  used.add(n); return n;
+}
+
+async function exportCrate(){
+  if(!crate.length){ alert("크레이트가 비어 있습니다."); return; }
+  if(window.showDirectoryPicker){                // Chrome/Edge: 폴더 선택 → 파일 복사본 + CSV
+    try { await exportToDir(); return; }
+    catch(e){ if(e.name === "AbortError") return; alert("폴더 내보내기 실패 — 색인 CSV만 저장합니다.\n"+e.message); }
+  }
+  saveCsvOnly();                                 // 미지원/실패 폴백
+}
+
+async function exportToDir(){
+  const dir = await window.showDirectoryPicker({ mode:"readwrite" });
+  const used = new Set(["crate.csv"]);           // csv 파일명과의 충돌도 방지
+  const copyNames = [];
+  for(const c of crate){                         // 선택 파일 복사본 쓰기
+    const name = uniqueName(c.name, used);
+    copyNames.push(name);
+    const fh = await dir.getFileHandle(name, { create:true });
+    const ws = await fh.createWritable();
+    await ws.write(c.file);                       // File 은 Blob → 그대로 기록
+    await ws.close();
+  }
+  const csvHandle = await dir.getFileHandle("crate.csv", { create:true });   // 색인 CSV 쓰기
+  const w = await csvHandle.createWritable();
+  await w.write(toCsv(crateRows(copyNames)));
+  await w.close();
+  alert(`내보내기 완료: 파일 ${crate.length}개 + crate.csv`);
+}
+
+function saveCsvOnly(){                           // 폴백: 색인 CSV만 다운로드
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([toCsv(crateRows(crate.map(c=>c.name)))], {type:"text/csv"}));
+  a.download = "crate.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  alert("이 브라우저는 폴더 내보내기를 지원하지 않아 crate.csv만 저장했습니다.\n파일 복사본 내보내기는 Chrome/Edge에서 지원됩니다.");
+}
+
+// ---- waveform : 재생 곡 1개만 디코드 ----
+async function drawWaveform(file){
+  peaks = []; $("#wave-msg").textContent = "waveform 분석 중…"; $("#wave-msg").style.display="flex"; paintWave();
+  try {
+    const buf = await file.arrayBuffer();
+    const actx = new (window.AudioContext||window.webkitAudioContext)();
+    const audioBuf = await actx.decodeAudioData(buf);
+    actx.close();
+    const data = audioBuf.getChannelData(0);
+    const N = 800, step = Math.max(1, Math.floor(data.length/N));
+    for(let i=0;i<N;i++){ let peak=0; for(let j=i*step;j<(i+1)*step&&j<data.length;j++){const v=Math.abs(data[j]); if(v>peak)peak=v;} peaks.push(peak); }
+    const max = Math.max(...peaks, 0.01); peaks = peaks.map(p => p/max);
+    $("#wave-msg").style.display="none";
+  } catch(e){
+    peaks = []; $("#wave-msg").textContent = "이 포맷은 waveform 미지원 (재생은 됩니다)"; $("#wave-msg").style.display="flex";
+  }
+  resizeCanvas();                              // 새 파일: 캔버스 실측 크기 반영 후 그리기
+}
+let raf = null, waveColors = null;
+function resizeCanvas(){ canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; paintWave(); }
+function paintWave(){
+  const W = canvas.width, H = canvas.height;                 // 리사이즈는 resizeCanvas/새 파일에서만 → 매 프레임 reflow 제거
+  cx.clearRect(0,0,W,H);
+  if(!peaks.length){ $("#cursor").style.display = "none"; return; }
+  if(!waveColors){ const cs = getComputedStyle(document.documentElement);   // 색상 1회 캐싱
+    waveColors = { play: cs.getPropertyValue("--wave-play").trim(), base: cs.getPropertyValue("--wave").trim() }; }
+  const prog = (audio.duration ? audio.currentTime/audio.duration : 0), bw = W/peaks.length, mid = H/2;
+  const playIdx = prog*peaks.length;
+  for(let i=0;i<peaks.length;i++){
+    const h = Math.max(2, peaks[i]*(H-10));
+    cx.fillStyle = (i <= playIdx) ? waveColors.play : waveColors.base;
+    cx.fillRect(i*bw, mid-h/2, Math.max(1,bw-0.6), h);
+  }
+  const cur = $("#cursor");
+  cur.style.display = "block"; cur.style.left = (prog*100)+"%";
+}
+// 재생 중에만 rAF로 60fps 갱신; 정지하면 루프 종료
+function tick(){
+  paintWave();
+  $("#time").textContent = fmt(audio.currentTime)+" / "+fmt(audio.duration);
+  raf = audio.paused ? null : requestAnimationFrame(tick);
+}
+function startTick(){ if(!raf) raf = requestAnimationFrame(tick); }
+$("#wave-wrap").onclick = e => {
+  if(!audio.duration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = (e.clientX-rect.left)/rect.width * audio.duration;
+  if(audio.paused) paintWave();
+};
+addEventListener("resize", resizeCanvas);
+
+// ---- keyboard ----
+function setRate(v){ audio.playbackRate = Math.min(4, Math.max(0.25, +v.toFixed(2))); $("#rate").textContent = audio.playbackRate.toFixed(2)+"×"; }
+
+document.addEventListener("keydown", e => {
+  if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  const k = e.key;
+  const rows = activePane==="dirs" ? dirRows : fileRows;
+  const cur  = () => activePane==="dirs" ? selDir : selFile;
+  const setCur = v => activePane==="dirs" ? (selDir=v) : (selFile=v);
+
+  if(k==="Tab"){ activePane = activePane==="dirs" ? "files" : "dirs"; render(); e.preventDefault(); }
+  else if(k==="ArrowDown"||k==="j"){ setCur(Math.min(rows.length-1, cur()+1)); render(); e.preventDefault(); }
+  else if(k==="ArrowUp"||k==="k"){ setCur(Math.max(0, cur()-1)); render(); e.preventDefault(); }
+  else if(k==="Enter"){ activate(); e.preventDefault(); }
+  else if(k==="a"){ if(activePane==="files" && fileRows[selFile]) addToCrate(fileRows[selFile]); e.preventDefault(); }
+  else if(k==="Backspace"){ if(cwd!==""){ cwd=dirOf(cwd); selDir=0; render(); } e.preventDefault(); }
+  else if(k===" "){ if(curURL) (audio.paused?audio.play().catch(()=>{}):audio.pause()); e.preventDefault(); }
+  else if(k==="ArrowRight"){ audio.currentTime+=5; e.preventDefault(); }
+  else if(k==="ArrowLeft"){ audio.currentTime=Math.max(0,audio.currentTime-5); e.preventDefault(); }
+  else if(k==="]"||k==="="||k==="+"){ setRate(audio.playbackRate+0.25); e.preventDefault(); }
+  else if(k==="["||k==="-"){ setRate(audio.playbackRate-0.25); e.preventDefault(); }
+  else if(k==="0"){ setRate(1); e.preventDefault(); }
+});
+</script>
+</body>
+</html>
