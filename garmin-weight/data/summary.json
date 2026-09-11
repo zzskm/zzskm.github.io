@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T00:43:49Z",
+  "generatedAt": "2026-09-11T18:17:38Z",
   "current": {
     "weightKg": 83.7,
     "weightDate": "2026-09-11",
@@ -12,26 +12,26 @@
   },
   "rolling": {
     "weeklyLossRateKg": null,
-    "last7ExerciseMinutes": 96.0,
-    "last7ExerciseCalories": 1568.0,
-    "last7StepsTotal": 45107,
-    "last7StepsAvg": 6444.0,
-    "last7ActiveDays": 4,
+    "last7ExerciseMinutes": 122.0,
+    "last7ExerciseCalories": 1595.0,
+    "last7StepsTotal": 46381,
+    "last7StepsAvg": 7730.0,
+    "last7ActiveDays": 5,
     "last7WeightRangeKg": 0.4,
     "last7SleepHoursAvg": null,
-    "last7RestingHrAvg": 63.7,
+    "last7RestingHrAvg": 63.8,
     "exerciseTrend": {
-      "recent7Avg": 224.0,
-      "prev21Avg": 257.7,
-      "deltaPct": -0.131,
-      "slopePerDay": -1.65,
+      "recent7Avg": 227.9,
+      "prev21Avg": 260.3,
+      "deltaPct": -0.125,
+      "slopePerDay": -2.1,
       "direction": "decreasing"
     },
     "lossRateDetail": {
-      "blended": -0.2097,
-      "ewmaSlope": -0.1572,
-      "ma7Slope": -0.2633,
-      "kcalRate": 0.2008,
+      "blended": -0.2075,
+      "ewmaSlope": -0.1561,
+      "ma7Slope": -0.2958,
+      "kcalRate": 0.2066,
       "weights": {
         "ewma": 0.25,
         "ma7": 0.3,
@@ -44,47 +44,47 @@
         }
       },
       "windowSlopes": {
-        "3d": -0.483,
-        "7d": -0.2633,
-        "14d": -0.1232,
-        "28d": -0.1572
+        "3d": -0.301,
+        "7d": -0.2958,
+        "14d": -0.1418,
+        "28d": -0.1561
       },
       "model": "multi_window_ewma_blend"
     }
   },
   "predictions": {
-    "oneMonthWeightKg": 84.13,
-    "threeMonthWeightKg": 85.81,
+    "oneMonthWeightKg": 84.12,
+    "threeMonthWeightKg": 85.78,
     "scenarios": {
       "optimistic": {
         "multiplier": 1.0,
-        "threeMonthWeightKg": 84.58,
-        "assumedDailyKcal": 336.0,
-        "weeklyKcalDelta": 784.0,
-        "extraWeeklyLossKg": 0.1018,
-        "effectiveWeeklyLossKg": -0.1079,
+        "threeMonthWeightKg": 84.54,
+        "assumedDailyKcal": 341.9,
+        "weeklyKcalDelta": 798.0,
+        "extraWeeklyLossKg": 0.1036,
+        "effectiveWeeklyLossKg": -0.1039,
         "label": "낙관",
-        "description": "주2회 추가 운동 (회당 ~392kcal) 가정"
+        "description": "주2회 추가 운동 (회당 ~399kcal) 가정"
       },
       "base": {
         "multiplier": 1.0,
-        "threeMonthWeightKg": 85.81,
-        "assumedDailyKcal": 224.0,
+        "threeMonthWeightKg": 85.78,
+        "assumedDailyKcal": 227.9,
         "weeklyKcalDelta": 0.0,
         "extraWeeklyLossKg": 0.0,
-        "effectiveWeeklyLossKg": -0.2097,
+        "effectiveWeeklyLossKg": -0.2075,
         "label": "기준",
         "description": "현재 운동량 유지 기준 예측"
       },
       "conservative": {
         "multiplier": 1.0,
-        "threeMonthWeightKg": 87.03,
-        "assumedDailyKcal": 112.0,
-        "weeklyKcalDelta": -784.0,
-        "extraWeeklyLossKg": -0.1018,
-        "effectiveWeeklyLossKg": -0.3115,
+        "threeMonthWeightKg": 87.02,
+        "assumedDailyKcal": 113.9,
+        "weeklyKcalDelta": -798.0,
+        "extraWeeklyLossKg": -0.1036,
+        "effectiveWeeklyLossKg": -0.3111,
         "label": "보수적",
-        "description": "주2회 운동 누락 (회당 ~392kcal) 가정"
+        "description": "주2회 운동 누락 (회당 ~399kcal) 가정"
       }
     }
   },
@@ -105,79 +105,79 @@
     "type": null
   },
   "predictionCI": {
-    "stdResidual": 0.321,
+    "stdResidual": 0.33,
     "series": [
       {
-        "date": "2026-09-18",
+        "date": "2026-09-19",
         "central": 83.5,
         "lower80": 82.78,
         "upper80": 84.22
       },
       {
-        "date": "2026-09-25",
+        "date": "2026-09-26",
         "central": 83.71,
         "lower80": 82.89,
         "upper80": 84.53
       },
       {
-        "date": "2026-10-02",
-        "central": 83.92,
+        "date": "2026-10-03",
+        "central": 83.91,
+        "lower80": 83.09,
+        "upper80": 84.73
+      },
+      {
+        "date": "2026-10-10",
+        "central": 84.12,
         "lower80": 83.1,
-        "upper80": 84.74
+        "upper80": 85.14
       },
       {
-        "date": "2026-10-09",
-        "central": 84.13,
-        "lower80": 83.11,
-        "upper80": 85.15
+        "date": "2026-10-17",
+        "central": 84.33,
+        "lower80": 83.31,
+        "upper80": 85.35
       },
       {
-        "date": "2026-10-16",
-        "central": 84.34,
-        "lower80": 83.32,
-        "upper80": 85.36
+        "date": "2026-10-24",
+        "central": 84.54,
+        "lower80": 83.5,
+        "upper80": 85.58
       },
       {
-        "date": "2026-10-23",
-        "central": 84.55,
-        "lower80": 83.53,
-        "upper80": 85.57
+        "date": "2026-10-31",
+        "central": 84.74,
+        "lower80": 83.62,
+        "upper80": 85.86
       },
       {
-        "date": "2026-10-30",
-        "central": 84.76,
-        "lower80": 83.67,
-        "upper80": 85.85
+        "date": "2026-11-07",
+        "central": 84.95,
+        "lower80": 83.75,
+        "upper80": 86.15
       },
       {
-        "date": "2026-11-06",
-        "central": 84.97,
-        "lower80": 83.81,
-        "upper80": 86.13
+        "date": "2026-11-14",
+        "central": 85.16,
+        "lower80": 83.89,
+        "upper80": 86.43
       },
       {
-        "date": "2026-11-13",
-        "central": 85.18,
-        "lower80": 83.95,
-        "upper80": 86.41
+        "date": "2026-11-21",
+        "central": 85.37,
+        "lower80": 84.03,
+        "upper80": 86.71
       },
       {
-        "date": "2026-11-20",
-        "central": 85.39,
-        "lower80": 84.09,
-        "upper80": 86.69
+        "date": "2026-11-28",
+        "central": 85.57,
+        "lower80": 84.17,
+        "upper80": 86.97
       },
       {
-        "date": "2026-11-27",
-        "central": 85.6,
-        "lower80": 84.24,
-        "upper80": 86.96
-      },
-      {
-        "date": "2026-12-04",
-        "central": 85.81,
-        "lower80": 84.39,
-        "upper80": 87.23
+        "date": "2026-12-05",
+        "central": 85.78,
+        "lower80": 84.32,
+        "upper80": 87.24
       }
     ],
     "hitRate": {
@@ -203,21 +203,21 @@
       ]
     },
     "coverage": {
-      "measuredDays": 19,
+      "measuredDays": 18,
       "totalDays": 30,
-      "pct": 63.0
+      "pct": 60.0
     },
     "dataQuality": {
-      "totalDays": 183,
+      "totalDays": 184,
       "measuredDays": 114,
       "recentWindowDays": 30,
-      "recentMeasuredDays": 19,
+      "recentMeasuredDays": 18,
       "recentTotalDays": 30,
-      "recentCoveragePct": 63.3,
+      "recentCoveragePct": 60.0,
       "longestMissingStreak": 5,
       "outlierCandidates": 9,
       "usableForRegression": true,
-      "recentMeasurementCadence": 0.623,
+      "recentMeasurementCadence": 0.62,
       "confidencePenalties": [
         "recent_coverage_low",
         "missing_streak_long"
@@ -225,7 +225,7 @@
     },
     "trend": {
       "direction": "gaining",
-      "weeklyChangeKg": -0.2633,
+      "weeklyChangeKg": -0.2958,
       "weeklyLossRateKg": null,
       "predictionEnabled": true,
       "disabledReason": null
@@ -243,19 +243,19 @@
     },
     "trendWindows": {
       "7d": {
-        "weeklyLossKg": -0.2633,
+        "weeklyLossKg": -0.2958,
         "points": 8
       },
       "14d": {
-        "weeklyLossKg": -0.1232,
+        "weeklyLossKg": -0.1418,
         "points": 15
       },
       "28d": {
-        "weeklyLossKg": -0.1572,
+        "weeklyLossKg": -0.1561,
         "points": 29
       }
     },
-    "residualStdKg": 0.321,
+    "residualStdKg": 0.33,
     "backtest": {
       "7d": {
         "sampleCount": 95,
@@ -282,24 +282,24 @@
     "modelAudit": {
       "flat_baseline": {
         "7d": {
-          "sampleCount": 148,
-          "maeKg": 0.606,
-          "rmseKg": 0.757,
-          "biasKg": 0.018,
+          "sampleCount": 149,
+          "maeKg": 0.607,
+          "rmseKg": 0.756,
+          "biasKg": 0.013,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
+          "sampleCount": 142,
           "maeKg": 0.692,
-          "rmseKg": 0.849,
-          "biasKg": 0.05,
+          "rmseKg": 0.848,
+          "biasKg": 0.044,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 0.802,
-          "rmseKg": 0.975,
-          "biasKg": 0.121,
+          "sampleCount": 128,
+          "maeKg": 0.805,
+          "rmseKg": 0.976,
+          "biasKg": 0.111,
           "status": "ok"
         }
       },
@@ -319,171 +319,171 @@
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 76,
-          "maeKg": 0.692,
-          "rmseKg": 0.896,
-          "biasKg": 0.018,
+          "sampleCount": 77,
+          "maeKg": 0.694,
+          "rmseKg": 0.895,
+          "biasKg": 0.007,
           "status": "ok"
         }
       },
       "ewma_baseline": {
         "7d": {
-          "sampleCount": 148,
-          "maeKg": 0.606,
-          "rmseKg": 0.757,
-          "biasKg": 0.018,
+          "sampleCount": 149,
+          "maeKg": 0.607,
+          "rmseKg": 0.756,
+          "biasKg": 0.013,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
+          "sampleCount": 142,
           "maeKg": 0.692,
-          "rmseKg": 0.849,
-          "biasKg": 0.05,
+          "rmseKg": 0.848,
+          "biasKg": 0.044,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 0.802,
-          "rmseKg": 0.975,
-          "biasKg": 0.121,
+          "sampleCount": 128,
+          "maeKg": 0.805,
+          "rmseKg": 0.976,
+          "biasKg": 0.111,
           "status": "ok"
         }
       },
       "linear_regression_28d": {
         "7d": {
-          "sampleCount": 148,
+          "sampleCount": 149,
           "maeKg": 0.695,
           "rmseKg": 0.856,
-          "biasKg": 0.069,
+          "biasKg": 0.064,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
-          "maeKg": 0.899,
+          "sampleCount": 142,
+          "maeKg": 0.901,
           "rmseKg": 1.088,
-          "biasKg": 0.178,
+          "biasKg": 0.168,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 1.302,
-          "rmseKg": 1.607,
-          "biasKg": 0.518,
+          "sampleCount": 128,
+          "maeKg": 1.311,
+          "rmseKg": 1.615,
+          "biasKg": 0.494,
           "status": "ok"
         }
       },
       "linear_regression_56d": {
         "7d": {
-          "sampleCount": 148,
-          "maeKg": 0.653,
+          "sampleCount": 149,
+          "maeKg": 0.655,
           "rmseKg": 0.814,
-          "biasKg": 0.117,
+          "biasKg": 0.111,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
-          "maeKg": 0.813,
-          "rmseKg": 0.993,
-          "biasKg": 0.279,
+          "sampleCount": 142,
+          "maeKg": 0.815,
+          "rmseKg": 0.994,
+          "biasKg": 0.269,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 1.02,
-          "rmseKg": 1.301,
-          "biasKg": 0.696,
+          "sampleCount": 128,
+          "maeKg": 1.024,
+          "rmseKg": 1.304,
+          "biasKg": 0.677,
           "status": "ok"
         }
       },
       "linear_regression_84d": {
         "7d": {
-          "sampleCount": 148,
-          "maeKg": 0.633,
+          "sampleCount": 149,
+          "maeKg": 0.634,
           "rmseKg": 0.797,
-          "biasKg": 0.15,
+          "biasKg": 0.144,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
+          "sampleCount": 142,
           "maeKg": 0.795,
-          "rmseKg": 0.971,
-          "biasKg": 0.332,
+          "rmseKg": 0.97,
+          "biasKg": 0.324,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 1.104,
-          "rmseKg": 1.364,
-          "biasKg": 0.742,
+          "sampleCount": 128,
+          "maeKg": 1.103,
+          "rmseKg": 1.361,
+          "biasKg": 0.729,
           "status": "ok"
         }
       },
       "weighted_linear_regression_56d": {
         "7d": {
-          "sampleCount": 148,
-          "maeKg": 0.666,
+          "sampleCount": 149,
+          "maeKg": 0.668,
           "rmseKg": 0.82,
-          "biasKg": 0.095,
+          "biasKg": 0.088,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
-          "maeKg": 0.822,
-          "rmseKg": 1.003,
-          "biasKg": 0.233,
+          "sampleCount": 142,
+          "maeKg": 0.825,
+          "rmseKg": 1.004,
+          "biasKg": 0.223,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 1.077,
-          "rmseKg": 1.33,
-          "biasKg": 0.612,
+          "sampleCount": 128,
+          "maeKg": 1.083,
+          "rmseKg": 1.334,
+          "biasKg": 0.593,
           "status": "ok"
         }
       },
       "robust_regression_56d": {
         "7d": {
-          "sampleCount": 148,
-          "maeKg": 0.642,
+          "sampleCount": 149,
+          "maeKg": 0.644,
           "rmseKg": 0.807,
-          "biasKg": 0.117,
+          "biasKg": 0.111,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
-          "maeKg": 0.791,
-          "rmseKg": 0.972,
-          "biasKg": 0.277,
+          "sampleCount": 142,
+          "maeKg": 0.793,
+          "rmseKg": 0.973,
+          "biasKg": 0.268,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "maeKg": 0.967,
-          "rmseKg": 1.244,
-          "biasKg": 0.687,
+          "sampleCount": 128,
+          "maeKg": 0.971,
+          "rmseKg": 1.246,
+          "biasKg": 0.67,
           "status": "ok"
         }
       },
       "kalman": {
         "7d": {
-          "sampleCount": 148,
-          "biasKg": -0.196,
-          "maeKg": 0.669,
-          "rmseKg": 0.821,
+          "sampleCount": 149,
+          "biasKg": -0.197,
+          "maeKg": 0.667,
+          "rmseKg": 0.819,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
+          "sampleCount": 142,
           "biasKg": -0.327,
-          "maeKg": 0.812,
-          "rmseKg": 1.037,
+          "maeKg": 0.809,
+          "rmseKg": 1.034,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "biasKg": -0.633,
-          "maeKg": 1.198,
-          "rmseKg": 1.409,
+          "sampleCount": 128,
+          "biasKg": -0.634,
+          "maeKg": 1.194,
+          "rmseKg": 1.405,
           "status": "ok"
         }
       }
@@ -499,44 +499,44 @@
     "modelComparison": {
       "kalmanBacktest": {
         "7d": {
-          "sampleCount": 148,
-          "biasKg": -0.196,
-          "maeKg": 0.669,
-          "rmseKg": 0.821,
+          "sampleCount": 149,
+          "biasKg": -0.197,
+          "maeKg": 0.667,
+          "rmseKg": 0.819,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 141,
+          "sampleCount": 142,
           "biasKg": -0.327,
-          "maeKg": 0.812,
-          "rmseKg": 1.037,
+          "maeKg": 0.809,
+          "rmseKg": 1.034,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 127,
-          "biasKg": -0.633,
-          "maeKg": 1.198,
-          "rmseKg": 1.409,
+          "sampleCount": 128,
+          "biasKg": -0.634,
+          "maeKg": 1.194,
+          "rmseKg": 1.405,
           "status": "ok"
         }
       },
       "perHorizon": {
-        "14d": {
-          "v1MaeKg": 0.608,
-          "kalmanMaeKg": 0.812,
-          "deltaKg": -0.204,
-          "kalmanWins": false
-        },
         "28d": {
           "v1MaeKg": 0.785,
-          "kalmanMaeKg": 1.198,
-          "deltaKg": -0.413,
+          "kalmanMaeKg": 1.194,
+          "deltaKg": -0.409,
           "kalmanWins": false
         },
         "7d": {
           "v1MaeKg": 0.588,
-          "kalmanMaeKg": 0.669,
-          "deltaKg": -0.081,
+          "kalmanMaeKg": 0.667,
+          "deltaKg": -0.079,
+          "kalmanWins": false
+        },
+        "14d": {
+          "v1MaeKg": 0.608,
+          "kalmanMaeKg": 0.809,
+          "deltaKg": -0.201,
           "kalmanWins": false
         }
       },
@@ -564,11 +564,11 @@
     ]
   },
   "coverage": {
-    "last30Measured": 19,
+    "last30Measured": 18,
     "last30Total": 30,
-    "last30Pct": 63.0,
+    "last30Pct": 60.0,
     "lastMeasurementAt": "2026-09-11",
-    "daysSinceLastMeasurement": 0
+    "daysSinceLastMeasurement": 1
   },
   "series": {
     "daily": [
@@ -1303,6 +1303,10 @@
       {
         "date": "2026-09-11",
         "valueKg": 83.7
+      },
+      {
+        "date": "2026-09-12",
+        "valueKg": null
       }
     ],
     "ma7": [
@@ -2036,6 +2040,10 @@
       },
       {
         "date": "2026-09-11",
+        "valueKg": 83.78
+      },
+      {
+        "date": "2026-09-12",
         "valueKg": 83.78
       }
     ],
@@ -2771,6 +2779,10 @@
       {
         "date": "2026-09-11",
         "valueKg": 83.54
+      },
+      {
+        "date": "2026-09-12",
+        "valueKg": 83.54
       }
     ],
     "ewma": [
@@ -3505,141 +3517,141 @@
       {
         "date": "2026-09-11",
         "valueKg": 83.29
+      },
+      {
+        "date": "2026-09-12",
+        "valueKg": 83.29
       }
     ],
     "prediction": [
       {
-        "date": "2026-09-11",
+        "date": "2026-09-12",
         "valueKg": 83.29
       },
       {
-        "date": "2026-09-18",
+        "date": "2026-09-19",
         "valueKg": 83.5
       },
       {
-        "date": "2026-09-25",
+        "date": "2026-09-26",
         "valueKg": 83.71
       },
       {
-        "date": "2026-10-02",
-        "valueKg": 83.92
+        "date": "2026-10-03",
+        "valueKg": 83.91
       },
       {
-        "date": "2026-10-09",
-        "valueKg": 84.13
+        "date": "2026-10-10",
+        "valueKg": 84.12
       },
       {
-        "date": "2026-10-16",
-        "valueKg": 84.34
+        "date": "2026-10-17",
+        "valueKg": 84.33
       },
       {
-        "date": "2026-10-23",
-        "valueKg": 84.55
+        "date": "2026-10-24",
+        "valueKg": 84.54
       },
       {
-        "date": "2026-10-30",
-        "valueKg": 84.76
+        "date": "2026-10-31",
+        "valueKg": 84.74
       },
       {
-        "date": "2026-11-06",
-        "valueKg": 84.97
+        "date": "2026-11-07",
+        "valueKg": 84.95
       },
       {
-        "date": "2026-11-13",
-        "valueKg": 85.18
+        "date": "2026-11-14",
+        "valueKg": 85.16
       },
       {
-        "date": "2026-11-20",
-        "valueKg": 85.39
+        "date": "2026-11-21",
+        "valueKg": 85.37
       },
       {
-        "date": "2026-11-27",
-        "valueKg": 85.6
+        "date": "2026-11-28",
+        "valueKg": 85.57
       },
       {
-        "date": "2026-12-04",
-        "valueKg": 85.81
+        "date": "2026-12-05",
+        "valueKg": 85.78
       }
     ],
     "predictionCI": [
       {
-        "date": "2026-09-18",
+        "date": "2026-09-19",
         "central": 83.5,
         "lower80": 82.78,
         "upper80": 84.22
       },
       {
-        "date": "2026-09-25",
+        "date": "2026-09-26",
         "central": 83.71,
         "lower80": 82.89,
         "upper80": 84.53
       },
       {
-        "date": "2026-10-02",
-        "central": 83.92,
+        "date": "2026-10-03",
+        "central": 83.91,
+        "lower80": 83.09,
+        "upper80": 84.73
+      },
+      {
+        "date": "2026-10-10",
+        "central": 84.12,
         "lower80": 83.1,
-        "upper80": 84.74
+        "upper80": 85.14
       },
       {
-        "date": "2026-10-09",
-        "central": 84.13,
-        "lower80": 83.11,
-        "upper80": 85.15
+        "date": "2026-10-17",
+        "central": 84.33,
+        "lower80": 83.31,
+        "upper80": 85.35
       },
       {
-        "date": "2026-10-16",
-        "central": 84.34,
-        "lower80": 83.32,
-        "upper80": 85.36
+        "date": "2026-10-24",
+        "central": 84.54,
+        "lower80": 83.5,
+        "upper80": 85.58
       },
       {
-        "date": "2026-10-23",
-        "central": 84.55,
-        "lower80": 83.53,
-        "upper80": 85.57
+        "date": "2026-10-31",
+        "central": 84.74,
+        "lower80": 83.62,
+        "upper80": 85.86
       },
       {
-        "date": "2026-10-30",
-        "central": 84.76,
-        "lower80": 83.67,
-        "upper80": 85.85
+        "date": "2026-11-07",
+        "central": 84.95,
+        "lower80": 83.75,
+        "upper80": 86.15
       },
       {
-        "date": "2026-11-06",
-        "central": 84.97,
-        "lower80": 83.81,
-        "upper80": 86.13
+        "date": "2026-11-14",
+        "central": 85.16,
+        "lower80": 83.89,
+        "upper80": 86.43
       },
       {
-        "date": "2026-11-13",
-        "central": 85.18,
-        "lower80": 83.95,
-        "upper80": 86.41
+        "date": "2026-11-21",
+        "central": 85.37,
+        "lower80": 84.03,
+        "upper80": 86.71
       },
       {
-        "date": "2026-11-20",
-        "central": 85.39,
-        "lower80": 84.09,
-        "upper80": 86.69
+        "date": "2026-11-28",
+        "central": 85.57,
+        "lower80": 84.17,
+        "upper80": 86.97
       },
       {
-        "date": "2026-11-27",
-        "central": 85.6,
-        "lower80": 84.24,
-        "upper80": 86.96
-      },
-      {
-        "date": "2026-12-04",
-        "central": 85.81,
-        "lower80": 84.39,
-        "upper80": 87.23
+        "date": "2026-12-05",
+        "central": 85.78,
+        "lower80": 84.32,
+        "upper80": 87.24
       }
     ],
     "steps": [
-      {
-        "date": "2026-08-13",
-        "value": 11999
-      },
       {
         "date": "2026-08-14",
         "value": 8525
@@ -3754,14 +3766,14 @@
       },
       {
         "date": "2026-09-11",
-        "value": 216
+        "value": 8608
+      },
+      {
+        "date": "2026-09-12",
+        "value": null
       }
     ],
     "exerciseMinutes": [
-      {
-        "date": "2026-08-13",
-        "value": 62.0
-      },
       {
         "date": "2026-08-14",
         "value": 17.0
@@ -3876,14 +3888,14 @@
       },
       {
         "date": "2026-09-11",
+        "value": 26.0
+      },
+      {
+        "date": "2026-09-12",
         "value": 0
       }
     ],
     "exerciseCaloriesDaily": [
-      {
-        "date": "2026-08-13",
-        "value": 466.0
-      },
       {
         "date": "2026-08-14",
         "value": 293.0
@@ -3998,7 +4010,11 @@
       },
       {
         "date": "2026-09-11",
-        "value": 5.0
+        "value": 277.0
+      },
+      {
+        "date": "2026-09-12",
+        "value": 0
       }
     ]
   }
