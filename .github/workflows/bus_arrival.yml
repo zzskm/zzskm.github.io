@@ -49,7 +49,7 @@ jobs:
             --sta-order 6 \
             --sta-order-pangyo 7 \
             --interval 60 \
-            --max-polls 70 \
+            --max-polls 4 \
             --output-csv bus-arrival/arrival_log.csv \
             --status-json bus-arrival/status.json \
             --log-level INFO
@@ -63,4 +63,5 @@ jobs:
           git config user.email "actions@github.com"
           git add bus-arrival/
           git diff --cached --quiet || git commit -m "bus: $(date -u +%Y-%m-%dT%H:%M)Z"
+          git pull --rebase || true
           git push
