@@ -277,6 +277,8 @@ def run_loop(args: argparse.Namespace):
             if status_path:
                 _write_status(status_path, ts_iso, {
                     "error": "no_bus",
+                    "secondary_station_id": secondary_station_id,
+                    "secondary_mobile_no": args.secondary_mobile_no,
                     "secondary_available": bool(info_secondary and info_secondary.get("veh_id")),
                     "daily_calls": daily_calls,
                 })
@@ -329,6 +331,8 @@ def run_loop(args: argparse.Namespace):
         if status_path:
             _write_status(status_path, ts_iso, {
                 "route_id": route_id,
+                "secondary_station_id": secondary_station_id,
+                "secondary_mobile_no": args.secondary_mobile_no,
                 "current_veh_id": vid,
                 "current_plate": info["plate_no"],
                 "predict_sec": predict,
