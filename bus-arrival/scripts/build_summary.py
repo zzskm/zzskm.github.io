@@ -14,6 +14,13 @@ def read_rows(path):
         return list(csv.DictReader(f))
 
 
+def is_valid_prediction(row):
+    try:
+        return int(row.get("vehId", "0")) != 0 and int(row.get("predict_sec", "")) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--predict", default="bus-arrival/predict_log.csv")
@@ -23,8 +30,11 @@ def main():
 
     predictions = read_rows(args.predict)
     arrivals = read_rows(args.arrival)
+    valid_predictions = [row for row in predictions if is_valid_prediction(row)]
+    no_bus_samples = sum(row.get("vehId", "") in ("", "0") for row in predictions)
+    invalid_samples = len(predictions) - len(valid_predictions) - no_bus_samples
     by_day = defaultdict(list)
-    for row in predictions:
+    for row in valid_predictions:
         day = row.get("ts_kst", "")[:10]
         if day:
             try:
@@ -41,11 +51,16 @@ def main():
         }
 
     latest = predictions[-1] if predictions else {}
+    latest_valid = next((row for row in reversed(predictions) if is_valid_prediction(row)), {})
     today = dt.datetime.now(dt.timezone.utc).astimezone(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d")
     summary = {
         "latest": latest,
+        "latest_valid": latest_valid,
         "today": daily.get(today, {"samples": 0, "min_predict_sec": None, "avg_predict_sec": None}),
         "prediction_samples": len(predictions),
+        "valid_prediction_samples": len(valid_predictions),
+        "no_bus_samples": no_bus_samples,
+        "invalid_samples": invalid_samples,
         "arrival_records": len(arrivals),
         "departure_reasons": dict(Counter(r.get("departure_reason", "unknown") for r in arrivals)),
         "daily": daily,
