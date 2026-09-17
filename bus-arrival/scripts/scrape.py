@@ -34,12 +34,13 @@ KST = dt.timezone(dt.timedelta(hours=9))
 
 # 유라코퍼레이션.SK케미칼 (정류소번호 7511)
 STATION_ID = 206000565
-# 판교역북편 (정류소번호 7073) — 유라코 다음 정류장
-STN_PANGYO_N = 7073
+# 성남시청전면 (ARS 정류소번호 06004)
+# GBIS API에서 사용하는 stationId가 별도인 경우 BUS_SECONDARY_STATION_ID로 덮어쓴다.
+STN_SECONDARY = 6004
 
 TARGET_ROUTE_ID = 204000170
 STA_ORDER = 6
-STA_ORDER_PANGYO_N = 7
+STA_ORDER_SECONDARY = 12
 
 ARRIVAL_BASE = "https://apis.data.go.kr/6410000/busarrivalservice/v2"
 USER_AGENT = "Mozilla/5.0 (compatible; bus-arrival-log/1.0)"
@@ -94,9 +95,9 @@ def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: i
         if n is None:
             return None
 
-        def ti(tag: str) -> int:
+        def ti(tag: str):
             v = xml_text(n, tag)
-            return int(v) if v.lstrip("-").isdigit() else 0
+            return int(v) if v.lstrip("-").isdigit() else None
 
         return {
             "veh_id": ti("vehId1"),
@@ -162,7 +163,8 @@ def run_loop(args: argparse.Namespace):
     service_key = get_service_key()
     route_id = args.route_id or TARGET_ROUTE_ID
     sta_order = args.sta_order
-    sta_order_pangyo = args.sta_order_pangyo
+    secondary_station_id = args.secondary_station_id
+    sta_order_secondary = args.sta_order_secondary
 
     state_path = os.path.join(os.path.dirname(args.output_csv), "tracker_state.json")
     predict_path = os.path.join(os.path.dirname(args.output_csv), "predict_log.csv")
@@ -186,8 +188,9 @@ def run_loop(args: argparse.Namespace):
     samples = state.get("samples", 0)
     consec_fail = state.get("consec_fail", 0)
 
-    logging.info("시작: routeId=%d staOrder=%d (판북 %d) cur_vid=%s 호출=%d/%d",
-                 route_id, sta_order, sta_order_pangyo, cur_vid, daily_calls, max_daily_calls)
+    logging.info("시작: routeId=%d staOrder=%d (성남시청전면 %d/%d) cur_vid=%s 호출=%d/%d",
+                 route_id, sta_order, secondary_station_id, sta_order_secondary,
+                 cur_vid, daily_calls, max_daily_calls)
 
     while True:
         ts = kst_now()
@@ -198,7 +201,7 @@ def run_loop(args: argparse.Namespace):
             break
 
         info = fetch_arrival(service_key, STATION_ID, route_id, sta_order)
-        info_pangyo = fetch_arrival(service_key, STN_PANGYO_N, route_id, sta_order_pangyo)
+        info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
         daily_calls += 2
 
         if info is None:
@@ -227,16 +230,32 @@ def run_loop(args: argparse.Namespace):
             "flag": info["flag"],
         })
 
-        # 판북 보정: 같은 차량이 유라코에 있고 판북에 이미 도착/통과했으면 구간 이동시간 계산
-        if info_pangyo and vid and vid == info_pangyo["veh_id"]:
-            if info_pangyo["state_cd"] == 1 or info_pangyo.get("location_no", 0) >= 1:
+        # 2차 정류장 보정: 같은 차량이 두 정류장 응답에 나타나는지 기록
+        if info_secondary and vid and vid == info_secondary["veh_id"]:
+            if info_secondary["state_cd"] == 1 or info_secondary.get("location_no", 0) >= 1:
                 append_csv(segment_path, {
                     "ts_kst": ts_iso,
                     "vehId": vid,
                     "from_station": STATION_ID,
-                    "to_station": STN_PANGYO_N,
+                    "to_station": secondary_station_id,
                     "note": "same_veh_at_both",
                 })
+
+        # 버스 없음은 차량 교체로 처리하지 않는다.
+        if not vid:
+            if status_path:
+                _write_status(status_path, ts_iso, {
+                    "error": "no_bus",
+                    "secondary_available": bool(info_secondary and info_secondary.get("veh_id")),
+                    "daily_calls": daily_calls,
+                })
+            _persist(state_path, today_str, daily_calls,
+                     cur_vid, cur_plate, first_seen, last_seen,
+                     min_predict, max_predict, samples, consec_fail,
+                     last_flag=info["flag"])
+            if _sleep_and_check(args):
+                break
+            continue
 
         # 차량 변경 감지
         if vid != cur_vid:
@@ -261,13 +280,14 @@ def run_loop(args: argparse.Namespace):
             cur_plate = info["plate_no"]
             first_seen = ts
             last_seen = ts
-            min_predict = predict
-            max_predict = predict
+            min_predict = predict if predict is not None else 99999
+            max_predict = predict if predict is not None else -1
             samples = 1
         else:
             last_seen = ts
-            min_predict = min(min_predict, predict)
-            max_predict = max(max_predict, predict)
+            if predict is not None:
+                min_predict = min(min_predict, predict)
+                max_predict = max(max_predict, predict)
             samples += 1
 
         _persist(state_path, today_str, daily_calls,
@@ -347,7 +367,9 @@ def parse_args() -> argparse.Namespace:
                    help="평일/공휴일 체크만 하고 종료 (워크플로우 게이트용)")
     p.add_argument("--route-id", type=int, default=None)
     p.add_argument("--sta-order", type=int, default=STA_ORDER)
-    p.add_argument("--sta-order-pangyo", type=int, default=STA_ORDER_PANGYO_N)
+    p.add_argument("--secondary-station-id", type=int,
+                   default=int(os.getenv("BUS_SECONDARY_STATION_ID", STN_SECONDARY)))
+    p.add_argument("--sta-order-secondary", type=int, default=STA_ORDER_SECONDARY)
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))
     p.add_argument("--status-json", default=os.getenv("BUS_STATUS_JSON", "bus-arrival/status.json"))

@@ -3,9 +3,12 @@ name: bus arrival scrape
 on:
   workflow_dispatch:
   schedule:
-    # UTC 22:00-23:59 → KST 다음날 07:00-08:59 (출근)
-    # UTC 00:00-11:59 → KST 당일 09:00-20:59 (출근~퇴근)
-    - cron: "*/5 22-23,0-11 * * *"
+    # UTC 22:00-23:59 → KST 다음날 07:00-08:59 (30분)
+    # UTC 00:00-06:59 → KST 09:00-15:59 (30분)
+    # UTC 07:00-12:59 → KST 16:00-21:59 (15분)
+    # UTC 13:00-14:59 → KST 22:00-23:59 (30분)
+    - cron: "0,30 22-23,0-6,13-23 * * *"
+    - cron: "*/15 7-12 * * *"
 
 concurrency:
   group: ${{ github.workflow }}
@@ -30,12 +33,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-bus-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-bus-${{ hashFiles('bus-arrival/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-bus-
 
       - name: Install deps
-        run: python -m pip install --disable-pip-version-check -r requirements.txt
+        run: python -m pip install --disable-pip-version-check -r bus-arrival/requirements.txt
 
       - name: KST weekday + holiday gate
         id: gate
@@ -47,7 +50,8 @@ jobs:
           python bus-arrival/scripts/scrape.py \
             --route-id 204000170 \
             --sta-order 6 \
-            --sta-order-pangyo 7 \
+            --secondary-station-id 6004 \
+            --sta-order-secondary 12 \
             --interval 60 \
             --max-polls 4 \
             --output-csv bus-arrival/arrival_log.csv \
@@ -55,6 +59,11 @@ jobs:
             --log-level INFO
         env:
           SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
+
+      - name: Build summary
+        if: always()
+        run: |
+          python bus-arrival/scripts/build_summary.py
 
       - name: Commit logs
         if: always()
