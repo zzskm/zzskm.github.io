@@ -120,6 +120,17 @@ def test_bus_arrival_empty_states_are_explicit():
     assert "body.loading .skeleton" in HTML
 
 
+def test_bus_arrival_surfaces_data_state_and_decision_reason():
+    """최신성·판단 근거·도보 비교가 접힌 상세 영역 밖에 표시된다."""
+    assert 'id="status-chip"' in HTML
+    assert 'id="quality-chip"' in HTML
+    assert 'id="decision-note"' in HTML
+    assert 'statusLabel = "오래된 정보"' in HTML
+    assert 'statusLabel = "현재 버스 없음"' in HTML
+    assert '도보 " + walk + "분' in HTML
+    assert "최근 차량 상태 변화" in HTML
+
+
 def test_bus_arrival_live_region_is_scoped_not_whole_hero():
     """히어로 전체 aria-live 제거, 판정 변화만 알리는 전용 status 영역."""
     assert '<section class="hero" id="hero">' in HTML
