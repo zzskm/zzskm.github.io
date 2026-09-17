@@ -61,9 +61,9 @@ def kst_iso() -> str:
 
 
 def get_service_key() -> str:
-    key = os.getenv("SERVICE_KEY") or os.getenv("GBIS_SERVICE_KEY")
+    key = os.getenv("BUS_SERVICE_KEY") or os.getenv("SERVICE_KEY")
     if not key:
-        raise RuntimeError("SERVICE_KEY 환경변수가 없습니다.")
+        raise RuntimeError("BUS_SERVICE_KEY 환경변수가 없습니다.")
     return key
 
 
