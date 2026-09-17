@@ -26,6 +26,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-bus-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-bus-
+
       - name: Install deps
         run: python -m pip install --disable-pip-version-check -r requirements.txt
 
@@ -38,7 +46,6 @@ jobs:
         run: |
           python bus-arrival/scripts/scrape.py \
             --route-id 204000170 \
-            --sta-order 6 \
             --interval 60 \
             --max-polls 70 \
             --output-csv bus-arrival/arrival_log.csv \
