@@ -32,17 +32,35 @@ def test_bus_arrival_staleness_follows_scrape_cadence():
 
 
 def test_bus_arrival_stale_data_is_visually_demoted():
-    """오래된 정보일 때 거대 ETA 숫자를 감쇠하고 배지를 노출한다."""
-    assert ".hero.is-stale .eta-row { opacity:.45" in HTML
+    """오래된 ETA를 계속 앞으로 주장할 때만 감쇠/배지를 걸고, 통과 추정 표시 중에는 해제한다."""
+    assert ".hero.is-stale:not(.is-passed) .eta-row { opacity:.45" in HTML
     assert 'id="stale-badge"' in HTML
-    assert ".hero.is-stale .stale-badge { display:inline-block; }" in HTML
+    assert ".hero.is-stale:not(.is-passed) .stale-badge { display:inline-block; }" in HTML
     assert "실시간 아님" in HTML
+    assert 'classList.toggle("is-passed", passed)' in HTML
+
+
+def test_bus_arrival_reports_how_long_ago_the_bus_passed():
+    """도착 예정 시각이 지났으면 '판단 보류' 대신 통과 후 경과 시간을 알린다."""
+    assert "판단 보류 · 정보가 오래되었습니다" not in HTML
+    assert "도착 예정 시각 지남" not in HTML
+    assert "function passedParts(min)" in HTML
+    assert "function agoText(min)" in HTML
+    assert "통과 추정" in HTML
+    assert 'text = agoText(passedMin) + " 통과 추정 · 다음 버스를 확인하세요"' in HTML
+    # 통과 판정은 예정 시각 대비 경과분에서 계산되며, 표시는 감쇠 대상이 아니다
+    assert "const passedMin = rawAdj != null && rawAdj < 0 ? -rawAdj / 60 : null;" in HTML
+    assert "const passed = passedMin != null && passedMin >= 2;" in HTML
+    # 통과 추정이 수집 오류보다 뒤, stale 판단보다 앞에 놓인다
+    assert HTML.index("수집 오류 · 실시간 아님") < HTML.index('agoText(passedMin) + " 통과 추정')
+    assert HTML.index('agoText(passedMin) + " 통과 추정') < HTML.index('" · 판단 보류"')
 
 
 def test_bus_arrival_shows_relative_time_and_countdown():
     """기계식 타임스탬프 대신 상대 시간 + 경과분 차감 카운트다운."""
     assert "function relTime(ageMin)" in HTML
-    assert "분 전 갱신" in HTML
+    assert 'return agoText(ageMin) + " 갱신";' in HTML
+    assert '"분 전"' in HTML
     assert "n - (now - pollMs) / 1000" in HTML
     assert "setInterval(paint, 1000)" in HTML
 
