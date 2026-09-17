@@ -62,10 +62,10 @@
                transition:opacity .2s, filter .2s; }
     .eta-num { font-size:clamp(52px,15vw,86px); font-weight:800; letter-spacing:-.03em; line-height:.95; }
     .eta-unit { font-size:clamp(15px,3.6vw,20px); font-weight:650; color:var(--hero-sub); }
-    .hero.is-stale .eta-row { opacity:.45; filter:saturate(.35); }
+    .hero.is-stale:not(.is-passed) .eta-row { opacity:.45; filter:saturate(.35); }
     .stale-badge { display:none; margin-top:4px; padding:5px 10px; border-radius:999px;
                    background:var(--danger-soft); color:var(--danger); font-size:13px; font-weight:700; }
-    .hero.is-stale .stale-badge { display:inline-block; }
+    .hero.is-stale:not(.is-passed) .stale-badge { display:inline-block; }
     .freshness { margin-top:10px; font-size:13px; color:var(--hero-sub); }
     .freshness .delay { margin-left:6px; padding:3px 8px; border-radius:999px;
                         background:var(--warn-soft); color:var(--warn); font-weight:700; }
@@ -236,17 +236,25 @@
     const state = ageMin <= cadence + 3 ? "fresh" : (ageMin <= cadence * 2 + 3 ? "aging" : "stale");
     return { state, ageMin, cadence };
   }
+  function agoText(min) {
+    if (min < 1) return "방금";
+    if (min < 60) return Math.floor(min) + "분 전";
+    return Math.floor(min / 60) + "시간 " + Math.floor(min % 60) + "분 전";
+  }
   function relTime(ageMin) {
     if (ageMin == null) return "갱신 시각 불명";
-    if (ageMin < 1) return "방금 갱신";
-    if (ageMin < 60) return Math.floor(ageMin) + "분 전 갱신";
-    const h = Math.floor(ageMin / 60);
-    return h + "시간 " + Math.floor(ageMin % 60) + "분 전 갱신";
+    return agoText(ageMin) + " 갱신";
   }
   function etaParts(sec) {
     if (sec == null) return { num:"--", unit:"도착 정보 없음" };
     if (sec < 60) return { num:"곧", unit:"도착" };
     return { num:String(Math.round(sec / 60)), unit:"분 후 도착" };
+  }
+  // 도착 예정 시각(last_poll + predict_sec)이 이미 지난 경우: 지나간 뒤 경과 시간
+  function passedParts(min) {
+    if (min < 1) return { num:"방금", unit:"통과 추정" };
+    if (min < 60) return { num:String(Math.floor(min)), unit:"분 전 통과 추정" };
+    return { num:String(Math.floor(min / 60)), unit:"시간 " + Math.floor(min % 60) + "분 전 통과 추정" };
   }
   const etaPlain = (p) => p.num === "--" ? p.unit : (p.num === "곧" ? "곧 도착" : p.num + p.unit);
 
@@ -266,14 +274,17 @@
       return Number.isFinite(pollMs) ? n - (now - pollMs) / 1000 : n;
     };
     const vehOk = st ? Number(st.current_veh_id || 0) !== 0 : false;
-    let adj = vehOk ? adjust(st.predict_sec) : null;
-    const passed = adj != null && adj < -120;
-    if (adj != null && adj < 0) adj = 0;
+    const rawAdj = vehOk ? adjust(st.predict_sec) : null;
+    const passedMin = rawAdj != null && rawAdj < 0 ? -rawAdj / 60 : null;
+    const passed = passedMin != null && passedMin >= 2;
+    const adj = rawAdj == null ? null : Math.max(0, rawAdj);
 
-    const parts = passed ? { num:"--", unit:"도착 예정 시각 지남" } : etaParts(adj);
+    const parts = passed ? passedParts(passedMin) : etaParts(adj);
     $("#eta-num").textContent = parts.num;
     $("#eta-unit").textContent = parts.unit;
 
+    // 통과 추정을 표시하는 동안은 감쇠/배지를 걸지 않는다 (더 이상 실시간 ETA를 주장하지 않으므로)
+    $("#hero").classList.toggle("is-passed", passed);
     $("#hero").classList.toggle("is-stale", fr.state === "stale");
     $("#stale-badge").textContent = (fr.ageMin == null
       ? "갱신 시각 불명"
@@ -289,9 +300,12 @@
       cls = "danger"; glyph = "⚠"; text = "수집 상태를 읽을 수 없습니다";
     } else if (st.error) {
       cls = "danger"; glyph = "⚠"; text = "수집 오류 · 실시간 아님";
+    } else if (passed) {
+      cls = "warn"; glyph = "⚠"; text = agoText(passedMin) + " 통과 추정 · 다음 버스를 확인하세요";
     } else if (fr.state === "stale") {
-      cls = "danger"; glyph = "⚠"; text = "판단 보류 · 정보가 오래되었습니다";
-    } else if (adj == null || passed) {
+      cls = "danger"; glyph = "⚠";
+      text = (fr.ageMin == null ? "갱신 시각 불명" : agoText(fr.ageMin) + " 정보") + " · 판단 보류";
+    } else if (adj == null) {
       cls = "warn"; glyph = "⚠"; text = "도착 정보 없음 · 다음 버스를 확인하세요";
     } else if (adj / 60 <= walk) {
       cls = "go"; glyph = "▶"; text = "지금 출발하세요";
