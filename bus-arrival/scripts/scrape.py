@@ -161,6 +161,8 @@ def gate_check() -> bool:
 def run_loop(args: argparse.Namespace):
     service_key = get_service_key()
     route_id = args.route_id or TARGET_ROUTE_ID
+    sta_order = args.sta_order
+    sta_order_pangyo = args.sta_order_pangyo
 
     state_path = os.path.join(os.path.dirname(args.output_csv), "tracker_state.json")
     predict_path = os.path.join(os.path.dirname(args.output_csv), "predict_log.csv")
@@ -185,7 +187,7 @@ def run_loop(args: argparse.Namespace):
     consec_fail = state.get("consec_fail", 0)
 
     logging.info("시작: routeId=%d staOrder=%d (판북 %d) cur_vid=%s 호출=%d/%d",
-                 route_id, STA_ORDER, STA_ORDER_PANGYO_N, cur_vid, daily_calls, max_daily_calls)
+                 route_id, sta_order, sta_order_pangyo, cur_vid, daily_calls, max_daily_calls)
 
     while True:
         ts = kst_now()
@@ -195,8 +197,8 @@ def run_loop(args: argparse.Namespace):
             logging.warning("일일 호출 상한 도달 (%d/%d). 중지.", daily_calls, max_daily_calls)
             break
 
-        info = fetch_arrival(service_key, STATION_ID, route_id, STA_ORDER)
-        info_pangyo = fetch_arrival(service_key, STN_PANGYO_N, route_id, STA_ORDER_PANGYO_N)
+        info = fetch_arrival(service_key, STATION_ID, route_id, sta_order)
+        info_pangyo = fetch_arrival(service_key, STN_PANGYO_N, route_id, sta_order_pangyo)
         daily_calls += 2
 
         if info is None:
@@ -344,6 +346,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gate-only", action="store_true",
                    help="평일/공휴일 체크만 하고 종료 (워크플로우 게이트용)")
     p.add_argument("--route-id", type=int, default=None)
+    p.add_argument("--sta-order", type=int, default=STA_ORDER)
+    p.add_argument("--sta-order-pangyo", type=int, default=STA_ORDER_PANGYO_N)
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))
     p.add_argument("--status-json", default=os.getenv("BUS_STATUS_JSON", "bus-arrival/status.json"))
