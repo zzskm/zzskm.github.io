@@ -5,16 +5,20 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>3100번 도착 로그 — 유라코퍼레이션</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
-    h1 { font-size: 20px; }
+    :root { color-scheme: light; --ink: #18212b; --muted: #687585; --line: #e6ebf0; --accent: #1769aa; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; color: var(--ink); background: #f4f7fa; max-width: 980px; margin: 0 auto; padding: 28px 16px 56px; }
+    main { background: white; border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 4vw, 34px); box-shadow: 0 8px 30px #1525360d; }
+    h1 { font-size: clamp(20px, 4vw, 28px); margin: 0 0 6px; }
     h2 { font-size: 15px; margin-top: 28px; }
     .meta { color: #666; font-size: 13px; }
-    .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
-    .stat { background: #f5f5f5; border-radius: 6px; padding: 6px 14px; font-size: 13px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 18px 0; }
+    .stat { background: #f7fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
     .stat b { font-size: 17px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 12px; }
     th, td { border-bottom: 1px solid #eee; padding: 5px 8px; text-align: left; }
-    th { color: #888; font-weight: 500; }
+    th { color: var(--muted); font-weight: 600; background: #f8fafc; }
+    .scroll { overflow-x: auto; }
     .empty { color: #999; padding: 18px 0; }
     .observed_arrival { color: #1a7f37; font-weight: 600; }
     .estimated_arrival { color: #9a6700; }
@@ -25,24 +29,25 @@
   </style>
 </head>
 <body>
+<main>
   <h1>🚌 유라코퍼레이션.SK케미칼 — 3100번 도착 로그</h1>
-  <p class="meta">정류소 7511 (GBIS 206000565) · staOrder 6 · 우림아파트 방면</p>
+  <p class="meta">유라코퍼레이션 07511 · 성남시청전면 06004 · 3100번 우림아파트 방면</p>
 
   <div id="status">불러오는 중...</div>
   <div class="stats" id="stats"></div>
 
   <h2>📉 예측 추이 (predict_sec)</h2>
-  <table id="predict">
+  <div class="scroll"><table id="predict">
     <thead><tr><th>시각</th><th>차량</th><th>예측(초)</th><th>빈자리</th><th>상태</th></tr></thead>
     <tbody></tbody>
-  </table>
+  </table></div>
 
   <h2>📋 이탈 기록</h2>
   <p class="meta">observed=도착확인 · estimated=도착추정 · vehicle_changed=차량변경 · data_gap=API누락 · service_end=운행종료</p>
-  <table id="arrival">
+  <div class="scroll"><table id="arrival">
     <thead><tr><th>이탈시각</th><th>차량</th><th>추적시작</th><th>최소예측</th><th>샘플</th><th>사유</th></tr></thead>
     <tbody></tbody>
-  </table>
+  </table></div>
 
   <script>
     async function load() {
@@ -52,8 +57,9 @@
       const arrBody = document.querySelector("#arrival tbody");
 
       try {
-        const [st, predCsv, arrCsv] = await Promise.all([
+        const [st, summary, predCsv, arrCsv] = await Promise.all([
           fetch("status.json?t=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("summary.json?t=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
           fetch("predict_log.csv?t=" + Date.now()).then(r => r.ok ? r.text() : "").catch(() => ""),
           fetch("arrival_log.csv?t=" + Date.now()).then(r => r.ok ? r.text() : "").catch(() => ""),
         ]);
@@ -74,6 +80,10 @@
             tags.push('<div class="stat">호출 <b>' + st.daily_calls + '</b></div>');
           if (st.error)
             tags.push('<div class="stat warn">⚠ ' + st.error + '</div>');
+          if (summary) {
+            tags.push('<div class="stat">오늘 표본 <b>' + (summary.prediction_samples || 0) + '</b></div>');
+            tags.push('<div class="stat">도착 기록 <b>' + (summary.arrival_records || 0) + '</b></div>');
+          }
           statsEl.innerHTML = tags.join("");
         } else {
           statusEl.textContent = "상태 정보 없음";
@@ -114,5 +124,6 @@
     load();
     setInterval(load, 60000);
   </script>
+</main>
 </body>
 </html>
