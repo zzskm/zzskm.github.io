@@ -109,6 +109,11 @@ def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: i
             "state_cd": ti("stateCd1"),
             "flag": xml_text(n, "flag"),
             "station_nm": xml_text(n, "stationNm1"),
+            "next_veh_id": ti("vehId2"),
+            "next_plate_no": xml_text(n, "plateNo2"),
+            "next_predict_min": ti("predictTime2"),
+            "next_predict_sec": ti("predictTimeSec2"),
+            "next_remain_seat": ti("remainSeatCnt2"),
         }
     except Exception as e:
         logging.debug("API 실패 station=%d: %s", station_id, e)
@@ -354,6 +359,9 @@ def run_loop(args: argparse.Namespace):
                 "current_veh_id": vid,
                 "current_plate": info["plate_no"],
                 "predict_sec": predict,
+                "next_veh_id": info["next_veh_id"],
+                "next_plate_no": info["next_plate_no"],
+                "next_predict_sec": info["next_predict_sec"],
                 "remain_seat": info["remain_seat"],
                 "flag": info["flag"],
                 "tracking_samples": samples,
