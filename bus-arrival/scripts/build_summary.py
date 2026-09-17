@@ -3,6 +3,7 @@ import argparse
 import csv
 import json
 import os
+import datetime as dt
 from collections import Counter, defaultdict
 
 
@@ -40,8 +41,10 @@ def main():
         }
 
     latest = predictions[-1] if predictions else {}
+    today = dt.datetime.now(dt.timezone.utc).astimezone(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d")
     summary = {
         "latest": latest,
+        "today": daily.get(today, {"samples": 0, "min_predict_sec": None, "avg_predict_sec": None}),
         "prediction_samples": len(predictions),
         "arrival_records": len(arrivals),
         "departure_reasons": dict(Counter(r.get("departure_reason", "unknown") for r in arrivals)),

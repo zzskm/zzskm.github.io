@@ -1,129 +1,129 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>3100번 도착 로그 — 유라코퍼레이션</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>3100 퇴근 버스</title>
   <style>
-    :root { color-scheme: light; --ink: #18212b; --muted: #687585; --line: #e6ebf0; --accent: #1769aa; }
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; color: var(--ink); background: #f4f7fa; max-width: 980px; margin: 0 auto; padding: 28px 16px 56px; }
-    main { background: white; border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 4vw, 34px); box-shadow: 0 8px 30px #1525360d; }
-    h1 { font-size: clamp(20px, 4vw, 28px); margin: 0 0 6px; }
-    h2 { font-size: 15px; margin-top: 28px; }
-    .meta { color: #666; font-size: 13px; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 18px 0; }
-    .stat { background: #f7fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-    .stat b { font-size: 17px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 12px; }
-    th, td { border-bottom: 1px solid #eee; padding: 5px 8px; text-align: left; }
-    th { color: var(--muted); font-weight: 600; background: #f8fafc; }
-    .scroll { overflow-x: auto; }
-    .empty { color: #999; padding: 18px 0; }
-    .observed_arrival { color: #1a7f37; font-weight: 600; }
-    .estimated_arrival { color: #9a6700; }
-    .vehicle_changed { color: #666; }
-    .data_gap { color: #cf222e; }
-    .service_end { color: #8250df; }
-    .warn { color: #9a6700; font-size: 12px; }
+    :root { --ink:#17212b; --muted:#718096; --line:#e6ebf0; --blue:#1769aa; --green:#137333; --amber:#9a6700; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:20px 14px 48px; background:#f4f7fa; color:var(--ink); font-family:system-ui,sans-serif; }
+    main { max-width:920px; margin:auto; }
+    header { margin:10px 0 18px; }
+    h1 { margin:0 0 6px; font-size:clamp(24px,5vw,36px); letter-spacing:-.04em; }
+    h2 { margin:30px 0 10px; font-size:17px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .hero { background:linear-gradient(135deg,#124e78,#1982a8); color:white; border-radius:20px; padding:22px; box-shadow:0 12px 30px #124e7830; }
+    .hero-label { opacity:.8; font-size:13px; }
+    .eta { margin:7px 0; font-size:clamp(40px,11vw,76px); font-weight:750; letter-spacing:-.07em; line-height:1; }
+    .hero-detail { display:flex; gap:14px; flex-wrap:wrap; font-size:13px; opacity:.9; }
+    .status-line { margin-top:12px; font-size:12px; opacity:.75; }
+    .cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .card { min-height:78px; padding:12px; background:white; border:1px solid var(--line); border-radius:12px; }
+    .card-label { color:var(--muted); font-size:12px; }
+    .card-value { margin-top:5px; font-size:21px; font-weight:700; }
+    .confidence-high { color:var(--green); } .confidence-medium { color:var(--amber); } .confidence-low,.stale { color:#b42318; }
+    .panel { padding:15px; background:white; border:1px solid var(--line); border-radius:14px; }
+    .chart { display:flex; align-items:end; gap:4px; height:120px; overflow:hidden; padding-top:14px; }
+    .bar { min-width:7px; flex:1; max-width:18px; background:#62a8cf; border-radius:4px 4px 0 0; position:relative; }
+    .bar:hover { background:#1769aa; }
+    .table-wrap { overflow-x:auto; background:white; border:1px solid var(--line); border-radius:14px; }
+    table { border-collapse:collapse; width:100%; min-width:540px; font-size:12px; }
+    th,td { padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+    th { color:var(--muted); background:#f8fafc; font-weight:600; }
+    tr:last-child td { border-bottom:0; }
+    .empty { padding:18px; color:var(--muted); text-align:center; }
+    .tag { display:inline-block; padding:3px 7px; border-radius:999px; background:#edf4f8; color:#31556b; }
+    .error { color:#b42318; }
+    @media (max-width:650px) { .cards { grid-template-columns:repeat(2,minmax(0,1fr)); } body { padding-top:12px; } .hero { border-radius:16px; } }
   </style>
 </head>
 <body>
 <main>
-  <h1>🚌 유라코퍼레이션.SK케미칼 — 3100번 도착 로그</h1>
-  <p class="meta">유라코퍼레이션 07511 · 성남시청전면 06004 · 3100번 우림아파트 방면</p>
+  <header>
+    <h1>3100 퇴근 버스</h1>
+    <div class="muted">유라코퍼레이션.SK케미칼(07511) · 우림아파트 방면</div>
+  </header>
 
-  <div id="status">불러오는 중...</div>
-  <div class="stats" id="stats"></div>
+  <section class="hero" aria-live="polite">
+    <div class="hero-label">현재 유라코퍼레이션 도착 예상</div>
+    <div id="eta" class="eta">--</div>
+    <div id="hero-detail" class="hero-detail">데이터를 불러오는 중입니다.</div>
+    <div id="status" class="status-line">마지막 조회: -</div>
+  </section>
 
-  <h2>📉 예측 추이 (predict_sec)</h2>
-  <div class="scroll"><table id="predict">
-    <thead><tr><th>시각</th><th>차량</th><th>예측(초)</th><th>빈자리</th><th>상태</th></tr></thead>
-    <tbody></tbody>
-  </table></div>
+  <section class="cards" id="cards" aria-label="현재 버스 상태"></section>
 
-  <h2>📋 이탈 기록</h2>
-  <p class="meta">observed=도착확인 · estimated=도착추정 · vehicle_changed=차량변경 · data_gap=API누락 · service_end=운행종료</p>
-  <div class="scroll"><table id="arrival">
-    <thead><tr><th>이탈시각</th><th>차량</th><th>추적시작</th><th>최소예측</th><th>샘플</th><th>사유</th></tr></thead>
-    <tbody></tbody>
-  </table></div>
+  <h2>최근 예측 흐름</h2>
+  <section class="panel">
+    <div id="chart" class="chart" aria-label="최근 도착 예측 막대 그래프"></div>
+    <div class="muted">막대가 낮을수록 도착이 가까운 상태입니다.</div>
+  </section>
 
-  <script>
-    async function load() {
-      const statusEl = document.getElementById("status");
-      const statsEl = document.getElementById("stats");
-      const predBody = document.querySelector("#predict tbody");
-      const arrBody = document.querySelector("#arrival tbody");
+  <h2>최근 도착 추정 기록</h2>
+  <div class="table-wrap">
+    <table id="arrivals">
+      <thead><tr><th>시각</th><th>차량</th><th>최소 예측</th><th>표본</th><th>판정</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-      try {
-        const [st, summary, predCsv, arrCsv] = await Promise.all([
-          fetch("status.json?t=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
-          fetch("summary.json?t=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
-          fetch("predict_log.csv?t=" + Date.now()).then(r => r.ok ? r.text() : "").catch(() => ""),
-          fetch("arrival_log.csv?t=" + Date.now()).then(r => r.ok ? r.text() : "").catch(() => ""),
-        ]);
-
-        if (st) {
-          const when = st.last_poll_local || st.last_poll || "-";
-          statusEl.textContent = "마지막 조회: " + when;
-          const tags = [];
-          if (st.current_veh_id)
-            tags.push('<div class="stat">추적 중 #' + st.current_veh_id + '</div>');
-          if (st.predict_sec != null)
-            tags.push('<div class="stat">예측 <b>' + st.predict_sec + 's</b></div>');
-          if (st.remain_seat != null && st.remain_seat >= 0)
-            tags.push('<div class="stat">빈자리 <b>' + st.remain_seat + '</b></div>');
-          if (st.min_predict_in_track != null)
-            tags.push('<div class="stat">이 버스 최소 <b>' + st.min_predict_in_track + 's</b></div>');
-          if (st.daily_calls != null)
-            tags.push('<div class="stat">호출 <b>' + st.daily_calls + '</b></div>');
-          if (st.error)
-            tags.push('<div class="stat warn">⚠ ' + st.error + '</div>');
-          if (summary) {
-            tags.push('<div class="stat">오늘 표본 <b>' + (summary.prediction_samples || 0) + '</b></div>');
-            tags.push('<div class="stat">도착 기록 <b>' + (summary.arrival_records || 0) + '</b></div>');
-          }
-          statsEl.innerHTML = tags.join("");
-        } else {
-          statusEl.textContent = "상태 정보 없음";
-        }
-
-        // 예측 추이
-        const predLines = predCsv.trim().split("\n").slice(1).filter(Boolean);
-        if (predLines.length === 0) {
-          predBody.innerHTML = '<tr><td colspan="5" class="empty">예측 기록 없음</td></tr>';
-        } else {
-          predBody.innerHTML = predLines.slice(-30).map(function(line) {
-            var p = line.split(",");
-            var ts = p[0], plate = p[2], sec = p[3], seat = p[4], flag = p[6];
-            var t = ts.slice(11, 19);
-            var secVal = parseInt(sec) || 0;
-            var style = secVal <= 60 ? ' style="color:#1a7f37;font-weight:600"' : '';
-            return '<tr><td>' + t + '</td><td>' + (plate || '-') + '</td><td' + style + '>' + sec + 's</td><td>' + (seat === '-1' ? '-' : seat) + '</td><td>' + flag + '</td></tr>';
-          }).join("");
-        }
-
-        // 이탈 기록
-        const arrLines = arrCsv.trim().split("\n").slice(1).filter(Boolean);
-        if (arrLines.length === 0) {
-          arrBody.innerHTML = '<tr><td colspan="6" class="empty">아직 없음</td></tr>';
-        } else {
-          arrBody.innerHTML = arrLines.slice(-30).reverse().map(function(line) {
-            var p = line.split(",");
-            var ts = p[0], vid = p[1], plate = p[2], firstTs = p[3], minP = p[5], n = p[7], reason = p[8];
-            var t = ts.slice(0, 19).replace("T", " ");
-            var minSec = minP ? minP + 's' : '-';
-            return '<tr><td>' + t + '</td><td>' + (plate || vid) + '</td><td>' + (firstTs ? firstTs.slice(11, 19) : '-') + '</td><td>' + minSec + '</td><td>' + (n || '-') + '</td><td class="' + reason + '">' + reason + '</td></tr>';
-          }).join("");
-        }
-      } catch (e) {
-        statusEl.textContent = "읽기 실패: " + e.message;
-      }
-    }
-    load();
-    setInterval(load, 60000);
-  </script>
+  <h2>수집 상태</h2>
+  <div id="system" class="panel muted">확인 중...</div>
 </main>
+<script>
+  const $ = (s) => document.querySelector(s);
+  const escapeHtml = (value) => String(value ?? "-").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+  const formatEta = (seconds) => {
+    const n = Number(seconds);
+    if (!Number.isFinite(n) || n < 0) return "정보 없음";
+    if (n < 60) return "곧 도착";
+    return `${Math.round(n / 60)}분 후`;
+  };
+  const confidenceLabel = (value) => ({high:"높음", medium:"보통", low:"낮음", unknown:"알 수 없음"}[value] || "알 수 없음");
+  const csvRows = (text) => {
+    const lines = text.trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",");
+    return lines.slice(1).map(line => {
+      const values = line.split(",");
+      return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""]));
+    });
+  };
+
+  async function load() {
+    const qs = "?t=" + Date.now();
+    const [status, summary, predictionsText, arrivalsText] = await Promise.all([
+      fetch("status.json" + qs).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch("summary.json" + qs).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch("predict_log.csv" + qs).then(r => r.ok ? r.text() : "").catch(() => ""),
+      fetch("arrival_log.csv" + qs).then(r => r.ok ? r.text() : "").catch(() => "")
+    ]);
+    const predictions = csvRows(predictionsText).slice(-30);
+    const arrivals = csvRows(arrivalsText).slice(-30).reverse();
+    const currentSeconds = status?.predict_sec;
+    $("#eta").textContent = formatEta(currentSeconds);
+    $("#hero-detail").innerHTML = status
+      ? `<span>차량 ${escapeHtml(status.current_plate || status.current_veh_id || "-")}</span><span>빈자리 ${status.remain_seat != null && status.remain_seat >= 0 ? escapeHtml(status.remain_seat) + "석" : "정보 없음"}</span><span>신뢰도 ${confidenceLabel(status.confidence)}</span>`
+      : "현재 상태를 확인할 수 없습니다.";
+    $("#status").textContent = "마지막 조회: " + (status?.last_poll_local || status?.last_poll || "-");
+
+    const cards = [
+      ["현재 예측", formatEta(currentSeconds)],
+      ["신뢰도", confidenceLabel(status?.confidence)],
+      ["오늘 표본", summary?.today?.samples || 0],
+      ["도착 기록", summary?.arrival_records || 0]
+    ];
+    $("#cards").innerHTML = cards.map(([label, value]) => `<div class="card"><div class="card-label">${label}</div><div class="card-value">${escapeHtml(value)}</div></div>`).join("");
+
+    const values = predictions.map(r => Number(r.predict_sec)).filter(Number.isFinite);
+    const max = Math.max(...values, 60);
+    $("#chart").innerHTML = values.length ? values.map((value, i) => `<div class="bar" title="${escapeHtml(value)}초" style="height:${Math.max(8, 100 - value / max * 88)}%"></div>`).join("") : '<div class="empty">예측 데이터가 없습니다.</div>';
+    $("#arrivals tbody").innerHTML = arrivals.length ? arrivals.map(r => `<tr><td>${escapeHtml((r.ts_kst || "").slice(0, 16).replace("T", " "))}</td><td>${escapeHtml(r.plateNo || r.vehId)}</td><td>${escapeHtml(r.min_predict_sec ? r.min_predict_sec + "초" : "-")}</td><td>${escapeHtml(r.samples)}</td><td><span class="tag">${escapeHtml(r.departure_reason || "미분류")}</span></td></tr>`).join("") : '<tr><td colspan="5" class="empty">아직 기록이 없습니다.</td></tr>';
+    $("#system").innerHTML = status?.error ? `<span class="error">조회 상태: ${escapeHtml(status.error)}</span> · 연속 오류 ${escapeHtml(status.consec_fail || 0)}회` : `정상 수집 중 · 호출 ${escapeHtml(status?.daily_calls || 0)}회 · 2차 정류장 ID ${escapeHtml(status?.secondary_station_id || "해석 대기")}`;
+  }
+  load().catch(e => { $("#status").textContent = "화면 데이터 로드 실패: " + e.message; });
+  setInterval(() => load().catch(() => {}), 60000);
+</script>
 </body>
 </html>

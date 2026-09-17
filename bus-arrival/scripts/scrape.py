@@ -43,6 +43,7 @@ STA_ORDER_SECONDARY = 12
 
 ARRIVAL_BASE = "https://apis.data.go.kr/6410000/busarrivalservice/v2"
 USER_AGENT = "Mozilla/5.0 (compatible; bus-arrival-log/1.0)"
+STATE_MAX_AGE_SECONDS = 20 * 60
 
 HOLIDAYS_2026 = {
     "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18",
@@ -216,6 +217,16 @@ def run_loop(args: argparse.Namespace):
     max_predict = state.get("max_predict", -1)
     samples = state.get("samples", 0)
     consec_fail = state.get("consec_fail", 0)
+    state_reset = False
+    if last_seen and (kst_now() - last_seen).total_seconds() > STATE_MAX_AGE_SECONDS:
+        cur_vid = None
+        cur_plate = ""
+        first_seen = None
+        last_seen = None
+        min_predict = 99999
+        max_predict = -1
+        samples = 0
+        state_reset = True
 
     logging.info("시작: routeId=%d staOrder=%d (성남시청전면 %d/%d) cur_vid=%s 호출=%d/%d",
                  route_id, sta_order, secondary_station_id, sta_order_secondary,
@@ -241,11 +252,17 @@ def run_loop(args: argparse.Namespace):
                      cur_vid, cur_plate, first_seen, last_seen,
                      min_predict, max_predict, samples, consec_fail)
             if status_path:
-                _write_status(status_path, ts_iso, {"error": "api_fail", "consec_fail": consec_fail})
+                _write_status(status_path, ts_iso, {
+                    "error": "api_error",
+                    "consec_fail": consec_fail,
+                    "last_success": state.get("last_success"),
+                    "state_reset": state_reset,
+                })
             if _sleep_and_check(args):
                 break
             continue
 
+        previous_failures = consec_fail
         consec_fail = 0
         vid = info["veh_id"]
         predict = info["predict_sec"]
@@ -293,7 +310,7 @@ def run_loop(args: argparse.Namespace):
         # 차량 변경 감지
         if vid != cur_vid:
             if cur_vid is not None and samples > 0:
-                reason = _classify_departure(info, consec_fail, min_predict, state.get("last_flag", ""))
+                reason = _classify_departure(info, previous_failures, min_predict, state.get("last_flag", ""))
                 append_csv(arrival_path, {
                     "ts_kst": ts_iso,
                     "vehId": cur_vid,
@@ -323,6 +340,7 @@ def run_loop(args: argparse.Namespace):
                 max_predict = max(max_predict, predict)
             samples += 1
 
+        state["last_success"] = ts_iso
         _persist(state_path, today_str, daily_calls,
                  cur_vid, cur_plate, first_seen, last_seen,
                  min_predict, max_predict, samples, consec_fail,
@@ -341,7 +359,11 @@ def run_loop(args: argparse.Namespace):
                 "tracking_samples": samples,
                 "min_predict_in_track": min_predict,
                 "daily_calls": daily_calls,
+                "confidence": arrival_confidence(info, predict),
+                "last_success": ts_iso,
+                "state_reset": state_reset,
             })
+        state_reset = False
 
         if _sleep_and_check(args):
             break
@@ -357,6 +379,16 @@ def _classify_departure(info, consec_fail: int, min_predict: int, last_flag: str
     if last_flag == "STOP":
         return "service_end"
     return "vehicle_changed"
+
+
+def arrival_confidence(info: dict, predict: int | None) -> str:
+    if info.get("state_cd") == 1:
+        return "high"
+    if predict is not None and predict <= 60:
+        return "medium"
+    if predict is not None:
+        return "low"
+    return "unknown"
 
 
 def _persist(state_path: str, date: str, daily_calls: int,
