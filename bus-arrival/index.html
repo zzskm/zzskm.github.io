@@ -42,6 +42,8 @@
     .setting { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
     .setting input { width:55px; padding:6px; border:1px solid var(--line); border-radius:7px; }
     .stale { background:#fff4e5; color:var(--amber); padding:9px 11px; border-radius:9px; }
+    .detail-link { display:inline-block; margin-top:8px; color:var(--blue); font-size:13px; text-decoration:none; }
+    .detail-link:hover { text-decoration:underline; }
     @media (max-width:650px) { .cards { grid-template-columns:repeat(2,minmax(0,1fr)); } body { padding-top:12px; } .hero { border-radius:16px; } }
   </style>
 </head>
@@ -50,6 +52,7 @@
   <header>
     <h1>3100 퇴근 버스</h1>
     <div class="muted">유라코퍼레이션.SK케미칼(07511) · 우림아파트 방면</div>
+    <a class="detail-link" href="https://map.naver.com/p/entry/bus-route/11001069?c=16.00,0,0,0,dh&bsl=11001069,163603,1" target="_blank" rel="noopener noreferrer">네이버 지도에서 3100번 노선 상세 보기 ↗</a>
     <div class="toolbar"><div class="setting">정류장까지 <input id="walk" type="number" min="0" max="60" step="1">분</div><button id="refresh" type="button">새로고침</button></div>
   </header>
 
