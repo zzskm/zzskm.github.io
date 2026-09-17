@@ -34,9 +34,8 @@ KST = dt.timezone(dt.timedelta(hours=9))
 
 # 유라코퍼레이션.SK케미칼 (정류소번호 7511)
 STATION_ID = 206000565
-# 성남시청전면 (ARS 정류소번호 06004)
-# GBIS API에서 사용하는 stationId가 별도인 경우 BUS_SECONDARY_STATION_ID로 덮어쓴다.
-STN_SECONDARY = 6004
+# 성남시청전면 (ARS/모바일 정류소번호 06004)
+SECONDARY_MOBILE_NO = "06004"
 
 TARGET_ROUTE_ID = 204000170
 STA_ORDER = 6
@@ -115,6 +114,29 @@ def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: i
         return None
 
 
+def resolve_station_id(service_key: str, route_id: int, mobile_no: str, station_seq: int) -> int | None:
+    """노선 경유정류장 목록에서 ARS 번호를 공식 stationId로 변환한다."""
+    params = {"serviceKey": service_key, "routeId": str(route_id), "format": "xml"}
+    try:
+        r = httpx.get(
+            "https://apis.data.go.kr/6410000/busrouteservice/v2/getBusRouteStationListv2",
+            params=params, headers={"User-Agent": USER_AGENT}, timeout=15,
+        )
+        r.raise_for_status()
+        root = ET.fromstring(r.text)
+        target = mobile_no.lstrip("0") or "0"
+        for node in root.findall(".//busRouteStationList"):
+            mobile = xml_text(node, "mobileNo").lstrip("0") or "0"
+            seq = xml_text(node, "stationSeq")
+            if mobile == target and seq == str(station_seq):
+                station_id = xml_text(node, "stationId")
+                if station_id.isdigit():
+                    return int(station_id)
+    except Exception as e:
+        logging.warning("2차 정류장 stationId 해석 실패: %s", e)
+    return None
+
+
 def append_csv(path: str, row: dict):
     exists = os.path.exists(path)
     with open(path, "a", newline="", encoding="utf-8") as f:
@@ -165,6 +187,13 @@ def run_loop(args: argparse.Namespace):
     sta_order = args.sta_order
     secondary_station_id = args.secondary_station_id
     sta_order_secondary = args.sta_order_secondary
+    if secondary_station_id is None:
+        secondary_station_id = resolve_station_id(
+            service_key, route_id, args.secondary_mobile_no, sta_order_secondary
+        )
+    if secondary_station_id is None:
+        logging.warning("성남시청전면(%s) stationId를 찾지 못해 2차 조회를 건너뜁니다.",
+                        args.secondary_mobile_no)
 
     state_path = os.path.join(os.path.dirname(args.output_csv), "tracker_state.json")
     predict_path = os.path.join(os.path.dirname(args.output_csv), "predict_log.csv")
@@ -201,8 +230,10 @@ def run_loop(args: argparse.Namespace):
             break
 
         info = fetch_arrival(service_key, STATION_ID, route_id, sta_order)
-        info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
-        daily_calls += 2
+        info_secondary = None
+        if secondary_station_id is not None:
+            info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
+        daily_calls += 1 + (1 if secondary_station_id is not None else 0)
 
         if info is None:
             consec_fail += 1
@@ -368,7 +399,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--route-id", type=int, default=None)
     p.add_argument("--sta-order", type=int, default=STA_ORDER)
     p.add_argument("--secondary-station-id", type=int,
-                   default=int(os.getenv("BUS_SECONDARY_STATION_ID", STN_SECONDARY)))
+                   default=int(os.getenv("BUS_SECONDARY_STATION_ID", "0")) or None)
+    p.add_argument("--secondary-mobile-no", default=SECONDARY_MOBILE_NO)
     p.add_argument("--sta-order-secondary", type=int, default=STA_ORDER_SECONDARY)
     p.add_argument("--interval", type=int, default=60)
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))
