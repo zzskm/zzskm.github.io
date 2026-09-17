@@ -35,6 +35,13 @@
     .empty { padding:18px; color:var(--muted); text-align:center; }
     .tag { display:inline-block; padding:3px 7px; border-radius:999px; background:#edf4f8; color:#31556b; }
     .error { color:#b42318; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; }
+    button { border:0; border-radius:9px; padding:9px 13px; color:white; background:var(--blue); cursor:pointer; font-weight:650; }
+    button:disabled { opacity:.6; cursor:wait; }
+    .guidance { margin-top:12px; padding:12px; border-radius:10px; background:#eef7f1; color:var(--green); font-weight:650; }
+    .setting { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+    .setting input { width:55px; padding:6px; border:1px solid var(--line); border-radius:7px; }
+    .stale { background:#fff4e5; color:var(--amber); padding:9px 11px; border-radius:9px; }
     @media (max-width:650px) { .cards { grid-template-columns:repeat(2,minmax(0,1fr)); } body { padding-top:12px; } .hero { border-radius:16px; } }
   </style>
 </head>
@@ -43,6 +50,7 @@
   <header>
     <h1>3100 퇴근 버스</h1>
     <div class="muted">유라코퍼레이션.SK케미칼(07511) · 우림아파트 방면</div>
+    <div class="toolbar"><div class="setting">정류장까지 <input id="walk" type="number" min="0" max="60" step="1">분</div><button id="refresh" type="button">새로고침</button></div>
   </header>
 
   <section class="hero" aria-live="polite">
@@ -50,6 +58,7 @@
     <div id="eta" class="eta">--</div>
     <div id="hero-detail" class="hero-detail">유라코퍼레이션 도착 정보를 불러오는 중입니다.</div>
     <div id="status" class="status-line">마지막 조회: -</div>
+    <div id="guidance" class="guidance">출발 판단 중...</div>
   </section>
 
   <section class="cards" id="cards" aria-label="현재 버스 상태"></section>
@@ -102,14 +111,23 @@
     const predictions = csvRows(predictionsText).slice(-30);
     const arrivals = csvRows(arrivalsText).slice(-30).reverse();
     const currentSeconds = status?.predict_sec;
+    const nextSeconds = status?.next_predict_sec;
     $("#eta").textContent = formatEta(currentSeconds);
     $("#hero-detail").innerHTML = status
       ? `<span>차량 ${escapeHtml(status.current_plate || status.current_veh_id || "-")}</span><span>빈자리 ${status.remain_seat != null && status.remain_seat >= 0 ? escapeHtml(status.remain_seat) + "석" : "정보 없음"}</span><span>신뢰도 ${confidenceLabel(status.confidence)}</span>`
       : "현재 상태를 확인할 수 없습니다.";
-    $("#status").textContent = "마지막 조회: " + (status?.last_poll_local || status?.last_poll || "-");
+    const updated = status?.last_poll_local || status?.last_poll || "-";
+    $("#status").textContent = "마지막 조회: " + updated;
+    const updatedAt = status?.last_poll ? Date.parse(status.last_poll) : NaN;
+    const stale = !Number.isFinite(updatedAt) || Date.now() - updatedAt > 10 * 60 * 1000;
+    $("#status").classList.toggle("stale", stale);
+    const walk = Number($("#walk").value) || 5;
+    const etaMinutes = Number.isFinite(Number(currentSeconds)) ? Number(currentSeconds) / 60 : null;
+    $("#guidance").textContent = etaMinutes == null ? "도착 정보를 확인할 수 없어 출발 판단을 할 수 없습니다." : etaMinutes <= walk ? "지금 출발하세요. 버스가 정류장에 가까워요." : `${Math.ceil(etaMinutes - walk)}분 뒤 출발 권장 (도보 ${walk}분 기준)`;
 
     const cards = [
       ["현재 예측", formatEta(currentSeconds)],
+      ["다음 버스", formatEta(nextSeconds)],
       ["신뢰도", confidenceLabel(status?.confidence)],
       ["오늘 표본", summary?.today?.samples || 0],
       ["도착 기록", summary?.arrival_records || 0]
@@ -122,6 +140,11 @@
     $("#arrivals tbody").innerHTML = arrivals.length ? arrivals.map(r => `<tr><td>${escapeHtml((r.ts_kst || "").slice(0, 16).replace("T", " "))}</td><td>${escapeHtml(r.plateNo || r.vehId)}</td><td>${escapeHtml(r.min_predict_sec ? r.min_predict_sec + "초" : "-")}</td><td>${escapeHtml(r.samples)}</td><td><span class="tag">${escapeHtml(r.departure_reason || "미분류")}</span></td></tr>`).join("") : '<tr><td colspan="5" class="empty">아직 기록이 없습니다.</td></tr>';
     $("#system").innerHTML = status?.error ? `<span class="error">조회 상태: ${escapeHtml(status.error)}</span> · 연속 오류 ${escapeHtml(status.consec_fail || 0)}회` : `정상 수집 중 · 호출 ${escapeHtml(status?.daily_calls || 0)}회 · 2차 정류장 ID ${escapeHtml(status?.secondary_station_id || "해석 대기")}`;
   }
+  const walkInput = $("#walk");
+  walkInput.value = localStorage.getItem("busWalkMinutes") || "5";
+  walkInput.addEventListener("change", () => { localStorage.setItem("busWalkMinutes", walkInput.value); load().catch(() => {}); });
+  const refreshButton = $("#refresh");
+  refreshButton.addEventListener("click", async () => { refreshButton.disabled = true; refreshButton.textContent = "조회 중..."; try { await load(); } finally { refreshButton.disabled = false; refreshButton.textContent = "새로고침"; } });
   load().catch(e => { $("#status").textContent = "화면 데이터 로드 실패: " + e.message; });
   setInterval(() => load().catch(() => {}), 60000);
 </script>
