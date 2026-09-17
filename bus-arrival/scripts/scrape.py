@@ -221,6 +221,8 @@ def run_loop(args: argparse.Namespace):
     min_predict = state.get("min_predict", 99999)
     max_predict = state.get("max_predict", -1)
     samples = state.get("samples", 0)
+    last_predict = state.get("last_predict")
+    last_state_cd = state.get("last_state_cd")
     consec_fail = state.get("consec_fail", 0)
     state_reset = False
     if last_seen and (kst_now() - last_seen).total_seconds() > STATE_MAX_AGE_SECONDS:
@@ -231,6 +233,8 @@ def run_loop(args: argparse.Namespace):
         min_predict = 99999
         max_predict = -1
         samples = 0
+        last_predict = None
+        last_state_cd = None
         state_reset = True
 
     logging.info("시작: routeId=%d staOrder=%d (성남시청전면 %d/%d) cur_vid=%s 호출=%d/%d",
@@ -255,7 +259,8 @@ def run_loop(args: argparse.Namespace):
             consec_fail += 1
             _persist(state_path, today_str, daily_calls,
                      cur_vid, cur_plate, first_seen, last_seen,
-                     min_predict, max_predict, samples, consec_fail)
+                     min_predict, max_predict, samples, consec_fail,
+                     last_predict, last_state_cd)
             if status_path:
                 _write_status(status_path, ts_iso, {
                     "error": "api_error",
@@ -307,6 +312,7 @@ def run_loop(args: argparse.Namespace):
             _persist(state_path, today_str, daily_calls,
                      cur_vid, cur_plate, first_seen, last_seen,
                      min_predict, max_predict, samples, consec_fail,
+                     None, None,
                      last_flag=info["flag"])
             if _sleep_and_check(args):
                 break
@@ -315,7 +321,10 @@ def run_loop(args: argparse.Namespace):
         # 차량 변경 감지
         if vid != cur_vid:
             if cur_vid is not None and samples > 0:
-                reason = _classify_departure(info, previous_failures, min_predict, state.get("last_flag", ""))
+                reason = _classify_departure(
+                    previous_failures, state.get("last_flag", ""),
+                    last_predict, last_state_cd,
+                )
                 append_csv(arrival_path, {
                     "ts_kst": ts_iso,
                     "vehId": cur_vid,
@@ -346,9 +355,12 @@ def run_loop(args: argparse.Namespace):
             samples += 1
 
         state["last_success"] = ts_iso
+        last_predict = predict
+        last_state_cd = info["state_cd"]
         _persist(state_path, today_str, daily_calls,
                  cur_vid, cur_plate, first_seen, last_seen,
                  min_predict, max_predict, samples, consec_fail,
+                 last_predict, last_state_cd,
                  last_flag=info["flag"])
 
         if status_path:
@@ -377,12 +389,13 @@ def run_loop(args: argparse.Namespace):
             break
 
 
-def _classify_departure(info, consec_fail: int, min_predict: int, last_flag: str) -> str:
+def _classify_departure(consec_fail: int, last_flag: str,
+                        last_predict: int | None, last_state_cd: int | None) -> str:
     if consec_fail >= 2:
         return "data_gap"
-    if info and info["veh_id"] != 0 and min_predict <= 60:
+    if last_state_cd == 1 or (last_predict is not None and last_predict <= 60):
         return "observed_arrival"
-    if info and info["veh_id"] != 0 and min_predict <= 90:
+    if last_predict is not None and last_predict <= 90:
         return "estimated_arrival"
     if last_flag == "STOP":
         return "service_end"
@@ -402,6 +415,7 @@ def arrival_confidence(info: dict, predict: int | None) -> str:
 def _persist(state_path: str, date: str, daily_calls: int,
              cur_vid, cur_plate, first_seen, last_seen,
              min_predict, max_predict, samples, consec_fail,
+             last_predict, last_state_cd,
              last_flag: str = ""):
     save_state(state_path, {
         "date": date,
@@ -413,6 +427,8 @@ def _persist(state_path: str, date: str, daily_calls: int,
         "min_predict": min_predict,
         "max_predict": max_predict,
         "samples": samples,
+        "last_predict": last_predict,
+        "last_state_cd": last_state_cd,
         "consec_fail": consec_fail,
         "last_flag": last_flag,
     })

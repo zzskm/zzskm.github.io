@@ -298,7 +298,7 @@
       cls = "danger"; glyph = "⚠"; text = "정보를 불러올 수 없습니다";
     } else if (!st) {
       cls = "danger"; glyph = "⚠"; text = "수집 상태를 읽을 수 없습니다";
-    } else if (st.error) {
+    } else if (st.error && st.error !== "no_bus") {
       cls = "danger"; glyph = "⚠"; text = "수집 오류 · 실시간 아님";
     } else if (passed) {
       cls = "warn"; glyph = "⚠"; text = agoText(passedMin) + " 통과 추정 · 다음 버스를 확인하세요";
@@ -394,19 +394,21 @@
     const st = cache.status, sm = cache.summary;
     const bits = [
       "오늘 표본 " + escapeHtml((sm && sm.today && sm.today.samples) || 0) + "건",
+      "유효 예측 " + escapeHtml((sm && sm.valid_prediction_samples) || 0) + "건",
+      "버스 없음 " + escapeHtml((sm && sm.no_bus_samples) || 0) + "건",
       "누적 도착 기록 " + escapeHtml((sm && sm.arrival_records) || 0) + "건",
       "API 호출 " + escapeHtml((st && st.daily_calls) || 0) + "회",
       "2차 정류장 ID " + escapeHtml((st && st.secondary_station_id) || "해석 대기")
     ];
-    const head = st && st.error
+    const head = st && st.error && st.error !== "no_bus"
       ? "<strong style=\"color:var(--danger)\">조회 오류: " + escapeHtml(st.error) + "</strong> · 연속 실패 " + escapeHtml(st.consec_fail || 0) + "회<br>"
-      : "정상 수집 중<br>";
+      : (st && st.error === "no_bus" ? "현재 정류장에 표시된 버스가 없습니다.<br>" : "정상 수집 중<br>");
     $("#system").innerHTML = head + bits.join(" · ");
 
     const card = $("#error-card");
     const message = cache.loadError
       ? cache.loadError
-      : (st && st.error ? "도착 정보 조회에 실패했습니다: " + st.error : "");
+      : (st && st.error && st.error !== "no_bus" ? "도착 정보 조회에 실패했습니다: " + st.error : "");
     card.textContent = message;
     card.classList.toggle("show", Boolean(message));
   }
