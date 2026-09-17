@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>3100번 도착 로그 — 유라코퍼레이션</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 15px; margin-top: 28px; }
+    .meta { color: #666; font-size: 13px; }
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+    .stat { background: #f5f5f5; border-radius: 6px; padding: 6px 14px; font-size: 13px; }
+    .stat b { font-size: 17px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 12px; }
+    th, td { border-bottom: 1px solid #eee; padding: 5px 8px; text-align: left; }
+    th { color: #888; font-weight: 500; }
+    .empty { color: #999; padding: 18px 0; }
+    .observed_arrival { color: #1a7f37; font-weight: 600; }
+    .estimated_arrival { color: #9a6700; }
+    .vehicle_changed { color: #666; }
+    .data_gap { color: #cf222e; }
+    .service_end { color: #8250df; }
+    .warn { color: #9a6700; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>🚌 유라코퍼레이션.SK케미칼 — 3100번 도착 로그</h1>
+  <p class="meta">정류소 7511 (GBIS 206000565) · staOrder 6 · 우림아파트 방면</p>
+
+  <div id="status">불러오는 중...</div>
+  <div class="stats" id="stats"></div>
+
+  <h2>📉 예측 추이 (predict_sec)</h2>
+  <table id="predict">
+    <thead><tr><th>시각</th><th>차량</th><th>예측(초)</th><th>빈자리</th><th>상태</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>📋 이탈 기록</h2>
+  <p class="meta">observed=도착확인 · estimated=도착추정 · vehicle_changed=차량변경 · data_gap=API누락 · service_end=운행종료</p>
+  <table id="arrival">
+    <thead><tr><th>이탈시각</th><th>차량</th><th>추적시작</th><th>최소예측</th><th>샘플</th><th>사유</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function load() {
+      const statusEl = document.getElementById("status");
+      const statsEl = document.getElementById("stats");
+      const predBody = document.querySelector("#predict tbody");
+      const arrBody = document.querySelector("#arrival tbody");
+
+      try {
+        const [st, predCsv, arrCsv] = await Promise.all([
+          fetch("status.json?t=" + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("predict_log.csv?t=" + Date.now()).then(r => r.ok ? r.text() : "").catch(() => ""),
+          fetch("arrival_log.csv?t=" + Date.now()).then(r => r.ok ? r.text() : "").catch(() => ""),
+        ]);
+
+        if (st) {
+          const when = st.last_poll_local || st.last_poll || "-";
+          statusEl.textContent = "마지막 조회: " + when;
+          const tags = [];
+          if (st.current_veh_id)
+            tags.push('<div class="stat">추적 중 #' + st.current_veh_id + '</div>');
+          if (st.predict_sec != null)
+            tags.push('<div class="stat">예측 <b>' + st.predict_sec + 's</b></div>');
+          if (st.remain_seat != null && st.remain_seat >= 0)
+            tags.push('<div class="stat">빈자리 <b>' + st.remain_seat + '</b></div>');
+          if (st.min_predict_in_track != null)
+            tags.push('<div class="stat">이 버스 최소 <b>' + st.min_predict_in_track + 's</b></div>');
+          if (st.daily_calls != null)
+            tags.push('<div class="stat">호출 <b>' + st.daily_calls + '</b></div>');
+          if (st.error)
+            tags.push('<div class="stat warn">⚠ ' + st.error + '</div>');
+          statsEl.innerHTML = tags.join("");
+        } else {
+          statusEl.textContent = "상태 정보 없음";
+        }
+
+        // 예측 추이
+        const predLines = predCsv.trim().split("\n").slice(1).filter(Boolean);
+        if (predLines.length === 0) {
+          predBody.innerHTML = '<tr><td colspan="5" class="empty">예측 기록 없음</td></tr>';
+        } else {
+          predBody.innerHTML = predLines.slice(-30).map(function(line) {
+            var p = line.split(",");
+            var ts = p[0], plate = p[2], sec = p[3], seat = p[4], flag = p[6];
+            var t = ts.slice(11, 19);
+            var secVal = parseInt(sec) || 0;
+            var style = secVal <= 60 ? ' style="color:#1a7f37;font-weight:600"' : '';
+            return '<tr><td>' + t + '</td><td>' + (plate || '-') + '</td><td' + style + '>' + sec + 's</td><td>' + (seat === '-1' ? '-' : seat) + '</td><td>' + flag + '</td></tr>';
+          }).join("");
+        }
+
+        // 이탈 기록
+        const arrLines = arrCsv.trim().split("\n").slice(1).filter(Boolean);
+        if (arrLines.length === 0) {
+          arrBody.innerHTML = '<tr><td colspan="6" class="empty">아직 없음</td></tr>';
+        } else {
+          arrBody.innerHTML = arrLines.slice(-30).reverse().map(function(line) {
+            var p = line.split(",");
+            var ts = p[0], vid = p[1], plate = p[2], firstTs = p[3], minP = p[5], n = p[7], reason = p[8];
+            var t = ts.slice(0, 19).replace("T", " ");
+            var minSec = minP ? minP + 's' : '-';
+            return '<tr><td>' + t + '</td><td>' + (plate || vid) + '</td><td>' + (firstTs ? firstTs.slice(11, 19) : '-') + '</td><td>' + minSec + '</td><td>' + (n || '-') + '</td><td class="' + reason + '">' + reason + '</td></tr>';
+          }).join("");
+        }
+      } catch (e) {
+        statusEl.textContent = "읽기 실패: " + e.message;
+      }
+    }
+    load();
+    setInterval(load, 60000);
+  </script>
+</body>
+</html>
