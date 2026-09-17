@@ -46,6 +46,8 @@ jobs:
         run: |
           python bus-arrival/scripts/scrape.py \
             --route-id 204000170 \
+            --sta-order 6 \
+            --sta-order-pangyo 7 \
             --interval 60 \
             --max-polls 70 \
             --output-csv bus-arrival/arrival_log.csv \
