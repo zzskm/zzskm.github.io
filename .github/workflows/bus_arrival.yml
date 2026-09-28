@@ -2,18 +2,24 @@ name: bus arrival scrape
 
 on:
   workflow_dispatch:
+    inputs:
+      window:
+        description: "수집 시간대 (KST, HH:MM-HH:MM)"
+        default: "16:00-22:00"
+      session_minutes:
+        description: "세션 최대 길이(분, 최대 340)"
+        default: "330"
   schedule:
-    # UTC 22:00-23:59 → KST 다음날 07:00-08:59 (30분)
-    # UTC 00:00-06:59 → KST 09:00-15:59 (30분)
-    # UTC 07:00-12:59 → KST 16:00-21:59 (15분)
-    # UTC 13:00-14:59 → KST 22:00-23:59 (30분)
-    - cron: "0,30 22-23,0-6 * * *"
-    - cron: "*/15 7-12 * * *"
-    - cron: "0,30 13-14 * * *"
+    # 평일 퇴근 시간대(KST 16:00~22:00) 장기 수집 세션.
+    # GitHub cron 은 수십 분~수 시간씩 밀리거나 누락되므로 KST 14:07~21:37 에 30분 간격으로
+    # 여러 번 트리거한다. 먼저 뜬 실행이 16:00 까지 기다렸다가 최대 5.5시간 수집하고,
+    # 그동안 온 트리거는 대기열에서 기다렸다가 남은 시간대를 이어받는다(시간대가 지났으면 즉시 종료).
+    - cron: "7,37 5-12 * * 1-5"
 
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  # 긴 세션을 새 트리거가 끊지 않도록 취소하지 않고 대기시킨다 (대기열은 최신 1건만 유지)
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,7 +27,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 350
 
     steps:
       - uses: actions/checkout@v4
@@ -41,38 +47,15 @@ jobs:
       - name: Install deps
         run: python -m pip install --disable-pip-version-check -r bus-arrival/requirements.txt
 
-      - name: KST weekday + holiday gate
-        id: gate
-        run: python bus-arrival/scripts/scrape.py --gate-only
-
-      - name: Run scraper
-        if: steps.gate.outputs.skip != 'true'
-        run: |
-          python bus-arrival/scripts/scrape.py \
-            --route-id 204000170 \
-            --sta-order 6 \
-            --secondary-mobile-no 06004 \
-            --sta-order-secondary 12 \
-            --interval 60 \
-            --max-polls 4 \
-            --output-csv bus-arrival/arrival_log.csv \
-            --status-json bus-arrival/status.json \
-            --log-level INFO
-        env:
-          SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
-
-      - name: Build summary
-        if: always()
-        run: |
-          python bus-arrival/scripts/trim_logs.py
-          python bus-arrival/scripts/build_summary.py
-
-      - name: Commit logs
-        if: always()
+      - name: Collect session
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add bus-arrival/
-          git diff --cached --quiet || git commit -m "bus: $(date -u +%Y-%m-%dT%H:%M)Z"
-          git pull --rebase || true
-          git push
+          bash bus-arrival/scripts/session.sh
+        env:
+          SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
+          BUS_WINDOW: ${{ inputs.window || '16:00-22:00' }}
+          BUS_SESSION_MINUTES: ${{ inputs.session_minutes || '330' }}
+          BUS_PUBLISH_SECONDS: "300"
+          # 성남시청전면(06004, staOrder 12) — 매 구간 노선 API 로 다시 해석하지 않도록 고정
+          BUS_SECONDARY_STATION_ID: "205000029"

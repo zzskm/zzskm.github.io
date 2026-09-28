@@ -23,12 +23,26 @@ def test_bus_arrival_eta_splits_number_and_unit():
 
 
 def test_bus_arrival_staleness_follows_scrape_cadence():
-    """고정 10분 임계 대신 cron 수집 주기(퇴근 15분 / 그 외 30분)를 따른다."""
+    """고정 10분 임계 대신 수집 세션의 게시 주기(5분)를 따르고, 수집 시간대 밖은 따로 구분한다."""
     assert "10 * 60 * 1000" not in HTML
-    assert "function cadenceMinutes" in HTML or "const cadenceMinutes" in HTML
-    assert "(h >= 16 && h < 22) ? 15 : 30" in HTML
+    assert "const PUBLISH_MINUTES = 5;" in HTML
     assert "cadence + 3" in HTML
     assert "cadence * 2 + 3" in HTML
+    # 수집 시간대는 status.json 의 collect_window 를 따르고, 기본값은 평일 퇴근 시간대
+    assert "parseWindow(st && st.collect_window)" in HTML
+    assert 'WINDOW_RE.exec("16:00-22:00")' in HTML
+    assert "c.day >= 1 && c.day <= 5" in HTML
+    assert 'if (state !== "fresh" && !collecting) state = "off";' in HTML
+    assert 'statusLabel = "수집 시간 외"' in HTML
+
+
+def test_bus_arrival_reads_recent_rows_from_summary():
+    """1분마다 전체 CSV 를 받지 않도록 summary.json 의 최근 기록을 우선 사용한다."""
+    assert "summary.recent_predictions" in HTML
+    assert "summary.recent_arrivals" in HTML
+    assert "r.est_arrival_ts || r.ts_kst" in HTML
+    for reason in ("vanished:", "stale:"):
+        assert reason in HTML
 
 
 def test_bus_arrival_stale_data_is_visually_demoted():
