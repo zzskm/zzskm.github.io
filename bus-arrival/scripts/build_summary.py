@@ -7,6 +7,9 @@ import datetime as dt
 from collections import Counter, defaultdict
 
 
+RECENT_ROWS = 30
+
+
 def read_rows(path):
     if not os.path.exists(path):
         return []
@@ -64,6 +67,9 @@ def main():
         "arrival_records": len(arrivals),
         "departure_reasons": dict(Counter(r.get("departure_reason", "unknown") for r in arrivals)),
         "daily": daily,
+        # 대시보드가 1분마다 전체 CSV 를 받지 않도록 최근 기록만 함께 싣는다
+        "recent_predictions": predictions[-RECENT_ROWS:],
+        "recent_arrivals": arrivals[-RECENT_ROWS:],
     }
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     tmp = args.output + ".tmp"
