@@ -26,8 +26,9 @@ KST = SCRAPER.KST
 NO_BUS = SCRAPER.no_bus_info("PASS")
 
 
-def bus(vid, predict_sec, plate="경기70아0000"):
-    return {**NO_BUS, "veh_id": vid, "plate_no": plate, "predict_sec": predict_sec}
+def bus(vid, predict_sec, location_no=None, plate="경기70아0000"):
+    return {**NO_BUS, "veh_id": vid, "plate_no": plate, "predict_sec": predict_sec,
+            "location_no": location_no}
 
 
 def read_csv(path):
@@ -182,6 +183,24 @@ class BusArrivalTrackingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             arrivals, _ = simulate(directory, [bus(111, 500), NO_BUS, NO_BUS], self.START)
         self.assertEqual([r["departure_reason"] for r in arrivals], ["vanished"])
+        # 도착 추정 시각은 확정 시점이 아니라 처음 안 보인 시점
+        self.assertEqual(arrivals[0]["ts_kst"], "2026-09-28T17:02:00+09:00")
+        self.assertEqual(arrivals[0]["est_arrival_ts"], "2026-09-28T17:01:00+09:00")
+
+    def test_bus_vanishing_one_stop_away_is_estimated_arrival(self):
+        """3100번 실측 패턴: 1정거장 전에서 예측초가 195초에 멈춘 채 통과해 사라진다."""
+        with tempfile.TemporaryDirectory() as directory:
+            arrivals, state = simulate(
+                directory, [bus(111, 270, 1), bus(111, 195, 1), bus(111, 195, 1), NO_BUS], self.START)
+        self.assertEqual([r["departure_reason"] for r in arrivals], ["estimated_arrival"])
+        self.assertEqual(arrivals[0]["est_arrival_ts"], "2026-09-28T17:03:00+09:00")
+        self.assertIsNone(state["cur_vid"])
+        self.assertIsNone(state["first_miss_ts"])
+
+    def test_vehicle_change_one_stop_away_is_estimated_arrival(self):
+        with tempfile.TemporaryDirectory() as directory:
+            arrivals, _ = simulate(directory, [bus(111, 250, 1), bus(222, 600, 5)], self.START)
+        self.assertEqual([r["departure_reason"] for r in arrivals], ["estimated_arrival"])
 
     def test_track_left_over_from_long_gap_is_logged_as_stale(self):
         state = {
