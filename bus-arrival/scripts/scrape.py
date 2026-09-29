@@ -12,13 +12,14 @@ GBIS 버스 도착 로그 수집기 — 유라코퍼레이션.SK케미칼(07511)
 
 이탈 사유 (arrival_log.csv):
   observed_arrival  — stateCd=1 또는 마지막 예측 60초 이하 (실제 도착 확인)
-  estimated_arrival — 마지막 예측 90초 이하 (도착 추정)
+  estimated_arrival — 마지막 예측 90초 이하, 또는 1정거장 전에서 사라지거나 교체됨 (도착 추정)
   vehicle_changed   — 다른 차량으로 교체 (마지막 예측이 멀었음)
   vanished          — 후속 차량 없이 사라짐 (마지막 예측이 멀었음)
   data_gap          — API 연속 2회 이상 실패 후 차량 변경
   service_end       — flag=STOP 확인
   stale             — 수집 공백(20분 초과)으로 추적 중단
-est_arrival_ts 는 min(판정 시각, 마지막 관측 시각 + 마지막 예측초) 로 추정한다.
+est_arrival_ts 는 min(처음 안 보인 시각, 마지막 관측 시각 + 마지막 예측초) 로 추정한다.
+  (3100번은 1정거장 전에서 예측초가 150~200초에 멈춘 채 통과해 사라지는 경우가 많다)
 """
 
 import argparse
@@ -75,6 +76,8 @@ TRACK_DEFAULTS = {
     "last_predict": None,
     "last_state_cd": None,
     "miss_count": 0,
+    "last_location": None,
+    "first_miss_ts": None,
 }
 
 
@@ -288,12 +291,16 @@ def gate_check(args: argparse.Namespace) -> bool:
 
 def _classify_departure(consec_fail: int, last_flag: str,
                         last_predict: int | None, last_state_cd: int | None,
-                        vanished: bool = False) -> str:
+                        vanished: bool = False, last_location: int | None = None) -> str:
     if consec_fail >= 2:
         return "data_gap"
     if last_state_cd == 1 or (last_predict is not None and last_predict <= 60):
         return "observed_arrival"
     if last_predict is not None and last_predict <= 90:
+        return "estimated_arrival"
+    # 1정거장 전에서 사라지거나 다른 차량으로 바뀜 = 정류장 통과
+    # (마지막 구간 예측초는 갱신이 늦어 신뢰하지 않는다)
+    if last_location is not None and last_location <= 1:
         return "estimated_arrival"
     if last_flag == "STOP":
         return "service_end"
@@ -315,7 +322,9 @@ def estimate_arrival(state: dict, ts: dt.datetime) -> str:
     if last_seen is None or state.get("last_predict") is None:
         return ""
     est = last_seen + dt.timedelta(seconds=state["last_predict"])
-    return min(est, ts).isoformat()
+    # 버스는 마지막 관측과 처음 안 보인 시각 사이에 지나갔다
+    gone = parse_ts(state.get("first_miss_ts")) or ts
+    return min(est, gone).isoformat()
 
 
 def close_track(state: dict, arrival_path: str, ts: dt.datetime, reason: str):
@@ -352,21 +361,27 @@ def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
     flag = info["flag"]
 
     if vid is None:
-        # 추적하던 버스가 후속 차량 없이 사라짐: 가까웠으면 즉시, 멀었으면 연속 누락 시 도착으로 확정
+        # 추적하던 버스가 후속 차량 없이 사라짐: 가까웠으면(예측 임박 또는 1정거장 전) 즉시,
+        # 멀었으면 일시적 누락일 수 있어 연속 누락 시 확정한다
         if state.get("cur_vid") is not None:
             state["miss_count"] = state.get("miss_count", 0) + 1
+            state["first_miss_ts"] = state.get("first_miss_ts") or ts.isoformat()
             last_predict = state.get("last_predict")
-            near = last_predict is not None and last_predict <= NEAR_ARRIVAL_SEC
+            last_location = state.get("last_location")
+            near = ((last_predict is not None and last_predict <= NEAR_ARRIVAL_SEC)
+                    or (last_location is not None and last_location <= 1))
             if near or state["miss_count"] >= VANISH_CONFIRM_POLLS or flag == "STOP":
                 close_track(state, arrival_path, ts, _classify_departure(
-                    previous_failures, flag, last_predict, state.get("last_state_cd"), vanished=True))
+                    previous_failures, flag, last_predict, state.get("last_state_cd"),
+                    vanished=True, last_location=last_location))
         state["last_flag"] = flag
         return
 
     if vid != state.get("cur_vid"):
         if state.get("cur_vid") is not None:
             close_track(state, arrival_path, ts, _classify_departure(
-                previous_failures, flag, state.get("last_predict"), state.get("last_state_cd")))
+                previous_failures, flag, state.get("last_predict"), state.get("last_state_cd"),
+                last_location=state.get("last_location")))
         state.update({
             "cur_vid": vid,
             "cur_plate": info["plate_no"],
@@ -383,7 +398,9 @@ def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
     state["samples"] = state.get("samples", 0) + 1
     state["last_predict"] = predict
     state["last_state_cd"] = info["state_cd"]
+    state["last_location"] = info["location_no"]
     state["miss_count"] = 0
+    state["first_miss_ts"] = None
     state["last_flag"] = flag
 
 
