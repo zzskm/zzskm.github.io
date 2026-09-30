@@ -19,6 +19,76 @@
   var TRIP_TTL_MS = 20 * MIN;        // 같은 차량이 이보다 뒤에 다시 오면 새 운행으로 본다
   var LEDGER_LIMIT = 40;
 
+
+  // ---- KST 시간 유틸 (KST 는 서머타임이 없어 고정 +9시간) ----
+  var KST_MS = 9 * 3600000, DAY_MS = 86400000;
+  var DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+  var WEEKDAYS = [1, 2, 3, 4, 5];
+  var MAX_WINDOWS = 3, MAX_CLOCKS = 20, MAX_TIMERS = 10;
+  var CLOCK_CATCHUP_MS = 10 * MIN;    // 예정 시각을 이만큼까지 지나서 확인해도 늦게라도 울린다
+  var CLOCK_MISSED_MS = 12 * 60 * MIN; // 그보다 오래 지났으면 '놓친 알람' 으로만 알린다
+  var TIMER_MAX_MIN = 720;
+
+  function kstParts(ms) {
+    var d = new Date(ms + KST_MS);
+    return { date: d.toISOString().slice(0, 10), day: d.getUTCDay(), minutes: d.getUTCHours() * 60 + d.getUTCMinutes() };
+  }
+  function parseTime(text) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(text == null ? "" : text).trim());
+    if (!m) return null;
+    var h = Number(m[1]), mi = Number(m[2]);
+    return h > 23 || mi > 59 ? null : h * 60 + mi;
+  }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function formatTime(minutes) { return pad2(Math.floor(minutes / 60)) + ":" + pad2(minutes % 60); }
+  function dayOfDate(date) { return new Date(date + "T00:00:00Z").getUTCDay(); }
+  function kstMs(date, minutes) {
+    var p = date.split("-");
+    return Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]), Math.floor(minutes / 60), minutes % 60) - KST_MS;
+  }
+  function sanitizeDays(raw, fallback) {
+    var seen = {}, out = [];
+    (Array.isArray(raw) ? raw : []).forEach(function (v) {
+      var n = Math.round(Number(v));
+      if (Number.isFinite(n) && n >= 0 && n <= 6 && !seen[n]) { seen[n] = true; out.push(n); }
+    });
+    out.sort(function (a, b) { return a - b; });
+    return out.length || !fallback ? out : fallback.slice();
+  }
+  function daysLabel(days) {
+    var d = sanitizeDays(days);
+    if (!d.length) return "한 번만";
+    if (d.length === 7) return "매일";
+    if (d.join() === WEEKDAYS.join()) return "평일";
+    if (d.join() === "0,6") return "주말";
+    return d.map(function (n) { return DAY_NAMES[n]; }).join("·");
+  }
+
+  // ---- 알림 시간대: 버스 도착 시각이 이 안에 있을 때만 알린다 ----
+  function defaultWindows() { return [{ start: "17:30", end: "19:30", days: WEEKDAYS.slice() }]; }
+  function sanitizeWindows(raw) {
+    var out = [];
+    (Array.isArray(raw) ? raw : []).forEach(function (w) {
+      if (!w || typeof w !== "object" || out.length >= MAX_WINDOWS) return;
+      var s = parseTime(w.start), e = parseTime(w.end);
+      if (s === null || e === null || e <= s) return;
+      out.push({ start: formatTime(s), end: formatTime(e), days: sanitizeDays(w.days, WEEKDAYS) });
+    });
+    return out;
+  }
+  // 시간대가 하나도 없으면 제한 없음
+  function inWindows(windows, ms) {
+    if (!windows || !windows.length) return true;
+    var p = kstParts(ms);
+    return windows.some(function (w) {
+      return w.days.indexOf(p.day) !== -1 && p.minutes >= parseTime(w.start) && p.minutes < parseTime(w.end);
+    });
+  }
+  function windowsText(windows) {
+    if (!windows || !windows.length) return "제한 없음";
+    return windows.map(function (w) { return daysLabel(w.days) + " " + w.start + "~" + w.end; }).join(", ");
+  }
+
   function emptyLedger() { return { fired: {}, skipped: {} }; }
 
   function sanitizeConfig(raw) {
@@ -34,6 +104,7 @@
     return {
       enabled: src.enabled === true,
       leads: leads.length ? leads : DEFAULT_LEADS.slice(),
+      windows: Array.isArray(src.windows) ? sanitizeWindows(src.windows) : defaultWindows(),
       armedAtMs: Number.isFinite(armed) && armed > 0 ? armed : null
     };
   }
@@ -118,17 +189,24 @@
     return e && arrivalAtMs < e.a + TRIP_TTL_MS ? e : null;
   }
 
-  // 알람 대상 차량: 현재 차량, 건너뛴 차량이면 다음 차량
-  function pickTarget(snap, ledger, nowMs) {
-    if (!snap || !snap.usable) return null;
+  // 알람 대상 차량: 건너뛰지 않았고 알림 시간대 안에 도착하는 첫 차량 (현재 차량, 없으면 다음 차량).
+  // outsideWindow: 대상은 없지만 시간대 밖이라서 그런 경우
+  function pickTargetInfo(snap, ledger, windows) {
+    if (!snap || !snap.usable) return { target: null, outsideWindow: false };
     var led = sanitizeLedger(ledger);
-    if (!isSkipped(led, snap.vehId, snap.arrivalAtMs)) {
-      return { vehId: snap.vehId, arrivalAtMs: snap.arrivalAtMs, source: "current" };
+    var candidates = [{ vehId: snap.vehId, arrivalAtMs: snap.arrivalAtMs, source: "current" }];
+    if (snap.next) candidates.push({ vehId: snap.next.vehId, arrivalAtMs: snap.next.arrivalAtMs, source: "next" });
+    var outside = false;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (isSkipped(led, c.vehId, c.arrivalAtMs)) continue;
+      if (!inWindows(windows, c.arrivalAtMs)) { outside = true; continue; }
+      return { target: c, outsideWindow: false };
     }
-    if (snap.next && !isSkipped(led, snap.next.vehId, snap.next.arrivalAtMs)) {
-      return { vehId: snap.next.vehId, arrivalAtMs: snap.next.arrivalAtMs, source: "next" };
-    }
-    return null;
+    return { target: null, outsideWindow: outside };
+  }
+  function pickTarget(snap, ledger, nowMs, windows) {
+    return pickTargetInfo(snap, ledger, windows).target;
   }
 
   // 이 차량은 못 탄다: 이후 알람은 다음 차량 기준으로 다시 잡는다
@@ -146,22 +224,26 @@
     var prev = input.prevTarget || null;
     var actions = [];
     var view = { state: "off", why: snap.why, nextFireAtMs: null, etaMin: null, target: null,
-                 done: false, skipped: [] };
+                 done: false, skipped: [], outside: false };
 
     if (!cfg.enabled) return { actions: actions, view: view, ledger: ledger, prevTarget: null };
 
-    var target = pickTarget(snap, ledger, nowMs);
+    var picked = pickTargetInfo(snap, ledger, cfg.windows);
+    var target = picked.target;
+    view.outside = picked.outsideWindow;
     var reliable = snap.why === "ok" || snap.why === "no_bus";
 
     // 알람 없이 차량이 사라짐/교체됨 (신뢰할 수 있는 스냅샷에서만 판단한다)
     if (prev && reliable && (!target || target.vehId !== prev.vehId)) {
-      var userSkipped = isSkipped(ledger, prev.vehId, prev.arrivalAtMs);
+      var stillListed = snap.vehId === prev.vehId || (snap.next && snap.next.vehId === prev.vehId);
+      var userSkipped = stillListed || isSkipped(ledger, prev.vehId, prev.arrivalAtMs);
       var unfired = cfg.leads.some(function (n) { return !firedEntry(ledger, prev.vehId, n, prev.arrivalAtMs); });
       if (unfired && !userSkipped) actions.push({ type: "passed", vehId: prev.vehId });
     }
 
     if (!target) {
-      view.state = snap.why === "no_bus" ? "armed" : "unavailable";
+      // 정보는 정상인데 대상이 없는 경우(버스 없음, 시간대 밖, 모두 건너뜀)는 대기 상태다
+      view.state = snap.why === "no_bus" || snap.usable ? "armed" : "unavailable";
       return { actions: actions, view: view, ledger: ledger, prevTarget: reliable ? null : prev };
     }
 
@@ -223,6 +305,129 @@
     return { title: title, body: "약 " + m + "분 후 도착 예정" };
   }
 
+
+  // ---- 시각 알람 (확장 프로그램의 '알람'): 매일/요일 반복 또는 한 번만 ----
+  function sanitizeClocks(raw) {
+    var out = [], ids = {};
+    (Array.isArray(raw) ? raw : []).forEach(function (c) {
+      if (!c || typeof c !== "object" || out.length >= MAX_CLOCKS) return;
+      var minutes = parseTime(c.time), id = String(c.id || "");
+      if (minutes === null || !id || ids[id]) return;
+      var days = sanitizeDays(c.days), date = /^\d{4}-\d{2}-\d{2}$/.test(String(c.date || "")) ? String(c.date) : null;
+      if (!days.length && !date) return;
+      var since = Number(c.since);
+      ids[id] = true;
+      out.push({ id: id, time: formatTime(minutes), label: String(c.label || "").slice(0, 30), days: days,
+                 date: days.length ? null : date, enabled: c.enabled !== false,
+                 since: Number.isFinite(since) && since > 0 ? since : 0, bus: c.bus !== false });
+    });
+    return out;
+  }
+  function nextDate(minutes, nowMs) {
+    var p = kstParts(nowMs);
+    return minutes > p.minutes ? p.date : kstParts(nowMs + DAY_MS).date;
+  }
+  var idCounter = 0;
+  function makeId(prefix, nowMs) { idCounter += 1; return prefix + nowMs.toString(36) + idCounter.toString(36); }
+  // 새 알람. days 가 비어 있으면 다음에 오는 그 시각에 한 번만 울린다.
+  function newClock(input, nowMs) {
+    var minutes = parseTime(input.time);
+    if (minutes === null) return null;
+    var days = sanitizeDays(input.days);
+    return { id: makeId("c", nowMs), time: formatTime(minutes), label: String(input.label || "").slice(0, 30), days: days,
+             date: days.length ? null : nextDate(minutes, nowMs), enabled: true, since: nowMs, bus: input.bus !== false };
+  }
+  // 다시 켤 때: 켜기 전에 이미 지난 시각은 울리지 않고, 한 번짜리는 다음 그 시각으로 옮긴다.
+  function rearmClock(clock, nowMs) {
+    var minutes = parseTime(clock.time);
+    return Object.assign({}, clock, { enabled: true, since: nowMs,
+      date: clock.days.length ? null : nextDate(minutes, nowMs) });
+  }
+  function clockOccurrenceText(clock, nowMs) {
+    var minutes = parseTime(clock.time), p = kstParts(nowMs), label;
+    if (clock.days.length) {
+      label = daysLabel(clock.days);
+    } else {
+      var date = clock.date;
+      label = date === p.date ? "오늘" : date === kstParts(nowMs + DAY_MS).date ? "내일" : date.slice(5).replace("-", "/");
+    }
+    return label + " " + formatTime(minutes);
+  }
+  function pruneClockLedger(ledger, nowMs) {
+    var src = ledger && typeof ledger === "object" ? ledger : {}, out = {};
+    var oldest = kstParts(nowMs - 3 * DAY_MS).date;
+    Object.keys(src).forEach(function (k) {
+      if (k.split("|")[1] >= oldest) out[k] = src[k];
+    });
+    return out;
+  }
+  // 예정 시각이 (어제/오늘) 지났는데 아직 울리지 않은 알람을 찾는다.
+  function evaluateClocks(input) {
+    var nowMs = input.nowMs;
+    var clocks = sanitizeClocks(input.clocks).map(function (c) { return Object.assign({}, c); });
+    var ledger = pruneClockLedger(input.ledger, nowMs);
+    var actions = [];
+    var dates = [kstParts(nowMs - DAY_MS).date, kstParts(nowMs).date];
+    clocks.forEach(function (c) {
+      if (!c.enabled) return;
+      var minutes = parseTime(c.time);
+      dates.forEach(function (date) {
+        var applies = c.days.length ? c.days.indexOf(dayOfDate(date)) !== -1 : c.date === date;
+        var scheduled = kstMs(date, minutes), key = c.id + "|" + date;
+        if (!applies || scheduled > nowMs || scheduled < c.since || ledger[key]) return;
+        var late = nowMs - scheduled;
+        if (late <= CLOCK_MISSED_MS) {
+          ledger[key] = nowMs;
+          actions.push({ type: late <= CLOCK_CATCHUP_MS ? "clock" : "clock_missed", id: c.id, label: c.label, time: c.time,
+                         bus: c.bus, scheduledMs: scheduled, lateMs: late,
+                         kind: late > ONTIME_GRACE_MS ? "late" : "ontime" });
+          if (!c.days.length) c.enabled = false;   // 한 번짜리는 울린 뒤 꺼 둔다
+        }
+      });
+    });
+    return { actions: actions, clocks: clocks, ledger: ledger };
+  }
+  function busHint(snap, nowMs) {
+    if (!snap || !snap.usable || snap.arrivalAtMs <= nowMs) return "";
+    return "3100번 약 " + Math.max(1, Math.round((snap.arrivalAtMs - nowMs) / MIN)) + "분 후 도착 예정";
+  }
+  function formatClockMessage(action, hint) {
+    var body = action.time;
+    if (action.type === "clock_missed") body += " 알람을 놓쳤습니다 (탭이 닫혀 있었을 수 있어요)";
+    else if (action.kind === "late") body += " (약 " + Math.max(1, Math.round(action.lateMs / MIN)) + "분 늦게 확인됨)";
+    if (hint && action.bus !== false) body += " · " + hint;
+    return { title: action.label || "알람", body: body };
+  }
+
+  // ---- 타이머 (확장 프로그램의 '타이머'): N분 뒤에 한 번 ----
+  function sanitizeTimers(raw) {
+    var out = [], ids = {};
+    (Array.isArray(raw) ? raw : []).forEach(function (t) {
+      if (!t || typeof t !== "object" || out.length >= MAX_TIMERS) return;
+      var ends = Number(t.endsAtMs), minutes = Number(t.minutes), id = String(t.id || "");
+      if (!Number.isFinite(ends) || ends <= 0 || !id || ids[id]) return;
+      ids[id] = true;
+      out.push({ id: id, label: String(t.label || "").slice(0, 30), minutes: Number.isFinite(minutes) ? minutes : 0, endsAtMs: ends });
+    });
+    return out;
+  }
+  function newTimer(minutes, label, nowMs) {
+    var n = Math.round(Number(minutes));
+    if (!Number.isFinite(n) || n < 1 || n > TIMER_MAX_MIN) return null;
+    return { id: makeId("t", nowMs), label: String(label || "").slice(0, 30), minutes: n, endsAtMs: nowMs + n * MIN };
+  }
+  function evaluateTimers(input) {
+    var timers = sanitizeTimers(input.timers), actions = [], keep = [];
+    timers.forEach(function (t) {
+      if (t.endsAtMs <= input.nowMs) actions.push({ type: "timer", id: t.id, label: t.label, minutes: t.minutes });
+      else keep.push(t);
+    });
+    return { actions: actions, timers: keep };
+  }
+  function formatTimerMessage(action) {
+    return { title: action.label || "타이머", body: action.minutes ? action.minutes + "분 타이머가 끝났습니다" : "타이머가 끝났습니다" };
+  }
+
   // 발화 시점에 한 번에 예약할 비프음: 3연속 비프 + 휴지를 duration 동안 반복 (최대 60초)
   function beepSchedule(durationSec) {
     var total = Math.min(60, Math.max(1, Number(durationSec) || 1));
@@ -240,7 +445,13 @@
     LEAD_MIN: LEAD_MIN, LEAD_MAX: LEAD_MAX, MAX_LEADS: MAX_LEADS, TRIP_TTL_MS: TRIP_TTL_MS,
     emptyLedger: emptyLedger, sanitizeConfig: sanitizeConfig, sanitizeLedger: sanitizeLedger,
     pruneLedger: pruneLedger, freshnessLimits: freshnessLimits, assessStatus: assessStatus,
-    pickTarget: pickTarget, skipTarget: skipTarget, evaluate: evaluate,
-    formatFireMessage: formatFireMessage, beepSchedule: beepSchedule
+    pickTarget: pickTarget, pickTargetInfo: pickTargetInfo, skipTarget: skipTarget, evaluate: evaluate,
+    formatFireMessage: formatFireMessage, beepSchedule: beepSchedule,
+    MAX_WINDOWS: MAX_WINDOWS, MAX_CLOCKS: MAX_CLOCKS, MAX_TIMERS: MAX_TIMERS, TIMER_MAX_MIN: TIMER_MAX_MIN,
+    kstParts: kstParts, parseTime: parseTime, formatTime: formatTime, daysLabel: daysLabel, sanitizeDays: sanitizeDays,
+    defaultWindows: defaultWindows, sanitizeWindows: sanitizeWindows, inWindows: inWindows, windowsText: windowsText,
+    sanitizeClocks: sanitizeClocks, newClock: newClock, rearmClock: rearmClock, clockOccurrenceText: clockOccurrenceText,
+    evaluateClocks: evaluateClocks, pruneClockLedger: pruneClockLedger, busHint: busHint, formatClockMessage: formatClockMessage,
+    sanitizeTimers: sanitizeTimers, newTimer: newTimer, evaluateTimers: evaluateTimers, formatTimerMessage: formatTimerMessage
   };
 });

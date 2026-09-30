@@ -105,6 +105,25 @@
                     font-size:17px; font-weight:800; box-shadow:0 8px 24px rgba(0,0,0,.25); }
     .alarm-banner button { background:var(--on-brand); color:var(--brand); }
 
+    /* 알림 시간대 / 시각 알람 / 타이머 */
+    .alarm-sub { margin-top:14px; font-size:13px; font-weight:700; }
+    .win { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .win input[type="time"], .clock-form input[type="time"], .clock-form input[type="text"], .timer-form input[type="text"] {
+      min-height:44px; padding:0 8px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; }
+    .days { display:inline-flex; gap:4px; flex-wrap:wrap; }
+    .day { min-width:36px; min-height:36px; padding:0 6px; background:var(--surface-2); color:var(--muted); border:1px solid var(--line); }
+    .day[aria-pressed="true"] { background:var(--brand); color:var(--on-brand); border-color:var(--brand); }
+    .clock-form, .timer-form { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .clock-form label:not(.check), .timer-form label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+    .check { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+    .check input { width:18px; height:18px; }
+    .clock-list { list-style:none; margin:10px 0 0; padding:0; }
+    .clock-list li { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0; border-top:1px solid var(--line); }
+    .clock-list li.empty { border-top:0; padding:8px 0; text-align:left; }
+    .clock-time { min-width:64px; font-size:22px; font-weight:800; }
+    .clock-meta { flex:1 1 140px; font-size:14px; }
+    .switch.mini { min-width:56px; min-height:36px; padding:0 10px; }
+
     /* 카드 3칸: 빈자리 / 다음 버스 / 현재 위치 */
     .cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:12px; }
     .card { min-height:84px; padding:12px; background:var(--surface); border:1px solid var(--line); border-radius:12px; }
@@ -227,6 +246,12 @@
       <input id="alarm-custom" type="number" min="1" max="20" step="1" inputmode="numeric" style="width:64px" aria-label="알림 시점 직접 입력(분 전)">분 전
       <button id="alarm-add" type="button" class="ghost">추가</button>
     </div>
+    <div class="alarm-sub">알림 받을 시간대 <span class="muted">(버스 도착 시각 기준)</span></div>
+    <div id="alarm-windows"></div>
+    <div class="alarm-custom">
+      <button id="window-add" type="button" class="ghost">+ 시간대 추가</button>
+      <span id="window-hint"></span>
+    </div>
     <div class="alarm-next" id="alarm-next">알림 설정 확인 중</div>
     <div class="alarm-notice" id="alarm-notice" hidden></div>
     <ul class="alarm-warn" id="alarm-warn" hidden></ul>
@@ -243,7 +268,33 @@
       <p>이 탭을 열어 두세요. 탭이 닫히거나 Chrome 이 메모리 절약으로 비활성화하면 울리지 않습니다 (chrome://settings/performance 에서 이 사이트를 예외로 등록하면 안전합니다).</p>
       <p>버스는 도착 약 7~18분 전(중앙값 11분)에야 화면에 나타나고 정보가 최대 약 5분 늦게 반영됩니다. 그래서 7분 이상 알림은 &quot;이미 N분 이내&quot;로 울릴 수 있습니다. 예측 오차는 ±3분 정도이고, 3분 이하는 예측이 멈춘 채 버스가 지나가 울리지 않을 수 있습니다 (최근 16건 중 6건).</p>
       <p>알림은 소리와 화면 배너가 기본이고, Windows 집중 지원 등으로 OS 알림이 숨겨져도 배너와 소리는 나옵니다.</p>
+      <p>알림 시간대는 버스가 도착하는 시각 기준입니다. 시간대 밖에 오는 버스는 건너뛰고, 다음 버스가 시간대 안이면 그 버스를 알립니다.</p>
     </details>
+  </section>
+
+  <section class="alarm" id="clock-panel" aria-labelledby="clock-title">
+    <h2 class="alarm-title" id="clock-title">⏰ 알람 · 타이머</h2>
+    <div class="alarm-sub">알람 추가</div>
+    <form class="clock-form" id="clock-form">
+      <label>시각<input type="time" id="clock-time" value="18:00" required></label>
+      <label>이름(선택)<input type="text" id="clock-label" maxlength="30" placeholder="예: 퇴근 준비" style="width:150px"></label>
+      <div class="days" id="clock-days" role="group" aria-label="반복 요일"></div>
+      <button type="button" class="ghost" id="clock-weekdays">평일</button>
+      <label class="check"><input type="checkbox" id="clock-bus" checked>다음 버스 도착 정보 함께 표시</label>
+      <button type="submit">알람 추가</button>
+    </form>
+    <div class="muted" style="margin-top:6px">요일을 고르지 않으면 다음에 오는 그 시각에 한 번만 울립니다.</div>
+    <ul class="clock-list" id="clock-list"></ul>
+    <div class="alarm-sub">타이머</div>
+    <div class="chips" id="timer-presets" role="group" aria-label="타이머 빠른 시작"></div>
+    <form class="timer-form" id="timer-form">
+      <label>분<input type="number" id="timer-custom" min="1" max="720" step="1" inputmode="numeric" style="width:72px" placeholder="직접" required></label>
+      <label>이름(선택)<input type="text" id="timer-label" maxlength="30" placeholder="예: 회의 시작" style="width:150px"></label>
+      <button type="submit" class="ghost">타이머 시작</button>
+    </form>
+    <ul class="clock-list" id="timer-list"></ul>
+    <div class="alarm-notice" id="clock-notice" hidden></div>
+    <p class="muted" style="margin:10px 0 0">알람과 타이머도 이 탭이 열려 있을 때 울립니다. 탭이 닫혀 있는 동안 지난 알람은 다시 열 때 &quot;놓친 알람&quot;으로 알려 드립니다.</p>
   </section>
 
   <section class="cards" id="cards" aria-label="현재 버스 상태" hidden>
@@ -513,7 +564,7 @@
     // 탭 제목/파비콘: 고정 탭으로 두고 곁눈질해도 남은 시간을 알 수 있게 한다
     const showEta = !off && !cache.loadError && st && !(st.error) && fr.state !== "stale" && !passed && adj != null;
     const etaShort = showEta ? (adj < 60 ? "곧" : Math.round(adj / 60) + "분") : "";
-    const bell = ringing ? "⏰ " : (alarmCfg && alarmCfg.enabled ? "🔔 " : "");
+    const bell = ringing ? "⏰ " : (anyAlarmActive() ? "🔔 " : "");
     const title = bell + (etaShort ? etaShort + " · " : "") + BASE_TITLE;
     if (document.title !== title) document.title = title;
     setFavicon(etaShort === "곧" ? "!" : etaShort.replace("분", ""));
@@ -647,6 +698,10 @@
   let alarmPrev = null, alarmView = null, alarmOff = false, alarmNotice = "";
   let ringing = false, alarmNotification = null, chipsSig = "";
   const audio = { ctx:null, master:null };
+  const CLOCKS_KEY = "busAlarm.v1.clocks", TIMERS_KEY = "busAlarm.v1.timers", CLOCK_LEDGER_KEY = "busAlarm.v1.clockFired";
+  let clocks = BA ? BA.sanitizeClocks(store.get(CLOCKS_KEY)) : [];
+  let timers = BA ? BA.sanitizeTimers(store.get(TIMERS_KEY)) : [];
+  let clockNotice = "", clockSig = "", timerSig = "", windowsSig = "";
 
   function saveCfg(rearm) {
     if (rearm) alarmCfg.armedAtMs = Date.now();   // 설정을 바꾼 시점 이전의 알림 시점은 조용히 넘긴다
@@ -664,7 +719,7 @@
     return audio.ctx;
   }
   function unlockAudio() {
-    if (alarmCfg && alarmCfg.enabled) ensureAudio();
+    if (anyAlarmActive()) ensureAudio();
     if (audio.ctx && audio.ctx.state === "running") {
       ["pointerdown", "keydown"].forEach(ev => window.removeEventListener(ev, unlockAudio));
     }
@@ -700,13 +755,14 @@
       alarmNotification = n;
     } catch (e) { /* OS 알림 실패는 배너/소리로 충분 */ }
   }
-  function ring(fire, tag) {
-    const msg = BA.formatFireMessage(fire);
+  function ring(fire, tag) { showRing(BA.formatFireMessage(fire), tag); }
+  // 버스 알림/시각 알람/타이머가 함께 쓰는 발화: 배너 + 소리 + OS 알림 (silent 이면 소리 없이 알리기만)
+  function showRing(msg, tag, silent) {
     ringing = true;
     $("#alarm-banner-text").textContent = "🔔 " + msg.title + " — " + msg.body;
     $("#alarm-banner").hidden = false;
     $("#sr-live").textContent = msg.title + ". " + msg.body;
-    playBeeps(45);
+    if (!silent) playBeeps(45);
     notifyOs(msg, tag);
     paint();
   }
@@ -717,8 +773,12 @@
     if (alarmNotification) { try { alarmNotification.close(); } catch (e) {} alarmNotification = null; }
     paint();
   }
-  function handleAlarmAction(action) {
-    if (action.type === "fire") {
+  function handleAlarmAction(action, snap, now) {
+    if (action.type === "clock" || action.type === "clock_missed") {
+      showRing(BA.formatClockMessage(action, BA.busHint(snap, now)), "clock-" + action.id + "-" + action.scheduledMs, action.type === "clock_missed");
+    } else if (action.type === "timer") {
+      showRing(BA.formatTimerMessage(action), "timer-" + action.id);
+    } else if (action.type === "fire") {
       alarmNotice = "";
       ring(action, "bus-" + action.vehId + "-" + Math.max(...action.leads));
     } else if (action.type === "passed") {
@@ -738,7 +798,17 @@
       const out = BA.evaluate({ cfg:alarmCfg, snap, ledger, nowMs:now, prevTarget:alarmPrev });
       if (JSON.stringify(out.ledger) !== JSON.stringify(ledger)) store.set(LEDGER_KEY, out.ledger);
       alarmPrev = out.prevTarget; alarmView = out.view; alarmOff = off;
-      out.actions.forEach(handleAlarmAction);
+      out.actions.forEach(a => handleAlarmAction(a, snap, now));
+      // 시각 알람/타이머도 같은 잠금 안에서 저장소를 다시 읽어 한 번만 울린다
+      const storedClocks = BA.sanitizeClocks(store.get(CLOCKS_KEY)), storedLedger = store.get(CLOCK_LEDGER_KEY) || {};
+      const storedTimers = BA.sanitizeTimers(store.get(TIMERS_KEY));
+      const clockOut = BA.evaluateClocks({ clocks:storedClocks, ledger:storedLedger, nowMs:now });
+      const timerOut = BA.evaluateTimers({ timers:storedTimers, nowMs:now });
+      saveIfChanged(CLOCKS_KEY, storedClocks, clockOut.clocks);
+      saveIfChanged(CLOCK_LEDGER_KEY, storedLedger, clockOut.ledger);
+      saveIfChanged(TIMERS_KEY, storedTimers, timerOut.timers);
+      clocks = clockOut.clocks; timers = timerOut.timers;
+      clockOut.actions.concat(timerOut.actions).forEach(a => handleAlarmAction(a, snap, now));
       renderAlarm();
     };
     // 여러 탭이 동시에 열려 있어도 한 탭만 판정/발화한다
@@ -750,7 +820,8 @@
   }
 
   function alarmNextText() {
-    if (!alarmCfg.enabled) return { text:"알림이 꺼져 있습니다. 켜면 도착 " + Math.max(...alarmCfg.leads) + "분 전에 알려 드립니다.", problem:false };
+    if (!alarmCfg.enabled) return { text:"알림이 꺼져 있습니다. 켜면 " + (alarmCfg.windows.length ? BA.windowsText(alarmCfg.windows) + " 사이에 도착하는 버스를 " : "도착 ")
+      + Math.max(...alarmCfg.leads) + "분 전에 알려 드립니다.", problem:false };
     const v = alarmView;
     if (!v || v.state === "off") return { text:"알림 상태를 계산하는 중입니다.", problem:false };
     if (v.state === "unavailable") {
@@ -758,7 +829,10 @@
                     clock_skew:"PC 시계가 어긋난 것 같아요 · 시계를 확인하세요", bad:"도착 정보를 읽을 수 없습니다" }[v.why] || "도착 정보를 읽을 수 없습니다";
       return { text:alarmOff ? "수집 시간 외입니다 · 평일 " + parseWindow(cache.status && cache.status.collect_window).label + "에 동작합니다" : why, problem:!alarmOff };
     }
-    if (v.state === "armed" && !v.target) return { text:"버스를 기다리는 중 · 나타나면 알려 드립니다", problem:false };
+    if (v.state === "armed" && !v.target) {
+      return { text:v.outside ? "지금 오는 버스는 알림 시간대(" + BA.windowsText(alarmCfg.windows) + ") 밖이라 알리지 않습니다"
+        : "버스를 기다리는 중 · 시간대 " + BA.windowsText(alarmCfg.windows) + "에 오는 버스를 알려 드립니다", problem:false };
+    }
     if (v.state === "passed") return { text:"도착 예정 시각이 지났습니다 · 다음 버스부터 알려 드립니다", problem:false };
     if (!v.target) return { text:"알림 상태를 계산하는 중입니다.", problem:false };
     const eta = "버스 도착 " + hhmm(v.target.arrivalAtMs) + " 예정";
@@ -812,10 +886,178 @@
     else { setText(sound, "🔇 소리 잠김 · 클릭하여 활성화"); sound.className = "pill bad"; }
 
     $("#alarm-skip").hidden = !(on && alarmView && alarmView.state === "armed" && alarmView.target);
+    renderWindows();
+    renderClocks();
+  }
+
+  // ---- 알림 시간대 / 시각 알람 / 타이머 ----
+  const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0], DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+  const dayButtons = (days) => DAY_ORDER.map(d => "<button type=\"button\" class=\"day\" data-day=\"" + d + "\" aria-pressed=\""
+    + days.includes(d) + "\">" + DAY_NAMES[d] + "</button>").join("");
+  const anyAlarmActive = () => Boolean((alarmCfg && alarmCfg.enabled) || clocks.some(c => c.enabled) || timers.length);
+  const saveIfChanged = (key, before, after) => { if (JSON.stringify(before) !== JSON.stringify(after)) store.set(key, after); };
+  function prepareAlarmPermission() {
+    ensureAudio();
+    if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().then(renderAlarm).catch(() => {});
+  }
+  const fmtRemain = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+    const two = (n) => String(n).padStart(2, "0");
+    return h ? h + ":" + two(m) + ":" + two(sec) : m + ":" + two(sec);
+  };
+
+  function renderWindows() {
+    const sig = JSON.stringify(alarmCfg.windows);
+    if (sig !== windowsSig) {
+      windowsSig = sig;
+      $("#alarm-windows").innerHTML = alarmCfg.windows.map((w, i) => "<div class=\"win\" data-i=\"" + i + "\">"
+        + "<input type=\"time\" data-f=\"start\" value=\"" + w.start + "\" aria-label=\"알림 시간대 " + (i + 1) + " 시작 시각\"> ~ "
+        + "<input type=\"time\" data-f=\"end\" value=\"" + w.end + "\" aria-label=\"알림 시간대 " + (i + 1) + " 끝 시각\">"
+        + "<span class=\"days\" role=\"group\" aria-label=\"요일\">" + dayButtons(w.days) + "</span>"
+        + "<button type=\"button\" class=\"ghost\" data-del aria-label=\"알림 시간대 " + (i + 1) + " 삭제\">삭제</button></div>").join("");
+    }
+    setText($("#window-hint"), alarmCfg.windows.length
+      ? "이 시간대에 도착하는 버스만 알립니다."
+      : "시간대 제한 없음 — 도착하는 모든 버스에 알립니다.");
+    $("#window-add").hidden = alarmCfg.windows.length >= BA.MAX_WINDOWS;
+  }
+  function setWindows(next) {
+    alarmCfg = BA.sanitizeConfig({ ...alarmCfg, windows:next });
+    alarmNotice = "";
+    windowsSig = "";
+    saveCfg(true);
+  }
+  function initWindows() {
+    const box = $("#alarm-windows");
+    box.addEventListener("change", (e) => {
+      const input = e.target.closest("input[data-f]");
+      if (!input) return;
+      const i = Number(input.closest(".win").dataset.i);
+      const next = alarmCfg.windows.map(w => ({ ...w }));
+      next[i][input.dataset.f] = input.value;
+      const valid = BA.sanitizeWindows(next);
+      if (valid.length !== next.length) {
+        windowsSig = ""; alarmNotice = "끝 시각은 시작 시각보다 늦어야 해요."; renderAlarm(); return;
+      }
+      setWindows(valid);
+    });
+    box.addEventListener("click", (e) => {
+      const win = e.target.closest(".win");
+      if (!win) return;
+      const i = Number(win.dataset.i);
+      const next = alarmCfg.windows.map(w => ({ ...w, days:[...w.days] }));
+      const dayBtn = e.target.closest("button[data-day]");
+      if (dayBtn) {
+        const d = Number(dayBtn.dataset.day), has = next[i].days.includes(d);
+        if (has && next[i].days.length === 1) return;   // 요일은 하나 이상
+        next[i].days = has ? next[i].days.filter(x => x !== d) : [...next[i].days, d];
+        setWindows(next);
+      } else if (e.target.closest("button[data-del]")) {
+        next.splice(i, 1);
+        setWindows(next);
+      }
+    });
+    $("#window-add").addEventListener("click", () => {
+      if (alarmCfg.windows.length >= BA.MAX_WINDOWS) return;
+      setWindows([...alarmCfg.windows, { start:"17:30", end:"19:30", days:[1, 2, 3, 4, 5] }]);
+    });
+  }
+
+  function saveClocks() { store.set(CLOCKS_KEY, clocks); clockSig = ""; renderClocks(); paint(); runAlarm(); }
+  function saveTimers() { store.set(TIMERS_KEY, timers); timerSig = ""; renderClocks(); paint(); runAlarm(); }
+  function renderClocks() {
+    if (!BA) return;
+    const now = Date.now();
+    const clockSigNow = JSON.stringify(clocks) + BA.kstParts(now).date;
+    if (clockSigNow !== clockSig) {
+      clockSig = clockSigNow;
+      $("#clock-list").innerHTML = clocks.length
+        ? clocks.slice().sort((a, b) => a.time.localeCompare(b.time)).map(c => {
+            const name = c.label || "알람";
+            return "<li data-id=\"" + escapeHtml(c.id) + "\"><span class=\"clock-time\">" + escapeHtml(c.time) + "</span>"
+              + "<span class=\"clock-meta\"><strong>" + escapeHtml(name) + "</strong><br><span class=\"muted\">" + escapeHtml(BA.clockOccurrenceText(c, now))
+              + (c.bus ? " · 버스 정보 포함" : "") + "</span></span>"
+              + "<button type=\"button\" class=\"switch mini" + (c.enabled ? " on" : "") + "\" role=\"switch\" data-toggle aria-checked=\"" + c.enabled
+              + "\" aria-label=\"" + escapeHtml(name + " " + c.time) + " 알람\">" + (c.enabled ? "켜짐" : "꺼짐") + "</button>"
+              + "<button type=\"button\" class=\"ghost\" data-del aria-label=\"" + escapeHtml(name + " " + c.time) + " 삭제\">삭제</button></li>";
+          }).join("")
+        : "<li class=\"empty\">등록된 알람이 없습니다.</li>";
+    }
+    const timerSigNow = timers.map(t => t.id).join(",");
+    if (timerSigNow !== timerSig) {
+      timerSig = timerSigNow;
+      $("#timer-list").innerHTML = timers.length
+        ? timers.map(t => "<li data-id=\"" + escapeHtml(t.id) + "\"><span class=\"clock-time\" data-end=\"" + t.endsAtMs + "\">--:--</span>"
+            + "<span class=\"clock-meta\"><strong>" + escapeHtml(t.label || "타이머") + "</strong><br><span class=\"muted\">" + t.minutes + "분 타이머</span></span>"
+            + "<button type=\"button\" class=\"ghost\" data-cancel aria-label=\"" + escapeHtml((t.label || "타이머") + " 취소") + "\">취소</button></li>").join("")
+        : "";
+    }
+    document.querySelectorAll("#timer-list [data-end]").forEach(el => setText(el, fmtRemain(Number(el.dataset.end) - now)));
+    setText($("#clock-notice"), clockNotice);
+    $("#clock-notice").hidden = !clockNotice;
+  }
+  function initClocks() {
+    $("#clock-days").innerHTML = dayButtons([]);
+    $("#clock-days").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-day]");
+      if (btn) btn.setAttribute("aria-pressed", String(btn.getAttribute("aria-pressed") !== "true"));
+    });
+    $("#clock-weekdays").addEventListener("click", () => {
+      document.querySelectorAll("#clock-days button").forEach(b => b.setAttribute("aria-pressed", String([1, 2, 3, 4, 5].includes(Number(b.dataset.day)))));
+    });
+    $("#clock-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (clocks.length >= BA.MAX_CLOCKS) { clockNotice = "알람은 최대 " + BA.MAX_CLOCKS + "개까지 등록할 수 있어요."; renderClocks(); return; }
+      const days = [...document.querySelectorAll("#clock-days button[aria-pressed='true']")].map(b => Number(b.dataset.day));
+      const clock = BA.newClock({ time:$("#clock-time").value, label:$("#clock-label").value.trim(), days, bus:$("#clock-bus").checked }, Date.now());
+      if (!clock) { $("#clock-time").focus(); return; }
+      clockNotice = "";
+      clocks = [...clocks, clock];
+      $("#clock-label").value = "";
+      prepareAlarmPermission();
+      saveClocks();
+    });
+    $("#clock-list").addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-id]");
+      if (!li) return;
+      const id = li.dataset.id;
+      if (e.target.closest("button[data-toggle]")) {
+        clocks = clocks.map(c => c.id !== id ? c : (c.enabled ? { ...c, enabled:false } : BA.rearmClock(c, Date.now())));
+        if (clocks.some(c => c.enabled)) prepareAlarmPermission();
+        saveClocks();
+      } else if (e.target.closest("button[data-del]")) {
+        clocks = clocks.filter(c => c.id !== id);
+        saveClocks();
+      }
+    });
+    const startTimer = (minutes, label) => {
+      if (timers.length >= BA.MAX_TIMERS) { clockNotice = "타이머는 최대 " + BA.MAX_TIMERS + "개까지 동시에 돌릴 수 있어요."; renderClocks(); return; }
+      const timer = BA.newTimer(minutes, label, Date.now());
+      if (!timer) { $("#timer-custom").focus(); return; }
+      clockNotice = "";
+      timers = [...timers, timer];
+      prepareAlarmPermission();
+      saveTimers();
+    };
+    $("#timer-presets").innerHTML = [5, 10, 15, 30].map(n => "<button type=\"button\" class=\"chip\" data-min=\"" + n + "\">" + n + "분</button>").join("");
+    $("#timer-presets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-min]");
+      if (btn) startTimer(Number(btn.dataset.min), $("#timer-label").value.trim());
+    });
+    $("#timer-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      startTimer($("#timer-custom").value, $("#timer-label").value.trim());
+      $("#timer-custom").value = "";
+    });
+    $("#timer-list").addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-id]");
+      if (li && e.target.closest("button[data-cancel]")) { timers = timers.filter(t => t.id !== li.dataset.id); saveTimers(); }
+    });
+    renderClocks();
   }
 
   function initAlarm() {
-    if (!BA || !alarmCfg) { $("#alarm").hidden = true; return; }
+    if (!BA || !alarmCfg) { $("#alarm").hidden = true; $("#clock-panel").hidden = true; return; }
     $("#alarm-toggle").addEventListener("click", () => {
       alarmCfg.enabled = !alarmCfg.enabled;
       if (alarmCfg.enabled) {
@@ -861,7 +1103,14 @@
     $("#alarm-sound").addEventListener("click", () => { ensureAudio(); setTimeout(renderAlarm, 200); });
     $("#alarm-ack").addEventListener("click", ackAlarm);
     ["pointerdown", "keydown"].forEach(ev => window.addEventListener(ev, unlockAudio));
-    window.addEventListener("storage", (e) => { if (e.key === CFG_KEY) { alarmCfg = BA.sanitizeConfig(store.get(CFG_KEY)); renderAlarm(); } });
+    window.addEventListener("storage", (e) => {
+      if (e.key === CFG_KEY) alarmCfg = BA.sanitizeConfig(store.get(CFG_KEY));
+      if (e.key === CLOCKS_KEY) clocks = BA.sanitizeClocks(store.get(CLOCKS_KEY));
+      if (e.key === TIMERS_KEY) timers = BA.sanitizeTimers(store.get(TIMERS_KEY));
+      renderAlarm();
+    });
+    initWindows();
+    initClocks();
     renderAlarm();
   }
 
