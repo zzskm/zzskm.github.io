@@ -244,3 +244,31 @@ def test_bus_arrival_hero_is_decluttered():
     assert 'class="station-box"' not in HTML
     assert "추적 표본 " not in HTML[:HTML.index("function renderSystem")]
     assert '$("#eta-row").hidden = parts.num === "--";' in HTML
+
+
+def test_bus_arrival_alarm_windows_limit_which_buses_alert():
+    """퇴근 시간대(버스 도착 시각 기준)를 지정해 원치 않는 시간대의 버스 알림을 막는다."""
+    for element in ("alarm-windows", "window-add", "window-hint"):
+        assert f'id="{element}"' in HTML
+    assert 'type=\\"time\\" data-f=\\"start\\"' in HTML
+    assert "BA.sanitizeWindows(next)" in HTML
+    assert "끝 시각은 시작 시각보다 늦어야 해요." in HTML
+    assert "알림 시간대(" in HTML                      # 시간대 밖 버스는 알리지 않는다는 안내
+    assert "시간대 제한 없음" in HTML                  # 시간대를 모두 지우면 모든 버스에 알림
+
+
+def test_bus_arrival_custom_clock_alarms_and_timers_replace_the_extension():
+    """참고한 확장 프로그램처럼 시각 알람(요일 반복/한 번)과 타이머를 등록할 수 있다."""
+    for element in ("clock-panel", "clock-form", "clock-time", "clock-label", "clock-days", "clock-weekdays", "clock-bus",
+                    "clock-list", "timer-presets", "timer-form", "timer-custom", "timer-label", "timer-list", "clock-notice"):
+        assert f'id="{element}"' in HTML
+    assert 'type="time" id="clock-time"' in HTML
+    assert "요일을 고르지 않으면 다음에 오는 그 시각에 한 번만 울립니다." in HTML
+    assert 'const CLOCKS_KEY = "busAlarm.v1.clocks"' in HTML
+    assert 'TIMERS_KEY = "busAlarm.v1.timers"' in HTML
+    # 버스 알림과 같은 잠금 안에서 판정해 여러 탭에서도 한 번만 울린다
+    assert "BA.evaluateClocks({" in HTML and "BA.evaluateTimers({" in HTML
+    assert "BA.rearmClock(c, Date.now())" in HTML
+    assert "function showRing(msg, tag, silent)" in HTML
+    assert 'action.type === "clock_missed"' in HTML     # 놓친 알람은 소리 없이 알린다
+    assert "BA.busHint(snap, now)" in HTML               # 알람 메시지에 다음 버스 정보를 덧붙인다
