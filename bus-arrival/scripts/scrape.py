@@ -57,13 +57,24 @@ NEAR_ARRIVAL_SEC = 180
 VANISH_CONFIRM_POLLS = 2
 # GBIS resultCode 4: 결과 없음 (운행 차량 없음)
 RESULT_NO_DATA = "4"
+# 버스가 없을 때의 조회 간격(초). GBIS 는 약 2분마다 갱신되므로 정보 손실이 거의 없다.
+IDLE_INTERVAL_SEC = 120
 
-HOLIDAYS_2026 = {
-    "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18",
-    "2026-03-01", "2026-05-05", "2026-06-06",
-    "2026-08-15", "2026-10-05", "2026-10-06", "2026-10-07",
-    "2026-10-09", "2026-12-25",
-}
+HOLIDAYS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "holidays.json")
+
+
+def load_holidays(path: str = HOLIDAYS_PATH) -> tuple[set[str], set[int]]:
+    """수집하지 않는 휴일 목록(holidays.json)과 그 목록이 다루는 연도를 읽는다."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return set(data.get("dates", {})), {int(y) for y in data.get("years", [])}
+    except (OSError, ValueError) as e:
+        logging.warning("holidays.json 을 읽지 못했습니다: %s", type(e).__name__)
+        return set(), set()
+
+
+HOLIDAYS, HOLIDAY_YEARS = load_holidays()
 
 TRACK_DEFAULTS = {
     "cur_vid": None,
@@ -264,7 +275,9 @@ def gate_decision(now: dt.datetime, window: str = COLLECT_WINDOW,
     """수집 여부 판정. before_window 이면 wait_seconds 뒤 시작할 수 있다."""
     if now.isoweekday() > 5:
         return {"skip": True, "reason": "weekend", "wait_seconds": 0}
-    if now.strftime("%Y-%m-%d") in HOLIDAYS_2026:
+    if HOLIDAY_YEARS and now.year not in HOLIDAY_YEARS:
+        logging.warning("holidays.json 에 %d 년 휴일이 없습니다. 휴일에도 수집합니다.", now.year)
+    if now.strftime("%Y-%m-%d") in HOLIDAYS:
         return {"skip": True, "reason": "holiday", "wait_seconds": 0}
     start, end = parse_window(window)
     sec = now.hour * 3600 + now.minute * 60 + now.second
@@ -449,17 +462,25 @@ def run_loop(args: argparse.Namespace):
                  route_id, sta_order, secondary_station_id, sta_order_secondary,
                  state["cur_vid"], state["daily_calls"], args.max_daily_calls, args.window)
 
-    # 수집 구간을 이어 붙여 실행해도 조회 간격이 interval 보다 짧아지지 않게 한다
+    # 수집 구간을 이어 붙여 실행해도 다음 조회 시각(next_poll_ts)을 지킨다.
+    # 기록이 없으면 마지막 조회 + interval 로 본다.
     last_poll = parse_ts(state.get("last_poll"))
-    if last_poll:
-        gap = (now - last_poll).total_seconds()
-        if 0 <= gap < args.interval:
-            time.sleep(args.interval - gap)
+    next_poll = parse_ts(state.get("next_poll_ts"))
+    if next_poll is None and last_poll:
+        next_poll = last_poll + dt.timedelta(seconds=args.interval)
 
     deadline = time.monotonic() + args.run_seconds if args.run_seconds else None
     polls = 0
     while True:
-        started = time.monotonic()
+        if next_poll is not None:
+            wait = max(0.0, (next_poll - kst_now()).total_seconds())
+            if deadline is not None and time.monotonic() + wait >= deadline:
+                # 이번 구간에 조회가 없다. 게시 주기를 지키려고 deadline 까지 기다린 뒤 끝낸다.
+                time.sleep(max(0.0, deadline - time.monotonic()))
+                break
+            if wait > 0:
+                time.sleep(wait)
+
         ts = kst_now()
         ts_iso = ts.isoformat()
 
@@ -471,11 +492,15 @@ def run_loop(args: argparse.Namespace):
             break
 
         info = fetch_arrival(service_key, STATION_ID, route_id, sta_order)
+        # 2차 정류장은 1차에 버스가 있을 때만 조회한다 (버스가 없으면 기록할 것이 없다)
         info_secondary = None
-        if secondary_station_id is not None:
+        secondary_called = False
+        if info is not None and info["veh_id"] and secondary_station_id is not None:
             info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
-        state["daily_calls"] += 1 + (1 if secondary_station_id is not None else 0)
+            secondary_called = True
+        state["daily_calls"] += 1 + (1 if secondary_called else 0)
         state["last_poll"] = ts_iso
+        previous_vid = state.get("cur_vid")
 
         if info is None:
             state["consec_fail"] = state.get("consec_fail", 0) + 1
@@ -520,7 +545,6 @@ def run_loop(args: argparse.Namespace):
                     "error": "no_bus",
                     "secondary_station_id": secondary_station_id,
                     "secondary_mobile_no": args.secondary_mobile_no,
-                    "secondary_available": bool(info_secondary and info_secondary.get("veh_id")),
                     "daily_calls": state["daily_calls"],
                     "last_success": ts_iso,
                 }
@@ -546,18 +570,24 @@ def run_loop(args: argparse.Namespace):
                     "state_reset": state_reset,
                 }
 
+        # 추적 중(차량 있음, 소실 확인 대기, API 실패 직후)이면 촘촘히, 버스가 없으면 성기게 조회한다
+        tracking = info is None or state.get("cur_vid") is not None
+        interval = args.interval if tracking else args.idle_interval
+        next_poll = ts + dt.timedelta(seconds=interval)
+        state["next_poll_ts"] = next_poll.isoformat()
+
         save_state(state_path, state)
         if status_path:
-            _write_status(status_path, ts_iso, {**status, "collect_window": args.window})
+            _write_status(status_path, ts_iso, {**status, "collect_window": args.window,
+                                                "poll_interval_sec": interval})
         state_reset = False
 
         polls += 1
         if args.max_polls is not None and polls >= args.max_polls:
             break
-        wait = max(0.0, args.interval - (time.monotonic() - started))
-        if deadline is not None and time.monotonic() + wait >= deadline:
+        # 버스가 처음 발견되거나 추적이 끝난 순간에는 바로 게시할 수 있도록 구간을 끝낸다
+        if args.exit_on_change and state.get("cur_vid") != previous_vid:
             break
-        time.sleep(wait)
 
 
 def _write_status(path: str, ts_iso: str, extra: dict):
@@ -581,7 +611,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--sta-order-secondary", type=int, default=STA_ORDER_SECONDARY)
     p.add_argument("--window", default=os.getenv("BUS_WINDOW") or COLLECT_WINDOW,
                    help="수집 시간대 (KST, HH:MM-HH:MM)")
-    p.add_argument("--interval", type=int, default=60)
+    p.add_argument("--interval", type=int, default=60,
+                   help="추적 중(버스가 있을 때) 조회 간격(초)")
+    p.add_argument("--idle-interval", type=int,
+                   default=int(os.getenv("BUS_IDLE_INTERVAL") or IDLE_INTERVAL_SEC),
+                   help="버스가 없을 때 조회 간격(초)")
+    p.add_argument("--exit-on-change", action="store_true",
+                   help="추적 차량이 바뀌면(첫 발견/도착/교체) 구간을 끝내 즉시 게시할 수 있게 한다")
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))
     p.add_argument("--status-json", default=os.getenv("BUS_STATUS_JSON", "bus-arrival/status.json"))
     p.add_argument("--max-polls", type=int, default=None)

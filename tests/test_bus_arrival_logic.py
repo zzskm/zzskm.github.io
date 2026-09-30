@@ -38,8 +38,11 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
-def simulate(directory, responses, start, state=None):
-    """가짜 시계로 run_loop 를 돌린다. 1차 정류장 응답만 responses 순서대로 돌려준다."""
+def simulate(directory, responses, start, state=None, extra_args=(), poll_times=None, secondary=None):
+    """가짜 시계로 run_loop 를 돌린다. 1차 정류장 응답만 responses 순서대로 돌려준다.
+
+    poll_times 리스트를 주면 1차 조회 시각을, secondary 리스트를 주면 2차 조회 시각을 채운다.
+    """
     base = Path(directory)
     if state is not None:
         (base / "tracker_state.json").write_text(json.dumps(state), encoding="utf-8")
@@ -47,7 +50,13 @@ def simulate(directory, responses, start, state=None):
     queue = iter(responses)
 
     def fake_fetch(service_key, station_id, route_id, sta_order):
-        return next(queue) if station_id == SCRAPER.STATION_ID else None
+        if station_id == SCRAPER.STATION_ID:
+            if poll_times is not None:
+                poll_times.append(clock["now"])
+            return next(queue)
+        if secondary is not None:
+            secondary.append(clock["now"])
+        return None
 
     class FakeTime:
         @staticmethod
@@ -64,6 +73,7 @@ def simulate(directory, responses, start, state=None):
         "--secondary-station-id", "205000029",
         "--window", "16:00-22:00",
         "--max-polls", str(max(1, len(responses))),
+        *extra_args,
     ])
     with mock.patch.dict(os.environ, {"SERVICE_KEY": "test-key"}), \
             mock.patch.object(SCRAPER, "fetch_arrival", fake_fetch), \
@@ -144,6 +154,15 @@ class BusArrivalGateTests(unittest.TestCase):
         self.assertEqual(SCRAPER.gate_decision(self.at(21, 59), "16:00-22:00")["reason"], "ok")
         self.assertEqual(SCRAPER.gate_decision(self.at(22, 0), "16:00-22:00")["reason"], "after_window")
 
+    def test_holidays_come_from_holidays_json(self):
+        # 2026 추석 연휴는 휴일, 2025 추석 날짜(2026-10-06)는 평일이다
+        self.assertEqual(SCRAPER.gate_decision(self.at(17, 0, dt.date(2026, 9, 25)))["reason"], "holiday")
+        self.assertEqual(SCRAPER.gate_decision(self.at(17, 0, dt.date(2026, 3, 2)))["reason"], "holiday")
+        self.assertEqual(SCRAPER.gate_decision(self.at(17, 0, dt.date(2026, 10, 6)))["reason"], "ok")
+
+    def test_missing_holidays_file_falls_back_to_collecting(self):
+        self.assertEqual(SCRAPER.load_holidays("/nonexistent/holidays.json"), (set(), set()))
+
     def test_skips_weekend_holiday_and_quota(self):
         self.assertEqual(SCRAPER.gate_decision(self.at(17, 0, dt.date(2026, 9, 27)))["reason"], "weekend")
         self.assertEqual(SCRAPER.gate_decision(self.at(17, 0, dt.date(2026, 10, 5)))["reason"], "holiday")
@@ -167,7 +186,8 @@ class BusArrivalTrackingTests(unittest.TestCase):
         self.assertEqual(row["last_predict_sec"], "50")
         self.assertEqual(row["est_arrival_ts"], "2026-09-28T17:01:50+09:00")
         self.assertIsNone(state["cur_vid"])
-        self.assertEqual(state["daily_calls"], 6)
+        # 버스가 있을 때만 2차 정류장을 조회한다: (1+1) + (1+1) + 1
+        self.assertEqual(state["daily_calls"], 5)
 
     def test_vehicle_change_closes_previous_track(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -214,7 +234,7 @@ class BusArrivalTrackingTests(unittest.TestCase):
             arrivals, saved = simulate(directory, [NO_BUS], self.START, state)
         self.assertEqual([r["departure_reason"] for r in arrivals], ["stale"])
         self.assertEqual(arrivals[0]["est_arrival_ts"], "2026-09-28T16:05:30+09:00")
-        self.assertEqual(saved["daily_calls"], 12)
+        self.assertEqual(saved["daily_calls"], 11)
 
     def test_does_not_poll_outside_window(self):
         late = dt.datetime(2026, 9, 28, 22, 0, tzinfo=KST)
@@ -222,6 +242,114 @@ class BusArrivalTrackingTests(unittest.TestCase):
             arrivals, state = simulate(directory, [], late)
         self.assertEqual(arrivals, [])
         self.assertEqual(state, {})
+
+
+class BusArrivalAdaptivePollingTests(unittest.TestCase):
+    START = dt.datetime(2026, 9, 28, 17, 0, tzinfo=KST)
+
+    def run_sim(self, responses, **kwargs):
+        times = []
+        secondary = []
+        with tempfile.TemporaryDirectory() as directory:
+            arrivals, state = simulate(directory, responses, self.START, poll_times=times,
+                                       secondary=secondary, **kwargs)
+            status = json.loads((Path(directory) / "status.json").read_text(encoding="utf-8"))
+        return times, secondary, state, status, arrivals
+
+    @staticmethod
+    def gaps(times):
+        return [int((b - a).total_seconds()) for a, b in zip(times, times[1:])]
+
+    def test_idle_interval_is_longer_than_tracking_interval(self):
+        times, _, _, _, _ = self.run_sim([NO_BUS, NO_BUS, NO_BUS])
+        self.assertEqual(self.gaps(times), [120, 120])
+        times, _, _, _, _ = self.run_sim([bus(111, 900), bus(111, 840), bus(111, 780)])
+        self.assertEqual(self.gaps(times), [60, 60])
+
+    def test_pending_vanish_confirmation_keeps_fast_polling(self):
+        # 멀리서 사라진 차량은 소실 확정 전까지(추적 중) 60초 간격, 확정되면 유휴 간격
+        times, _, state, _, arrivals = self.run_sim([bus(111, 500), NO_BUS, NO_BUS, NO_BUS])
+        self.assertEqual(self.gaps(times), [60, 60, 120])
+        self.assertEqual([r["departure_reason"] for r in arrivals], ["vanished"])
+        self.assertIsNone(state["cur_vid"])
+
+    def test_api_failure_retries_at_tracking_interval(self):
+        times, _, _, _, _ = self.run_sim([None, NO_BUS])
+        self.assertEqual(self.gaps(times), [60])
+
+    def test_secondary_station_is_polled_only_when_a_bus_is_present(self):
+        _, secondary, state, _, _ = self.run_sim([NO_BUS, bus(111, 600), NO_BUS])
+        self.assertEqual(len(secondary), 1)
+        self.assertEqual(state["daily_calls"], 4)  # 1 + (1+1) + 1
+
+    def test_status_reports_current_poll_interval(self):
+        _, _, _, status, _ = self.run_sim([NO_BUS])
+        self.assertEqual(status["poll_interval_sec"], 120)
+        self.assertNotIn("secondary_available", status)
+        _, _, _, status, _ = self.run_sim([bus(111, 600)])
+        self.assertEqual(status["poll_interval_sec"], 60)
+
+    def test_idle_interval_is_configurable(self):
+        times, _, _, _, _ = self.run_sim([NO_BUS, NO_BUS], extra_args=("--idle-interval", "180"))
+        self.assertEqual(self.gaps(times), [180])
+
+    def test_next_poll_time_carries_over_between_segments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            times = []
+            simulate(directory, [NO_BUS], self.START, poll_times=times)
+            state = json.loads((Path(directory) / "tracker_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["next_poll_ts"], "2026-09-28T17:02:00+09:00")
+            # 30초 뒤에 새 세그먼트가 시작돼도 다음 조회 시각(17:02:00)까지 기다린다
+            times = []
+            simulate(directory, [NO_BUS], self.START + dt.timedelta(seconds=30), poll_times=times)
+        self.assertEqual(times, [self.START + dt.timedelta(minutes=2)])
+
+    def test_segment_without_due_poll_fills_run_seconds(self):
+        """다음 조회가 구간 밖이면 조회 없이 구간 길이(게시 주기)만큼 기다린 뒤 끝난다."""
+        state = {"date": "2026-09-28", "daily_calls": 0, "last_poll": "2026-09-28T17:00:00+09:00",
+                 "next_poll_ts": "2026-09-28T17:10:00+09:00"}
+        with tempfile.TemporaryDirectory() as directory:
+            times = []
+            simulate(directory, [NO_BUS], self.START, state=state, poll_times=times,
+                     extra_args=("--run-seconds", "300"))
+        self.assertEqual(times, [])
+
+    def test_exit_on_change_ends_segment_when_bus_first_seen(self):
+        times, _, state, _, _ = self.run_sim([bus(111, 900), bus(111, 840)], extra_args=("--exit-on-change",))
+        self.assertEqual(len(times), 1)
+        self.assertEqual(state["cur_vid"], 111)
+        # 변화가 없으면 계속 조회한다
+        times, _, _, _, _ = self.run_sim([NO_BUS, NO_BUS], extra_args=("--exit-on-change",))
+        self.assertEqual(len(times), 2)
+
+    def test_exit_on_change_ends_segment_when_track_closes(self):
+        times, _, state, _, arrivals = self.run_sim(
+            [bus(111, 60), bus(111, 40), NO_BUS, NO_BUS], extra_args=("--exit-on-change",))
+        # 첫 발견에서 한 번 끝나므로 이어 붙여 실행하는 상황을 상태 파일로 재현한다
+        self.assertEqual(len(times), 1)
+
+
+class GuardRowsTests(unittest.TestCase):
+    GUARD = load_module("bus-arrival/scripts/guard_rows.py", "bus_arrival_guard")
+    TODAY = dt.date(2026, 9, 29)
+
+    @staticmethod
+    def csv_text(days):
+        return "ts_kst,vehId\n" + "".join(f"{d}T17:00:00+09:00,1\n" for d in days)
+
+    def check(self, head_days, now_days):
+        head = {"b/predict_log.csv": self.csv_text(head_days)}
+        now = {"b/predict_log.csv": self.csv_text(now_days)}
+        return self.GUARD.shrunk_files("b", lambda p: head.get(p, ""), lambda p: now.get(p, ""), self.TODAY)
+
+    def test_row_loss_in_recent_days_is_reported(self):
+        bad = self.check(["2026-09-29"] * 5, ["2026-09-29"] * 3)
+        self.assertEqual(bad, [("predict_log.csv", 5, 3)])
+
+    def test_growth_and_trimmed_old_rows_pass(self):
+        self.assertEqual(self.check(["2026-09-29"] * 3, ["2026-09-29"] * 4), [])
+        # 30일 트림으로 오래된 행이 사라지는 것은 최근 2일 비교에 걸리지 않는다
+        self.assertEqual(self.check(["2026-08-01", "2026-09-29"], ["2026-09-29"]), [])
 
 
 class BusArrivalCsvTests(unittest.TestCase):

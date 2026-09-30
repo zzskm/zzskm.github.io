@@ -16,16 +16,20 @@ BASE=bus-arrival
 publish() {
   python "$BASE/scripts/trim_logs.py" >/dev/null
   python "$BASE/scripts/build_summary.py"
+  # 오래된 체크아웃이 최신 로그를 덮어쓴 경우(행 수 감소)에는 커밋하지 않고 세션을 실패시킨다
+  if ! python "$BASE/scripts/guard_rows.py" "$BASE"; then
+    exit 1
+  fi
   git add "$BASE/"
   if ! git diff --cached --quiet; then
     git commit -q -m "bus: $(date -u +%Y-%m-%dT%H:%M)Z"
   fi
-  # 다른 워크플로우(yuc 등)가 수시로 push 하므로 rebase 후 재시도한다.
-  # 충돌 시 -X theirs: 재적용 중인 이 세션의 데이터 커밋을 우선한다.
+  # 다른 워크플로우(yuc 등)가 수시로 push 하지만 bus-arrival/ 는 이 세션만 쓴다.
+  # 충돌이 나면 조용히 한쪽을 고르지 않고 중단 후 재시도한다(-X theirs 는 오래된 로그로 덮어쓴 전례가 있다).
   local attempt
   for attempt in 1 2 3 4 5; do
     [[ $(git rev-list --count '@{u}..HEAD') -eq 0 ]] && return 0
-    if git pull -q --rebase -X theirs && git push -q; then
+    if git pull -q --rebase && git push -q; then
       return 0
     fi
     git rebase --abort 2>/dev/null || true
@@ -41,6 +45,9 @@ main() {
   (( session_minutes > 340 )) && session_minutes=340
   local deadline=$(( $(date +%s) + session_minutes * 60 ))
   local collected=0
+
+  # 대기열에서 오래 기다린 run 은 오래된 커밋을 체크아웃했을 수 있으므로 시작 시 최신으로 맞춘다
+  git pull -q --rebase --autostash || echo "::warning::시작 시 pull 실패 — 현재 체크아웃으로 진행"
 
   while :; do
     local remaining gate reason wait_s
@@ -63,7 +70,8 @@ main() {
     fi
     [[ $reason == ok ]] || break
 
-    python "$BASE/scripts/scrape.py" \
+    # --exit-on-change: 버스를 처음 발견하거나 추적이 끝나면 구간을 끝내 바로 게시한다 (알람 지연 최소화)
+    python "$BASE/scripts/scrape.py" --exit-on-change \
       --run-seconds $(( remaining < publish_seconds ? remaining : publish_seconds )) \
       || echo "::warning::scraper 비정상 종료 (exit $?)"
     collected=1
