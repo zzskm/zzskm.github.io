@@ -425,3 +425,68 @@ test("타이머: 범위를 벗어난 분과 잘못된 저장값을 거른다", (
   const late = A.evaluateTimers({ timers: [{ id: "z", endsAtMs: T0 }], nowMs: T0 + 3 * 60 * MIN });
   assert.equal(late.actions.length, 1);
 });
+
+test("요일 반복 알람은 일주일 내내 꺼지지 않고 평일에만 울린다", () => {
+  let clocks = [A.newClock({ time: "18:00", days: [1, 2, 3, 4, 5] }, KST("2026-09-28T09:00:00"))];   // 월요일에 만듦
+  let ledger = {};
+  const rang = [];
+  for (let d = 0; d < 7; d++) {
+    const nowMs = KST("2026-09-28T18:00:00") + d * DAY;
+    const r = A.evaluateClocks({ clocks, ledger, nowMs });
+    clocks = r.clocks; ledger = r.ledger;
+    rang.push(r.actions.length);
+    assert.equal(clocks[0].enabled, true);
+  }
+  assert.deepEqual(rang, [1, 1, 1, 1, 1, 0, 0]);   // 월~금 울림, 토·일 조용
+});
+
+// 지난 주 같은 요일 기록으로 보는 도착 예상 시간대
+const NOW_WED = KST("2026-09-30T18:30:00");   // 수요일. 지난 수요일들: 09-23, 09-16, 09-09, 09-02
+const arr = (date, hhmm, extra = {}) => ({ ts_kst: `${date}T${hhmm}:30+09:00`, est_arrival_ts: `${date}T${hhmm}:00+09:00`, ...extra });
+
+test("n주 전 같은 요일: 버스별로 도착 시각 min~max 를 묶고 지난 것/다음 것을 구분한다", () => {
+  const rows = [
+    arr("2026-09-23", "18:02"), arr("2026-09-16", "18:09"), arr("2026-09-09", "18:05"),
+    arr("2026-09-23", "18:35"), arr("2026-09-16", "18:41"),
+  ];
+  const r = A.weeklyArrivalSlots({ rows, windows: A.defaultWindows(), nowMs: NOW_WED });
+  assert.equal(r.weeksWithData, 3);
+  assert.equal(r.weeksRequested, 4);
+  assert.equal(r.slots.length, 2);
+  assert.deepEqual(r.slots.map((s) => [A.formatTime(s.minMin), A.formatTime(s.maxMin), s.weeks, s.status]),
+    [["18:02", "18:09", 3, "passed"], ["18:35", "18:41", 2, "next"]]);
+  assert.equal(A.formatSlot(r.slots[0], r.weeksWithData), "18:02~18:09 도착 · 3/3주 관측");
+  assert.equal(A.formatSlot({ minMin: 1085, maxMin: 1085, weeks: 1 }, 2), "18:05 도착 · 1/2주 관측");
+  // 아직 아무 슬롯도 지나지 않은 시각이면 첫 슬롯이 next, 나머지는 upcoming
+  const early = A.weeklyArrivalSlots({ rows, windows: A.defaultWindows(), nowMs: KST("2026-09-30T17:40:00") });
+  assert.deepEqual(early.slots.map((s) => s.status), ["next", "upcoming"]);
+});
+
+test("n주 전 같은 요일: 시간대 밖/다른 요일/오늘/4주보다 오래된 기록과 도착 미확인 행은 슬롯에서 뺀다", () => {
+  const rows = [
+    arr("2026-09-23", "18:02"),
+    arr("2026-09-23", "19:45"),                          // 시간대(17:30~19:30) 밖
+    arr("2026-09-22", "18:10"),                          // 화요일
+    arr("2026-09-30", "18:20"),                          // 오늘은 지난주 기록이 아니다
+    arr("2026-09-02", "18:12", { est_arrival_ts: "" }),  // 도착 미확인(차량 변경 등)
+    arr("2026-08-26", "18:15"),                          // 5주 전
+  ];
+  const r = A.weeklyArrivalSlots({ rows, windows: A.defaultWindows(), nowMs: NOW_WED });
+  assert.deepEqual(r.slots.map((s) => A.formatTime(s.minMin)), ["18:02"]);
+  assert.equal(r.weeksWithData, 2);   // 09-23 과 09-02(행은 있으나 도착 미확인). 기록이 없는 주는 분모에서 빠진다
+  // 시간대 제한이 없으면 19:45 도 포함
+  const open = A.weeklyArrivalSlots({ rows, windows: [], nowMs: NOW_WED });
+  assert.deepEqual(open.slots.map((s) => A.formatTime(s.minMin)), ["18:02", "19:45"]);
+});
+
+test("n주 전 같은 요일: 오늘 요일에 해당하는 시간대가 없으면 안내하지 않고, 기록이 없으면 빈 결과", () => {
+  const mondayOnly = [{ start: "17:30", end: "19:30", days: [1] }];
+  const none = A.weeklyArrivalSlots({ rows: [arr("2026-09-23", "18:02")], windows: mondayOnly, nowMs: NOW_WED });
+  assert.equal(none.noWindowToday, true);
+  assert.deepEqual(none.slots, []);
+  const empty = A.weeklyArrivalSlots({ rows: [], windows: A.defaultWindows(), nowMs: NOW_WED });
+  assert.equal(empty.noWindowToday, false);
+  assert.equal(empty.weeksWithData, 0);
+  assert.deepEqual(empty.slots, []);
+  assert.deepEqual(A.weeklyArrivalSlots({ rows: null, windows: [], nowMs: NOW_WED }).slots, []);
+});
