@@ -272,3 +272,21 @@ def test_bus_arrival_custom_clock_alarms_and_timers_replace_the_extension():
     assert "function showRing(msg, tag, silent)" in HTML
     assert 'action.type === "clock_missed"' in HTML     # 놓친 알람은 소리 없이 알린다
     assert "BA.busHint(snap, now)" in HTML               # 알람 메시지에 다음 버스 정보를 덧붙인다
+
+
+def test_bus_arrival_clock_alarms_default_to_weekday_repeat():
+    """시각 알람 폼은 평일 반복으로 시작해 울린 뒤에도 꺼지지 않고, 한 번짜리는 '한 번만'으로 고른다."""
+    assert 'dayButtons([1, 2, 3, 4, 5])' in HTML
+    assert 'id="clock-once"' in HTML and 'id="clock-everyday"' in HTML
+    assert '$("#clock-once").addEventListener("click", () => pickDays([]))' in HTML
+    assert "기본은 평일 반복입니다." in HTML
+
+
+def test_bus_arrival_shows_same_weekday_arrivals_from_previous_weeks():
+    """도착 알림 패널에 지난 4주 같은 요일에 알림 시간대 안으로 도착한 버스 범위를 안내한다."""
+    assert 'id="alarm-history"' in HTML and 'id="alarm-history-note"' in HTML
+    assert "BA.weeklyArrivalSlots({" in HTML and "BA.formatSlot(s, r.weeksWithData)" in HTML
+    # 30일치 로그를 10분에 한 번만 받아 쓴다 (summary.json 의 최근 30건으로는 지난주를 알 수 없다)
+    assert 'get("arrival_log.csv", true)' in HTML
+    assert "HISTORY_REFRESH_MS = 10 * 60000" in HTML
+    assert "renderHistory();" in HTML

@@ -399,6 +399,58 @@
     return { title: action.label || "알람", body: body };
   }
 
+  // ---- 지난 주 같은 요일의 도착 기록으로 보는 '오늘 이 시간대에 올 버스' (안내용, 알람 발화와 무관) ----
+  var HISTORY_WEEKS = 4;      // arrival_log 는 30일만 보관하므로 최대 4주
+  var SLOT_GAP_MIN = 10;      // 도착 시각이 이보다 벌어지면 다른 차로 본다 (배차 간격 약 30분)
+  function weeklyArrivalSlots(input) {
+    var nowMs = input.nowMs;
+    var weeks = Math.min(HISTORY_WEEKS, Math.max(1, Math.round(Number(input.weeks)) || HISTORY_WEEKS));
+    var today = kstParts(nowMs);
+    var windows = sanitizeWindows(input.windows);
+    var active = windows.filter(function (w) { return w.days.indexOf(today.day) !== -1; });
+    var out = { slots: [], weeksWithData: 0, weeksRequested: weeks, day: today.day, noWindowToday: windows.length > 0 && !active.length };
+    if (out.noWindowToday) return out;
+
+    var dates = {};
+    for (var k = 1; k <= weeks; k++) dates[kstParts(nowMs - 7 * k * DAY_MS).date] = false;   // 값: 그 날 기록이 있었는지
+    var points = [];
+    (Array.isArray(input.rows) ? input.rows : []).forEach(function (r) {
+      if (!r) return;
+      var seen = String(r.ts_kst || "").slice(0, 10);
+      if (Object.prototype.hasOwnProperty.call(dates, seen)) dates[seen] = true;   // 공휴일 등 기록이 아예 없는 주는 분모에서 뺀다
+      var at = Date.parse(r.est_arrival_ts);
+      if (!Number.isFinite(at)) return;                                           // 도착이 확인/추정되지 않은 행은 제외
+      var p = kstParts(at);
+      if (!Object.prototype.hasOwnProperty.call(dates, p.date)) return;
+      if (active.length && !active.some(function (w) { return p.minutes >= parseTime(w.start) && p.minutes < parseTime(w.end); })) return;
+      points.push({ min: p.minutes, date: p.date });
+    });
+    out.weeksWithData = Object.keys(dates).filter(function (d) { return dates[d]; }).length;
+
+    points.sort(function (a, b) { return a.min - b.min; });
+    var slots = [], cur = null;
+    points.forEach(function (pt) {
+      if (!cur || pt.min - cur.maxMin > SLOT_GAP_MIN) {
+        cur = { minMin: pt.min, maxMin: pt.min, count: 0, _dates: {} };
+        slots.push(cur);
+      }
+      cur.maxMin = pt.min;
+      cur.count += 1;
+      cur._dates[pt.date] = true;
+    });
+    var nextFound = false;
+    out.slots = slots.map(function (s) {
+      var status = s.maxMin < today.minutes ? "passed" : nextFound ? "upcoming" : "next";
+      if (status === "next") nextFound = true;
+      return { minMin: s.minMin, maxMin: s.maxMin, count: s.count, weeks: Object.keys(s._dates).length, status: status };
+    });
+    return out;
+  }
+  function formatSlot(slot, weeksWithData) {
+    var range = slot.minMin === slot.maxMin ? formatTime(slot.minMin) : formatTime(slot.minMin) + "~" + formatTime(slot.maxMin);
+    return range + " 도착 · " + slot.weeks + "/" + weeksWithData + "주 관측";
+  }
+
   // ---- 타이머 (확장 프로그램의 '타이머'): N분 뒤에 한 번 ----
   function sanitizeTimers(raw) {
     var out = [], ids = {};
@@ -452,6 +504,7 @@
     defaultWindows: defaultWindows, sanitizeWindows: sanitizeWindows, inWindows: inWindows, windowsText: windowsText,
     sanitizeClocks: sanitizeClocks, newClock: newClock, rearmClock: rearmClock, clockOccurrenceText: clockOccurrenceText,
     evaluateClocks: evaluateClocks, pruneClockLedger: pruneClockLedger, busHint: busHint, formatClockMessage: formatClockMessage,
+    HISTORY_WEEKS: HISTORY_WEEKS, weeklyArrivalSlots: weeklyArrivalSlots, formatSlot: formatSlot,
     sanitizeTimers: sanitizeTimers, newTimer: newTimer, evaluateTimers: evaluateTimers, formatTimerMessage: formatTimerMessage
   };
 });
