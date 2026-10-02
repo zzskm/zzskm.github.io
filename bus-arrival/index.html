@@ -222,7 +222,7 @@
 
   <div class="alarm-banner" id="alarm-banner" role="alert" hidden>
     <span id="alarm-banner-text"></span>
-    <button id="alarm-ack" type="button">확인</button>
+    <button id="alarm-ack" type="button" aria-label="알람 끄기 (Esc)">알람 끄기</button>
   </div>
 
   <section class="hero" id="hero">
@@ -763,6 +763,8 @@
     try {
       const n = new Notification(msg.title, { body:msg.body, tag, renotify:true, requireInteraction:true });
       n.onclick = () => { window.focus(); n.close(); ackAlarm(); };
+      // OS 알림을 직접 닫아도 소리를 끈다 (새 알림으로 교체돼 닫힌 이전 알림은 무시)
+      n.onclose = () => { if (alarmNotification === n) ackAlarm(); };
       alarmNotification = n;
     } catch (e) { /* OS 알림 실패는 배너/소리로 충분 */ }
   }
@@ -1139,6 +1141,7 @@
     });
     $("#alarm-sound").addEventListener("click", () => { ensureAudio(); setTimeout(renderAlarm, 200); });
     $("#alarm-ack").addEventListener("click", ackAlarm);
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape" && ringing) ackAlarm(); });
     ["pointerdown", "keydown"].forEach(ev => window.addEventListener(ev, unlockAudio));
     window.addEventListener("storage", (e) => {
       if (e.key === CFG_KEY) alarmCfg = BA.sanitizeConfig(store.get(CFG_KEY));
