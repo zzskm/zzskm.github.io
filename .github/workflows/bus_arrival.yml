@@ -61,5 +61,19 @@ jobs:
           BUS_WINDOW: ${{ inputs.window || '16:00-22:00' }}
           BUS_SESSION_MINUTES: ${{ inputs.session_minutes || '330' }}
           BUS_PUBLISH_SECONDS: "300"
+          # <=15 min or <=2 stops: publish after each existing 60s poll; no extra API calls.
+          BUS_URGENT_PREDICT_SEC: "900"
           # 성남시청전면(06004, staOrder 12) — 매 구간 노선 API 로 다시 해석하지 않도록 고정
           BUS_SECONDARY_STATION_ID: "205000029"
+
+
+      - name: Preserve collection on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bus-arrival-recovery-${{ github.run_id }}
+          path: |
+            bus-arrival/*_log.csv
+            bus-arrival/tracker_state.json
+            bus-arrival/status.json
+          retention-days: 14
