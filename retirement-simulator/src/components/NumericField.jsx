@@ -29,7 +29,7 @@ export function NumericField({ label, value, min = 0, max = 100000000, step = 1,
   const conversion = focused && parsed.valid ? parsed.value : value;
   return <div className="mb-4 numeric-field">
     <div className="flex justify-between gap-2 items-baseline mb-1">
-      <label htmlFor={id} className="text-xs text-slate-700">{label}{changed && <span title="기본값에서 변경됨"> ●</span>}</label>
+      <label htmlFor={id} className="text-xs text-slate-700">{label}{changed && <span aria-hidden="true" title="기본값에서 변경됨"> ●</span>}</label>
       {fieldKey && context.onReset && <span className="text-[11px] text-slate-500">{source === 'user' ? '직접 입력' : '저장값·기본 추정'} <button type="button" aria-label={`${label} 기본값 복원`} onClick={() => context.onReset?.(fieldKey)}>↺</button></span>}
     </div>
     <div className="flex gap-2 items-center">

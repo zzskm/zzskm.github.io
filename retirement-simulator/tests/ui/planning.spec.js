@@ -62,8 +62,8 @@ test('wizard prevents invalid ages and traps keyboard focus',async({page})=>{
  await expect(dialog.getByRole('button',{name:'다음',exact:true})).toBeDisabled();
  await dialog.getByRole('button',{name:'빠른 설정 닫기'}).focus();await page.keyboard.press('Shift+Tab');
  expect(await page.evaluate(()=>document.activeElement.closest('[role="dialog"]')!==null)).toBe(true);
+ await dialog.getByRole('button',{name:'빠른 설정 닫기'}).focus();
  await page.keyboard.press('Escape');
- if(await page.evaluate(()=>document.activeElement.closest('[role="dialog"] input')!==null)) await page.keyboard.press('Escape');
  await expect(dialog).not.toBeVisible();
 });
 test('JSON import adds a comparison and keeps existing input intact',async({page})=>{
