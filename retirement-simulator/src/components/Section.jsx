@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { FieldContext } from "./NumericField.jsx";
 import React from "react";
 
@@ -25,8 +25,9 @@ function Toggle({ label, value, onChange, hint }) {
 
 function Section({ title, summary, defaultOpen, children }) {
   const context = useContext(FieldContext);
+  const [open, setOpen] = useState(!!defaultOpen);
   return (
-    <details className="mb-2 border-b border-slate-100 last:border-b-0" open={!!defaultOpen}>
+    <details className="mb-2 border-b border-slate-100 last:border-b-0" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
       <summary className="flex items-center justify-between py-2 select-none">
         <div className="flex items-center gap-1.5">
           <span className="chev text-slate-400 text-xs">▶</span>
