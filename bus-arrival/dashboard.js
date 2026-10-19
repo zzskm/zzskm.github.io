@@ -32,12 +32,16 @@
 
   function buildView(input) {
     const { status:st, snapshot:snap, alarmView:av, nowMs:now } = input;
-    const observed = input.observationStatus || st;
+    const apiFailed = Boolean(st && st.error && st.error !== 'no_bus');
+    const savedObservation = input.observationStatus;
+    const observed = apiFailed
+      ? savedObservation && (!savedObservation.error || savedObservation.error === 'no_bus') ? savedObservation : null
+      : st;
     const poll = stamp(st && st.last_poll), observedPoll = stamp(observed && observed.last_poll);
     const veh = Number(st && st.current_veh_id || 0), observedVeh = Number(observed && observed.current_veh_id || 0);
     const samePollTarget = av && av.target && av.target.pollMs === poll;
-    const apiFailed = Boolean(st && st.error && st.error !== 'no_bus');
-    const displayPoll = apiFailed ? observedPoll : poll;
+    const lastSuccessPoll = stamp(st && st.last_success);
+    const displayPoll = apiFailed ? valid(lastSuccessPoll) ? lastSuccessPoll : observedPoll : poll;
     const selectedNext = Boolean(input.currentSkipped === true && snap && snap.usable && av && av.state === 'armed' && samePollTarget
       && Number(av.target.vehId) !== veh && av.target.source === 'next'
       && Number(observed && observed.next_veh_id) === Number(av.target.vehId)
@@ -60,13 +64,14 @@
       out.apiAtMs = target.arrivalAtMs;
       out.safetyMethod = target.safetyMethod || snap.safetyMethod;
       out.sampleTrips = selectedNext ? Number(target.sampleTrips) || 0 : snap.sampleTrips;
+      out.stalled = !selectedNext && snap.stalled === true;
       out.departureAtMs = selectedNext && valid(av.safeDepartureAtMs)
         ? av.safeDepartureAtMs : out.safeAtMs - walk * MIN - margin * 1000;
       const mins = Math.max(0, Math.ceil((out.departureAtMs - now) / MIN));
       out.state = mins ? 'waiting' : 'due'; out.tone=mins ? 'wait' : 'go';
       const prefix = selectedNext ? '다음 차량 · ' : '';
       out.title = prefix + (mins ? mins + '분 뒤 출발 권장' : '출발 권장 시점입니다');
-      if (samePollTarget && valid(av.nextFireAtMs)) out.nextFireAtMs = av.nextFireAtMs;
+      if (samePollTarget && (selectedNext || Number(av.target.vehId) === veh) && valid(av.nextFireAtMs)) out.nextFireAtMs = av.nextFireAtMs;
     } else if (av && av.pendingUncertain && av.target && valid(av.safeDepartureAtMs)) {
       out.state='reserved'; out.title='최신 정보 없음 · 이전 정보 기준 예약 경고'; out.tone='warn'; out.uncertain=true;
       out.departureAtMs=av.safeDepartureAtMs; out.safeAtMs=av.target.safeArrivalAtMs;

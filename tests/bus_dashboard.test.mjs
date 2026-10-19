@@ -41,6 +41,15 @@ test('a next-vehicle alarm alone does not replace the current-bus departure deci
  const target={vehId:22,pollMs:NOW,source:'next',arrivalAtMs:NOW+30*M,safeArrivalAtMs:NOW+25*M};
  const v=view(st,{alarmView:{state:'armed',target,safeDepartureAtMs:NOW+19*M,nextFireAtMs:NOW+14*M}});
  assert.equal(v.selectedNext,false);assert.equal(v.targetVehId,11);assert.equal(v.departureAtMs,NOW+8*M);
+ assert.equal(v.nextFireAtMs,null);assert.ok(!v.timeline.some(e=>e.label==='다음 알림'));
+});
+test('window-selected next bus keeps its reservation out of the current bus timeline',()=>{
+ const st=status({next_veh_id:22,next_predict_sec:1800}),snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const cfg={enabled:true,leads:[5],windows:[{start:'18:25',end:'18:40',days:[1]}],armedAtMs:NOW-1};
+ const out=BA.evaluate({cfg,snap,ledger:{},nowMs:NOW,walkMinutes:5,marginSec:60});
+ const v=view(st,{alarmView:out.view});
+ assert.equal(out.view.target.vehId,22);assert.equal(v.targetVehId,11);
+ assert.equal(v.nextFireAtMs,null);assert.ok(!v.timeline.some(e=>e.label==='다음 알림'));
 });
 test('skipped current arrival expiry does not mask a valid next-vehicle decision',()=>{
  const st=status({predict_sec:0,next_veh_id:22,next_predict_sec:1800});
@@ -131,6 +140,26 @@ test('uncertain next vehicle reservation does not inherit current vehicle observ
  const v=view(current,{alarmView:av,observationStatus:current});
  assert.equal(v.targetVehId,22);assert.ok(!v.timeline.some(e=>e.label==='차량 최초 확인'));
  assert.ok(v.timeline.some(e=>e.label==='후속 알림 대상 차량 확인'));
+});
+
+test('API error on first visit uses last success and never invents a vehicle observation',()=>{
+ const error={last_poll:iso(NOW),last_success:iso(NOW-5*M),error:'api_error'};
+ const v=view(error,{observationStatus:error});
+ assert.equal(v.ageSec,300);assert.equal(v.departureAtMs,null);
+ assert.ok(!v.timeline.some(e=>e.kind==='observed'));
+ const unknown=view({...error,last_success:null});
+ assert.equal(unknown.ageSec,null);assert.equal(unknown.departureAtMs,null);
+});
+
+test('selected next vehicle uses its fixed margin without current vehicle model metadata',()=>{
+ const st=status({next_veh_id:22,next_predict_sec:1800,safety:{...status().safety,stalled_last_stop:true}});
+ const snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const cfg={enabled:true,leads:[5],windows:[],armedAtMs:NOW-1};
+ const ledger=BA.skipTarget({}, {vehId:11,arrivalAtMs:snap.arrivalAtMs});
+ const out=BA.evaluate({cfg,snap,ledger,nowMs:NOW,walkMinutes:5,marginSec:60});
+ const v=view(st,{alarmView:out.view,currentSkipped:true});
+ assert.equal(v.safetyMethod,'fixed_margin');assert.equal(v.sampleTrips,0);assert.equal(v.stalled,false);
+ assert.equal(v.safeAtMs,NOW+19*M);
 });
 
 test('four week comparison includes the full KST cutoff date',()=>{

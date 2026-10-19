@@ -44,12 +44,13 @@ class SafetyBrowserTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def open_page(self, status, summary=None, history=None):
+    def open_page(self, status, summary=None, history=None, config=None):
         page=self.browser.new_page(viewport={'width':390,'height':844})
         errors=[]
         page.on('pageerror',lambda e: errors.append(str(e)))
         page.clock.install(time=T)
-        page.add_init_script('localStorage.setItem("busAlarm.v1.cfg",'+json.dumps(json.dumps({'enabled':True,'leads':[5],'windows':[],'armedAtMs':MS-3600000}))+');')
+        cfg={'enabled':True,'leads':[5],'windows':[],'armedAtMs':MS-3600000,**(config or {})}
+        page.add_init_script('localStorage.setItem("busAlarm.v1.cfg",'+json.dumps(json.dumps(cfg))+');')
         page.route('**/status.json?*',lambda r:r.fulfill(json=status))
         page.route('**/summary.json?*',lambda r:r.fulfill(json=summary or {'recent_predictions':[],'recent_arrivals':[],'today':{},'historical_alerts':{'date':'2026-10-19','slots':[]}}))
         page.route('**/holidays.json?*',lambda r:r.fulfill(json={'years':[2026],'dates':{}}))
@@ -162,8 +163,8 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#alarm-skip').click()
             expect(page.locator('#alarm-undo-skip')).to_be_visible()
             page.wait_for_function('JSON.parse(localStorage.getItem("busAlarm.v1.fired")).skipped["11"]')
-            expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
-            expect(page.locator('#card-seat')).to_have_text('미제공')
+            expect(page.locator('#alarm-next')).to_contain_text('버스를 기다리는 중')
+            expect(page.locator('#verdict-text')).not_to_contain_text('다음 차량')
             page.locator('#alarm-undo-skip').click()
             expect(page.locator('#alarm-next')).to_contain_text('18:08')
             ledger=page.evaluate('JSON.parse(localStorage.getItem("busAlarm.v1.fired"))')
@@ -239,6 +240,11 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
             expect(page.locator('#hero-detail')).to_contain_text('22')
             expect(page.locator('#journey-timeline')).to_contain_text('후속 알림 대상 차량 확인')
+            expect(page.locator('#card-seat')).to_have_text('미제공')
+            page.locator('.hero-evidence summary').click()
+            expect(page.locator('#model-note')).to_contain_text('고정 11분 여유')
+            expect(page.locator('#safety-detail')).to_contain_text('고정 11분 여유')
+            expect(page.locator('#safety-detail')).not_to_contain_text('하위 분위수')
             self.assertEqual(errors,[])
         finally: page.close()
 
@@ -256,6 +262,31 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#hero-detail')).to_contain_text('마지막 정상 확인 기준 차량 11')
             expect(page.locator('#journey-timeline')).to_contain_text('마지막 정상 정보에서 차량 확인')
             expect(page.locator('#journey-timeline')).not_to_contain_text('후속 알림 대상 차량 확인')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_api_error_first_visit_uses_last_success_without_fabricated_observations(self):
+        from playwright.sync_api import expect
+        status={'last_poll':T.isoformat(),'last_success':(T-dt.timedelta(minutes=5)).isoformat(),
+                'error':'api_error','collect_window':'16:00-22:00','poll_interval_sec':60}
+        page,errors=self.open_page(status)
+        try:
+            expect(page.locator('#freshness')).to_contain_text('5분 전')
+            expect(page.locator('#verdict-text')).to_contain_text('출발 판단 보류')
+            expect(page.locator('#journey-timeline')).not_to_contain_text('차량 확인')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_window_selected_next_alarm_is_separate_from_current_bus_timeline(self):
+        from playwright.sync_api import expect
+        status={**self.ready_status(),'next_veh_id':22,'next_predict_sec':1800}
+        page,errors=self.open_page(status,config={'windows':[{'start':'18:25','end':'18:40','days':[1]}]})
+        try:
+            expect(page.locator('#alarm-next')).to_contain_text('알림 대상 차량 22')
+            expect(page.locator('#hero-next')).to_contain_text('후속 차량 22 알림')
+            expect(page.locator('#hero-detail')).to_contain_text('테스트 3100')
+            expect(page.locator('#verdict-text')).to_contain_text('8분')
+            expect(page.locator('#journey-timeline')).not_to_contain_text('다음 알림')
             self.assertEqual(errors,[])
         finally: page.close()
 
