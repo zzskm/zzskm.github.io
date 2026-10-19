@@ -31,7 +31,7 @@ test('numeric editing preserves blank draft, Escape cancels, Enter commits and r
  const profile=page.locator('#inputs-panel details').filter({has:page.locator('summary').filter({hasText:/프로필/})}).first();
  if(!(await profile.locator(':scope > summary').isVisible())) throw new Error('프로필 섹션을 찾을 수 없습니다');
  if(!(await profile.evaluate(el=>el.open))) await profile.locator(':scope > summary').click();
- await expect(page.getByLabel('퇴직 나이',{exact:true})).toHaveValue('62');
+ await expect(page.locator('[data-field-key="retireAge"]')).toHaveValue('62');
 });
 test('money precision and 억원 units round trip without slider-step rounding',async({page})=>{
  await page.goto('/retirement-simulator/');await inputPanel(page);
@@ -40,8 +40,8 @@ test('money precision and 억원 units round trip without slider-step rounding',
  const money=page.getByLabel('저축성 자산 (예금·MMF 등)',{exact:true});
  await money.fill('1234.56');await money.press('Enter');
  await expect.poll(async()=>(await stored(page)).scenarios[0].input.savingsBalance).toBe(1234.56);
- await page.getByLabel('저축성 자산 (예금·MMF 등) 금액 단위').selectOption('10000');
- await page.getByLabel('저축성 자산 (예금·MMF 등)',{exact:true}).fill('.5');await page.getByLabel('저축성 자산 (예금·MMF 등)',{exact:true}).press('Enter');
+ await page.locator('[data-unit-key="savingsBalance"]').selectOption('10000');
+ const savings=page.locator('[data-field-key="savingsBalance"]');await savings.fill('.5');await savings.press('Enter');
  await expect.poll(async()=>(await stored(page)).scenarios[0].input.savingsBalance).toBe(5000);
 });
 test('wizard resumes and selectively merges settings without an automatic comparison',async({page})=>{
