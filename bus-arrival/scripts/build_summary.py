@@ -72,6 +72,7 @@ def main():
     except (OSError, ValueError):
         holidays = {}
     summary = {
+        "runtime_schema_version": 2,
         "safety_model": model,
         "safety_audit": safety_audit,
         "historical_alerts": historical_slots(training, holidays, today),

@@ -32,7 +32,7 @@ import time
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from safety_model import safety_prediction, timestamp
+from safety_model import safety_prediction, timestamp, model_for_day, publication_decision
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -465,15 +465,7 @@ def run_loop(args: argparse.Namespace):
 
     state = load_state(state_path)
     summary = load_state(os.path.join(base_dir, "summary.json"))
-    model = summary.get("safety_model", {})
-    # A future/same-day or old model is not evidence of current calibration quality.
-    trained = model.get("trained_through")
-    try:
-        age_days = (kst_now().date() - dt.date.fromisoformat(trained)).days
-        if not 1 <= age_days <= 14:
-            model = {}
-    except (ValueError, TypeError):
-        model = {}
+    model = model_for_day(summary.get("safety_model"), kst_now().date().isoformat())
     for key, value in TRACK_DEFAULTS.items():
         state.setdefault(key, value)
 
@@ -618,9 +610,9 @@ def run_loop(args: argparse.Namespace):
         next_poll = ts + dt.timedelta(seconds=interval)
         state["next_poll_ts"] = next_poll.isoformat()
 
-        urgent = (state.get("cur_vid") is not None and (
-            (state.get("last_predict") is not None and state["last_predict"] <= args.urgent_predict_sec)
-            or (state.get("last_location") is not None and state["last_location"] <= 2)))
+        publication = publication_decision(state.get("last_predict"), state.get("last_location"),
+                                           status.get("safety"), ts_iso, args.urgent_predict_sec)
+        urgent = state.get("cur_vid") is not None and publication['urgent_publication']
         save_state(state_path, state)
         if status_path:
             _write_status(status_path, ts_iso, {**status, "collect_window": args.window,
@@ -629,7 +621,11 @@ def run_loop(args: argparse.Namespace):
                                                 "api_response_received_at": api_received_ts,
                                                 "api_request_duration_sec": api_latency_sec,
                                                 "publish_interval_sec": 60 if urgent else 300,
-                                                "urgent_publication": urgent})
+                                                "urgent_publication": urgent,
+                                                "publication_reason": publication['publication_reason'],
+                                                "runtime_schema_version": 2,
+                                                "model_status": model['model_status'],
+                                                "model_trained_through": model.get('trained_through')})
         state_reset = False
 
         polls += 1

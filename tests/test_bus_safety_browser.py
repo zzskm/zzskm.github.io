@@ -4,6 +4,7 @@ import functools
 import http.server
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import threading
@@ -14,10 +15,13 @@ T = dt.datetime(2026,10,19,18,tzinfo=dt.timezone(dt.timedelta(hours=9)))
 MS = int(T.timestamp()*1000)
 
 
-@unittest.skipUnless(importlib.util.find_spec('playwright') and shutil.which('chromium'), 'optional Playwright/Chromium unavailable')
 class SafetyBrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        required = os.getenv('BUS_REQUIRE_BROWSER_TESTS') == '1'
+        if not importlib.util.find_spec('playwright'):
+            if required: raise RuntimeError('Required Playwright browser tests unavailable')
+            raise unittest.SkipTest('optional Playwright unavailable')
         from playwright.sync_api import sync_playwright
         class QuietHandler(http.server.SimpleHTTPRequestHandler):
             def log_message(self, *args):
@@ -25,11 +29,12 @@ class SafetyBrowserTests(unittest.TestCase):
         try:
             cls.server=http.server.ThreadingHTTPServer(('127.0.0.1',0),functools.partial(QuietHandler,directory=str(ROOT)))
         except PermissionError:
+            if required: raise
             raise unittest.SkipTest('sandbox prohibits local sockets; browser test needs a network-enabled runner')
         cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True)
         cls.thread.start()
         cls.pw=sync_playwright().start()
-        cls.browser=cls.pw.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
+        cls.browser=cls.pw.chromium.launch(executable_path=shutil.which('chromium') or cls.pw.chromium.executable_path,headless=True,args=['--no-sandbox'])
 
     @classmethod
     def tearDownClass(cls):
@@ -66,7 +71,8 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertIn('18:14',page.locator('#safety-detail').inner_text())
             self.assertIn('실제 도착 미측정',page.locator('#safety-detail').inner_text())
             self.assertEqual(page.locator('#eta-num').inner_text(),'18')
-            self.assertIn('18:08',page.locator('#alarm-next').inner_text())
+            from playwright.sync_api import expect
+            expect(page.locator('#alarm-next')).to_contain_text('18:08')
             page.locator('#walk').fill('10')
             page.locator('#walk').dispatch_event('change')
             self.assertIn('3분',page.locator('#verdict-text').inner_text())
@@ -89,6 +95,25 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertIn('판단 보류',page.locator('#verdict-text').inner_text())
             self.assertIn('알림을 믿을 수 없습니다',page.locator('#alarm-next').inner_text())
             self.assertTrue(page.locator('#alarm-banner').is_hidden())
+            self.assertEqual(errors,[])
+        finally:
+            page.close()
+
+    def test_reserved_warning_remains_visible_after_expiry_and_reload(self):
+        status={'last_poll':T.isoformat(),'current_veh_id':11,'predict_sec':1200,'location_no':3,
+                'collect_window':'16:00-22:00','safety':{
+                    'observation_ts':T.isoformat(),'safe_arrival_ts':(T+dt.timedelta(seconds=549)).isoformat(),
+                    'method':'trip_lower_quantile','sample_trips':89}}
+        page,errors=self.open_page(status)
+        try:
+            from playwright.sync_api import expect
+            expect(page.locator('#alarm-next')).to_contain_text('18:03')
+            page.clock.fast_forward(120000)
+            page.reload()
+            page.wait_for_function('!document.body.classList.contains("loading")')
+            page.clock.fast_forward(69000)
+            expect(page.locator('#alarm-banner')).to_be_visible()
+            expect(page.locator('#alarm-banner-text')).to_contain_text('최신 정보 없음')
             self.assertEqual(errors,[])
         finally:
             page.close()

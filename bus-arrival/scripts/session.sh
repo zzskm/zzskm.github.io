@@ -18,6 +18,7 @@ publish() {
   # Calibration reads completed dates only; no destructive log trimming here.
   python "$BASE/scripts/build_summary.py" || return 1
   python "$BASE/scripts/prepare_publish.py" || return 1
+  python "$BASE/scripts/verify_runtime.py" --base "$BASE" || return 1
   # 오래된 체크아웃이 최신 로그를 덮어쓴 경우(행 수 감소)에는 커밋하지 않고 세션을 실패시킨다
   if ! python "$BASE/scripts/guard_rows.py" "$BASE"; then
     exit 1
@@ -76,6 +77,8 @@ main() {
     fi
     [[ $reason == ok ]] || break
 
+    # Build calibration before the first poll, including after a code update pulled by publish().
+    python "$BASE/scripts/build_summary.py" || return 1
     # --exit-on-change: 버스를 처음 발견하거나 추적이 끝나면 구간을 끝내 바로 게시한다 (알람 지연 최소화)
     python "$BASE/scripts/scrape.py" --exit-on-change \
       --run-seconds $(( remaining < publish_seconds ? remaining : publish_seconds )) \
