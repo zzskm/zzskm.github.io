@@ -1,0 +1,566 @@
+{
+  "source_counts": {
+    "invalid_timestamp": 0,
+    "duplicate_prediction": 0,
+    "duplicate_trip": 0,
+    "invalid_trip_interval": 0,
+    "unmatched_trip": 0,
+    "plate_mismatch": 0,
+    "invalid_trip_predictions": 0,
+    "excluded_gap_or_reason": 3,
+    "sample_count_mismatch": 0,
+    "missing_endpoints": 0,
+    "quick_reappearance": 1,
+    "overlapping_trip": 0,
+    "prediction_rows": 3531,
+    "arrival_rows": 142,
+    "short_track_trips": 5,
+    "reasons": {
+      "estimated_arrival": 48,
+      "observed_arrival": 91,
+      "vanished": 3
+    },
+    "matched_trips": 142,
+    "eligible_trips": 139,
+    "api_signal_trips": 0,
+    "no_bus_rows": 1712,
+    "unmatched_vehicle_rows": 16
+  },
+  "segment_audit": {
+    "rows": 1053,
+    "matched": 1041,
+    "unmatched": 12,
+    "ambiguous": 0,
+    "invalid_timestamp": 0,
+    "interpretation": "same_veh_at_both confirms API identity co-occurrence, not measured segment travel or arrival"
+  },
+  "estimate_only_reference": {
+    "label": "Legacy est_arrival_ts comparison, NOT measured accuracy or calibration truth",
+    "trips": 139,
+    "p05_trip_worst_error_sec": -605.0,
+    "p10_trip_worst_error_sec": -554.0
+  },
+  "truth": "No measured arrivals; conditional disappearance intervals. est_arrival_ts is never ground truth.",
+  "split": {
+    "train_dates": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-12"
+    ],
+    "test_dates": [
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-19"
+    ],
+    "cutoff": "2026-10-13",
+    "unit": "trip; entire dates held out; days may remain correlated"
+  },
+  "strata_scope": "All dates, descriptive only; not used to fit holdout models",
+  "strata": {
+    "all": {
+      "independent_trips": 139,
+      "worst_early_error_sec": -1110,
+      "p05_trip_worst_error_sec": -651.0,
+      "p10_trip_worst_error_sec": -605.0,
+      "early_trip_fraction": 1.0
+    },
+    "far:last": {
+      "independent_trips": 57,
+      "worst_early_error_sec": -1110,
+      "p05_trip_worst_error_sec": -788.0,
+      "p10_trip_worst_error_sec": -702.0,
+      "early_trip_fraction": 0.9825
+    },
+    "far:other": {
+      "independent_trips": 101,
+      "worst_early_error_sec": -655,
+      "p05_trip_worst_error_sec": -603.0,
+      "p10_trip_worst_error_sec": -546.0,
+      "early_trip_fraction": 0.7525
+    },
+    "hour:16": {
+      "independent_trips": 18,
+      "worst_early_error_sec": -766,
+      "p05_trip_worst_error_sec": null,
+      "p10_trip_worst_error_sec": null,
+      "early_trip_fraction": 1.0
+    },
+    "hour:17": {
+      "independent_trips": 26,
+      "worst_early_error_sec": -788,
+      "p05_trip_worst_error_sec": -788.0,
+      "p10_trip_worst_error_sec": -770.0,
+      "early_trip_fraction": 1.0
+    },
+    "hour:18": {
+      "independent_trips": 13,
+      "worst_early_error_sec": -635,
+      "p05_trip_worst_error_sec": null,
+      "p10_trip_worst_error_sec": null,
+      "early_trip_fraction": 1.0
+    },
+    "hour:19": {
+      "independent_trips": 28,
+      "worst_early_error_sec": -563,
+      "p05_trip_worst_error_sec": -563.0,
+      "p10_trip_worst_error_sec": -544.0,
+      "early_trip_fraction": 1.0
+    },
+    "hour:20": {
+      "independent_trips": 28,
+      "worst_early_error_sec": -1110,
+      "p05_trip_worst_error_sec": -1110.0,
+      "p10_trip_worst_error_sec": -626.0,
+      "early_trip_fraction": 1.0
+    },
+    "hour:21": {
+      "independent_trips": 26,
+      "worst_early_error_sec": -574,
+      "p05_trip_worst_error_sec": -574.0,
+      "p10_trip_worst_error_sec": -552.0,
+      "early_trip_fraction": 1.0
+    },
+    "mid:last": {
+      "independent_trips": 114,
+      "worst_early_error_sec": -409,
+      "p05_trip_worst_error_sec": -350.0,
+      "p10_trip_worst_error_sec": -330.0,
+      "early_trip_fraction": 0.9386
+    },
+    "mid:other": {
+      "independent_trips": 62,
+      "worst_early_error_sec": -304,
+      "p05_trip_worst_error_sec": -250.0,
+      "p10_trip_worst_error_sec": -185.0,
+      "early_trip_fraction": 0.7419
+    },
+    "near:last": {
+      "independent_trips": 131,
+      "worst_early_error_sec": -300,
+      "p05_trip_worst_error_sec": -271.0,
+      "p10_trip_worst_error_sec": -230.0,
+      "early_trip_fraction": 1.0
+    }
+  },
+  "legacy": {
+    "trips": 50,
+    "possible_miss_rate": 0.74,
+    "certain_miss_rate": 0.52,
+    "notification_omission_rate": 0.08,
+    "wait_lower_mean_sec": 39.5,
+    "wait_upper_mean_sec": 59.1,
+    "excess_wait_lower_mean_sec": 23.1,
+    "excess_wait_upper_mean_sec": 39.5,
+    "wait_denominator_alerted_trips": 46,
+    "trip_simultaneous_early_coverage": 0.0,
+    "first_recognition_lead_min_sec": 0.0,
+    "first_recognition_lead_mean_sec": 734.4,
+    "daily_possible_miss_rates": {
+      "2026-10-13": 1.0,
+      "2026-10-14": 0.8,
+      "2026-10-15": 0.8,
+      "2026-10-16": 0.5,
+      "2026-10-19": 0.5556
+    },
+    "first_publication_and_fetch_delay_mean_sec": 60.0
+  },
+  "candidates": {
+    "p05": {
+      "model": {
+        "version": 1,
+        "alpha": 0.05,
+        "min_trips": 20,
+        "fallback_sec": 240,
+        "trained_through": "2026-10-12",
+        "bins": {
+          "global": {
+            "trips": 89,
+            "offset_sec": -651,
+            "mean_offset_sec": -97,
+            "method": "trip_lower_quantile"
+          },
+          "far:other": {
+            "trips": 62,
+            "offset_sec": -603,
+            "mean_offset_sec": -95,
+            "method": "trip_lower_quantile"
+          },
+          "far:last": {
+            "trips": 35,
+            "offset_sec": -788,
+            "mean_offset_sec": -304,
+            "method": "trip_lower_quantile"
+          },
+          "near:last": {
+            "trips": 82,
+            "offset_sec": -260,
+            "mean_offset_sec": -45,
+            "method": "trip_lower_quantile"
+          },
+          "mid:other": {
+            "trips": 40,
+            "offset_sec": -250,
+            "mean_offset_sec": -6,
+            "method": "trip_lower_quantile"
+          },
+          "mid:last": {
+            "trips": 73,
+            "offset_sec": -360,
+            "mean_offset_sec": -79,
+            "method": "trip_lower_quantile"
+          }
+        },
+        "arrival_truth": "conditional_interval_not_measured"
+      },
+      "metrics": {
+        "trips": 50,
+        "possible_miss_rate": 0.02,
+        "certain_miss_rate": 0.02,
+        "notification_omission_rate": 0.0,
+        "wait_lower_mean_sec": 361.8,
+        "wait_upper_mean_sec": 420.6,
+        "excess_wait_lower_mean_sec": 303.0,
+        "excess_wait_upper_mean_sec": 361.8,
+        "wait_denominator_alerted_trips": 50,
+        "trip_simultaneous_early_coverage": 0.96,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 60.0
+      }
+    },
+    "p10": {
+      "model": {
+        "version": 1,
+        "alpha": 0.1,
+        "min_trips": 20,
+        "fallback_sec": 240,
+        "trained_through": "2026-10-12",
+        "bins": {
+          "global": {
+            "trips": 89,
+            "offset_sec": -605,
+            "mean_offset_sec": -97,
+            "method": "trip_lower_quantile"
+          },
+          "far:other": {
+            "trips": 62,
+            "offset_sec": -563,
+            "mean_offset_sec": -95,
+            "method": "trip_lower_quantile"
+          },
+          "far:last": {
+            "trips": 35,
+            "offset_sec": -653,
+            "mean_offset_sec": -304,
+            "method": "trip_lower_quantile"
+          },
+          "near:last": {
+            "trips": 82,
+            "offset_sec": -230,
+            "mean_offset_sec": -45,
+            "method": "trip_lower_quantile"
+          },
+          "mid:other": {
+            "trips": 40,
+            "offset_sec": -201,
+            "mean_offset_sec": -6,
+            "method": "trip_lower_quantile"
+          },
+          "mid:last": {
+            "trips": 73,
+            "offset_sec": -336,
+            "mean_offset_sec": -79,
+            "method": "trip_lower_quantile"
+          }
+        },
+        "arrival_truth": "conditional_interval_not_measured"
+      },
+      "metrics": {
+        "trips": 50,
+        "possible_miss_rate": 0.02,
+        "certain_miss_rate": 0.02,
+        "notification_omission_rate": 0.0,
+        "wait_lower_mean_sec": 353.8,
+        "wait_upper_mean_sec": 412.6,
+        "excess_wait_lower_mean_sec": 295.0,
+        "excess_wait_upper_mean_sec": 353.8,
+        "wait_denominator_alerted_trips": 50,
+        "trip_simultaneous_early_coverage": 0.92,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 60.0
+      }
+    }
+  },
+  "assumptions": {
+    "walk_sec": 300,
+    "lead_sec": 300,
+    "additional_margin_sec": 60,
+    "browser_fetch_sec": 60,
+    "push_deploy_delay_sec": 0,
+    "publication_delay_measured": false,
+    "first_api_visibility_delay_measured": false
+  },
+  "delay_sensitivity": {
+    "0": {
+      "legacy": {
+        "trips": 50,
+        "possible_miss_rate": 0.68,
+        "certain_miss_rate": 0.54,
+        "notification_omission_rate": 0.08,
+        "wait_lower_mean_sec": 31.6,
+        "wait_upper_mean_sec": 54.3,
+        "excess_wait_lower_mean_sec": 15.7,
+        "excess_wait_upper_mean_sec": 31.6,
+        "wait_denominator_alerted_trips": 46,
+        "trip_simultaneous_early_coverage": 0.0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.6,
+          "2026-10-15": 0.7,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.5556
+        },
+        "first_publication_and_fetch_delay_mean_sec": 0.0
+      },
+      "safe": {
+        "trips": 50,
+        "possible_miss_rate": 0.02,
+        "certain_miss_rate": 0.02,
+        "notification_omission_rate": 0.0,
+        "wait_lower_mean_sec": 409.3,
+        "wait_upper_mean_sec": 468.1,
+        "excess_wait_lower_mean_sec": 350.5,
+        "excess_wait_upper_mean_sec": 409.3,
+        "wait_denominator_alerted_trips": 50,
+        "trip_simultaneous_early_coverage": 0.96,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 0.0
+      }
+    },
+    "60": {
+      "legacy": {
+        "trips": 50,
+        "possible_miss_rate": 0.74,
+        "certain_miss_rate": 0.52,
+        "notification_omission_rate": 0.08,
+        "wait_lower_mean_sec": 39.5,
+        "wait_upper_mean_sec": 59.1,
+        "excess_wait_lower_mean_sec": 23.1,
+        "excess_wait_upper_mean_sec": 39.5,
+        "wait_denominator_alerted_trips": 46,
+        "trip_simultaneous_early_coverage": 0.0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.8,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.5556
+        },
+        "first_publication_and_fetch_delay_mean_sec": 60.0
+      },
+      "safe": {
+        "trips": 50,
+        "possible_miss_rate": 0.02,
+        "certain_miss_rate": 0.02,
+        "notification_omission_rate": 0.0,
+        "wait_lower_mean_sec": 361.8,
+        "wait_upper_mean_sec": 420.6,
+        "excess_wait_lower_mean_sec": 303.0,
+        "excess_wait_upper_mean_sec": 361.8,
+        "wait_denominator_alerted_trips": 50,
+        "trip_simultaneous_early_coverage": 0.96,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 60.0
+      }
+    },
+    "120": {
+      "legacy": {
+        "trips": 50,
+        "possible_miss_rate": 0.72,
+        "certain_miss_rate": 0.54,
+        "notification_omission_rate": 0.1,
+        "wait_lower_mean_sec": 43.4,
+        "wait_upper_mean_sec": 66.3,
+        "excess_wait_lower_mean_sec": 26.6,
+        "excess_wait_upper_mean_sec": 43.4,
+        "wait_denominator_alerted_trips": 45,
+        "trip_simultaneous_early_coverage": 0.0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.7,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.5556
+        },
+        "first_publication_and_fetch_delay_mean_sec": 120.0
+      },
+      "safe": {
+        "trips": 50,
+        "possible_miss_rate": 0.02,
+        "certain_miss_rate": 0.02,
+        "notification_omission_rate": 0.02,
+        "wait_lower_mean_sec": 315.0,
+        "wait_upper_mean_sec": 375.0,
+        "excess_wait_lower_mean_sec": 259.9,
+        "excess_wait_upper_mean_sec": 315.0,
+        "wait_denominator_alerted_trips": 49,
+        "trip_simultaneous_early_coverage": 0.96,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 120.0
+      }
+    },
+    "180": {
+      "legacy": {
+        "trips": 50,
+        "possible_miss_rate": 0.72,
+        "certain_miss_rate": 0.54,
+        "notification_omission_rate": 0.06,
+        "wait_lower_mean_sec": 44.0,
+        "wait_upper_mean_sec": 65.9,
+        "excess_wait_lower_mean_sec": 26.6,
+        "excess_wait_upper_mean_sec": 44.0,
+        "wait_denominator_alerted_trips": 47,
+        "trip_simultaneous_early_coverage": 0.0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.6,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.6667
+        },
+        "first_publication_and_fetch_delay_mean_sec": 180.0
+      },
+      "safe": {
+        "trips": 50,
+        "possible_miss_rate": 0.1,
+        "certain_miss_rate": 0.02,
+        "notification_omission_rate": 0.02,
+        "wait_lower_mean_sec": 262.0,
+        "wait_upper_mean_sec": 317.1,
+        "excess_wait_lower_mean_sec": 213.1,
+        "excess_wait_upper_mean_sec": 262.0,
+        "wait_denominator_alerted_trips": 49,
+        "trip_simultaneous_early_coverage": 0.96,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.2727,
+          "2026-10-14": 0.1,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.1,
+          "2026-10-19": 0.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 180.0
+      }
+    },
+    "300": {
+      "legacy": {
+        "trips": 50,
+        "possible_miss_rate": 0.7,
+        "certain_miss_rate": 0.56,
+        "notification_omission_rate": 0.2,
+        "wait_lower_mean_sec": 52.7,
+        "wait_upper_mean_sec": 78.7,
+        "excess_wait_lower_mean_sec": 33.8,
+        "excess_wait_upper_mean_sec": 52.7,
+        "wait_denominator_alerted_trips": 40,
+        "trip_simultaneous_early_coverage": 0.0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.5,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.6667
+        },
+        "first_publication_and_fetch_delay_mean_sec": 300.0
+      },
+      "safe": {
+        "trips": 50,
+        "possible_miss_rate": 1.0,
+        "certain_miss_rate": 1.0,
+        "notification_omission_rate": 1.0,
+        "wait_lower_mean_sec": null,
+        "wait_upper_mean_sec": null,
+        "excess_wait_lower_mean_sec": null,
+        "excess_wait_upper_mean_sec": null,
+        "wait_denominator_alerted_trips": 0,
+        "trip_simultaneous_early_coverage": 0.96,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 734.4,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 1.0,
+          "2026-10-15": 1.0,
+          "2026-10-16": 1.0,
+          "2026-10-19": 1.0
+        },
+        "first_publication_and_fetch_delay_mean_sec": 300.0
+      }
+    }
+  },
+  "source": {
+    "git_ref": "120a0873c5d2f9effbf06b6af242859122aeb14a",
+    "sha256": {
+      "predict_log.csv": "47d0a8cd1d6cdb62eda4c6df075e79721d995c1896eb17ba9095276b46c974eb",
+      "arrival_log.csv": "092f8cc2f9839f5b933e8d019897872f021524f1fafe411525901deb8d6d2222",
+      "segment_log.csv": "e6e45962a1df7534306fd006cf6852f6e947066e5b3960f4e1a19925369fefc9"
+    }
+  }
+}
