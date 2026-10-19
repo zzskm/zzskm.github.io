@@ -597,7 +597,9 @@
     setText($("#decision-note"), decisionNote);
     $("#decision-note").hidden = !decisionNote;
     const vehOk = st && Number(st.current_veh_id || 0) !== 0;
-    setText($("#hero-detail"), view.uncertain ? "알림 예약 대상 차량 " + view.targetVehId + " · 현재 위치 미확인" : vehOk ? "차량 " + (st.current_plate || st.current_veh_id) + " · " + (stopsText(stopsAwayOf(st)) || "위치 미확인") : "차량 미확인");
+    setText($("#hero-detail"), view.uncertain ? "알림 예약 대상 차량 " + view.targetVehId + " · 현재 위치 미확인"
+      : vehOk && !available ? "마지막 확인 차량 " + (st.current_plate || st.current_veh_id) + " · 현재 위치 미확인"
+      : vehOk ? "차량 " + (st.current_plate || st.current_veh_id) + " · " + (stopsText(stopsAwayOf(st)) || "위치 미확인") : "차량 미확인");
     const announce = view.state + "|" + view.title;
     if (announce !== lastAnnounced) { lastAnnounced=announce; $("#sr-live").textContent=view.title; }
     const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;
@@ -605,7 +607,10 @@
     setText($("#card-next-sub"), "API 예측 · 후속 차량");
     $("#cards").hidden = !(vehOk && !off);
     $("#cards").classList.toggle("is-stale", !available);
-    if (!available) { setText($("#card-seat"), "미확인"); setText($("#card-stops"), "미확인"); }
+    if (!available) {
+      setText($("#card-seat"), "미확인"); setText($("#card-stops"), "미확인");
+      setText($("#card-seat-sub"), "최신 좌석 정보 필요"); setText($("#card-stops-sub"), "최신 위치 정보 필요");
+    }
     else renderCards();
     const heroAlarm = !alarmCfg || !alarmCfg.enabled ? "알림 꺼짐" : alarmView && alarmView.pendingUncertain
       ? "예약 경고 유지 · 최신 정보 없음" : alarmView && alarmView.nextFireAtMs
