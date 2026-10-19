@@ -85,3 +85,10 @@ test('old alarm view cannot override a new observation departure or add an old r
  const old={target:{vehId:11,pollMs:NOW-M},safeDepartureAtMs:NOW+20*M,nextFireAtMs:NOW+20*M};
  const v=view(status(),{alarmView:old});assert.equal(v.departureAtMs,NOW+8*M);assert.equal(v.nextFireAtMs,null);
 });
+
+test('uncertain next vehicle reservation does not inherit current vehicle observations',()=>{
+ const av={pendingUncertain:true,target:{vehId:22,pollMs:NOW-4*M,safeArrivalAtMs:NOW+10*M},safeDepartureAtMs:NOW+4*M,nextFireAtMs:NOW+4*M};
+ const v=view(status({last_poll:iso(NOW-4*M)}),{alarmView:av});
+ assert.equal(v.targetVehId,22);assert.ok(!v.timeline.some(e=>e.label==='차량 최초 확인'));
+ assert.ok(v.timeline.some(e=>e.label==='후속 알림 대상 차량 확인'));
+});

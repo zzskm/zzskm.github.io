@@ -597,7 +597,7 @@
     setText($("#decision-note"), decisionNote);
     $("#decision-note").hidden = !decisionNote;
     const vehOk = st && Number(st.current_veh_id || 0) !== 0;
-    setText($("#hero-detail"), vehOk ? "차량 " + (st.current_plate || st.current_veh_id) + " · " + (stopsText(stopsAwayOf(st)) || "위치 미확인") : "차량 미확인");
+    setText($("#hero-detail"), view.uncertain ? "알림 예약 대상 차량 " + view.targetVehId + " · 현재 위치 미확인" : vehOk ? "차량 " + (st.current_plate || st.current_veh_id) + " · " + (stopsText(stopsAwayOf(st)) || "위치 미확인") : "차량 미확인");
     const announce = view.state + "|" + view.title;
     if (announce !== lastAnnounced) { lastAnnounced=announce; $("#sr-live").textContent=view.title; }
     const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;

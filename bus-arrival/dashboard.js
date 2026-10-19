@@ -58,15 +58,20 @@
       out.nextFireAtMs=av.nextFireAtMs;
     } else { out.state='unavailable'; out.title='출발 판단 보류 · 최신 정보가 필요합니다'; }
 
-    const series = currentSeries(st, input.predictions);
-    const first = stamp(st && st.first_seen_ts);
-    if (veh && valid(poll) && poll <= now + 90000) {
+    const timelineVeh = out.uncertain ? Number(av.target.vehId) : veh;
+    out.targetVehId = timelineVeh;
+    const series = timelineVeh === veh ? currentSeries(st, input.predictions) : [];
+    const first = timelineVeh === veh ? stamp(st && st.first_seen_ts) : NaN;
+    if (timelineVeh !== veh && out.uncertain && valid(av.target.pollMs)) {
+      out.timeline.push({kind:'observed',atMs:av.target.pollMs,label:'후속 알림 대상 차량 확인'});
+    }
+    if (timelineVeh === veh && veh && valid(poll) && poll <= now + 90000) {
       if (valid(first) && first <= poll) out.timeline.push({kind:'observed',atMs:first,label:'차량 최초 확인'});
       else if (series.length) out.timeline.push({kind:'observed',atMs:series[0].t,label:'표시 가능한 기록 시작'});
       out.timeline.push({kind:'observed',atMs:poll,label:'마지막 차량 정보 확인'});
     }
     const since = valid(first) ? first : (series[0] ? series[0].t : poll);
-    (input.events || []).filter(e => e && e.type === 'fire' && Number(e.vehId) === veh
+    (input.events || []).filter(e => e && e.type === 'fire' && Number(e.vehId) === timelineVeh
       && valid(e.atMs) && e.atMs >= since && e.atMs <= now && now - e.atMs < 2 * 60 * MIN)
       .forEach(e => out.timeline.push({kind:'observed',atMs:e.atMs,label:e.uncertain ? '예약 경고 실행 · 당시 최신 정보 없음' : '이 브라우저에서 알림 실행'}));
     out.timeline.push({kind:'now',atMs:now,label:'지금'});

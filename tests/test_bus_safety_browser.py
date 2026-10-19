@@ -68,6 +68,7 @@ class SafetyBrowserTests(unittest.TestCase):
         page, errors=self.open_page(status)
         try:
             self.assertIn('8분',page.locator('#verdict-text').inner_text())
+            page.locator('.hero-evidence summary').click()
             self.assertIn('18:14',page.locator('#safety-detail').inner_text())
             self.assertIn('실제 도착 미측정',page.locator('#safety-detail').inner_text())
             self.assertEqual(page.locator('#eta-num').inner_text(),'18')
