@@ -51,7 +51,7 @@
     if (input.off) { out.state='off'; out.title=input.holiday ? '휴일 · 수집하지 않습니다' : '수집 시간 외'; out.tone='wait'; }
     else if (input.loadError || !st) { out.title='정보를 불러올 수 없습니다'; }
     else if (snap && snap.why === 'no_bus') { out.state='no_bus'; out.title='실시간에서 확인된 차량 없음'; out.tone='wait'; }
-    else if (snap && snap.usable && snap.arrivalAtMs <= now) { out.state='elapsed'; out.title='도착 예정 시각 지남 · 통과 미확인'; out.tone='warn'; }
+    else if (snap && snap.usable && snap.arrivalAtMs <= now && !selectedNext) { out.state='elapsed'; out.title='도착 예정 시각 지남 · 통과 미확인'; out.tone='warn'; }
     else if (snap && snap.usable) {
       const target = selectedNext ? av.target : snap;
       out.targetVehId = selectedNext ? Number(target.vehId) : veh;

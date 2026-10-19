@@ -42,6 +42,13 @@ test('a next-vehicle alarm alone does not replace the current-bus departure deci
  const v=view(st,{alarmView:{state:'armed',target,safeDepartureAtMs:NOW+19*M,nextFireAtMs:NOW+14*M}});
  assert.equal(v.selectedNext,false);assert.equal(v.targetVehId,11);assert.equal(v.departureAtMs,NOW+8*M);
 });
+test('skipped current arrival expiry does not mask a valid next-vehicle decision',()=>{
+ const st=status({predict_sec:0,next_veh_id:22,next_predict_sec:1800});
+ const snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const av={state:'armed',target:{vehId:22,source:'next',pollMs:NOW,arrivalAtMs:NOW+30*M,safeArrivalAtMs:NOW+19*M,safetyMethod:'fixed_margin'},safeDepartureAtMs:NOW+13*M,nextFireAtMs:NOW+9*M};
+ const v=view(st,{alarmView:av,currentSkipped:true});
+ assert.equal(v.state,'waiting');assert.equal(v.targetVehId,22);assert.match(v.title,/다음 차량/);
+});
 test('API error uses last successful observation time and vehicle in pending timeline',()=>{
  const st=status(), snap=BA.assessStatus(st,NOW,{safetyMode:true});
  const cfg={enabled:true,leads:[5],windows:[],armedAtMs:NOW-1};
