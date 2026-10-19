@@ -31,7 +31,8 @@ test('numeric editing preserves blank draft, Escape cancels, Enter commits and r
 });
 test('money precision and 억원 units round trip without slider-step rounding',async({page})=>{
  await page.goto('/retirement-simulator/');await inputPanel(page);
- await page.locator('details').filter({has:page.locator('details').filter({has:page.locator('summary').filter({hasText:/^▶자산/})}).locator('summary')}).locator('summary').click();
+ const section=page.locator('#inputs-panel details').filter({has:page.locator('summary').filter({hasText:/자산/})}).first();
+ await section.locator(':scope > summary').click();
  const money=page.getByLabel('저축성 자산 (예금·MMF 등)',{exact:true});
  await money.fill('1234.56');await money.press('Enter');
  await expect.poll(async()=>(await stored(page)).scenarios[0].input.savingsBalance).toBe(1234.56);
