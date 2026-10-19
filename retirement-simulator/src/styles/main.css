@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+  html, body { background: #f8fafc; color: #0f172a; }
+  body { font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; letter-spacing: -0.005em; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; height: 8px; background: #e2e8f0; border-radius: 999px; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #0f172a; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #0f172a; cursor: pointer; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  @media (max-width: 640px) {
+    input[type="range"]::-webkit-slider-thumb { width: 26px; height: 26px; }
+    input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; }
+    input[type="range"] { height: 10px; }
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+  .num { font-variant-numeric: tabular-nums; }
+  .loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; color: #64748b; font-size: 14px; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  .chev { transition: transform 0.15s; }
+  details[open] .chev { transform: rotate(90deg); }
+  .scenario-tab { position: relative; }
+  .scenario-tab.active::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: currentColor; }
+  .wizard-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .wizard-card { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  button, select, input[type="text"] { min-height: 44px; }
+  button:focus-visible, summary:focus-visible, select:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+  .numeric-field input[type="range"] { min-height: 24px; }
+  @media (max-width: 640px) { input[type="text"], select { font-size: 16px; } }
