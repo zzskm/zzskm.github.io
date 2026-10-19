@@ -161,6 +161,7 @@
     snap.ageMin = (nowMs - pollMs) / MIN;
     if (pollMs > nowMs + CLOCK_SKEW_MS) { snap.why = "clock_skew"; return snap; }
     if (maxAgeMin != null && snap.ageMin > maxAgeMin) { snap.why = "too_old"; return snap; }
+    if (opts && opts.safetyMode && snap.ageMin > 3) { snap.why = "too_old"; return snap; }
     if (st.error && st.error !== "no_bus") { snap.why = "api_error"; return snap; }
     var veh = Number(st.current_veh_id || 0);
     if (st.error === "no_bus" || !veh) { snap.why = "no_bus"; return snap; }
@@ -170,6 +171,21 @@
     snap.why = "ok";
     snap.vehId = veh;
     snap.arrivalAtMs = pollMs + predict * 1000;
+    if (opts && opts.safetyMode) {
+      // Production safety mode keeps API ETA separate from the departure bound.
+      var safety = st.safety || {}, safeAt = Date.parse(safety.safe_arrival_ts);
+      var corrected = Date.parse(safety.corrected_arrival_ts);
+      var matches = Date.parse(safety.observation_ts) === pollMs;
+      var validSafety = matches && Number.isFinite(safeAt) && safeAt <= snap.arrivalAtMs
+        && (safety.method === "fixed_margin" || (safety.method === "trip_lower_quantile" && Number(safety.sample_trips) >= 20));
+      snap.safetyEnabled = true;
+      snap.safeArrivalAtMs = validSafety
+        ? safeAt : snap.arrivalAtMs - 240000;
+      snap.correctedArrivalAtMs = validSafety && Number.isFinite(corrected) ? corrected : snap.arrivalAtMs;
+      snap.safetyMethod = validSafety && safety.method === "trip_lower_quantile" ? "trip_lower_quantile" : "fixed_margin";
+      snap.sampleTrips = validSafety ? Number(safety.sample_trips) || 0 : 0;
+      snap.stalled = validSafety && safety.stalled_last_stop === true;
+    }
     var stops = Number(st.location_no);
     snap.stopsAway = st.location_no === null || st.location_no === "" || !Number.isFinite(stops) ? null : stops;
     var nextVeh = Number(st.next_veh_id || 0), nextPredict = Number(st.next_predict_sec);
@@ -195,7 +211,16 @@
     if (!snap || !snap.usable) return { target: null, outsideWindow: false };
     var led = sanitizeLedger(ledger);
     var candidates = [{ vehId: snap.vehId, arrivalAtMs: snap.arrivalAtMs, source: "current" }];
-    if (snap.next) candidates.push({ vehId: snap.next.vehId, arrivalAtMs: snap.next.arrivalAtMs, source: "next" });
+    if (snap.safetyEnabled) {
+      candidates[0].safeArrivalAtMs = snap.safeArrivalAtMs;
+      candidates[0].correctedArrivalAtMs = snap.correctedArrivalAtMs;
+      candidates[0].safetyMethod = snap.safetyMethod;
+    }
+    if (snap.next) {
+      var next = { vehId: snap.next.vehId, arrivalAtMs: snap.next.arrivalAtMs, source: "next" };
+      if (snap.safetyEnabled) { next.safeArrivalAtMs = next.arrivalAtMs - 240000; next.safetyMethod = "fixed_margin"; }
+      candidates.push(next);
+    }
     var outside = false;
     for (var i = 0; i < candidates.length; i++) {
       var c = candidates[i];
@@ -255,13 +280,18 @@
       return { actions: actions, view: view, ledger: ledger, prevTarget: target };
     }
 
+    var safetyMode = Number.isFinite(target.safeArrivalAtMs);
+    var walk = Math.min(60, Math.max(0, Number(input.walkMinutes) || 0));
+    var margin = Math.min(600, Math.max(0, Number.isFinite(input.marginSec) ? input.marginSec : 60));
+    var alarmBase = safetyMode ? target.safeArrivalAtMs : target.arrivalAtMs;
+    view.safeDepartureAtMs = safetyMode ? alarmBase - walk * MIN - margin * 1000 : null;
     var armedAt = cfg.armedAtMs || 0;
     var due = [];
     var pendingFireAts = [];
     cfg.leads.forEach(function (n) {
       var e = firedEntry(ledger, target.vehId, n, target.arrivalAtMs);
       if (e) { if (e.k === "skipped") view.skipped.push(n); return; }
-      var fireAt = target.arrivalAtMs - n * MIN;
+      var fireAt = alarmBase - (safetyMode ? Math.max(n * MIN, walk * MIN + margin * 1000) : n * MIN);
       if (fireAt <= nowMs) due.push({ n: n, fireAt: fireAt });
       else pendingFireAts.push(fireAt);
     });
@@ -272,8 +302,8 @@
       };
       var loud = [];
       due.forEach(function (d) {
-        if (d.fireAt < armedAt) { mark(d.n, "skipped"); view.skipped.push(d.n); }   // 켜기 전에 이미 지난 시점: 조용히 넘김
-        else if (remainingSec < MISSED_SEC) mark(d.n, "missed");                    // 이미 정류장 앞
+        if (d.fireAt < armedAt && !safetyMode) { mark(d.n, "skipped"); view.skipped.push(d.n); }   // 켜기 전에 이미 지난 시점: 조용히 넘김
+        else if (remainingSec < MISSED_SEC && !safetyMode) mark(d.n, "missed");                    // 이미 정류장 앞
         else loud.push(d);
       });
       if (loud.length) {
@@ -283,7 +313,9 @@
         actions.push({
           type: "fire", kind: kind, vehId: target.vehId, arrivalAtMs: target.arrivalAtMs,
           leads: loud.map(function (d) { return d.n; }).sort(function (a, b) { return b - a; }),
-          remainingSec: remainingSec
+          remainingSec: remainingSec,
+          ...(safetyMode ? { safeArrivalAtMs: target.safeArrivalAtMs, safetyMethod: target.safetyMethod,
+                              safeDepartureAtMs: view.safeDepartureAtMs } : {})
         });
       }
     }
@@ -295,6 +327,10 @@
   }
 
   function formatFireMessage(fire) {
+    if (Number.isFinite(fire.safeArrivalAtMs)) {
+      return { title: "3100번 안전 출발 알림", body: "조기 도착 가능성을 반영한 출발 시점입니다. 실제 도착은 미확인"
+        + (fire.kind === "late" ? " · 안전 출발 시점이 이미 지났을 수 있습니다" : "") };
+    }
     var leads = Array.isArray(fire.leads) ? fire.leads : [fire.lead];
     var lead = Math.max.apply(null, leads);
     var m = Math.max(1, Math.round(fire.remainingSec / 60));
@@ -305,6 +341,61 @@
     return { title: title, body: "약 " + m + "분 후 도착 예정" };
   }
 
+
+  // Historical prealerts use a separate persistent ledger; a slot has no vehicle ID yet.
+  // Associate only one plausible real-time candidate, then transfer fired leads once.
+  function evaluateHistorical(input) {
+    var cfg = sanitizeConfig(input.cfg), now = input.nowMs, snap = input.snap || {};
+    var history = input.history || {}, day = kstParts(now), actions = [];
+    var saved = input.ledger && typeof input.ledger === "object" ? input.ledger : {};
+    var ledger = {};
+    Object.keys(saved).filter(function (k) { return k.indexOf(day.date + ":") === 0; }).forEach(function (k) {
+      var e = saved[k];
+      if (e && typeof e === "object") ledger[k] = { leads: Array.isArray(e.leads) ? e.leads.slice() : [], vehId: e.vehId || null };
+    });
+    var busLedger = sanitizeLedger(input.busLedger);
+    if (!cfg.enabled || history.date !== day.date || day.day === 0 || day.day === 6) {
+      return { ledger: ledger, busLedger: busLedger, actions: actions };
+    }
+    var slots = (Array.isArray(history.slots) ? history.slots : []).filter(function (s) {
+      return s && s.sample_days >= 4 && String(s.id).indexOf(day.date + ":") === 0
+        && Number.isFinite(Date.parse(s.earliest_arrival_ts)) && Number.isFinite(Date.parse(s.latest_arrival_ts));
+    }).slice(0, 48);
+    if (snap.usable) {
+      var eta = Number.isFinite(snap.correctedArrivalAtMs) ? snap.correctedArrivalAtMs : snap.arrivalAtMs;
+      var matches = slots.filter(function (s) {
+        return eta >= Date.parse(s.earliest_arrival_ts) - 5 * MIN && eta <= Date.parse(s.latest_arrival_ts) + 5 * MIN;
+      });
+      // A known next vehicle in the same slot makes identity association ambiguous.
+      if (matches.length === 1 && !(snap.next && snap.next.arrivalAtMs >= Date.parse(matches[0].earliest_arrival_ts) - 5 * MIN
+          && snap.next.arrivalAtMs <= Date.parse(matches[0].latest_arrival_ts) + 5 * MIN)) {
+        var slot = matches[0], entry = ledger[slot.id];
+        if (entry && entry.leads.length && !entry.vehId) {
+          entry.vehId = snap.vehId;
+          entry.leads.forEach(function (n) { busLedger.fired[snap.vehId + "|" + n] = { a:snap.arrivalAtMs, k:"historical" }; });
+          actions.push({ type:"historical_confirmed", vehId:snap.vehId, slotId:slot.id });
+        }
+      }
+      return { ledger:ledger, busLedger:busLedger, actions:actions };
+    }
+    // API errors/old data do not provide evidence that no real-time vehicle exists.
+    if (!input.enabled || snap.why !== "no_bus") return { ledger:ledger, busLedger:busLedger, actions:actions };
+    slots.forEach(function (s) {
+      var earliest = Date.parse(s.earliest_arrival_ts), latest = Date.parse(s.latest_arrival_ts);
+      if (!inWindows(cfg.windows, earliest) || now > latest || now < earliest - 45 * MIN) return;
+      var entry = ledger[s.id] || { leads:[], vehId:null };
+      var due = cfg.leads.filter(function (n) {
+        var fireAt = earliest - Math.max(n * MIN, (Math.min(60, Math.max(0, Number(input.walkMinutes) || 0)) * 60 + Math.min(600, Math.max(0, Number.isFinite(input.marginSec) ? input.marginSec : 60))) * 1000);
+        return entry.leads.indexOf(n) === -1 && now >= fireAt && fireAt >= (cfg.armedAtMs || 0);
+      });
+      if (due.length && !entry.vehId) {
+        entry.leads = entry.leads.concat(due);
+        ledger[s.id] = entry;
+        actions.push({ type:"historical", slotId:s.id, leads:due, earliestAtMs:earliest });
+      }
+    });
+    return { ledger:ledger, busLedger:busLedger, actions:actions };
+  }
 
   // ---- 시각 알람 (확장 프로그램의 '알람'): 매일/요일 반복 또는 한 번만 ----
   function sanitizeClocks(raw) {
@@ -498,7 +589,7 @@
     emptyLedger: emptyLedger, sanitizeConfig: sanitizeConfig, sanitizeLedger: sanitizeLedger,
     pruneLedger: pruneLedger, freshnessLimits: freshnessLimits, assessStatus: assessStatus,
     pickTarget: pickTarget, pickTargetInfo: pickTargetInfo, skipTarget: skipTarget, evaluate: evaluate,
-    formatFireMessage: formatFireMessage, beepSchedule: beepSchedule,
+    evaluateHistorical: evaluateHistorical, formatFireMessage: formatFireMessage, beepSchedule: beepSchedule,
     MAX_WINDOWS: MAX_WINDOWS, MAX_CLOCKS: MAX_CLOCKS, MAX_TIMERS: MAX_TIMERS, TIMER_MAX_MIN: TIMER_MAX_MIN,
     kstParts: kstParts, parseTime: parseTime, formatTime: formatTime, daysLabel: daysLabel, sanitizeDays: sanitizeDays,
     defaultWindows: defaultWindows, sanitizeWindows: sanitizeWindows, inWindows: inWindows, windowsText: windowsText,
@@ -508,3 +599,4 @@
     sanitizeTimers: sanitizeTimers, newTimer: newTimer, evaluateTimers: evaluateTimers, formatTimerMessage: formatTimerMessage
   };
 });
+

@@ -5,6 +5,7 @@ import json
 import os
 import datetime as dt
 from collections import Counter, defaultdict
+from safety_model import match_trips, fit_model, historical_slots, KST
 
 
 RECENT_ROWS = 30
@@ -56,7 +57,25 @@ def main():
     latest = predictions[-1] if predictions else {}
     latest_valid = next((row for row in reversed(predictions) if is_valid_prediction(row)), {})
     today = dt.datetime.now(dt.timezone.utc).astimezone(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d")
+    since = (dt.date.fromisoformat(today) - dt.timedelta(days=42)).isoformat()
+    model_predictions = [r for r in predictions if (r.get('ts_kst') or '')[:10] >= since]
+    model_arrivals = [r for r in arrivals if (r.get('first_seen_ts') or '')[:10] >= since]
+    trips, safety_audit = match_trips(model_predictions, model_arrivals)
+    safety_audit['window_days'] = 42
+    # Exclude the entire current day: no partially completed daily history in calibration.
+    training = [t for t in trips if 0 < (dt.date.fromisoformat(today) - dt.date.fromisoformat(t['day'])).days <= 42]
+    model = fit_model(training)
+    holiday_path = os.path.join(os.path.dirname(args.predict), 'holidays.json')
+    try:
+        with open(holiday_path, encoding='utf-8') as f:
+            holidays = json.load(f)
+    except (OSError, ValueError):
+        holidays = {}
     summary = {
+        "safety_model": model,
+        "safety_audit": safety_audit,
+        "historical_alerts": historical_slots(training, holidays, today),
+        "generated_at": dt.datetime.now(KST).isoformat(),
         "latest": latest,
         "latest_valid": latest_valid,
         "today": daily.get(today, {"samples": 0, "min_predict_sec": None, "avg_predict_sec": None}),
@@ -80,3 +99,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
