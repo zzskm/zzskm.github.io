@@ -29,6 +29,10 @@ import json
 import logging
 import os
 import time
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from safety_model import safety_prediction, timestamp
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -89,6 +93,8 @@ TRACK_DEFAULTS = {
     "miss_count": 0,
     "last_location": None,
     "first_miss_ts": None,
+    "near_stall_since": None,
+    "near_stall_predict": None,
 }
 
 
@@ -357,6 +363,16 @@ def close_track(state: dict, arrival_path: str, ts: dt.datetime, reason: str):
             "departure_reason": reason,
             "last_predict_sec": state.get("last_predict") if state.get("last_predict") is not None else "",
             "est_arrival_ts": estimate_arrival(state, ts),
+            # Additive fields: the legacy observed_arrival name is not measured ground truth.
+            "arrival_evidence": "api_state_signal" if state.get("last_state_cd") == 1 else "prediction_and_disappearance",
+            "arrival_lower_ts": ((parse_ts(state.get("last_seen")) - dt.timedelta(seconds=60)).isoformat()
+                                 if state.get("last_state_cd") == 1 and parse_ts(state.get("last_seen"))
+                                 else state.get("last_seen") or ""),
+            "arrival_upper_ts": (state.get("last_seen") if state.get("last_state_cd") == 1
+                                 else state.get("first_miss_ts") or ts.isoformat()),
+            "first_missing_ts": state.get("first_miss_ts") or ts.isoformat(),
+            "last_state_cd": state.get("last_state_cd"),
+            "last_location_no": state.get("last_location"),
         })
         logging.info("이탈: vehId=%s plate=%s reason=%s last_predict=%ss",
                      state["cur_vid"], state.get("cur_plate", ""), reason,
@@ -407,6 +423,15 @@ def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
         state["min_predict"] = min(state.get("min_predict", 99999), predict)
         state["max_predict"] = max(state.get("max_predict", -1), predict)
 
+    near = info.get("location_no") is not None and info["location_no"] <= 1 and predict is not None and 150 <= predict <= 200
+    anchor = state.get("near_stall_predict")
+    if near:
+        if state.get("near_stall_since") is None or anchor is None or abs(predict - anchor) > 15:
+            state["near_stall_since"] = ts.isoformat()
+            state["near_stall_predict"] = predict
+    else:
+        state["near_stall_since"] = None
+        state["near_stall_predict"] = None
     state["last_seen"] = ts.isoformat()
     state["samples"] = state.get("samples", 0) + 1
     state["last_predict"] = predict
@@ -439,6 +464,16 @@ def run_loop(args: argparse.Namespace):
     status_path = args.status_json
 
     state = load_state(state_path)
+    summary = load_state(os.path.join(base_dir, "summary.json"))
+    model = summary.get("safety_model", {})
+    # A future/same-day or old model is not evidence of current calibration quality.
+    trained = model.get("trained_through")
+    try:
+        age_days = (kst_now().date() - dt.date.fromisoformat(trained)).days
+        if not 1 <= age_days <= 14:
+            model = {}
+    except (ValueError, TypeError):
+        model = {}
     for key, value in TRACK_DEFAULTS.items():
         state.setdefault(key, value)
 
@@ -491,11 +526,14 @@ def run_loop(args: argparse.Namespace):
             logging.warning("일일 호출 상한 도달 (%d/%d). 중지.", state["daily_calls"], args.max_daily_calls)
             break
 
+        request_started = time.monotonic()
         info = fetch_arrival(service_key, STATION_ID, route_id, sta_order)
+        api_latency_sec = round(time.monotonic() - request_started, 3)
+        api_received_ts = kst_iso()
         # 2차 정류장은 1차에 버스가 있을 때만 조회한다 (버스가 없으면 기록할 것이 없다)
         info_secondary = None
         secondary_called = False
-        if info is not None and info["veh_id"] and secondary_station_id is not None:
+        if info is not None and info["veh_id"] and secondary_station_id is not None and state["daily_calls"] + 1 < args.max_daily_calls:
             info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
             secondary_called = True
         state["daily_calls"] += 1 + (1 if secondary_called else 0)
@@ -555,6 +593,10 @@ def run_loop(args: argparse.Namespace):
                     "secondary_mobile_no": args.secondary_mobile_no,
                     "current_veh_id": vid,
                     "current_plate": info["plate_no"],
+                    "first_seen_ts": state.get("first_seen"),
+                    "safety": safety_prediction(model, {"ts_kst": ts_iso, "predict_sec": predict,
+                                                       "location_no": info["location_no"]},
+                                                 timestamp(state.get("near_stall_since"))),
                     "predict_sec": predict,
                     "location_no": info["location_no"],
                     "next_veh_id": info["next_veh_id"],
@@ -576,17 +618,25 @@ def run_loop(args: argparse.Namespace):
         next_poll = ts + dt.timedelta(seconds=interval)
         state["next_poll_ts"] = next_poll.isoformat()
 
+        urgent = (state.get("cur_vid") is not None and (
+            (state.get("last_predict") is not None and state["last_predict"] <= args.urgent_predict_sec)
+            or (state.get("last_location") is not None and state["last_location"] <= 2)))
         save_state(state_path, state)
         if status_path:
             _write_status(status_path, ts_iso, {**status, "collect_window": args.window,
-                                                "poll_interval_sec": interval})
+                                                "poll_interval_sec": interval,
+                                                "api_request_started_at": ts_iso,
+                                                "api_response_received_at": api_received_ts,
+                                                "api_request_duration_sec": api_latency_sec,
+                                                "publish_interval_sec": 60 if urgent else 300,
+                                                "urgent_publication": urgent})
         state_reset = False
 
         polls += 1
         if args.max_polls is not None and polls >= args.max_polls:
             break
         # 버스가 처음 발견되거나 추적이 끝난 순간에는 바로 게시할 수 있도록 구간을 끝낸다
-        if args.exit_on_change and state.get("cur_vid") != previous_vid:
+        if args.exit_on_change and (state.get("cur_vid") != previous_vid or urgent):
             break
 
 
@@ -616,6 +666,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--idle-interval", type=int,
                    default=int(os.getenv("BUS_IDLE_INTERVAL") or IDLE_INTERVAL_SEC),
                    help="버스가 없을 때 조회 간격(초)")
+    p.add_argument("--urgent-predict-sec", type=int, default=int(os.getenv("BUS_URGENT_PREDICT_SEC", "900")))
     p.add_argument("--exit-on-change", action="store_true",
                    help="추적 차량이 바뀌면(첫 발견/도착/교체) 구간을 끝내 즉시 게시할 수 있게 한다")
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))
@@ -649,3 +700,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -14,22 +14,25 @@ set -uo pipefail
 BASE=bus-arrival
 
 publish() {
-  python "$BASE/scripts/trim_logs.py" >/dev/null
-  python "$BASE/scripts/build_summary.py"
+  # Preserve original observations; retention is a separate reviewed operation.
+  # Calibration reads completed dates only; no destructive log trimming here.
+  python "$BASE/scripts/build_summary.py" || return 1
+  python "$BASE/scripts/prepare_publish.py" || return 1
   # 오래된 체크아웃이 최신 로그를 덮어쓴 경우(행 수 감소)에는 커밋하지 않고 세션을 실패시킨다
   if ! python "$BASE/scripts/guard_rows.py" "$BASE"; then
     exit 1
   fi
-  git add "$BASE/"
+  git add "$BASE/" || return 1
   if ! git diff --cached --quiet; then
-    git commit -q -m "bus: $(date -u +%Y-%m-%dT%H:%M)Z"
+    git commit -q -m "bus: $(date -u +%Y-%m-%dT%H:%M)Z" || return 1
   fi
   # 다른 워크플로우(yuc 등)가 수시로 push 하지만 bus-arrival/ 는 이 세션만 쓴다.
   # 충돌이 나면 조용히 한쪽을 고르지 않고 중단 후 재시도한다(-X theirs 는 오래된 로그로 덮어쓴 전례가 있다).
-  local attempt
-  for attempt in 1 2 3 4 5; do
-    [[ $(git rev-list --count '@{u}..HEAD') -eq 0 ]] && return 0
-    if git pull -q --rebase && git push -q; then
+  local attempt ahead
+  for attempt in 1 2 3; do
+    ahead=$(git rev-list --count '@{u}..HEAD') || return 1
+    [[ $ahead -eq 0 ]] && return 0
+    if git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 pull -q --rebase && git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 push -q; then
       return 0
     fi
     git rebase --abort 2>/dev/null || true
@@ -47,7 +50,10 @@ main() {
   local collected=0
 
   # 대기열에서 오래 기다린 run 은 오래된 커밋을 체크아웃했을 수 있으므로 시작 시 최신으로 맞춘다
-  git pull -q --rebase --autostash || echo "::warning::시작 시 pull 실패 — 현재 체크아웃으로 진행"
+  if ! git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 pull -q --rebase --autostash; then
+    echo "::error::최신 브랜치 동기화 실패 — 오래된 상태로 수집하지 않습니다"
+    return 1
+  fi
 
   while :; do
     local remaining gate reason wait_s
@@ -75,7 +81,17 @@ main() {
       --run-seconds $(( remaining < publish_seconds ? remaining : publish_seconds )) \
       || echo "::warning::scraper 비정상 종료 (exit $?)"
     collected=1
-    publish
+    # Keep unpushed commits and rows on this runner; retry before collecting more.
+    # Never continue for hours with an unpublishable dataset and lose it at timeout.
+    local failures=0
+    until publish; do
+      failures=$(( failures + 1 ))
+      if (( failures >= 3 )); then
+        echo "::error::게시 반복 실패 — 보존용 artifact 확인 필요"
+        return 1
+      fi
+      sleep 15
+    done
   done
 
   if (( collected == 0 )); then
@@ -84,3 +100,4 @@ main() {
 }
 
 main "$@"
+
