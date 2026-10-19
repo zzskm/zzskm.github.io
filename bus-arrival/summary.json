@@ -1,4 +1,84 @@
 {
+  "safety_model": {
+    "version": 1,
+    "alpha": 0.05,
+    "min_trips": 20,
+    "fallback_sec": 240,
+    "trained_through": "2026-10-16",
+    "bins": {
+      "global": {
+        "trips": 130,
+        "offset_sec": -651,
+        "mean_offset_sec": -94,
+        "method": "trip_lower_quantile"
+      },
+      "far:other": {
+        "trips": 94,
+        "offset_sec": -603,
+        "mean_offset_sec": -90,
+        "method": "trip_lower_quantile"
+      },
+      "far:last": {
+        "trips": 54,
+        "offset_sec": -788,
+        "mean_offset_sec": -305,
+        "method": "trip_lower_quantile"
+      },
+      "near:last": {
+        "trips": 122,
+        "offset_sec": -271,
+        "mean_offset_sec": -43,
+        "method": "trip_lower_quantile"
+      },
+      "mid:other": {
+        "trips": 58,
+        "offset_sec": -250,
+        "mean_offset_sec": -5,
+        "method": "trip_lower_quantile"
+      },
+      "mid:last": {
+        "trips": 108,
+        "offset_sec": -350,
+        "mean_offset_sec": -66,
+        "method": "trip_lower_quantile"
+      }
+    },
+    "arrival_truth": "conditional_interval_not_measured"
+  },
+  "safety_audit": {
+    "invalid_timestamp": 0,
+    "duplicate_prediction": 0,
+    "duplicate_trip": 0,
+    "invalid_trip_interval": 0,
+    "unmatched_trip": 0,
+    "plate_mismatch": 0,
+    "invalid_trip_predictions": 0,
+    "excluded_gap_or_reason": 3,
+    "sample_count_mismatch": 0,
+    "missing_endpoints": 0,
+    "quick_reappearance": 1,
+    "overlapping_trip": 0,
+    "prediction_rows": 3551,
+    "arrival_rows": 143,
+    "short_track_trips": 5,
+    "reasons": {
+      "estimated_arrival": 48,
+      "observed_arrival": 92,
+      "vanished": 3
+    },
+    "matched_trips": 143,
+    "eligible_trips": 140,
+    "api_signal_trips": 0,
+    "no_bus_rows": 1725,
+    "unmatched_vehicle_rows": 16,
+    "window_days": 42
+  },
+  "historical_alerts": {
+    "date": "2026-10-19",
+    "slots": [],
+    "source": "historical_not_realtime"
+  },
+  "generated_at": "2026-10-19T22:00:01.541967+09:00",
   "latest": {
     "ts_kst": "2026-10-19T21:58:01+09:00",
     "vehId": "",
