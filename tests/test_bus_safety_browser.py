@@ -44,8 +44,8 @@ class SafetyBrowserTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def open_page(self, status, summary=None, history=None, config=None):
-        page=self.browser.new_page(viewport={'width':390,'height':844})
+    def open_page(self, status, summary=None, history=None, config=None, context=None):
+        page=context.new_page() if context else self.browser.new_page(viewport={'width':390,'height':844})
         errors=[]
         page.on('pageerror',lambda e: errors.append(str(e)))
         page.clock.install(time=T)
@@ -292,9 +292,11 @@ class SafetyBrowserTests(unittest.TestCase):
 
     def test_walk_and_margin_preferences_sync_between_tabs_and_reschedule(self):
         from playwright.sync_api import expect
-        page,errors=self.open_page(self.ready_status())
-        other=page.context.new_page()
+        context=self.browser.new_context(viewport={'width':390,'height':844})
         try:
+            page,errors=self.open_page(self.ready_status(),context=context)
+            other=context.new_page()
+            other.on('pageerror',lambda e: errors.append(str(e)))
             other.clock.install(time=T)
             other.add_init_script('localStorage.setItem("busAlarm.v1.cfg",'+json.dumps(json.dumps({'enabled':True,'leads':[5],'windows':[],'armedAtMs':MS-3600000}))+');')
             other.route('**/status.json?*',lambda r:r.fulfill(json=self.ready_status()))
@@ -316,7 +318,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(other.locator('#alarm-next')).to_contain_text('18:02')
             self.assertEqual(errors,[])
         finally:
-            other.close();page.close()
+            context.close()
 
     def test_same_weekday_plot_uses_trip_points_and_labels_estimates(self):
         from playwright.sync_api import expect
