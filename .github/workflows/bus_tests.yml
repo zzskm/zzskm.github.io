@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'bus-arrival/alarm.js'
+      - 'bus-arrival/dashboard.js'
       - 'bus-arrival/index.html'
       - 'bus-arrival/scripts/**'
       - 'tests/*bus*'
@@ -37,3 +38,10 @@ jobs:
         run: |
           python -m pytest tests/test_bus*.py
           bash -n bus-arrival/scripts/session.sh
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bus-ui-screenshots
+          path: /tmp/bus-ui-*.png
+          if-no-files-found: ignore
