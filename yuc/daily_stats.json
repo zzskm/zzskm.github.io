@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-20T08:49:38.291920+09:00",
+  "generated_at": "2026-10-20T08:57:16.419082+09:00",
   "target": "수지노외 공영주차장",
-  "source_latest_at": "2026-10-20T08:49:38+09:00",
+  "source_latest_at": "2026-10-20T08:57:16+09:00",
   "thresholds": {
     "low": 2,
     "safe": 5,
@@ -21,21 +21,21 @@
   },
   "summary": {
     "first_low": {
-      "p10": 505,
-      "p25": 514,
-      "median": 530,
-      "p75": 537,
+      "p10": 508,
+      "p25": 522,
+      "median": 533,
+      "p75": 539,
       "p90": 542,
-      "included_days": 3,
+      "included_days": 4,
       "minimum_required_days": 5
     },
     "effective_full": {
-      "p10": 505,
-      "p25": 514,
-      "median": 530,
-      "p75": 537,
+      "p10": 508,
+      "p25": 522,
+      "median": 533,
+      "p75": 539,
       "p90": 542,
-      "included_days": 3,
+      "included_days": 4,
       "minimum_required_days": 5
     }
   },
@@ -43,17 +43,26 @@
     {
       "date": "2026-10-20",
       "weekday": 1,
-      "sample_count": 16,
+      "sample_count": 17,
       "max_gap_minutes": 12.1,
       "morning_coverage": {
         "first_sample": "2026-10-20T07:08:27+09:00",
-        "last_sample": "2026-10-20T08:49:38+09:00"
+        "last_sample": "2026-10-20T08:57:16+09:00"
       },
-      "first_le_2": null,
-      "effective_full": null,
-      "min_available_morning": 4,
-      "included_in_first_low_summary": false,
-      "included_in_effective_full_summary": false
+      "first_le_2": {
+        "observed_at": "2026-10-20T08:57:16+09:00",
+        "interval_start": "2026-10-20T08:49:38+09:00",
+        "interval_end": "2026-10-20T08:57:16+09:00",
+        "previous_available": 4,
+        "available": 2,
+        "confidence": "medium"
+      },
+      "effective_full": {
+        "observed_at": "2026-10-20T08:57:16+09:00"
+      },
+      "min_available_morning": 2,
+      "included_in_first_low_summary": true,
+      "included_in_effective_full_summary": true
     },
     {
       "date": "2026-10-19",
