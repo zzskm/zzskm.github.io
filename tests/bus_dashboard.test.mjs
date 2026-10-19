@@ -21,9 +21,38 @@ test('next vehicle alarm cannot masquerade as current vehicle event',()=>{
  assert.equal(v.departureAtMs,NOW+8*M);assert.equal(v.nextFireAtMs,null);
 });
 test('N-minute and walking settings use actual engine fire time',()=>{
- const st=status(),snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const st=status({next_veh_id:22,next_predict_sec:1800}),snap=BA.assessStatus(st,NOW,{safetyMode:true});
  const out=BA.evaluate({cfg:{enabled:true,leads:[10],windows:[],armedAtMs:NOW-1},snap,ledger:{},nowMs:NOW,walkMinutes:5,marginSec:60});
  const v=view(st,{alarmView:out.view});assert.equal(v.nextFireAtMs,NOW+4*M);assert.equal(v.departureAtMs,NOW+8*M);
+});
+test('skipping current bus aligns departure summary and timeline with engine next bus',()=>{
+ const st=status({next_veh_id:22,next_predict_sec:1800}), snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const cfg={enabled:true,leads:[5],windows:[],armedAtMs:NOW-1};
+ const current=BA.evaluate({cfg,snap,ledger:{},nowMs:NOW,walkMinutes:5,marginSec:60});
+ const ledger=BA.skipTarget(current.ledger,current.view.target);
+ const next=BA.evaluate({cfg,snap,ledger,nowMs:NOW,prevTarget:current.prevTarget,walkMinutes:5,marginSec:60});
+ const v=BD.buildView({status:st,snapshot:snap,alarmView:next.view,nowMs:NOW,walkMinutes:5,marginSec:60,currentSkipped:true});
+ assert.equal(next.view.target.vehId,22);assert.equal(v.targetVehId,22);assert.equal(v.selectedNext,true);
+ assert.equal(v.departureAtMs,next.view.safeDepartureAtMs);assert.match(v.title,/다음 차량/);
+ assert.ok(v.timeline.some(e=>e.label==='후속 알림 대상 차량 확인'));
+});
+test('a next-vehicle alarm alone does not replace the current-bus departure decision',()=>{
+ const st=status({next_veh_id:22,next_predict_sec:1800}),snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const target={vehId:22,pollMs:NOW,source:'next',arrivalAtMs:NOW+30*M,safeArrivalAtMs:NOW+25*M};
+ const v=view(st,{alarmView:{state:'armed',target,safeDepartureAtMs:NOW+19*M,nextFireAtMs:NOW+14*M}});
+ assert.equal(v.selectedNext,false);assert.equal(v.targetVehId,11);assert.equal(v.departureAtMs,NOW+8*M);
+});
+test('API error uses last successful observation time and vehicle in pending timeline',()=>{
+ const st=status(), snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const cfg={enabled:true,leads:[5],windows:[],armedAtMs:NOW-1};
+ const first=BA.evaluate({cfg,snap,ledger:{},nowMs:NOW,walkMinutes:5,marginSec:60});
+ const failedAt=NOW+4*M, error={last_poll:iso(failedAt),last_success:iso(NOW),error:'api_error'};
+ const badSnap=BA.assessStatus(error,failedAt,{maxAgeMin:3,safetyMode:true});
+ const resumed=BA.evaluate({cfg,snap:badSnap,ledger:first.ledger,prevTarget:first.prevTarget,nowMs:failedAt,walkMinutes:5,marginSec:60});
+ const v=BD.buildView({status:error,observationStatus:st,snapshot:badSnap,alarmView:resumed.view,nowMs:failedAt,walkMinutes:5,marginSec:60});
+ assert.equal(v.state,'reserved');assert.equal(v.ageSec,4*60);
+ assert.ok(v.timeline.some(e=>e.label==='마지막 정상 정보에서 차량 확인' && e.atMs===NOW));
+ assert.ok(!v.timeline.some(e=>e.label==='후속 알림 대상 차량 확인'));
 });
 test('past planned milestones stay planned and never become actual arrivals',()=>{
  const v=view(status(),{walkMinutes:30});assert.equal(v.state,'due');
@@ -78,7 +107,10 @@ test('browser timeline excludes other vehicles, earlier trips and future events'
 test('weekday plot counts trips, excludes gaps, today and duplicate records',()=>{
  const row={vehId:11,first_seen_ts:'2026-10-12T17:40:00+09:00',est_arrival_ts:'2026-10-12T18:00:00+09:00',departure_reason:'estimated_arrival'};
  const rows=[row,row,{...row,departure_reason:'data_gap',vehId:12}, {...row,est_arrival_ts:'2026-10-13T18:00:00+09:00'}, {...row,est_arrival_ts:'2026-10-19T17:59:00+09:00'}];
- const pts=BD.historyPoints(rows,NOW);assert.equal(pts.length,1);assert.equal(pts[0].date,'2026-10-12');
+ const boundary={...row,first_seen_ts:'2026-09-21T17:30:00+09:00',est_arrival_ts:'2026-09-21T17:50:00+09:00'};
+ const outside={...boundary,vehId:12,first_seen_ts:'2026-09-14T17:30:00+09:00',est_arrival_ts:'2026-09-14T17:50:00+09:00'};
+ const pts=BD.historyPoints(rows.concat([boundary,outside]),NOW);assert.equal(pts.length,2);
+ assert.deepEqual(pts.map(p=>p.date),['2026-09-21','2026-10-12']);
 });
 
 test('old alarm view cannot override a new observation departure or add an old reservation',()=>{
@@ -88,7 +120,21 @@ test('old alarm view cannot override a new observation departure or add an old r
 
 test('uncertain next vehicle reservation does not inherit current vehicle observations',()=>{
  const av={pendingUncertain:true,target:{vehId:22,pollMs:NOW-4*M,safeArrivalAtMs:NOW+10*M},safeDepartureAtMs:NOW+4*M,nextFireAtMs:NOW+4*M};
- const v=view(status({last_poll:iso(NOW-4*M)}),{alarmView:av});
+ const current=status({last_poll:iso(NOW-4*M),next_veh_id:22});
+ const v=view(current,{alarmView:av,observationStatus:current});
  assert.equal(v.targetVehId,22);assert.ok(!v.timeline.some(e=>e.label==='차량 최초 확인'));
  assert.ok(v.timeline.some(e=>e.label==='후속 알림 대상 차량 확인'));
+});
+
+test('four week comparison includes the full KST cutoff date',()=>{
+ const row={vehId:11,first_seen_ts:'2026-09-21T17:30:00+09:00',est_arrival_ts:'2026-09-21T17:50:00+09:00',departure_reason:'estimated_arrival'};
+ const pts=BD.historyPoints([row],NOW);assert.equal(pts.length,1);assert.equal(pts[0].date,'2026-09-21');
+});
+
+test('API failures without a reservation retain the last observation without ETA',()=>{
+ const last=status(), error={last_poll:iso(NOW+M),last_success:iso(NOW),error:'api_error'};
+ const snap=BA.assessStatus(error,NOW+M,{maxAgeMin:3,safetyMode:true});
+ const v=BD.buildView({status:error,observationStatus:last,snapshot:snap,alarmView:{state:'off'},nowMs:NOW+M,walkMinutes:5,marginSec:60});
+ assert.equal(v.departureAtMs,null);assert.equal(v.ageSec,60);
+ assert.ok(v.timeline.some(e=>e.label==='마지막 정상 정보에서 차량 확인'));
 });

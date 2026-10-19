@@ -162,6 +162,8 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#alarm-skip').click()
             expect(page.locator('#alarm-undo-skip')).to_be_visible()
             page.wait_for_function('JSON.parse(localStorage.getItem("busAlarm.v1.fired")).skipped["11"]')
+            expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
+            expect(page.locator('#card-seat')).to_have_text('미제공')
             page.locator('#alarm-undo-skip').click()
             expect(page.locator('#alarm-next')).to_contain_text('18:08')
             ledger=page.evaluate('JSON.parse(localStorage.getItem("busAlarm.v1.fired"))')
@@ -226,6 +228,64 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#alarm-banner')).to_be_hidden()
             self.assertEqual(errors,[])
         finally: page.close()
+
+    def test_skip_current_bus_updates_primary_departure_to_next_bus(self):
+        from playwright.sync_api import expect
+        status={**self.ready_status(),'next_veh_id':22,'next_plate_no':'후속 차량','next_predict_sec':1800}
+        page,errors=self.open_page(status)
+        try:
+            expect(page.locator('#hero-detail')).to_contain_text('테스트 3100')
+            page.locator('#alarm-skip').click()
+            expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
+            expect(page.locator('#hero-detail')).to_contain_text('22')
+            expect(page.locator('#journey-timeline')).to_contain_text('후속 알림 대상 차량 확인')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_api_error_shows_last_success_time_and_original_vehicle(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.clock.fast_forward(4*60*1000)
+            page.route('**/status.json?*',lambda r:r.fulfill(json={
+                'last_poll':(T+dt.timedelta(minutes=4)).isoformat(),'last_success':T.isoformat(),'error':'api_error',
+                'consec_fail':1,'collect_window':'16:00-22:00','poll_interval_sec':60}))
+            page.locator('#refresh').click()
+            expect(page.locator('#verdict-text')).to_contain_text('최신 정보 없음')
+            expect(page.locator('#freshness')).to_contain_text('4분 전')
+            expect(page.locator('#hero-detail')).to_contain_text('마지막 정상 확인 기준 차량 11')
+            expect(page.locator('#journey-timeline')).to_contain_text('마지막 정상 정보에서 차량 확인')
+            expect(page.locator('#journey-timeline')).not_to_contain_text('후속 알림 대상 차량 확인')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_walk_and_margin_preferences_sync_between_tabs_and_reschedule(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        other=page.context.new_page()
+        try:
+            other.clock.install(time=T)
+            other.add_init_script('localStorage.setItem("busAlarm.v1.cfg",'+json.dumps(json.dumps({'enabled':True,'leads':[5],'windows':[],'armedAtMs':MS-3600000}))+');')
+            other.route('**/status.json?*',lambda r:r.fulfill(json=self.ready_status()))
+            other.route('**/summary.json?*',lambda r:r.fulfill(json={'recent_predictions':[],'recent_arrivals':[],'today':{},'historical_alerts':{'date':'2026-10-19','slots':[]}}))
+            other.route('**/holidays.json?*',lambda r:r.fulfill(json={'years':[2026],'dates':{}}))
+            other.route('**/arrival_log.csv?*',lambda r:r.fulfill(body='ts_kst,vehId,est_arrival_ts\n'))
+            other.goto(f'http://127.0.0.1:{self.server.server_port}/bus-arrival/')
+            other.wait_for_function('!document.body.classList.contains("loading")')
+            page.locator('#open-settings').click()
+            other.locator('#open-settings').click()
+            page.locator('#walk').fill('10')
+            page.locator('#walk').dispatch_event('change')
+            expect(other.locator('#walk')).to_have_value('10')
+            expect(other.locator('#verdict-text')).to_contain_text('3분')
+            page.locator('#safety-margin').fill('2')
+            page.locator('#safety-margin').dispatch_event('change')
+            expect(other.locator('#safety-margin')).to_have_value('2')
+            expect(other.locator('#verdict-text')).to_contain_text('2분')
+            expect(other.locator('#alarm-next')).to_contain_text('18:02')
+            self.assertEqual(errors,[])
+        finally:
+            other.close();page.close()
 
     def test_same_weekday_plot_uses_trip_points_and_labels_estimates(self):
         from playwright.sync_api import expect

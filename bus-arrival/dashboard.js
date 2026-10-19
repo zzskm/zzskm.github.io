@@ -32,45 +32,64 @@
 
   function buildView(input) {
     const { status:st, snapshot:snap, alarmView:av, nowMs:now } = input;
-    const poll = stamp(st && st.last_poll), veh = Number(st && st.current_veh_id || 0);
+    const observed = input.observationStatus || st;
+    const poll = stamp(st && st.last_poll), observedPoll = stamp(observed && observed.last_poll);
+    const veh = Number(st && st.current_veh_id || 0), observedVeh = Number(observed && observed.current_veh_id || 0);
+    const samePollTarget = av && av.target && av.target.pollMs === poll;
+    const apiFailed = Boolean(st && st.error && st.error !== 'no_bus');
+    const displayPoll = apiFailed ? observedPoll : poll;
+    const selectedNext = Boolean(input.currentSkipped === true && snap && snap.usable && av && av.state === 'armed' && samePollTarget
+      && Number(av.target.vehId) !== veh && av.target.source === 'next'
+      && Number(observed && observed.next_veh_id) === Number(av.target.vehId)
+      && valid(av.target.safeArrivalAtMs));
     const walk = Math.min(60, Math.max(0, Number(input.walkMinutes) || 0));
     const margin = Math.min(600, Math.max(0, Number(input.marginSec) || 0));
-    const sameTarget = av && av.target && Number(av.target.vehId) === veh;
     const out = { state:'unknown', title:'출발 시각 확인 중', tone:'danger', departureAtMs:null,
       safeAtMs:null, correctedAtMs:null, apiAtMs:null, nextFireAtMs:null, timeline:[], changeMinutes:null,
-      ageSec:valid(poll) ? Math.max(0, Math.floor((now - poll) / 1000)) : null, uncertain:false };
+      ageSec:valid(displayPoll) ? Math.max(0, Math.floor((now - displayPoll) / 1000)) : null, uncertain:false, selectedNext:false };
+    out.selectedNext = selectedNext;
     if (input.off) { out.state='off'; out.title=input.holiday ? '휴일 · 수집하지 않습니다' : '수집 시간 외'; out.tone='wait'; }
     else if (input.loadError || !st) { out.title='정보를 불러올 수 없습니다'; }
     else if (snap && snap.why === 'no_bus') { out.state='no_bus'; out.title='실시간에서 확인된 차량 없음'; out.tone='wait'; }
     else if (snap && snap.usable && snap.arrivalAtMs <= now) { out.state='elapsed'; out.title='도착 예정 시각 지남 · 통과 미확인'; out.tone='warn'; }
     else if (snap && snap.usable) {
-      out.safeAtMs = snap.safeArrivalAtMs;
-      out.correctedAtMs = snap.correctedArrivalAtMs;
-      out.apiAtMs = snap.arrivalAtMs;
-      out.departureAtMs = out.safeAtMs - walk * MIN - margin * 1000;
+      const target = selectedNext ? av.target : snap;
+      out.targetVehId = selectedNext ? Number(target.vehId) : veh;
+      out.safeAtMs = target.safeArrivalAtMs;
+      out.correctedAtMs = target.correctedArrivalAtMs || target.arrivalAtMs;
+      out.apiAtMs = target.arrivalAtMs;
+      out.safetyMethod = target.safetyMethod || snap.safetyMethod;
+      out.sampleTrips = selectedNext ? Number(target.sampleTrips) || 0 : snap.sampleTrips;
+      out.departureAtMs = selectedNext && valid(av.safeDepartureAtMs)
+        ? av.safeDepartureAtMs : out.safeAtMs - walk * MIN - margin * 1000;
       const mins = Math.max(0, Math.ceil((out.departureAtMs - now) / MIN));
       out.state = mins ? 'waiting' : 'due'; out.tone=mins ? 'wait' : 'go';
-      out.title = mins ? mins + '분 뒤 출발 권장' : '출발 권장 시점입니다';
-      if (sameTarget && av.target.pollMs === poll && valid(av.nextFireAtMs)) out.nextFireAtMs = av.nextFireAtMs;
+      const prefix = selectedNext ? '다음 차량 · ' : '';
+      out.title = prefix + (mins ? mins + '분 뒤 출발 권장' : '출발 권장 시점입니다');
+      if (samePollTarget && valid(av.nextFireAtMs)) out.nextFireAtMs = av.nextFireAtMs;
     } else if (av && av.pendingUncertain && av.target && valid(av.safeDepartureAtMs)) {
       out.state='reserved'; out.title='최신 정보 없음 · 이전 정보 기준 예약 경고'; out.tone='warn'; out.uncertain=true;
       out.departureAtMs=av.safeDepartureAtMs; out.safeAtMs=av.target.safeArrivalAtMs;
       out.nextFireAtMs=av.nextFireAtMs;
     } else { out.state='unavailable'; out.title='출발 판단 보류 · 최신 정보가 필요합니다'; }
 
-    const timelineVeh = out.uncertain ? Number(av.target.vehId) : veh;
+    const timelineVeh = out.uncertain || selectedNext ? Number(av.target.vehId) : apiFailed && observedVeh ? observedVeh : veh;
     out.targetVehId = timelineVeh;
-    const series = timelineVeh === veh ? currentSeries(st, input.predictions) : [];
-    const first = timelineVeh === veh ? stamp(st && st.first_seen_ts) : NaN;
-    if (timelineVeh !== veh && out.uncertain && valid(av.target.pollMs)) {
-      out.timeline.push({kind:'observed',atMs:av.target.pollMs,label:'후속 알림 대상 차량 확인'});
+    const timelineStatus = observed;
+    const timelinePoll = (out.uncertain || selectedNext) && valid(av.target.pollMs) ? av.target.pollMs : observedPoll;
+    const isCurrent = timelineVeh === observedVeh;
+    const isObservedNext = !isCurrent && Number(timelineStatus && timelineStatus.next_veh_id) === timelineVeh;
+    const series = isCurrent ? currentSeries(timelineStatus, input.predictions) : [];
+    const first = isCurrent ? stamp(timelineStatus && timelineStatus.first_seen_ts) : NaN;
+    if (isObservedNext && valid(timelinePoll) && (out.uncertain || selectedNext)) {
+      out.timeline.push({kind:'observed',atMs:timelinePoll,label:'후속 알림 대상 차량 확인'});
     }
-    if (timelineVeh === veh && veh && valid(poll) && poll <= now + 90000) {
-      if (valid(first) && first <= poll) out.timeline.push({kind:'observed',atMs:first,label:'차량 최초 확인'});
+    if (isCurrent && timelineVeh && valid(timelinePoll) && timelinePoll <= now + 90000) {
+      if (valid(first) && first <= timelinePoll) out.timeline.push({kind:'observed',atMs:first,label:'차량 최초 확인'});
       else if (series.length) out.timeline.push({kind:'observed',atMs:series[0].t,label:'표시 가능한 기록 시작'});
-      out.timeline.push({kind:'observed',atMs:poll,label:'마지막 차량 정보 확인'});
+      out.timeline.push({kind:'observed',atMs:timelinePoll,label:apiFailed || out.uncertain ? '마지막 정상 정보에서 차량 확인' : '마지막 차량 정보 확인'});
     }
-    const since = valid(first) ? first : (series[0] ? series[0].t : poll);
+    const since = valid(first) ? first : (series[0] ? series[0].t : timelinePoll);
     (input.events || []).filter(e => e && e.type === 'fire' && Number(e.vehId) === timelineVeh
       && valid(e.atMs) && e.atMs >= since && e.atMs <= now && now - e.atMs < 2 * 60 * MIN)
       .forEach(e => out.timeline.push({kind:'observed',atMs:e.atMs,label:e.uncertain ? '예약 경고 실행 · 당시 최신 정보 없음' : '이 브라우저에서 알림 실행'}));
@@ -80,6 +99,7 @@
     if (valid(out.safeAtMs)) out.timeline.push({kind:'planned',atMs:out.safeAtMs,label:out.uncertain ? '조기 도착 대비 · 마지막 확인 기준' : '조기 도착 대비 기준',elapsed:out.safeAtMs <= now});
     if (valid(out.correctedAtMs)) out.timeline.push({kind:'planned',atMs:out.correctedAtMs,label:'보정 도착 예상 · 실제 도착 미측정',elapsed:out.correctedAtMs <= now});
     out.timeline.sort((a, b) => a.atMs - b.atMs || ({now:0,observed:1,planned:2}[a.kind] - {now:0,observed:1,planned:2}[b.kind]));
+    if ((out.uncertain || selectedNext) && valid(av.target.pollMs)) out.ageSec = Math.max(0, Math.floor((now - av.target.pollMs) / 1000));
     const prev = input.previous;
     if (prev && prev.vehId === veh && prev.pollMs < poll && valid(prev.departureAtMs) && valid(out.departureAtMs) && !out.uncertain) {
       out.changeMinutes = Math.round((out.departureAtMs - prev.departureAtMs) / MIN);
@@ -88,15 +108,17 @@
   }
 
   function historyPoints(rows, nowMs) {
-    const today = new Date(nowMs + 9 * 60 * MIN).toISOString().slice(0,10);
+    const nowLocal = new Date(nowMs + 9 * 60 * MIN);
+    const today = nowLocal.toISOString().slice(0,10);
+    const cutoff = new Date(nowLocal.getTime() - 28 * 24 * 60 * MIN).toISOString().slice(0,10);
     const weekday = new Date(nowMs + 9 * 60 * MIN).getUTCDay();
     const seen = new Set(), points = [];
     (rows || []).forEach(r => {
       if (!['observed_arrival','estimated_arrival'].includes(r.departure_reason)) return;
       const at = stamp(r.est_arrival_ts), first = stamp(r.first_seen_ts);
-      if (!valid(at) || at >= nowMs || nowMs-at > 28*24*60*MIN) return;
+      if (!valid(at) || at >= nowMs) return;
       const d = new Date(at + 9*60*MIN), date = d.toISOString().slice(0,10);
-      if (date === today || d.getUTCDay() !== weekday || !Number(r.vehId)) return;
+      if (date < cutoff || date >= today || d.getUTCDay() !== weekday || !Number(r.vehId)) return;
       const key = r.vehId+'|'+(valid(first) ? first : at);
       if (seen.has(key)) return;
       seen.add(key); points.push({date,atMs:at,minute:d.getUTCHours()*60+d.getUTCMinutes(),vehId:Number(r.vehId),reason:r.departure_reason});
