@@ -33,13 +33,13 @@ export function NumericField({ label, value, min = 0, max = 100000000, step = 1,
       {fieldKey && context.onReset && <span className="text-[11px] text-slate-500">{source === 'user' ? '직접 입력' : '저장값·기본 추정'} <button type="button" aria-label={`${label} 기본값 복원`} onClick={() => context.onReset?.(fieldKey)}>↺</button></span>}
     </div>
     <div className="flex gap-2 items-center">
-      <input id={id} type="text" inputMode={isInteger ? 'numeric' : 'decimal'} value={draft}
+      <input id={id} data-field-key={fieldKey} type="text" inputMode={isInteger ? 'numeric' : 'decimal'} value={draft}
         aria-invalid={!!(error || externalError)} aria-describedby={`${id}-help`} autoComplete="off"
         onFocus={() => { setFocused(true); cancelled.current = false; }}
         onChange={e => { setDraft(e.target.value); setError(''); context.onValidityChange?.(fieldKey ?? label, !parseNumericDraft(e.target.value, {value,min,max:hardMax,scale,integer:isInteger}).valid); }} onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { e.preventDefault(); cancelled.current = true; context.onValidityChange?.(fieldKey ?? label, false); setDraft(String(value / scale)); e.currentTarget.blur(); } }}
         className="num w-full min-w-0 border border-slate-300 rounded-md px-3 py-2 text-right focus:ring-2 focus:ring-blue-500" />
-      {unit === '만원' ? <select aria-label={`${label} 금액 단위`} value={scale} onChange={e => { setScale(Number(e.target.value)); setFocused(false); setError(''); }} className="border rounded px-1 py-2"><option value="1">만원</option><option value="10000">억원</option></select> : <span className="text-xs whitespace-nowrap">{unit}</span>}
+      {unit === '만원' ? <select data-unit-key={fieldKey} aria-label={`${label} 금액 단위`} value={scale} onChange={e => { setScale(Number(e.target.value)); setFocused(false); setError(''); }} className="border rounded px-1 py-2"><option value="1">만원</option><option value="10000">억원</option></select> : <span className="text-xs whitespace-nowrap">{unit}</span>}
     </div>
     <div id={`${id}-help`} className="text-[11px] mt-1 text-slate-500" aria-live="polite">
       {(error || externalError) && <p role="alert" className="text-red-700">{error || externalError}</p>}
