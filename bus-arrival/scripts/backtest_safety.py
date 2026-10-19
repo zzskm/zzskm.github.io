@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chronological holdout replay; metrics are conditional interval proxies, not truth."""
+"""Historical approximation retained for the v1 report; use backtest_engine.py for production replay."""
 import argparse
 import csv
 import datetime as dt

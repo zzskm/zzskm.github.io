@@ -1,0 +1,1397 @@
+{
+  "engine": "production alarm.js; 1-second ticks; persistent ledger and reservations",
+  "audit": {
+    "invalid_timestamp": 0,
+    "duplicate_prediction": 0,
+    "duplicate_trip": 0,
+    "invalid_trip_interval": 0,
+    "unmatched_trip": 0,
+    "plate_mismatch": 0,
+    "invalid_trip_predictions": 0,
+    "excluded_gap_or_reason": 3,
+    "sample_count_mismatch": 0,
+    "missing_endpoints": 0,
+    "quick_reappearance": 1,
+    "overlapping_trip": 0,
+    "prediction_rows": 3551,
+    "arrival_rows": 143,
+    "short_track_trips": 5,
+    "reasons": {
+      "estimated_arrival": 48,
+      "observed_arrival": 92,
+      "vanished": 3
+    },
+    "matched_trips": 143,
+    "eligible_trips": 140,
+    "api_signal_trips": 0,
+    "no_bus_rows": 1725,
+    "unmatched_vehicle_rows": 16
+  },
+  "split": {
+    "cutoff": "2026-10-13",
+    "train_dates": [
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-12"
+    ],
+    "test_dates": [
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-19"
+    ]
+  },
+  "truth": "Conditional disappearance intervals; no measured actual arrivals",
+  "assumptions": {
+    "walk_sec": 300,
+    "lead_sec": 300,
+    "margin_sec": 60,
+    "delivery_delay_default_sec": 60,
+    "publication_history_measured": false,
+    "first_visibility_delay_measured": false,
+    "holidays_prealerts_replayed": false,
+    "validation_unit": "trip and entire held-out dates"
+  },
+  "holdout": {
+    "legacy_api": {
+      "0": {
+        "trips": 51,
+        "possible_miss_rate": 0.6863,
+        "certain_miss_rate": 0.549,
+        "notification_omission_rate": 0.098,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 29.0,
+        "wait_upper_mean_sec": 51.7,
+        "wait_denominator": 46,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 0.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.6,
+          "2026-10-15": 0.7,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.6
+        }
+      },
+      "60": {
+        "trips": 51,
+        "possible_miss_rate": 0.7451,
+        "certain_miss_rate": 0.5294,
+        "notification_omission_rate": 0.098,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 36.9,
+        "wait_upper_mean_sec": 56.5,
+        "wait_denominator": 46,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.8,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.6
+        }
+      },
+      "120": {
+        "trips": 51,
+        "possible_miss_rate": 0.7255,
+        "certain_miss_rate": 0.549,
+        "notification_omission_rate": 0.0784,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 39.0,
+        "wait_upper_mean_sec": 60.9,
+        "wait_denominator": 47,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 120.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.7,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.6
+        }
+      },
+      "180": {
+        "trips": 51,
+        "possible_miss_rate": 0.7255,
+        "certain_miss_rate": 0.549,
+        "notification_omission_rate": 0.0392,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 41.8,
+        "wait_upper_mean_sec": 62.7,
+        "wait_denominator": 49,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 180.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.6,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.7
+        }
+      },
+      "300": {
+        "trips": 51,
+        "possible_miss_rate": 0.7059,
+        "certain_miss_rate": 0.5686,
+        "notification_omission_rate": 0.1569,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 50.1,
+        "wait_upper_mean_sec": 74.2,
+        "wait_denominator": 43,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 300.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 0.5,
+          "2026-10-15": 0.8,
+          "2026-10-16": 0.5,
+          "2026-10-19": 0.7
+        }
+      }
+    },
+    "previous_safe": {
+      "0": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 402.4,
+        "wait_upper_mean_sec": 461.3,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 0.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      },
+      "60": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 354.7,
+        "wait_upper_mean_sec": 413.5,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      },
+      "120": {
+        "trips": 51,
+        "possible_miss_rate": 0.0392,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 302.6,
+        "wait_upper_mean_sec": 360.3,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 120.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.1
+        }
+      },
+      "180": {
+        "trips": 51,
+        "possible_miss_rate": 0.1176,
+        "certain_miss_rate": 0.0392,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 251.8,
+        "wait_upper_mean_sec": 304.7,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 180.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.2727,
+          "2026-10-14": 0.1,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.1,
+          "2026-10-19": 0.1
+        }
+      },
+      "300": {
+        "trips": 51,
+        "possible_miss_rate": 1.0,
+        "certain_miss_rate": 1.0,
+        "notification_omission_rate": 1.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": null,
+        "wait_upper_mean_sec": null,
+        "wait_denominator": 0,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 300.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 1.0,
+          "2026-10-15": 1.0,
+          "2026-10-16": 1.0,
+          "2026-10-19": 1.0
+        }
+      }
+    },
+    "safe_p05": {
+      "0": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 398.5,
+        "wait_upper_mean_sec": 457.4,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 0.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      },
+      "60": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 354.7,
+        "wait_upper_mean_sec": 413.5,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      },
+      "120": {
+        "trips": 51,
+        "possible_miss_rate": 0.0392,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 305.7,
+        "wait_upper_mean_sec": 363.3,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 120.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.1
+        }
+      },
+      "180": {
+        "trips": 51,
+        "possible_miss_rate": 0.1176,
+        "certain_miss_rate": 0.0392,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": 260.5,
+        "wait_upper_mean_sec": 313.4,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 4,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 180.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.2727,
+          "2026-10-14": 0.1,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.1,
+          "2026-10-19": 0.1
+        }
+      },
+      "300": {
+        "trips": 51,
+        "possible_miss_rate": 1.0,
+        "certain_miss_rate": 1.0,
+        "notification_omission_rate": 1.0,
+        "trip_early_coverage": 0.9608,
+        "wait_lower_mean_sec": null,
+        "wait_upper_mean_sec": null,
+        "wait_denominator": 0,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 300.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 1.0,
+          "2026-10-15": 1.0,
+          "2026-10-16": 1.0,
+          "2026-10-19": 1.0
+        }
+      }
+    },
+    "safe_p10": {
+      "0": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9216,
+        "wait_lower_mean_sec": 387.2,
+        "wait_upper_mean_sec": 446.0,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 0.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      },
+      "60": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9216,
+        "wait_lower_mean_sec": 344.2,
+        "wait_upper_mean_sec": 403.0,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      },
+      "120": {
+        "trips": 51,
+        "possible_miss_rate": 0.0392,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9216,
+        "wait_lower_mean_sec": 298.5,
+        "wait_upper_mean_sec": 356.2,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 120.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.1
+        }
+      },
+      "180": {
+        "trips": 51,
+        "possible_miss_rate": 0.1176,
+        "certain_miss_rate": 0.0392,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9216,
+        "wait_lower_mean_sec": 253.7,
+        "wait_upper_mean_sec": 306.7,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 3,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 180.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.2727,
+          "2026-10-14": 0.1,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.1,
+          "2026-10-19": 0.1
+        }
+      },
+      "300": {
+        "trips": 51,
+        "possible_miss_rate": 1.0,
+        "certain_miss_rate": 1.0,
+        "notification_omission_rate": 1.0,
+        "trip_early_coverage": 0.9216,
+        "wait_lower_mean_sec": null,
+        "wait_upper_mean_sec": null,
+        "wait_denominator": 0,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 300.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0,
+          "2026-10-14": 1.0,
+          "2026-10-15": 1.0,
+          "2026-10-16": 1.0,
+          "2026-10-19": 1.0
+        }
+      }
+    },
+    "research_bucket_only": {
+      "60": {
+        "trips": 51,
+        "possible_miss_rate": 0.0196,
+        "certain_miss_rate": 0.0196,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.8431,
+        "wait_lower_mean_sec": 343.8,
+        "wait_upper_mean_sec": 402.7,
+        "wait_denominator": 51,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 727.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909,
+          "2026-10-14": 0.0,
+          "2026-10-15": 0.0,
+          "2026-10-16": 0.0,
+          "2026-10-19": 0.0
+        }
+      }
+    }
+  },
+  "rolling": {
+    "2026-10-02": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.7,
+        "certain_miss_rate": 0.5,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 63.7,
+        "wait_upper_mean_sec": 91.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 702.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-02": 0.7
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 312.0,
+        "wait_upper_mean_sec": 372.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 702.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-02": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 312.0,
+        "wait_upper_mean_sec": 372.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 702.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-02": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 312.0,
+        "wait_upper_mean_sec": 372.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 702.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-02": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.8,
+        "wait_lower_mean_sec": 312.0,
+        "wait_upper_mean_sec": 372.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 702.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-02": 0.0
+        }
+      }
+    },
+    "2026-10-06": {
+      "legacy_api": {
+        "trips": 11,
+        "possible_miss_rate": 0.6364,
+        "certain_miss_rate": 0.4545,
+        "notification_omission_rate": 0.0909,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 16.2,
+        "wait_upper_mean_sec": 45.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-06": 0.6364
+        }
+      },
+      "previous_safe": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 351.5,
+        "wait_upper_mean_sec": 406.1,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-06": 0.0909
+        }
+      },
+      "safe_p05": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 355.4,
+        "wait_upper_mean_sec": 409.9,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-06": 0.0909
+        }
+      },
+      "safe_p10": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.8182,
+        "wait_lower_mean_sec": 351.0,
+        "wait_upper_mean_sec": 405.5,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-06": 0.0909
+        }
+      },
+      "research_bucket_only": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.8182,
+        "wait_lower_mean_sec": 355.4,
+        "wait_upper_mean_sec": 409.9,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-06": 0.0909
+        }
+      }
+    },
+    "2026-10-07": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.7,
+        "certain_miss_rate": 0.6,
+        "notification_omission_rate": 0.2,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 15.4,
+        "wait_upper_mean_sec": 41.5,
+        "wait_denominator": 8,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 606.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-07": 0.7
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.2,
+        "certain_miss_rate": 0.2,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 293.3,
+        "wait_upper_mean_sec": 346.7,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 606.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-07": 0.2
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.2,
+        "certain_miss_rate": 0.2,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 293.3,
+        "wait_upper_mean_sec": 346.7,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 606.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-07": 0.2
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.2,
+        "certain_miss_rate": 0.2,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 292.1,
+        "wait_upper_mean_sec": 345.4,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 606.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-07": 0.2
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.2,
+        "certain_miss_rate": 0.2,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.8,
+        "wait_lower_mean_sec": 288.7,
+        "wait_upper_mean_sec": 342.0,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 606.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-07": 0.2
+        }
+      }
+    },
+    "2026-10-08": {
+      "legacy_api": {
+        "trips": 11,
+        "possible_miss_rate": 0.6364,
+        "certain_miss_rate": 0.4545,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 69.4,
+        "wait_upper_mean_sec": 95.9,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-08": 0.6364
+        }
+      },
+      "previous_safe": {
+        "trips": 11,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 335.1,
+        "wait_upper_mean_sec": 395.1,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-08": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 11,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 335.1,
+        "wait_upper_mean_sec": 395.1,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-08": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 11,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9091,
+        "wait_lower_mean_sec": 332.8,
+        "wait_upper_mean_sec": 392.8,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-08": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 11,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 332.8,
+        "wait_upper_mean_sec": 392.8,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 709.1,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-08": 0.0
+        }
+      }
+    },
+    "2026-10-12": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.9,
+        "certain_miss_rate": 0.8,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 13.1,
+        "wait_upper_mean_sec": 20.8,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 654.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-12": 0.9
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 288.4,
+        "wait_upper_mean_sec": 348.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 654.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-12": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 288.4,
+        "wait_upper_mean_sec": 348.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 654.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-12": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 282.9,
+        "wait_upper_mean_sec": 342.9,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 654.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-12": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 286.3,
+        "wait_upper_mean_sec": 346.3,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 654.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-12": 0.0
+        }
+      }
+    },
+    "2026-10-13": {
+      "legacy_api": {
+        "trips": 11,
+        "possible_miss_rate": 1.0,
+        "certain_miss_rate": 0.6364,
+        "notification_omission_rate": 0.1818,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 0,
+        "wait_upper_mean_sec": 7.1,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 643.6,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 1.0
+        }
+      },
+      "previous_safe": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 311.3,
+        "wait_upper_mean_sec": 365.8,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 643.6,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909
+        }
+      },
+      "safe_p05": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 311.3,
+        "wait_upper_mean_sec": 365.8,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 643.6,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909
+        }
+      },
+      "safe_p10": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9091,
+        "wait_lower_mean_sec": 297.7,
+        "wait_upper_mean_sec": 352.3,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 643.6,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909
+        }
+      },
+      "research_bucket_only": {
+        "trips": 11,
+        "possible_miss_rate": 0.0909,
+        "certain_miss_rate": 0.0909,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9091,
+        "wait_lower_mean_sec": 297.4,
+        "wait_upper_mean_sec": 351.9,
+        "wait_denominator": 11,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 0.0,
+        "first_recognition_lead_mean_sec": 643.6,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-13": 0.0909
+        }
+      }
+    },
+    "2026-10-14": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.8,
+        "certain_miss_rate": 0.5,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 16.5,
+        "wait_upper_mean_sec": 29.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 798.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-14": 0.8
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 384.0,
+        "wait_upper_mean_sec": 444.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 798.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-14": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 384.0,
+        "wait_upper_mean_sec": 444.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 798.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-14": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 379.9,
+        "wait_upper_mean_sec": 439.9,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 798.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-14": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 379.7,
+        "wait_upper_mean_sec": 439.7,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 798.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-14": 0.0
+        }
+      }
+    },
+    "2026-10-15": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.8,
+        "certain_miss_rate": 0.5,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 44.1,
+        "wait_upper_mean_sec": 61.9,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 726.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-15": 0.8
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 346.2,
+        "wait_upper_mean_sec": 406.2,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 726.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-15": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 346.2,
+        "wait_upper_mean_sec": 406.2,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 726.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-15": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 337.8,
+        "wait_upper_mean_sec": 397.8,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 726.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-15": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 342.8,
+        "wait_upper_mean_sec": 402.8,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 480.0,
+        "first_recognition_lead_mean_sec": 726.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-15": 0.0
+        }
+      }
+    },
+    "2026-10-16": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.5,
+        "certain_miss_rate": 0.5,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 97.0,
+        "wait_upper_mean_sec": 130.3,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 756.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-16": 0.5
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 382.4,
+        "wait_upper_mean_sec": 442.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 756.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-16": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 382.4,
+        "wait_upper_mean_sec": 442.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 756.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-16": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 373.2,
+        "wait_upper_mean_sec": 433.2,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 756.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-16": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 1.0,
+        "wait_lower_mean_sec": 372.8,
+        "wait_upper_mean_sec": 432.8,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 420.0,
+        "first_recognition_lead_mean_sec": 756.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-16": 0.0
+        }
+      }
+    },
+    "2026-10-19": {
+      "legacy_api": {
+        "trips": 10,
+        "possible_miss_rate": 0.6,
+        "certain_miss_rate": 0.5,
+        "notification_omission_rate": 0.1,
+        "trip_early_coverage": 0.0,
+        "wait_lower_mean_sec": 29.0,
+        "wait_upper_mean_sec": 56.8,
+        "wait_denominator": 9,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 360.0,
+        "first_recognition_lead_mean_sec": 720.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-19": 0.6
+        }
+      },
+      "previous_safe": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 354.1,
+        "wait_upper_mean_sec": 414.1,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 360.0,
+        "first_recognition_lead_mean_sec": 720.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-19": 0.0
+        }
+      },
+      "safe_p05": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 354.1,
+        "wait_upper_mean_sec": 414.1,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 360.0,
+        "first_recognition_lead_mean_sec": 720.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-19": 0.0
+        }
+      },
+      "safe_p10": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.9,
+        "wait_lower_mean_sec": 337.0,
+        "wait_upper_mean_sec": 397.0,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 360.0,
+        "first_recognition_lead_mean_sec": 720.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-19": 0.0
+        }
+      },
+      "research_bucket_only": {
+        "trips": 10,
+        "possible_miss_rate": 0.0,
+        "certain_miss_rate": 0.0,
+        "notification_omission_rate": 0.0,
+        "trip_early_coverage": 0.8,
+        "wait_lower_mean_sec": 336.4,
+        "wait_upper_mean_sec": 396.4,
+        "wait_denominator": 10,
+        "uncertain_alert_trips": 0,
+        "first_recognition_lead_min_sec": 360.0,
+        "first_recognition_lead_mean_sec": 720.0,
+        "first_delivery_delay_mean_sec": 60.0,
+        "daily_possible_miss_rates": {
+          "2026-10-19": 0.0
+        }
+      }
+    }
+  },
+  "research_policy": "bucket-only margins are evaluated for waiting-time reduction; production retains the global floor",
+  "engine_sha256": "7d36f41d06ea85d10fa06bcdbab6325b408996467fe198e57f7f5a18edca90e3",
+  "reference_engine_sha256": "bbe158dc99812bccdbaea13bb7fe2b6ff52056f1cd02ea0af14e063dd36eeaee",
+  "source": {
+    "git_ref": "245ffa3690d2e45bf7a5524620d0de4fe6c5fb2c",
+    "sha256": {
+      "predict_log.csv": "a521efd9fb2fa4c706ee4b4059d4b7051b69497aae8ab4890e97a93f7233cfd4",
+      "arrival_log.csv": "c0720737074d1396e9446cf10b0650bca95ae492573bea81054dd2c95558baac"
+    }
+  }
+}
