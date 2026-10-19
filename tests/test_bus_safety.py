@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / 'bus-arrival/scripts'))
 import safety_model as M
 import backtest_safety as B
 import prepare_publish as P
+import verify_runtime as V
 from test_bus_arrival_logic import SCRAPER, bus, simulate, NO_BUS
 
 START = dt.datetime(2026, 10, 19, 18, tzinfo=M.KST)
@@ -68,7 +69,7 @@ class SafetyDataTests(unittest.TestCase):
         trip = trips[0]
         model = M.fit_model([{**trip,'rows':trip['rows']*100}])
         self.assertEqual(model['bins']['global']['trips'], 1)
-        self.assertEqual(model['bins']['global']['offset_sec'], -240)
+        self.assertEqual(model['bins']['global']['offset_sec'], -660)
         self.assertEqual(M.lower_quantile(list(range(20)), .05), 0)
         self.assertIsNone(M.lower_quantile(list(range(19)), .05))
         self.assertEqual(M.lower_quantile(list(range(20)), .10), 1)
@@ -156,7 +157,7 @@ class SafetyDataTests(unittest.TestCase):
             self.assertEqual(len(times),1)  # same ID, so this is specifically the imminent-publication boundary
         with tempfile.TemporaryDirectory() as d:
             times=[]
-            simulate(d,[bus(11,1500,4),bus(11,1440,4)],START,state=initial,poll_times=times,extra_args=('--exit-on-change',))
+            simulate(d,[bus(11,2400,4),bus(11,2340,4)],START,state=initial,poll_times=times,extra_args=('--exit-on-change',))
             self.assertEqual(len(times),2)
             self.assertFalse(json.loads((Path(d)/'status.json').read_text())['urgent_publication'])
 
@@ -186,6 +187,56 @@ publish
         self.assertEqual(conflict.stdout.count('rebase-aborted'),3)
         self.assertNotIn('reset',conflict.stderr)
         self.assertNotIn('checkout',conflict.stderr)
+
+    def test_training_freshness_ignores_recent_ineligible_trips(self):
+        trips,_=M.match_trips([row(0),row(60),row(120,vid='22')],[arrival()])
+        older={**trips[0],'day':'2026-09-28'}
+        recent={**trips[0],'id':'rejected','day':'2026-10-18','eligible':False}
+        fitted=M.fit_model([older,recent])
+        self.assertEqual(fitted['trained_through'],'2026-09-28')
+        self.assertEqual(fitted['training_days'],['2026-09-28'])
+        self.assertIsNone(M.fit_model([recent])['trained_through'])
+
+    def test_stale_model_retains_the_larger_margin_without_becoming_fresh(self):
+        model={'version':2,'trained_through':'2026-09-28','bins':{'global':{
+            'method':'trip_lower_quantile','offset_sec':-788,'mean_offset_sec':-100,'trips':30}}}
+        stale=M.model_for_day(model,'2026-10-19')
+        self.assertEqual(stale['model_status'],'retained_stale_margin')
+        output=M.safety_prediction(stale,row(0,1800))
+        self.assertEqual(output['offset_sec'],-788)
+        self.assertEqual(output['method'],'retained_margin')
+        self.assertEqual(output['sample_trips'],0)
+        self.assertEqual(M.model_for_day({**model,'trained_through':'2026-10-20'},'2026-10-19')['model_status'],'invalid_training_date')
+        self.assertEqual(M.safety_prediction(M.model_for_day({},'2026-10-19'),row(0))['offset_sec'],-660)
+        self.assertEqual(M.model_for_day({**model,'bins':[]},'2026-10-19')['model_status'],'unavailable')
+
+    def test_safe_horizon_requests_publication_without_increasing_api_polls(self):
+        output=M.publication_decision(1200,3,{'safe_arrival_ts':row(549)['ts_kst']},row(0)['ts_kst'])
+        self.assertEqual(output['publication_reason'],'safe_horizon')
+        self.assertEqual(output['publish_interval_sec'],60)
+        self.assertFalse(M.publication_decision(2400,3,{'safe_arrival_ts':row(1740)['ts_kst']},row(0)['ts_kst'])['urgent_publication'])
+
+    def test_historical_cluster_spans_half_hour_boundary(self):
+        trips=[]
+        for index,days in enumerate((7,14,21,28)):
+            start=START-dt.timedelta(days=days)+dt.timedelta(minutes=29 if index%2 else 31)
+            trips.append({'eligible':True,'day':start.date().isoformat(),'lower':start.timestamp()})
+        h=M.historical_slots(trips,{'years':[2026],'dates':{}},'2026-10-19')
+        self.assertEqual(len(h['slots']),1)
+        self.assertEqual(h['slots'][0]['sample_days'],4)
+
+    def test_runtime_contract_detects_partial_rollout_and_verifies_simulated_artifacts(self):
+        self.assertTrue(V.validate({},{}))
+        with tempfile.TemporaryDirectory() as d:
+            simulate(d,[bus(11,1200,3)],START)
+            p=Path(d)/'status.json'
+            P.prepare(p,START+dt.timedelta(seconds=1))
+            summary={'runtime_schema_version':2,'generated_at':START.isoformat(),
+                     'safety_model':{'version':2,'model_status':'insufficient_support'}}
+            status=json.loads(p.read_text())
+            self.assertEqual(V.validate(summary,status),[])
+            self.assertEqual(status['runtime_schema_version'],2)
+            self.assertEqual(status['publication_reason'],'safe_horizon')
 
 
 if __name__ == '__main__':

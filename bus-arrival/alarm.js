@@ -177,12 +177,12 @@
       var corrected = Date.parse(safety.corrected_arrival_ts);
       var matches = Date.parse(safety.observation_ts) === pollMs;
       var validSafety = matches && Number.isFinite(safeAt) && safeAt <= snap.arrivalAtMs
-        && (safety.method === "fixed_margin" || (safety.method === "trip_lower_quantile" && Number(safety.sample_trips) >= 20));
+        && ((safety.method === "fixed_margin" || safety.method === "retained_margin") || (safety.method === "trip_lower_quantile" && Number(safety.sample_trips) >= 20));
       snap.safetyEnabled = true;
       snap.safeArrivalAtMs = validSafety
-        ? safeAt : snap.arrivalAtMs - 240000;
+        ? safeAt : snap.arrivalAtMs - 660000;
       snap.correctedArrivalAtMs = validSafety && Number.isFinite(corrected) ? corrected : snap.arrivalAtMs;
-      snap.safetyMethod = validSafety && safety.method === "trip_lower_quantile" ? "trip_lower_quantile" : "fixed_margin";
+      snap.safetyMethod = validSafety ? safety.method : "fixed_margin";
       snap.sampleTrips = validSafety ? Number(safety.sample_trips) || 0 : 0;
       snap.stalled = validSafety && safety.stalled_last_stop === true;
     }
@@ -215,10 +215,11 @@
       candidates[0].safeArrivalAtMs = snap.safeArrivalAtMs;
       candidates[0].correctedArrivalAtMs = snap.correctedArrivalAtMs;
       candidates[0].safetyMethod = snap.safetyMethod;
+      candidates[0].pollMs = snap.pollMs;
     }
     if (snap.next) {
       var next = { vehId: snap.next.vehId, arrivalAtMs: snap.next.arrivalAtMs, source: "next" };
-      if (snap.safetyEnabled) { next.safeArrivalAtMs = next.arrivalAtMs - 240000; next.safetyMethod = "fixed_margin"; }
+      if (snap.safetyEnabled) { next.safeArrivalAtMs = next.arrivalAtMs - 660000; next.safetyMethod = "fixed_margin"; next.pollMs = snap.pollMs; }
       candidates.push(next);
     }
     var outside = false;
@@ -257,6 +258,16 @@
     var target = picked.target;
     view.outside = picked.outsideWindow;
     var reliable = snap.why === "ok" || snap.why === "no_bus";
+    var uncertain = false;
+    // A validated reservation survives a short publication outage, with explicit uncertainty.
+    // Never manufacture a target from a stale snapshot first seen after reload.
+    if (!target && prev && Number.isFinite(prev.safeArrivalAtMs) && Number.isFinite(prev.pollMs)
+        && ["too_old", "api_error", "bad"].indexOf(snap.why) !== -1
+        && nowMs >= prev.pollMs && nowMs - prev.pollMs <= 10 * MIN && prev.arrivalAtMs > nowMs
+        && !isSkipped(ledger, prev.vehId, prev.arrivalAtMs) && inWindows(cfg.windows, prev.arrivalAtMs)) {
+      target = Object.assign({}, prev);
+      uncertain = true;
+    }
 
     // 알람 없이 차량이 사라짐/교체됨 (신뢰할 수 있는 스냅샷에서만 판단한다)
     if (prev && reliable && (!target || target.vehId !== prev.vehId)) {
@@ -314,19 +325,23 @@
           type: "fire", kind: kind, vehId: target.vehId, arrivalAtMs: target.arrivalAtMs,
           leads: loud.map(function (d) { return d.n; }).sort(function (a, b) { return b - a; }),
           remainingSec: remainingSec,
+          ...(uncertain ? { uncertain: true } : {}),
           ...(safetyMode ? { safeArrivalAtMs: target.safeArrivalAtMs, safetyMethod: target.safetyMethod,
                               safeDepartureAtMs: view.safeDepartureAtMs } : {})
         });
       }
     }
 
-    view.state = "armed";
+    view.state = uncertain ? "unavailable" : "armed";
+    view.pendingUncertain = uncertain;
     view.nextFireAtMs = pendingFireAts.length ? Math.min.apply(null, pendingFireAts) : null;
     view.done = view.nextFireAtMs === null;
     return { actions: actions, view: view, ledger: ledger, prevTarget: target };
   }
 
   function formatFireMessage(fire) {
+    if (fire.uncertain) return { title:"3100번 예약 출발 경고 · 최신 정보 없음",
+      body:"마지막 정상 정보로 예약한 출발 시점입니다. 차량 위치·도착은 현재 미확인입니다. 출발 여부를 확인하세요." };
     if (Number.isFinite(fire.safeArrivalAtMs)) {
       return { title: "3100번 안전 출발 알림", body: "조기 도착 가능성을 반영한 출발 시점입니다. 실제 도착은 미확인"
         + (fire.kind === "late" ? " · 안전 출발 시점이 이미 지났을 수 있습니다" : "") };
@@ -343,7 +358,7 @@
 
 
   // Historical prealerts use a separate persistent ledger; a slot has no vehicle ID yet.
-  // Associate only one plausible real-time candidate, then transfer fired leads once.
+  // A time-slot candidate is not a verified vehicle identity. Keep the real-time ledger intact.
   function evaluateHistorical(input) {
     var cfg = sanitizeConfig(input.cfg), now = input.nowMs, snap = input.snap || {};
     var history = input.history || {}, day = kstParts(now), actions = [];
@@ -372,8 +387,7 @@
         var slot = matches[0], entry = ledger[slot.id];
         if (entry && entry.leads.length && !entry.vehId) {
           entry.vehId = snap.vehId;
-          entry.leads.forEach(function (n) { busLedger.fired[snap.vehId + "|" + n] = { a:snap.arrivalAtMs, k:"historical" }; });
-          actions.push({ type:"historical_confirmed", vehId:snap.vehId, slotId:slot.id });
+          actions.push({ type:"historical_candidate", vehId:snap.vehId, slotId:slot.id });
         }
       }
       return { ledger:ledger, busLedger:busLedger, actions:actions };

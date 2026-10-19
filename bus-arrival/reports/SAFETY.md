@@ -1,5 +1,7 @@
 # 3100번 안전 출발 보정: 분석·운영·검증
 
+이 문서는 최초 구현의 기록이다. 현재 예약·모델·사전 준비 정책과 실제 엔진 검증은 [후속 개선](RELIABILITY.md)을 참조한다.
+
 분석 입력: `120a0873c5d2f9effbf06b6af242859122aeb14a`의 공개 로그. 원본 CSV와 현재 운영 JSON은 이 PR에서 변경하지 않는다. 재현 결과와 입력 SHA-256은 [safety-backtest.json](safety-backtest.json)에 있다.
 
 ## 데이터에서 확인한 문제

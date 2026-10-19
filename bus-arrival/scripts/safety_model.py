@@ -9,8 +9,8 @@ import math
 from collections import Counter, defaultdict
 
 KST = dt.timezone(dt.timedelta(hours=9))
-VERSION = 1
-FALLBACK_SEC = 240
+VERSION = 2
+FALLBACK_SEC = 660
 MIN_TRIPS = 20
 MAX_GAP_SEC = 180
 
@@ -134,13 +134,16 @@ def lower_quantile(values, alpha):
 
 def fit_model(trips, alpha=.05):
     groups, means = defaultdict(list), defaultdict(list)
-    seen_trips = set()
+    seen_trips, trained_days = set(), set()
     for t in trips:
         if t['id'] in seen_trips:
             continue
         seen_trips.add(t['id'])
         if not t['eligible']:
             continue
+        if not t['rows']:
+            continue
+        trained_days.add(t['day'])
         errors = defaultdict(list)
         for r in t['rows']:
             residual = t['lower'] - (r['_t'] + r['_p'])
@@ -156,22 +159,71 @@ def fit_model(trips, alpha=.05):
                      'mean_offset_sec': round(sum(means[key]) / len(means[key])),
                      'method': 'trip_lower_quantile' if q is not None else 'fixed_margin'}
     return {'version': VERSION, 'alpha': alpha, 'min_trips': MIN_TRIPS, 'fallback_sec': FALLBACK_SEC,
-            'trained_through': max((t['day'] for t in trips), default=None), 'bins': bins,
+            'trained_through': max(trained_days, default=None), 'training_days': sorted(trained_days),
+            'bins': bins, 'model_status': 'ready' if bins.get('global', {}).get('method') == 'trip_lower_quantile' else 'insufficient_support',
             'arrival_truth': 'conditional_interval_not_measured'}
 
 
 def calibration(model, row):
     bins = model.get('bins', {})
     b = bins.get(bucket(row), {})
-    if b.get('method') != 'trip_lower_quantile':
+    if b.get('method') not in ('trip_lower_quantile', 'retained_margin'):
         b = bins.get('global', {})
     b = b or {'offset_sec': -FALLBACK_SEC, 'mean_offset_sec': 0, 'method': 'fixed_margin', 'trips': 0}
     # One trip contributes multiple horizon bins. A global trip-worst floor avoids
     # claiming that several marginal tail estimates jointly give 95% coverage.
     global_bin = bins.get('global', {})
-    if global_bin.get('method') == 'trip_lower_quantile':
+    if model.get('use_global_floor', True) and global_bin.get('method') in ('trip_lower_quantile', 'retained_margin'):
         b = {**b, 'offset_sec': min(b['offset_sec'], global_bin['offset_sec'])}
     return b
+
+
+def model_for_day(model, today):
+    """A stale calibration is only a conservative retained margin, not a fresh model."""
+    fallback = {'version': VERSION, 'bins': {}, 'model_status': 'unavailable', 'fallback_sec': FALLBACK_SEC}
+    if not isinstance(model, dict) or model.get('version') not in (1, VERSION):
+        return fallback
+    try:
+        age = (dt.date.fromisoformat(today) - dt.date.fromisoformat(model.get('trained_through'))).days
+    except (TypeError, ValueError):
+        return fallback
+    if age < 1:
+        return {**fallback, 'model_status': 'invalid_training_date'}
+    bins = {}
+    raw_bins = model.get('bins')
+    if not isinstance(raw_bins, dict):
+        return fallback
+    for key, entry in raw_bins.items():
+        if not isinstance(entry, dict):
+            continue
+        offset = number(entry.get('offset_sec'))
+        support = number(entry.get('trips'))
+        if offset is None or offset > 0 or support is None or support < MIN_TRIPS or entry.get('method') != 'trip_lower_quantile':
+            continue
+        bins[key] = {**entry, 'mean_offset_sec': number(entry.get('mean_offset_sec')) or 0}
+    if 'global' not in bins:
+        return {**fallback, 'model_status': 'insufficient_support'}
+    retained = age > 14 or model.get('version') == 1
+    if retained:
+        bins = {key: {**e, 'offset_sec': min(e['offset_sec'], -FALLBACK_SEC),
+                      'mean_offset_sec': 0, 'method': 'retained_margin', 'trips': 0} for key, e in bins.items()}
+    return {**model, 'bins': bins, 'model_status': 'retained_stale_margin' if retained else 'ready'}
+
+
+def publication_decision(predict_sec, location_no, safety, poll_ts, threshold=900):
+    """Run after an existing poll; safety horizon can be earlier than the raw API ETA."""
+    p, loc = number(predict_sec), number(location_no)
+    safe_ts = timestamp((safety or {}).get('safe_arrival_ts'))
+    now = timestamp(poll_ts)
+    reason = 'normal'
+    if loc is not None and loc <= 2:
+        reason = 'near_stop'
+    elif p is not None and p <= threshold:
+        reason = 'api_horizon'
+    elif safe_ts is not None and now is not None and safe_ts - now <= threshold:
+        reason = 'safe_horizon'
+    return {'urgent_publication': reason != 'normal', 'publish_interval_sec': 60 if reason != 'normal' else 300,
+            'publication_reason': reason}
 
 
 def safety_prediction(model, row, near_anchor=None):
@@ -189,7 +241,8 @@ def safety_prediction(model, row, near_anchor=None):
             'safe_arrival_ts': dt.datetime.fromtimestamp(safe, KST).isoformat(),
             'offset_sec': round(safe - api), 'method': c['method'], 'sample_trips': c['trips'],
             'alpha': model.get('alpha', .05), 'stalled_last_stop': stalled,
-            'confidence': 'conditional_estimate', 'observation_ts': row.get('ts_kst')}
+            'confidence': 'conditional_estimate', 'observation_ts': row.get('ts_kst'),
+            'model_status': model.get('model_status', 'unavailable'), 'fallback_sec': FALLBACK_SEC}
 
 
 def historical_slots(trips, holidays, today):
@@ -198,15 +251,20 @@ def historical_slots(trips, holidays, today):
     result = {'date': today, 'slots': [], 'source': 'historical_not_realtime'}
     if date.isoweekday() > 5 or date.year not in holidays.get('years', []) or today in holidays.get('dates', {}):
         return result
-    groups = defaultdict(list)
+    points = []
     for t in trips:
         day = dt.date.fromisoformat(t['day'])
         if not t['eligible'] or not 0 < (date-day).days <= 42 or day.weekday() != date.weekday() or t['day'] in holidays.get('dates', {}):
             continue
         clock = dt.datetime.fromtimestamp(t['lower'], KST)
         seconds = clock.hour * 3600 + clock.minute * 60 + clock.second
-        groups[seconds // 1800].append((t['day'], seconds))
-    for key, vals in sorted(groups.items()):
+        points.append((t['day'], seconds))
+    groups = []
+    for point in sorted(points, key=lambda p: p[1]):
+        if not groups or point[1] - groups[-1][0][1] > 900:
+            groups.append([])
+        groups[-1].append(point)
+    for key, vals in enumerate(groups):
         dates = {d for d, _ in vals}
         times = [s for _, s in vals]
         # Multiple runs in one slot are ambiguous: do not guess vehicle identity.
