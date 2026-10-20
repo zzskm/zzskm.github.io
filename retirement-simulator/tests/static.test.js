@@ -16,6 +16,6 @@ for(const file of files){
   }
  }
 }
-const html=readFileSync(path.join(root,'index.html'),'utf8');
+const html=readFileSync(path.join(root,'app/index.html'),'utf8');
 assert.match(html,/type="module"/);assert.doesNotMatch(html,/text\/babel|esm\.sh|cdn\.tailwindcss/);
 console.log(`Static import graph: ${files.length} modules valid`);

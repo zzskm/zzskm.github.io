@@ -10,6 +10,11 @@ createServer(async(req,res)=>{
   let file;
   if(pathname==='/retirement_simulator.html')file=path.join(root,'../retirement_simulator.html');
   else if(pathname==='/retirement_favicon.svg')file=path.join(root,'../retirement_favicon.svg');
+  else if(pathname.startsWith('/published-retirement-simulator/')){
+   const relative=pathname.slice('/published-retirement-simulator/'.length)||'index.html';
+   if(relative!=='index.html'&&!/^assets\/[^/]+$/.test(relative)){res.writeHead(404).end();return;}
+   file=path.resolve(root,relative);
+  }
   else if(pathname.startsWith('/retirement-simulator/')){
    const relative=pathname.slice('/retirement-simulator/'.length)||'index.html';
    file=path.resolve(root,'dist',relative);

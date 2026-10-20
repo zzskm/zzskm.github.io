@@ -126,3 +126,12 @@ test('repeated imports can be exported and the complete backup restored',async({
  await page.evaluate(()=>{localStorage.removeItem('retirement-sim-v5');});await page.reload();await page.locator('input[type="file"]').setInputFiles({name:'restored.json',mimeType:'application/json',buffer});
  await expect.poll(async()=>(await stored(page)).scenarios.length).toBe(14);
 });
+test('branch Pages entry serves compiled modules with JavaScript MIME types',async({page,request})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/published-retirement-simulator/');
+ await expect(page.getByRole('heading',{name:'은퇴 현금흐름 시뮬레이터'})).toBeVisible();
+ await expect(page.getByText('이 모델의 표본에서',{exact:false})).toBeVisible();
+ const scripts=await page.locator('script[src]').evaluateAll(nodes=>nodes.map(n=>n.src));expect(scripts.length).toBeGreaterThan(0);
+ for(const src of scripts){expect(new URL(src).pathname).toMatch(/\/assets\/[^/]+\.js$/);const response=await request.get(src);expect(response.ok()).toBe(true);expect(response.headers()['content-type']).toMatch(/javascript/);}
+ expect(errors).toEqual([]);
+});
