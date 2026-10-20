@@ -12,7 +12,7 @@ def test_legacy_redirect():
     assert 'location.search + location.hash' in html
 
 def test_static_build():
-    html = (APP / 'index.html').read_text()
+    html = (APP / 'app/index.html').read_text()
     assert 'type="module"' in html
     for old in ['text/babel', 'cdn.tailwindcss', 'esm.sh']:
         assert old not in html
