@@ -18,7 +18,7 @@ def test_bus_arrival_eta_splits_number_and_unit():
     """긴 한글 문장을 거대 폰트로 렌더하지 않고 숫자/단위를 분리한다."""
     assert 'id="eta-num"' in HTML
     assert 'id="eta-unit"' in HTML
-    assert ".eta-num { font-size:clamp(30px,8vw,46px)" in HTML
+    assert ".eta-num { font-size:22px; }" in HTML
     assert "function etaParts(sec)" in HTML
 
 
@@ -99,7 +99,7 @@ def test_bus_arrival_cards_prioritise_decision_inputs():
 
 def test_bus_arrival_chart_plots_current_vehicle_trend():
     """API 이력과 현재 보정 한 건을 구분하고 관측 공백을 연결하지 않는다."""
-    assert 'BD.currentSeries(st, cache.predictions)' in HTML
+    assert 'BD.targetSeries(st, cache.predictions, dashboardView)' in HTML
     assert 'BD.splitGaps(pts,st && st.poll_interval_sec)' in HTML
     assert 'id="chart-table"' in HTML
     assert 'id="chart-arrival"' in HTML and 'id="chart-remaining"' in HTML
@@ -191,9 +191,9 @@ def test_bus_arrival_alarm_survives_hidden_tabs_and_reloads():
     assert 'window.addEventListener("pageshow"' in HTML
     # 재로드 뒤 소리 잠김은 첫 사용자 입력에서 푼다
     assert '["pointerdown", "keydown"].forEach(ev => window.addEventListener(ev, unlockAudio))' in HTML
-    assert "소리 잠김 · 클릭하여 활성화" in HTML
+    assert '["#alarm-sound",readiness.sound,readiness.soundReady]' in HTML
     # 저장소를 쓸 수 없는 환경에서도 동작한다
-    assert "catch (e) { /* 저장 불가 환경 */ }" in HTML
+    assert "catch (e) { /* 저장 불가 환경 */ return false; }" in HTML
 
 
 def test_bus_arrival_alarm_can_be_tried_without_a_real_bus():
@@ -205,7 +205,8 @@ def test_bus_arrival_alarm_can_be_tried_without_a_real_bus():
 def test_bus_arrival_walk_stepper_and_tab_title():
     """도보 시간은 −/+ 스텝퍼로 바로 저장하고, 탭 제목/파비콘에 남은 시간을 보여 준다."""
     assert 'id="walk-dec"' in HTML and 'id="walk-inc"' in HTML
-    assert 'walkInput.addEventListener("input"' in HTML
+    assert 'input.addEventListener("input"' in HTML
+    assert 'input.addEventListener("change", () => commitPreference' in HTML
     assert "min-height:44px" in HTML                    # 터치 목표
     assert 'const title = bell + (etaShort ? etaShort + " · " : "") + BASE_TITLE;' in HTML
     assert 'id="favicon"' in HTML
@@ -261,7 +262,7 @@ def test_bus_arrival_shows_same_weekday_arrivals_from_previous_weeks():
     assert 'id="alarm-history"' in HTML and 'id="alarm-history-note"' in HTML
     assert "BA.weeklyArrivalSlots({" in HTML and "BA.formatSlot(s, r.weeksWithData)" in HTML
     # 30일치 로그를 10분에 한 번만 받아 쓴다 (summary.json 의 최근 30건으로는 지난주를 알 수 없다)
-    assert 'get("arrival_log.csv", true)' in HTML
+    assert 'get("arrival_log.csv", true,generation)' in HTML
     assert "HISTORY_REFRESH_MS = 10 * 60000" in HTML
     assert "renderHistory();" in HTML
 

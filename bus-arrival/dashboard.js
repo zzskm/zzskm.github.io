@@ -9,6 +9,38 @@
   const valid = Number.isFinite;
   const stamp = value => typeof value === 'string' && value ? Date.parse(value) : NaN;
 
+  function relativeTime(atMs, nowMs) {
+    const delta = atMs - nowMs;
+    if (!valid(delta)) return '시각 미확인';
+    if (delta === 0) return '지금';
+    const minutes = delta > 0 ? Math.ceil(delta / MIN) : Math.floor(-delta / MIN);
+    return Math.abs(delta) < MIN ? (delta > 0 ? '1분 미만 남음' : '1분 미만 지남')
+      : minutes + (delta > 0 ? '분 후' : '분 지남');
+  }
+
+  function buildReadiness(input) {
+    return {
+      setting: input.enabled ? '알림 켜짐' : '알림 꺼짐',
+      permission: !input.notificationSupported ? 'OS 알림 미지원'
+        : input.permission === 'granted' ? 'OS 알림 허용'
+        : input.permission === 'denied' ? 'OS 알림 차단' : 'OS 알림 허용 필요',
+      sound: !input.audioSupported ? '소리 미지원'
+        : input.audioState === 'running' ? '소리 활성화됨' : '소리 활성화 필요',
+      permissionAction: input.notificationSupported && input.permission === 'default' ? 'request' : 'guide',
+      soundReady: input.audioState === 'running'
+    };
+  }
+
+  function targetSeries(status, rows, view) {
+    if (!view || view.state === 'skipped') return [];
+    if (Number(status && status.current_veh_id) === view.targetVehId) return currentSeries(status, rows);
+    if (valid(view.observationAtMs) && stamp(status && status.last_poll) !== view.observationAtMs) return [];
+    const poll = stamp(status && status.last_poll), sec = Number(status && status.next_predict_sec);
+    return Number(status && status.next_veh_id) === view.targetVehId && valid(poll)
+      && status.next_predict_sec != null && status.next_predict_sec !== '' && valid(sec) && sec > 0
+      ? [{t:poll, remainingSec:sec, arrivalAtMs:poll + sec * 1000}] : [];
+  }
+
   function currentSeries(status, rows) {
     if (!status || !Number(status.current_veh_id)) return [];
     const veh = Number(status.current_veh_id), poll = stamp(status.last_poll);
@@ -42,7 +74,7 @@
     const samePollTarget = av && av.target && av.target.pollMs === poll;
     const lastSuccessPoll = stamp(st && st.last_success);
     const displayPoll = apiFailed ? valid(lastSuccessPoll) ? lastSuccessPoll : observedPoll : poll;
-    const selectedNext = Boolean(input.currentSkipped === true && snap && snap.usable && av && av.state === 'armed' && samePollTarget
+    const selectedNext = Boolean(input.currentSkipped === true && !input.alarmTargetSkipped && av && ((snap && snap.usable && av.state === 'armed' && samePollTarget) || av.pendingUncertain)
       && Number(av.target.vehId) !== veh && av.target.source === 'next'
       && Number(observed && observed.next_veh_id) === Number(av.target.vehId)
       && valid(av.target.safeArrivalAtMs));
@@ -50,11 +82,15 @@
     const margin = Math.min(600, Math.max(0, Number(input.marginSec) || 0));
     const out = { state:'unknown', title:'출발 시각 확인 중', tone:'danger', departureAtMs:null,
       safeAtMs:null, correctedAtMs:null, apiAtMs:null, nextFireAtMs:null, timeline:[], changeMinutes:null,
-      ageSec:valid(displayPoll) ? Math.max(0, Math.floor((now - displayPoll) / 1000)) : null, uncertain:false, selectedNext:false };
+      ageSec:valid(displayPoll) ? Math.max(0, Math.floor((now - displayPoll) / 1000)) : null, uncertain:false, selectedNext:false,
+      observationAtMs:valid(displayPoll) ? displayPoll : null, departureElapsedSec:null };
     out.selectedNext = selectedNext;
     if (input.off) { out.state='off'; out.title=input.holiday ? '휴일 · 수집하지 않습니다' : '수집 시간 외'; out.tone='wait'; }
     else if (input.loadError || !st) { out.title='정보를 불러올 수 없습니다'; }
     else if (snap && snap.why === 'no_bus') { out.state='no_bus'; out.title='실시간에서 확인된 차량 없음'; out.tone='wait'; }
+    else if ((input.currentSkipped && !selectedNext) || input.alarmTargetSkipped) {
+      out.state='skipped'; out.title='이번 차량 제외됨 · 다음 차량 확인 중'; out.tone='wait';
+    }
     else if (snap && snap.usable && snap.arrivalAtMs <= now && !selectedNext) { out.state='elapsed'; out.title='도착 예정 시각 지남 · 통과 미확인'; out.tone='warn'; }
     else if (snap && snap.usable) {
       const target = selectedNext ? av.target : snap;
@@ -67,13 +103,19 @@
       out.stalled = !selectedNext && snap.stalled === true;
       out.departureAtMs = selectedNext && valid(av.safeDepartureAtMs)
         ? av.safeDepartureAtMs : out.safeAtMs - walk * MIN - margin * 1000;
-      const mins = Math.max(0, Math.ceil((out.departureAtMs - now) / MIN));
-      out.state = mins ? 'waiting' : 'due'; out.tone=mins ? 'wait' : 'go';
+      const delta = out.departureAtMs - now;
+      const mins = Math.max(0, Math.ceil(delta / MIN));
+      out.state = delta > 0 ? 'waiting' : delta === 0 ? 'due' : 'overdue';
+      out.tone = delta > 0 ? 'wait' : delta === 0 ? 'go' : 'warn';
+      out.departureElapsedSec = delta < 0 ? Math.floor(-delta / 1000) : null;
       const prefix = selectedNext ? '다음 차량 · ' : '';
-      out.title = prefix + (mins ? mins + '분 뒤 출발 권장' : '출발 권장 시점입니다');
+      out.title = prefix + (delta > 0 ? (delta < MIN ? '출발까지 1분 미만' : '출발까지 ' + mins + '분')
+        : delta === 0 ? '출발 권장 시점입니다'
+        : '권장 시각 ' + relativeTime(out.departureAtMs, now) + ' · 탑승 여부 확인 필요');
       if (samePollTarget && (selectedNext || Number(av.target.vehId) === veh) && valid(av.nextFireAtMs)) out.nextFireAtMs = av.nextFireAtMs;
     } else if (av && av.pendingUncertain && av.target && valid(av.safeDepartureAtMs)) {
       out.state='reserved'; out.title='최신 정보 없음 · 이전 정보 기준 예약 경고'; out.tone='warn'; out.uncertain=true;
+      out.safetyMethod=av.target.safetyMethod; out.sampleTrips=Number(av.target.sampleTrips) || 0; out.stalled=false;
       out.departureAtMs=av.safeDepartureAtMs; out.safeAtMs=av.target.safeArrivalAtMs;
       out.nextFireAtMs=av.nextFireAtMs;
     } else { out.state='unavailable'; out.title='출발 판단 보류 · 최신 정보가 필요합니다'; }
@@ -98,15 +140,22 @@
     (input.events || []).filter(e => e && e.type === 'fire' && Number(e.vehId) === timelineVeh
       && valid(e.atMs) && e.atMs >= since && e.atMs <= now && now - e.atMs < 2 * 60 * MIN)
       .forEach(e => out.timeline.push({kind:'observed',atMs:e.atMs,label:e.uncertain ? '예약 경고 실행 · 당시 최신 정보 없음' : '이 브라우저에서 알림 실행'}));
-    out.timeline.push({kind:'now',atMs:now,label:'지금'});
-    if (valid(out.nextFireAtMs)) out.timeline.push({kind:'planned',atMs:out.nextFireAtMs,label:out.uncertain ? '예약 경고 · 마지막 확인 기준' : '다음 알림'});
-    if (valid(out.departureAtMs)) out.timeline.push({kind:'planned',atMs:out.departureAtMs,label:out.uncertain ? '출발 권장 · 마지막 확인 기준' : '출발 권장',elapsed:out.departureAtMs <= now});
+    out.timeline.push({kind:'now',role:'now',atMs:now,label:'지금'});
+    if (valid(out.nextFireAtMs)) out.timeline.push({kind:'planned',role:'alarm',atMs:out.nextFireAtMs,label:out.uncertain ? '예약 경고 · 마지막 확인 기준' : '다음 알림'});
+    if (valid(out.departureAtMs)) out.timeline.push({kind:'planned',role:'departure',atMs:out.departureAtMs,label:out.uncertain ? '출발 권장 · 마지막 확인 기준' : '출발 권장',elapsed:out.departureAtMs < now});
     if (valid(out.safeAtMs)) out.timeline.push({kind:'planned',atMs:out.safeAtMs,label:out.uncertain ? '조기 도착 대비 · 마지막 확인 기준' : '조기 도착 대비 기준',elapsed:out.safeAtMs <= now});
-    if (valid(out.correctedAtMs)) out.timeline.push({kind:'planned',atMs:out.correctedAtMs,label:'보정 도착 예상 · 실제 도착 미측정',elapsed:out.correctedAtMs <= now});
+    if (valid(out.correctedAtMs)) out.timeline.push({kind:'planned',role:'arrival',atMs:out.correctedAtMs,label:'도착 예상 · 실제 도착 미측정',elapsed:out.correctedAtMs < now});
     out.timeline.sort((a, b) => a.atMs - b.atMs || ({now:0,observed:1,planned:2}[a.kind] - {now:0,observed:1,planned:2}[b.kind]));
-    if ((out.uncertain || selectedNext) && valid(av.target.pollMs)) out.ageSec = Math.max(0, Math.floor((now - av.target.pollMs) / 1000));
+    out.summaryTimeline = out.timeline.filter(e => e.role);
+    out.detailTimeline = out.timeline.filter(e => !e.role);
+    if ((out.uncertain || selectedNext) && valid(av.target.pollMs)) {
+      out.observationAtMs = av.target.pollMs;
+      out.ageSec = Math.max(0, Math.floor((now - av.target.pollMs) / 1000));
+    }
+    out.comparisonKey = [out.targetVehId, selectedNext ? 'next' : 'current', observed && observed.first_seen_ts || '', walk, margin].join('|');
     const prev = input.previous;
-    if (prev && prev.vehId === veh && prev.pollMs < poll && valid(prev.departureAtMs) && valid(out.departureAtMs) && !out.uncertain) {
+    if (prev && prev.vehId === out.targetVehId && (!prev.comparisonKey || prev.comparisonKey === out.comparisonKey)
+      && prev.pollMs < poll && valid(prev.departureAtMs) && valid(out.departureAtMs) && !out.uncertain) {
       out.changeMinutes = Math.round((out.departureAtMs - prev.departureAtMs) / MIN);
     }
     return out;
@@ -140,5 +189,5 @@
     });
     return groups;
   }
-  return { currentSeries, buildView, splitGaps, historyPoints };
+  return { currentSeries, targetSeries, buildView, buildReadiness, relativeTime, splitGaps, historyPoints };
 });
