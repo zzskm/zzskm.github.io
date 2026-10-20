@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class BusAlarmEngineTests(unittest.TestCase):
     def test_alarm_engine_unit_tests_pass(self):
         result = subprocess.run(
-            ["node", "--test", str(ROOT / "tests" / "bus_alarm.test.mjs"), str(ROOT / "tests" / "bus_safety.test.mjs")],
+            ["node", "--test", str(ROOT / "tests" / "bus_alarm.test.mjs"), str(ROOT / "tests" / "bus_safety.test.mjs"), str(ROOT / "tests" / "bus_dashboard.test.mjs")],
             capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
