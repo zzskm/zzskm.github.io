@@ -163,8 +163,9 @@ class SafetyDataTests(unittest.TestCase):
 
     def test_session_refuses_stale_checkout_and_retains_commits_on_rebase_conflict(self):
         script=(ROOT/'bus-arrival/scripts/session.sh').read_text().rsplit('main "$@"',1)[0]
-        failed_start=subprocess.run(['bash'],input=script+\
-            '\ngit() { return 1; }\npython() { echo unexpected-collection; return 99; }\nmain\n',capture_output=True,text=True)
+        failed_start=subprocess.run(['bash'],input=(script+\
+            '\ngit() { return 1; }\npython() { echo unexpected-collection; return 99; }\nmain\n').encode('utf-8'),capture_output=True)
+        failed_start.stdout=failed_start.stdout.decode('utf-8')
         self.assertNotEqual(failed_start.returncode,0)
         self.assertIn('최신 브랜치 동기화 실패',failed_start.stdout)
         self.assertNotIn('unexpected-collection',failed_start.stdout)
@@ -181,7 +182,8 @@ git() {
 }
 publish
 '''
-        conflict=subprocess.run(['bash'],input=script+fake_commands,capture_output=True,text=True)
+        conflict=subprocess.run(['bash'],input=(script+fake_commands).encode('utf-8'),capture_output=True)
+        conflict.stdout=conflict.stdout.decode('utf-8'); conflict.stderr=conflict.stderr.decode('utf-8')
         self.assertNotEqual(conflict.returncode,0)
         self.assertIn('git commit',conflict.stderr)
         self.assertEqual(conflict.stdout.count('rebase-aborted'),3)
