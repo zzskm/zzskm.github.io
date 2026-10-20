@@ -2,6 +2,7 @@ import { cachedScenarioBand } from "./model/cache.js";
 import { useAnalysis } from "./features/analysis/useAnalysis.js";
 import { DecisionAnalysis } from "./features/results/DecisionAnalysis.jsx";
 import { serializeBackup, parseBackup } from "./state/backup.js";
+import { applyInputPatch } from "./state/inputUpdates.js";
 import { SECTION_FIELDS } from "./state/sections.js";
 import React, { useState, useMemo, useEffect } from "react";
 import { ResponsiveContainer, ComposedChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea, ReferenceLine, ReferenceDot } from "recharts";
@@ -78,9 +79,9 @@ function App() {
       return update;
     }));
   };
-  const setInputPatch = (patch) => {
+  const setInputPatch = (patch, options) => {
     setScenarios(prev => prev.map(s =>
-      s.id === active.id ? { ...s, input: normalizeInput({ ...s.input, ...patch, _sources: {...s.input._sources, ...Object.fromEntries(Object.keys(patch).map(k=>[k,"user"]))} }) } : s
+      s.id === active.id ? { ...s, input: applyInputPatch(s.input, patch, options) } : s
     ));
   };
   const renameScenario = (id, name) => {
@@ -347,13 +348,14 @@ function App() {
   if (i.selfLifeExpectancy <= Math.max(i.currentAge, i.retireAge)) fieldErrors.selfLifeExpectancy = '계획 수명은 현재·퇴직 나이보다 커야 합니다.';
   if (i.spouseEnabled && i.spouseLifeExpectancy <= i.spouseCurrentAge) fieldErrors.spouseLifeExpectancy = '배우자 계획 수명을 확인해주세요.';
   const resetFields = fields => {
-    const patch = Object.fromEntries(fields.map(k=>[k,KR_DEFAULTS[k]]));
-    const sources={...i._sources}; for(const k of fields) delete sources[k]; patch._sources=sources;
-    setInputPatch(patch);
+    const patch = Object.fromEntries(fields.map(k=>[k,k === "projectionStress" ? false : KR_DEFAULTS[k]]));
+    setInputPatch(patch, { source: "default" });
   };
   const exportJSON = () => {
-    const url=URL.createObjectURL(new Blob([serializeBackup(scenarios,activeId)],{type:'application/json'}));
-    const a=document.createElement('a'); a.href=url; a.download='retirement-scenarios.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    try {
+      const url=URL.createObjectURL(new Blob([serializeBackup(scenarios,activeId)],{type:'application/json'}));
+      const a=document.createElement('a'); a.href=url; a.download='retirement-scenarios.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch (error) { setToast(`백업 실패: ${error.message}`); }
   };
   const importJSON = async event => {
     const file=event.target.files?.[0]; event.target.value=''; if(!file) return;
@@ -674,6 +676,7 @@ function App() {
 
             {/* 시장 가정 */}
             <Section title="시장 가정" summary={`투자 ${i.investmentReturnRate.toFixed(1)}% / 저축 ${i.savingsReturnRate?.toFixed(1) ?? 3.0}% / 물가 ${i.inflationRate.toFixed(1)}%`}>
+              <Toggle label="시장 충격을 기본 결과에 반영" value={i.projectionStress === true} onChange={setInputField("projectionStress")} hint="켜면 선택한 충격 가정을 기본 지표·그래프와 몬테카를로 표본에 함께 적용합니다." />
               <Slider label="투자성 수익률" value={i.investmentReturnRate} {...UI_RANGES.investmentReturnRate} fieldKey="investmentReturnRate" onChange={setInputField("investmentReturnRate")} format={v => `${v.toFixed(1)}%`} changed={changedFrom("investmentReturnRate")} hint="연복리(CAGR) 기준 명목 수익률. DC/IRP·주식·ETF 등에 적용, 스트레스 테스트 적용." />
               <Slider label="저축성 수익률" value={i.savingsReturnRate ?? 3.0} {...UI_RANGES.savingsReturnRate} fieldKey="savingsReturnRate" onChange={setInputField("savingsReturnRate")} format={v => `${v.toFixed(1)}%`} hint="예금·MMF 등 안정 자산. 시장 충격 미적용." />
               <Slider label="물가상승률 (기준)" value={i.inflationRate} {...UI_RANGES.inflationRate} fieldKey="inflationRate" onChange={setInputField("inflationRate")} format={v => `${v.toFixed(1)}%`} />
@@ -1003,6 +1006,7 @@ function App() {
           </div>
 
           {analysis.error && <div role="alert" className="text-sm text-amber-800 border rounded p-3">{analysis.error}<button type="button" className="underline ml-3" onClick={analysis.retry}>다시 계산</button></div>}
+          {i.projectionStress === true && <p role="status" className="text-sm bg-amber-50 border border-amber-200 rounded-lg p-3">기본 결과·그래프·성공 비율에 시장 충격({STRESS_PRESETS[i.stressTest]?.label ?? "없음"})을 반영한 비교 계획입니다.</p>}
           <DecisionAnalysis input={i} result={activeResult} targets={targets} onCompare={applyInsightAsNewScenario} canCompare={scenarios.length < SCENARIO_COLORS.length} />
 
           {/* 자산 구성 변화 차트 */}

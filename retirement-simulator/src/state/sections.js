@@ -6,7 +6,7 @@ export const SECTION_FIELDS = {
   '주거': ['housingMode','housePrice','hasMortgage','mortgageBalance','monthlyMortgagePayment','mortgageRate','deposit','monthlyRent','housingMaintenance','housingInflationScenario'],
   '생활비 (현재가치)': ['workingLivingCost','bridgeLivingCost','retirementLivingCost','childCostMultiplier','medicalCostMultiplier'],
   '이벤트 — 다운사이징': ['downsizeEnabled','downsizeAge','downsizeRatio'],
-  '시장 가정': ['investmentReturnRate','savingsReturnRate','inflationRate','scenarioBandSpread','returnVolatility','houseInflationRate','stressTest'],
+  '시장 가정': ['investmentReturnRate','savingsReturnRate','inflationRate','scenarioBandSpread','returnVolatility','houseInflationRate','stressTest','projectionStress'],
   '세제·건보·의료': ['applyHealthInsurance','applyBasicPension','applyMedicalCost','includeSeveranceLumpSum'],
   '인출 전략': ['withdrawalStrategy'],
 };

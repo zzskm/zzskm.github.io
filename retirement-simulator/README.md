@@ -1,6 +1,6 @@
 # 은퇴 시뮬레이터
 
-독립 Vite + React 정적 앱. `npm install`, `npm run dev`, `npm test`, `npm run build`.
+독립 Vite + React 정적 앱. `npm ci`, `npm run dev`, `npm test`, `npm run build`.
 결과물 `dist/`를 `/retirement-simulator/`에 배치한다. 자산 경로는 상대 경로다.
 이전 `/retirement_simulator.html`은 동일 origin의 새 경로로 이동한다.
 
@@ -22,3 +22,9 @@ GitHub Actions는 전체 정적 사이트를 보존하고 새 앱의 빌드 결�
 실제 배포는 main의 수동 workflow_dispatch로 실행한다. Pages source가 GitHub Actions인지 먼저 확인한다.
 다른 앱의 기존 워크플로는 변경하지 않는다. 저장 키 `retirement-sim-v5` 및
 v4/v3/v2 마이그레이션을 유지한다. 경로 이동은 동일 origin이므로 localStorage를 공유한다.
+
+시장 충격 진단의 비교 계획은 `projectionStress: true`를 저장한다. 기본 지표·수익률 밴드·
+몬테카를로에 같은 충격 가정을 한 번 적용한다. 몬테카를로는 기존 표본 실질수익률에
+충격 프리셋의 기준 수익률 대비 차이를 더한다(하한 -100%). 기존 입력의 계산은 유지한다.
+JSON 백업은 개수 제한 없이 전체 시나리오를 보존하며 내보내기·가져오기 모두 UTF-8 2MB 제한을 적용한다.
+직접 추가하는 비교 계획은 화면의 기존 비교 슬롯 제한을 유지한다.

@@ -1,3 +1,4 @@
+import { buildStressRateFn } from "./stress.js";
 import { ASSUMPTIONS, CURRENT_YEAR } from "./assumptions.js";
 import { netToGrossAnnual } from "./taxation.js";
 import { autoPensionStartAge, pensionClaimFactor, simEndAgeFor, estimatedPensionMonthlyFor } from "./pension.js";
@@ -83,9 +84,18 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
   const inflRate = input.inflationRate / 100;
   const toReal = (nomPct) => (1 + nomPct / 100) / (1 + inflRate) - 1;
   // returnRateOverride가 함수이면 연도별 실질수익률 함수; 숫자이면 고정
-  const rateFn = typeof returnRateOverride === "function"
+  const baseRateFn = typeof returnRateOverride === "function"
     ? returnRateOverride
     : () => toReal(returnRateOverride ?? input.investmentReturnRate);
+  // An explicitly selected shock comparison applies the same preset to every
+  // projection, including sampled MC returns. Ordinary/legacy inputs are unchanged.
+  const mean = typeof returnRateOverride === "number" ? returnRateOverride : input.investmentReturnRate;
+  const stressRateFn = buildStressRateFn(input.stressTest, mean, input.retireAge, inflRate);
+  const rateFn = input.projectionStress === true && !opts.skipProjectionStress
+    ? typeof returnRateOverride === "function"
+      ? age => Math.max(-1, baseRateFn(age) + stressRateFn(age) - toReal(mean))
+      : stressRateFn
+    : baseRateFn;
   const sg = toReal(input.salaryGrowthRate);
   const hg = toReal(input.houseInflationRate);
 
