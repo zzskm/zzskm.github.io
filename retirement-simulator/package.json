@@ -7,10 +7,11 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test tests/model/*.test.js tests/insights/*.test.js tests/state/*.test.js && node tests/static.test.js",
+    "test": "node --test tests/model/*.test.js tests/insights/*.test.js tests/state/*.test.js && node tests/static.test.js && node tests/deployment.test.js",
     "test:e2e": "playwright test",
     "serve:test": "node scripts/serve-preview.js",
-    "profile": "node scripts/profile.js"
+    "profile": "node scripts/profile.js",
+    "publish:static": "node scripts/publish-build.js"
   },
   "dependencies": {
     "react": "18.3.1",
