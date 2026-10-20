@@ -44,7 +44,7 @@ class SafetyBrowserTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def open_page(self, status, summary=None, history=None, config=None, context=None):
+    def open_page(self, status, summary=None, history=None, config=None, context=None, setup=None):
         page=context.new_page() if context else self.browser.new_page(viewport={'width':390,'height':844})
         errors=[]
         page.on('pageerror',lambda e: errors.append(str(e)))
@@ -55,6 +55,7 @@ class SafetyBrowserTests(unittest.TestCase):
         page.route('**/summary.json?*',lambda r:r.fulfill(json=summary or {'recent_predictions':[],'recent_arrivals':[],'today':{},'historical_alerts':{'date':'2026-10-19','slots':[]}}))
         page.route('**/holidays.json?*',lambda r:r.fulfill(json={'years':[2026],'dates':{}}))
         page.route('**/arrival_log.csv?*',lambda r:r.fulfill(body=history or 'ts_kst,vehId,est_arrival_ts\n'))
+        if setup: setup(page)
         page.goto(f'http://127.0.0.1:{self.server.server_port}/bus-arrival/')
         page.wait_for_function('!document.body.classList.contains("loading")')
         return page, errors
@@ -78,10 +79,10 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#open-settings').click()
             page.locator('#walk').fill('10')
             page.locator('#walk').dispatch_event('change')
-            self.assertIn('3분',page.locator('#verdict-text').inner_text())
+            expect(page.locator('#verdict-text')).to_contain_text('3분')
             page.locator('#safety-margin').fill('2')
             page.locator('#safety-margin').dispatch_event('change')
-            self.assertIn('2분',page.locator('#verdict-text').inner_text())
+            expect(page.locator('#verdict-text')).to_contain_text('2분')
             self.assertEqual(page.evaluate('localStorage.getItem("busWalkMinutes")'),'10')
             self.assertEqual(page.locator('#clock-once').count(),1)
             self.assertEqual(page.locator('#timer-custom').count(),1)
@@ -135,7 +136,8 @@ class SafetyBrowserTests(unittest.TestCase):
         from playwright.sync_api import expect
         page,errors=self.open_page(self.ready_status())
         try:
-            expect(page.locator('#journey-timeline')).to_contain_text('17:55')
+            page.locator('.timeline-details summary').click()
+            expect(page.locator('#journey-details')).to_contain_text('17:55')
             expect(page.locator('#journey-timeline')).to_contain_text('18:08')
             expect(page.locator('#journey-timeline')).to_contain_text('계산된 예정')
             expect(page).to_have_title(__import__('re').compile('출발 8분'))
@@ -164,7 +166,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#alarm-undo-skip')).to_be_visible()
             page.wait_for_function('JSON.parse(localStorage.getItem("busAlarm.v1.fired")).skipped["11"]')
             expect(page.locator('#alarm-next')).to_contain_text('버스를 기다리는 중')
-            expect(page.locator('#verdict-text')).not_to_contain_text('다음 차량')
+            expect(page.locator('#verdict-text')).to_contain_text('이번 차량 제외됨')
             page.locator('#alarm-undo-skip').click()
             expect(page.locator('#alarm-next')).to_contain_text('18:08')
             ledger=page.evaluate('JSON.parse(localStorage.getItem("busAlarm.v1.fired"))')
@@ -239,7 +241,8 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#alarm-skip').click()
             expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
             expect(page.locator('#hero-detail')).to_contain_text('22')
-            expect(page.locator('#journey-timeline')).to_contain_text('후속 알림 대상 차량 확인')
+            page.locator('.timeline-details summary').click()
+            expect(page.locator('#journey-details')).to_contain_text('후속 알림 대상 차량 확인')
             expect(page.locator('#card-seat')).to_have_text('미제공')
             page.locator('.hero-evidence summary').click()
             expect(page.locator('#model-note')).to_contain_text('고정 11분 여유')
@@ -260,7 +263,8 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#verdict-text')).to_contain_text('최신 정보 없음')
             expect(page.locator('#freshness')).to_contain_text('4분 전')
             expect(page.locator('#hero-detail')).to_contain_text('마지막 정상 확인 기준 차량 11')
-            expect(page.locator('#journey-timeline')).to_contain_text('마지막 정상 정보에서 차량 확인')
+            page.locator('.timeline-details summary').click()
+            expect(page.locator('#journey-details')).to_contain_text('마지막 정상 정보에서 차량 확인')
             expect(page.locator('#journey-timeline')).not_to_contain_text('후속 알림 대상 차량 확인')
             self.assertEqual(errors,[])
         finally: page.close()
@@ -332,6 +336,335 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#history-table')).to_contain_text('2026-10-12')
             self.assertEqual(errors,[])
         finally: page.close()
+
+
+
+    def test_departure_elapsed_is_warning_immediately_after_deadline(self):
+        from playwright.sync_api import expect
+        status=self.ready_status()
+        status['safety']['safe_arrival_ts']=(T+dt.timedelta(minutes=6,seconds=2)).isoformat()
+        page,errors=self.open_page(status)
+        try:
+            expect(page.locator('#verdict-text')).to_contain_text('1분 미만')
+            page.clock.fast_forward(3000)
+            expect(page.locator('#verdict-text')).to_contain_text('1분 미만 지남')
+            expect(page.locator('#verdict')).to_have_class('verdict warn')
+            expect(page.locator('#journey-timeline')).to_contain_text('계산된 예정')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_excluded_vehicle_never_keeps_departure_advice(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.locator('#alarm-skip').click()
+            expect(page.locator('#verdict-text')).to_contain_text('이번 차량 제외됨')
+            expect(page.locator('#hero-next')).to_contain_text('제외한 차량 알림 없음')
+            expect(page.locator('#alarm-skip')).to_be_hidden()
+            expect(page.locator('#alarm-undo-skip')).to_be_focused()
+            expect(page.locator('#journey-timeline .planned')).to_have_count(0)
+            expect(page.locator('#eta-row')).to_be_hidden()
+            page.locator('#hero-alarm-toggle').click()
+            expect(page.locator('#verdict-text')).to_contain_text('이번 차량 제외됨')
+            page.locator('#alarm-undo-skip').click()
+            expect(page.locator('#verdict-text')).to_contain_text('8분')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_editing_preferences_keeps_last_applied_value_until_commit(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.locator('#open-settings').click()
+            page.locator('#walk').fill('')
+            page.clock.fast_forward(1000)
+            expect(page.locator('#verdict-text')).to_contain_text('8분')
+            self.assertEqual(page.evaluate('localStorage.getItem("busWalkMinutes")'),None)
+            page.locator('#walk').press('Enter')
+            expect(page.locator('#walk-error')).to_be_visible()
+            expect(page.locator('#verdict-text')).to_contain_text('8분')
+            page.locator('#walk').fill('10')
+            page.locator('#walk').press('Enter')
+            expect(page.locator('#verdict-text')).to_contain_text('3분')
+            expect(page.locator('#walk')).to_be_focused()
+            page.locator('#safety-margin').fill('')
+            page.clock.fast_forward(1000)
+            expect(page.locator('#verdict-text')).to_contain_text('3분')
+            page.locator('#safety-margin').fill('2')
+            page.locator('#safety-margin').press('Enter')
+            expect(page.locator('#verdict-text')).to_contain_text('2분')
+            self.assertEqual(page.evaluate('localStorage.getItem("busWalkMinutes")'),'10')
+            self.assertEqual(page.evaluate('localStorage.getItem("busSafetyMarginMinutes")'),'2')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_selected_next_graph_uses_one_next_observation(self):
+        from playwright.sync_api import expect
+        status={**self.ready_status(),'next_veh_id':22,'next_predict_sec':1800}
+        rows=[{'ts_kst':(T-dt.timedelta(minutes=n)).isoformat(),'vehId':11,'predict_sec':1200+n*30} for n in [4,0]]
+        page,errors=self.open_page(status,summary={'recent_predictions':rows,'recent_arrivals':[],'today':{},'historical_alerts':{'date':'2026-10-19','slots':[]}})
+        try:
+            expect(page.locator('#chart .dot')).to_have_count(2)
+            page.locator('#alarm-skip').click()
+            expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
+            expect(page.locator('#chart .dot')).to_have_count(1)
+            expect(page.locator('#chart')).to_have_attribute('aria-label',__import__('re').compile('선택 차량 22'))
+            expect(page.locator('#chart-note')).to_contain_text('이력 부족')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_slow_auxiliary_records_do_not_delay_departure_and_old_generation_is_discarded(self):
+        from playwright.sync_api import expect
+        pending=[]
+        def setup(page):
+            page.route('**/summary.json?*',lambda r:pending.append(r))
+        page,errors=self.open_page(self.ready_status(),setup=setup)
+        try:
+            expect(page.locator('#verdict-text')).to_contain_text('8분')
+            expect(page.locator('#aux-status')).to_contain_text('확인 중')
+            self.assertEqual(len(pending),1)
+            # A new core refresh gets a new auxiliary generation.
+            page.locator('#refresh').click()
+            page.wait_for_function('loadGeneration === 2')
+            self.assertEqual(len(pending),2)
+            current={'recent_predictions':[],'recent_arrivals':[],'today':{}}
+            pending[1].fulfill(json=current)
+            expect(page.locator('#aux-status')).to_contain_text('확인했습니다')
+            old={'recent_predictions':[],'recent_arrivals':[{'vehId':999,'est_arrival_ts':T.isoformat()}]}
+            pending[0].fulfill(json=old)
+            page.wait_for_function('!requests.size')
+            self.assertEqual(page.evaluate('cache.arrivals.length'),0)
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_refresh_joins_requests_times_out_at_ten_seconds_and_keeps_original_observation(self):
+        from playwright.sync_api import expect
+        pending=[]
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.route('**/status.json?*',lambda r:pending.append(r))
+            page.locator('#refresh').click()
+            page.evaluate('window.dispatchEvent(new Event("online")); window.dispatchEvent(new Event("online"));')
+            expect(page.locator('#refresh')).to_be_disabled()
+            self.assertEqual(len(pending),1)
+            page.clock.fast_forward(10001)
+            expect(page.locator('#refresh')).to_be_enabled()
+            expect(page.locator('#refresh-status')).to_contain_text('확인 실패')
+            self.assertEqual(page.evaluate('cache.status.last_poll'),T.isoformat())
+            self.assertEqual(page.evaluate('cache.lastGoodStatus.last_poll'),T.isoformat())
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_refresh_reports_same_new_and_rejects_older_observation(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.locator('#refresh').click()
+            expect(page.locator('#refresh-status')).to_contain_text('이전과 같습니다')
+            newer=self.ready_status(); newer['last_poll']=(T+dt.timedelta(seconds=10)).isoformat()
+            page.route('**/status.json?*',lambda r:r.fulfill(json=newer))
+            page.locator('#refresh').click()
+            expect(page.locator('#refresh-status')).to_contain_text('새 차량 자료')
+            page.route('**/status.json?*',lambda r:r.fulfill(json=self.ready_status()))
+            page.locator('#refresh').click()
+            expect(page.locator('#refresh-status')).to_contain_text('이전 시각의 응답')
+            self.assertEqual(page.evaluate('cache.status.last_poll'),newer['last_poll'])
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_following_reservation_keeps_one_graph_point_after_freshness_expiry(self):
+        from playwright.sync_api import expect
+        status={**self.ready_status(),'next_veh_id':22,'next_predict_sec':1800}
+        page,errors=self.open_page(status)
+        try:
+            page.locator('#alarm-skip').click()
+            expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
+            page.wait_for_function('store.get("busAlarm.v2.pending")?.vehId === 22')
+            page.clock.fast_forward(181000)
+            expect(page.locator('#verdict-text')).to_contain_text('예약 경고')
+            expect(page.locator('#hero-detail')).to_contain_text('차량 22')
+            expect(page.locator('#card-next')).to_contain_text('선택 차량 22')
+            expect(page.locator('#chart .dot')).to_have_count(1)
+            expect(page.locator('#chart .corrected')).to_have_count(0)
+            expect(page.locator('#chart-note')).not_to_contain_text('정체 보정 중')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_settings_keep_nodes_focus_drafts_and_adjacent_window_errors(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.locator('#open-settings').click()
+            chip=page.locator('#alarm-chips [data-lead="7"]')
+            chip.focus(); page.evaluate('window.savedChip=document.activeElement')
+            chip.press('Space')
+            expect(chip).to_have_attribute('aria-pressed','true')
+            self.assertTrue(page.evaluate('savedChip===document.activeElement'))
+            page.locator('#window-add').click()
+            start=page.locator('#alarm-windows [data-f="start"]')
+            end=page.locator('#alarm-windows [data-f="end"]')
+            start.fill('20:00'); start.dispatch_event('change')
+            expect(page.locator('#window-error')).to_contain_text('이전 적용값')
+            expect(start).to_have_value('20:00')
+            expect(start).to_have_attribute('aria-describedby','window-error')
+            end.fill('21:00'); end.dispatch_event('change')
+            expect(page.locator('#window-error')).to_be_hidden()
+            self.assertEqual(page.evaluate('alarmCfg.windows[0].start'),'20:00')
+            end.focus();page.evaluate('window.savedTime=document.activeElement')
+            page.clock.fast_forward(1000)
+            self.assertTrue(page.evaluate('savedTime===document.activeElement'))
+            page.locator('#alarm-windows [data-day="2"]').click()
+            expect(page.locator('#alarm-windows [data-day="2"]')).to_be_focused()
+            page.locator('#alarm-windows [data-del]').click()
+            expect(page.locator('#window-add')).to_be_focused()
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_clock_toggle_and_delete_and_timer_cancel_preserve_keyboard_focus(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.locator('#clock-create summary').click()
+            page.locator('#clock-time').fill('19:00')
+            page.locator('#clock-label').fill('퇴근')
+            page.locator('#clock-form button[type=submit]').click()
+            toggle=page.locator('#clock-list [data-toggle]')
+            toggle.focus();page.evaluate('window.savedToggle=document.activeElement')
+            toggle.press('Space')
+            expect(toggle).to_have_attribute('aria-checked','false')
+            self.assertTrue(page.evaluate('savedToggle===document.activeElement'))
+            page.locator('#clock-list [data-del]').click()
+            expect(page.locator('#clock-form button[type=submit]')).to_be_focused()
+            page.locator('#timer-create summary').click()
+            page.locator('#timer-presets [data-min="5"]').click()
+            page.locator('#timer-list [data-cancel]').click()
+            expect(page.locator('#timer-form button[type=submit]')).to_be_focused()
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_all_forms_reflow_at_two_hundred_percent_without_hiding_controls(self):
+        from playwright.sync_api import expect
+        history='ts_kst,vehId,first_seen_ts,est_arrival_ts,departure_reason\n2026-10-12T18:01:00+09:00,11,2026-10-12T17:45:00+09:00,2026-10-12T18:00:00+09:00,estimated_arrival\n'
+        page,errors=self.open_page(self.ready_status(),history=history)
+        try:
+            page.locator('#open-settings').click();page.locator('#window-add').click()
+            page.locator('#clock-create summary').click();page.locator('#timer-create summary').click()
+            page.locator('.history-panel > summary').click();page.locator('.history-panel details summary').click()
+            for width in [360,390,1280]:
+                for scheme in ['light','dark']:
+                    page.set_viewport_size({'width':width,'height':844})
+                    page.emulate_media(color_scheme=scheme,reduced_motion='reduce')
+                    page.evaluate('document.documentElement.style.zoom="2"; window.dispatchEvent(new Event("resize"))')
+                    page.clock.fast_forward(200)
+                    self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'),(width,scheme))
+                    self.assertTrue(page.evaluate("""() => [...document.querySelectorAll('button,input')].filter(e=>e.getClientRects().length).every(e=>{
+                        const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;
+                    })"""))
+                    expect(page.locator('#chart-table')).to_have_role('table')
+                    page.screenshot(path=f'/tmp/bus-ui-zoom200-{width}-{scheme}.png',full_page=True)
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_permission_and_audio_unsupported_denied_resume_failure_and_statechange(self):
+        from playwright.sync_api import expect
+        def setup(page):
+            page.add_init_script("""
+                delete window.AudioContext; delete window.webkitAudioContext;
+                Object.defineProperty(Notification,'permission',{value:'denied',configurable:true});
+            """)
+        page,errors=self.open_page(self.ready_status(),setup=setup)
+        try:
+            expect(page.locator('#hero-alarm-perm')).to_contain_text('차단')
+            expect(page.locator('#hero-alarm-sound')).to_have_text('소리 미지원')
+            expect(page.locator('#alarm-sound')).to_have_text('소리 미지원')
+            expect(page.locator('#alarm-sound')).to_be_disabled()
+            page.locator('#hero-alarm-perm').click()
+            expect(page.locator('#alarm-help summary')).to_be_focused()
+            expect(page.locator('#alarm-help')).to_contain_text('사이트 설정')
+            page.evaluate("""() => {
+                window.AudioContext=class extends EventTarget {
+                    constructor(){super();this.state='suspended';window.testAudio=this;}
+                    resume(){return Promise.reject(new Error('blocked'));}
+                };
+                ensureAudio();
+            }""")
+            expect(page.locator('#alarm-warn')).to_contain_text('소리 활성화 실패')
+            page.evaluate("testAudio.state='running'; testAudio.dispatchEvent(new Event('statechange'))")
+            expect(page.locator('#hero-alarm-sound')).to_have_text('소리 활성화됨')
+            expect(page.locator('#alarm-sound')).to_have_text('소리 활성화됨')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+
+    def test_tick_preserves_chart_and_live_text_and_form_selection(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            expect(page.locator('#chart .dot')).to_have_count(1)
+            page.locator('#clock-create summary').click()
+            text=page.locator('#clock-label');text.fill('퇴근 버스 알람');text.focus()
+            page.evaluate("""() => {
+                const el=document.querySelector('#clock-label');el.setSelectionRange(2,5);
+                window.chartNode=document.querySelector('#chart svg');window.liveText=document.querySelector('#sr-live').textContent;
+            }""")
+            page.clock.fast_forward(5000)
+            self.assertTrue(page.evaluate("chartNode===document.querySelector('#chart svg')"))
+            self.assertTrue(page.evaluate("liveText===document.querySelector('#sr-live').textContent"))
+            self.assertEqual(text.evaluate('e=>[e.selectionStart,e.selectionEnd]'),[2,5])
+            expect(text).to_be_focused()
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_storage_failure_is_visible_without_discarding_applied_preference(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            page.evaluate("() => { Storage.prototype.setItem=function(){throw new Error('blocked')} }")
+            page.locator('#open-settings').click()
+            page.locator('#walk').fill('10');page.locator('#walk').press('Enter')
+            expect(page.locator('#verdict-text')).to_contain_text('3분')
+            expect(page.locator('#settings-feedback')).to_contain_text('저장 실패')
+            page.locator('#alarm-chips [data-lead="7"]').click()
+            expect(page.locator('#alarm-notice')).to_contain_text('현재 탭에서만')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_last_lead_and_weekday_explain_why_they_cannot_be_removed(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status(),config={'windows':[{'start':'17:00','end':'20:00','days':[1]}]})
+        try:
+            page.locator('#open-settings').click()
+            lead=page.locator('#alarm-chips [data-lead="5"]');lead.click()
+            expect(lead).to_have_attribute('aria-pressed','true')
+            expect(lead).to_be_focused()
+            expect(page.locator('#alarm-notice')).to_contain_text('알림 시점은 하나 이상')
+            day=page.locator('#alarm-windows [data-day="1"]');day.click()
+            expect(day).to_have_attribute('aria-pressed','true')
+            expect(day).to_be_focused()
+            expect(page.locator('#alarm-notice')).to_contain_text('요일은 하나 이상')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+
+    def test_decision_and_readiness_text_contrast_in_both_color_schemes(self):
+        page,errors=self.open_page(self.ready_status())
+        try:
+            for mode in ['light','dark']:
+                page.emulate_media(color_scheme=mode)
+                ratios=page.evaluate("""() => {
+                    const rgb=s=>s.match(/[0-9.]+/g).slice(0,3).map(Number).map(x=>x/255);
+                    const lum=s=>rgb(s).map(x=>x<=.04045 ? x/12.92 : ((x+.055)/1.055)**2.4)
+                        .reduce((v,x,i)=>v+x*[.2126,.7152,.0722][i],0);
+                    return ['#status-chip','#verdict','#hero-alarm-perm','#hero-alarm-sound','#refresh'].map(id=>{
+                        const cs=getComputedStyle(document.querySelector(id));
+                        const l=[lum(cs.color),lum(cs.backgroundColor)].sort((a,b)=>a-b);
+                        return {id,ratio:(l[1]+.05)/(l[0]+.05)};
+                    });
+                }""")
+                for row in ratios: self.assertGreaterEqual(row['ratio'],4.5,(mode,row))
+            self.assertEqual(errors,[])
+        finally: page.close()
+
 
 
 if __name__=='__main__':

@@ -71,7 +71,7 @@ test('API error uses last successful observation time and vehicle in pending tim
  assert.ok(!v.timeline.some(e=>e.label==='후속 알림 대상 차량 확인'));
 });
 test('past planned milestones stay planned and never become actual arrivals',()=>{
- const v=view(status(),{walkMinutes:30});assert.equal(v.state,'due');
+ const v=view(status(),{walkMinutes:30});assert.equal(v.state,'overdue');
  const departure=v.timeline.find(e=>e.label==='출발 권장');assert.equal(departure.kind,'planned');assert.equal(departure.elapsed,true);
  assert.ok(!v.timeline.some(e=>e.label==='도착 완료'));
  const st=status({predict_sec:0,safety:null});assert.equal(view(st).state,'elapsed');assert.match(view(st).title,/통과 미확인/);
@@ -173,4 +173,78 @@ test('API failures without a reservation retain the last observation without ETA
  const v=BD.buildView({status:error,observationStatus:last,snapshot:snap,alarmView:{state:'off'},nowMs:NOW+M,walkMinutes:5,marginSec:60});
  assert.equal(v.departureAtMs,null);assert.equal(v.ageSec,60);
  assert.ok(v.timeline.some(e=>e.label==='마지막 정상 정보에서 차량 확인'));
+});
+
+
+test('departure boundary switches immediately and planned milestones stay planned',()=>{
+ const st=status(), snap=BA.assessStatus(st,NOW,{maxAgeMin:3,safetyMode:true});
+ const depart=NOW+8*M;
+ for (const [offset,state,text] of [[-1,'waiting','1분 미만'],[0,'due','권장 시점'],[1,'overdue','1분 미만 지남'],[59000,'overdue','1분 미만 지남'],[60000,'overdue','1분 지남'],[61000,'overdue','1분 지남']]) {
+   const v=BD.buildView({status:st,snapshot:snap,nowMs:depart+offset,walkMinutes:5,marginSec:60});
+   assert.equal(v.state,state);assert.ok(v.title.includes(text));
+   assert.equal(v.timeline.find(e=>e.role==='departure').kind,'planned');
+   if (offset>0) assert.equal(v.tone,'warn');
+ }
+});
+
+test('excluded vehicle has no departure even with alarms off or stale reservation',()=>{
+ for (const alarmView of [{state:'off'},{state:'armed',target:{vehId:11,pollMs:NOW},nextFireAtMs:NOW+M},
+   {pendingUncertain:true,target:{vehId:11,pollMs:NOW,safeArrivalAtMs:NOW+14*M},safeDepartureAtMs:NOW+8*M}]) {
+   const v=view(status(),{currentSkipped:true,alarmView});
+   assert.equal(v.state,'skipped');assert.equal(v.departureAtMs,null);assert.equal(v.correctedAtMs,null);
+   assert.equal(v.nextFireAtMs,null);assert.ok(!v.timeline.some(e=>e.kind==='planned'));
+ }
+ assert.equal(view(status(),{currentSkipped:false}).state,'waiting');
+});
+
+test('next graph contains only next API point and skipped graph has no predictions',()=>{
+ const st=status({next_veh_id:22,next_predict_sec:1800});
+ const rows=[{ts_kst:iso(NOW-M),vehId:11,predict_sec:1500}];
+ const pts=BD.targetSeries(st,rows,{selectedNext:true,targetVehId:22});
+ assert.deepEqual(pts,[{t:NOW,remainingSec:1800,arrivalAtMs:NOW+30*M}]);
+ assert.deepEqual(BD.targetSeries(st,rows,{state:'skipped'}),[]);
+});
+
+test('compact timeline contains at most four planned and now milestones',()=>{
+ const v=view(status(),{alarmView:{target:{vehId:11,pollMs:NOW},nextFireAtMs:NOW+M}});
+ assert.equal(v.summaryTimeline.length,4);assert.ok(v.detailTimeline.some(e=>e.kind==='observed'));
+ assert.ok(v.detailTimeline.some(e=>e.label==='조기 도착 대비 기준'));
+});
+
+test('readiness keeps setting permission and sound independent',()=>{
+ for (const permission of ['granted','default','denied']) {
+   const v=BD.buildReadiness({enabled:true,notificationSupported:true,permission,audioSupported:true,audioState:'suspended'});
+   assert.equal(v.setting,'알림 켜짐');assert.equal(v.soundReady,false);
+   assert.equal(v.permissionAction,permission==='default'?'request':'guide');
+ }
+ const unsupported=BD.buildReadiness({enabled:false,notificationSupported:false,audioSupported:false});
+ assert.equal(unsupported.setting,'알림 꺼짐');assert.equal(unsupported.permission,'OS 알림 미지원');assert.equal(unsupported.sound,'소리 미지원');
+ assert.equal(BD.buildReadiness({enabled:true,notificationSupported:true,permission:'granted',audioSupported:true,audioState:'running'}).soundReady,true);
+});
+
+test('setting or run identity changes never become prediction-change announcements',()=>{
+ const v=view(), prev={vehId:11,pollMs:NOW-M,departureAtMs:NOW+20*M,comparisonKey:v.comparisonKey};
+ assert.equal(view(status(),{previous:prev,walkMinutes:10}).changeMinutes,null);
+ assert.equal(view(status({first_seen_ts:iso(NOW-M)}),{previous:prev}).changeMinutes,null);
+});
+
+
+test('expired next reservation never borrows the preceding vehicle graph or metadata',()=>{
+ const st=status({next_veh_id:22,next_predict_sec:1800});
+ const snap=BA.assessStatus(st,NOW,{safetyMode:true});
+ const cfg={enabled:true,leads:[5],windows:[],armedAtMs:NOW-1};
+ const ledger=BA.skipTarget({}, {vehId:11,arrivalAtMs:snap.arrivalAtMs});
+ const first=BA.evaluate({cfg,snap,ledger,nowMs:NOW,walkMinutes:5,marginSec:60});
+ const now=NOW+4*M;
+ const stale=BA.assessStatus(st,now,{safetyMode:true,maxAgeMin:3});
+ const next=BA.evaluate({cfg,snap:stale,ledger:first.ledger,prevTarget:first.prevTarget,nowMs:now,walkMinutes:5,marginSec:60});
+ const v=BD.buildView({status:st,observationStatus:st,snapshot:stale,alarmView:next.view,nowMs:now,
+   currentSkipped:true,walkMinutes:5,marginSec:60});
+ assert.equal(v.state,'reserved');assert.equal(v.selectedNext,true);assert.equal(v.targetVehId,22);
+ assert.equal(v.correctedAtMs,null);assert.equal(v.stalled,false);assert.equal(v.sampleTrips,0);
+ const rows=[{ts_kst:iso(NOW-M),vehId:11,predict_sec:1500}];
+ assert.deepEqual(BD.targetSeries(st,rows,v),[{t:NOW,remainingSec:1800,arrivalAtMs:NOW+30*M}]);
+ assert.deepEqual(BD.targetSeries({...st,next_veh_id:33},rows,v),[]);
+ const excluded=BD.buildView({status:st,snapshot:stale,alarmView:next.view,nowMs:now,currentSkipped:true,alarmTargetSkipped:true});
+ assert.equal(excluded.state,'skipped');assert.equal(excluded.departureAtMs,null);
 });
