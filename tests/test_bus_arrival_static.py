@@ -18,27 +18,17 @@ def test_bus_arrival_eta_splits_number_and_unit():
     """긴 한글 문장을 거대 폰트로 렌더하지 않고 숫자/단위를 분리한다."""
     assert 'id="eta-num"' in HTML
     assert 'id="eta-unit"' in HTML
-    assert ".eta-num { font-size:clamp(52px,15vw,86px)" in HTML
+    assert ".eta-num { font-size:clamp(30px,8vw,46px)" in HTML
     assert "function etaParts(sec)" in HTML
 
 
 def test_bus_arrival_staleness_follows_scrape_cadence():
-    """고정 임계 대신 게시 주기(5분)와 현재 조회 간격을 따르고, 수집 시간대/휴일 밖은 따로 구분한다."""
-    assert "10 * 60 * 1000" not in HTML
-    assert "const PUBLISH_MINUTES = 5;" in HTML
-    # 조회 간격(status.poll_interval_sec)이 길어지면 최신성 임계값도 늘어난다 (alarm.js 와 공유)
-    assert "BA.freshnessLimits(PUBLISH_MINUTES, intervalSec)" in HTML
-    assert "limits.fresh" in HTML and "limits.aging" in HTML
-    assert "poll_interval_sec" in HTML
-    # 수집 시간대는 status.json 의 collect_window 를 따르고, 기본값은 평일 퇴근 시간대
-    assert "parseWindow(st && st.collect_window)" in HTML
-    assert 'WINDOW_RE.exec("16:00-22:00")' in HTML
-    assert "c.day >= 1 && c.day <= 5" in HTML
-    assert 'if (state !== "fresh" && !collecting) state = "off";' in HTML
-    assert 'statusLabel = holiday ? "휴일" : "수집 시간 외"' in HTML
-    # 휴일은 holidays.json 을 수집기와 함께 쓴다
+    """출발 판단은 엔진의 3분 최신성 검증을 공유하고 휴일/시간 외를 구분한다."""
+    assert "BA.assessStatus(st, now, { maxAgeMin:3, safetyMode:true })" in HTML
     assert 'get("holidays.json", false)' in HTML
-    assert "!isHoliday(c.date)" in HTML
+    assert "isHoliday(kstClock(now).date)" in HTML
+    assert 'statusLabel = holiday ? "휴일" : "수집 시간 외"' in HTML
+
 
 
 def test_bus_arrival_reads_recent_rows_from_summary():
@@ -51,39 +41,26 @@ def test_bus_arrival_reads_recent_rows_from_summary():
 
 
 def test_bus_arrival_stale_data_is_visually_demoted():
-    """오래된 ETA를 계속 앞으로 주장할 때만 감쇠를 걸고, 통과 추정 표시 중에는 해제한다.
-    최신성 표시는 상태 칩과 갱신 문장으로 통일하고 별도 배지는 두지 않는다."""
-    assert ".hero.is-stale:not(.is-passed) .eta-row { opacity:.45" in HTML
-    assert 'id="stale-badge"' not in HTML
-    assert "실시간 아님" in HTML
-    assert 'classList.toggle("is-passed", passed)' in HTML
+    assert 'classList.toggle("is-stale", !available)' in HTML
+    assert '$("#eta-row").hidden = parts.num === "--";' in HTML
+    assert '최신 차량 정보로 다시 판단합니다.' in HTML
+
 
 
 def test_bus_arrival_reports_how_long_ago_the_bus_passed():
-    """도착 예정 시각이 지났으면 '판단 보류' 대신 통과 후 경과 시간을 알린다."""
-    assert "판단 보류 · 정보가 오래되었습니다" not in HTML
-    assert "도착 예정 시각 지남" not in HTML
-    assert "function passedParts(min)" in HTML
-    assert "function agoText(min)" in HTML
-    assert "통과 추정" in HTML
-    assert 'text = agoText(passedMin) + " 통과 추정 · 다음 버스를 확인하세요"' in HTML
-    # 통과 판정은 예정 시각 대비 경과분에서 계산되며, 표시는 감쇠 대상이 아니다
-    assert "const passedMin = rawAdj != null && rawAdj < 0 ? -rawAdj / 60 : null;" in HTML
-    assert "const passed = passedMin != null && passedMin >= 2;" in HTML
-    # 통과 추정이 수집 오류보다 뒤, stale 판단보다 앞에 놓인다
-    assert HTML.index("수집 오류 · 실시간 아님") < HTML.index('agoText(passedMin) + " 통과 추정')
-    assert HTML.index('agoText(passedMin) + " 통과 추정') < HTML.index('" · 판단 보류"')
+    """API 시각 경과를 실제 통과로 확정하지 않는다."""
+    assert 'view.state === "elapsed"' in HTML
+    assert '예상 시각이 지났지만 실제 통과를 확인한 것은 아닙니다.' in HTML
+    assert '통과 추정 · 다음 버스를 확인하세요' not in HTML
+
 
 
 def test_bus_arrival_shows_relative_time_and_countdown():
-    """기계식 타임스탬프 대신 상대 시간 + 경과분 차감 카운트다운."""
-    assert "function relTime(ageMin)" in HTML
-    assert 'return agoText(ageMin) + " 갱신";' in HTML
-    assert '"분 전"' in HTML
-    assert "n - (now - pollMs) / 1000" in HTML
-    # 1초 tick 하나가 화면과 알림 판정을 함께 갱신한다
-    assert "setInterval(tick, 1000)" in HTML
-    assert "function tick()" in HTML
+    assert 'view.ageSec' in HTML
+    assert '차량 정보 확인' in HTML
+    assert 'view.departureAtMs-now' in HTML
+    assert 'setInterval(tick, 1000)' in HTML
+
 
 
 def test_bus_arrival_confidence_moves_to_details():
@@ -121,43 +98,40 @@ def test_bus_arrival_cards_prioritise_decision_inputs():
 
 
 def test_bus_arrival_chart_plots_current_vehicle_trend():
-    """원시 폴링 막대 대신 현재 차량의 도착 예측 추이 선 그래프 + 알림 기준선 + 스크린리더용 표."""
-    assert "bar-empty" not in HTML
-    assert "function renderChart()" in HTML
-    assert "Number(r.vehId || 0) === veh" in HTML
-    assert 'class=\\"line\\"' in HTML and 'class=\\"proj\\"' in HTML
-    assert 'class=\\"lead\\"' in HTML          # 알림 N분 전 기준선
-    assert 'id="chart-table"' in HTML          # 그림에 의존하지 않는 대체 표
-    assert "현재 추적 중인 차량이 없습니다." in HTML
+    """API 이력과 현재 보정 한 건을 구분하고 관측 공백을 연결하지 않는다."""
+    assert 'BD.currentSeries(st, cache.predictions)' in HTML
+    assert 'BD.splitGaps(pts,st && st.poll_interval_sec)' in HTML
+    assert 'id="chart-table"' in HTML
+    assert 'id="chart-arrival"' in HTML and 'id="chart-remaining"' in HTML
+    assert '과거 보정 이력이나 확률 구간이 아닙니다.' in HTML
+    assert '오차가 ±3분' not in HTML
+
 
 
 def test_bus_arrival_chart_is_responsive():
-    """SVG viewBox 로 폭에 맞게 줄고, 리사이즈 시 다시 그린다."""
-    assert 'viewBox=\\"0 0 " + W + " " + H' in HTML
-    assert ".trend { display:block; width:100%; height:auto" in HTML
+    assert 'viewBox="0 0 ' in HTML
+    assert '.trend { display:block; width:100%; height:auto' in HTML
     assert 'window.addEventListener("resize"' in HTML
 
 
+
 def test_bus_arrival_empty_states_are_explicit():
-    assert "도착 기록 수집 대기 중입니다." in HTML
-    assert "예측 추이는 차량이 2회 이상 관측되면 표시됩니다." in HTML
+    assert '운행 기록 수집 대기 중입니다.' in HTML
+    assert '관측 한 건만 있어 추이는 아직 알 수 없습니다.' in HTML
     assert 'id="error-card"' in HTML
     assert 'role="alert"' in HTML
-    assert "body.loading .skeleton" in HTML
+    assert 'body.loading .skeleton' in HTML
+
 
 
 def test_bus_arrival_surfaces_data_state_and_decision_reason():
-    """최신성·도보 비교가 접힌 상세 영역 밖에 표시되고, 판단 근거 문장은 이상 상태에서만 나온다."""
-    assert 'id="status-chip"' in HTML
-    assert 'id="decision-note"' in HTML
-    assert 'statusLabel = "오래된 정보"' in HTML
-    assert 'statusLabel = "현재 버스 없음"' in HTML
-    assert '도보 " + walk + "분' in HTML
-    assert '$("#decision-note").hidden = !decisionNote;' in HTML
-    assert "최근 도착 기록" in HTML
-    # 표는 목록으로 바뀌어 좁은 화면에서도 가로 스크롤이 없다
+    assert 'id="status-chip"' in HTML and 'id="decision-note"' in HTML
+    assert '오래되거나 불확실한 정보' in HTML
+    assert '실시간에서 확인된 차량 없음' in HTML
+    assert '최근 운행 기록' in HTML
     assert '<ul class="arrival-list" id="arrivals">' in HTML
-    assert '<table id="arrivals">' not in HTML
+    assert '실제 도착을 측정한 기록이 아닙니다.' in HTML
+
 
 
 def test_bus_arrival_live_region_is_scoped_not_whole_hero():
@@ -205,7 +179,7 @@ def test_bus_arrival_alarm_panel_and_engine_are_wired():
     assert "BA.beepSchedule(seconds)" in HTML
     assert "BA.evaluate({" in HTML
     assert 'const CFG_KEY = "busAlarm.v1.cfg"' in HTML
-    assert "3분 이하 알림은 예측이 멈춘 채" in HTML          # 정확도 한계를 솔직하게 알린다
+    assert "도착 시각은 추정이며" in HTML
 
 
 def test_bus_arrival_alarm_survives_hidden_tabs_and_reloads():
@@ -290,3 +264,19 @@ def test_bus_arrival_shows_same_weekday_arrivals_from_previous_weeks():
     assert 'get("arrival_log.csv", true)' in HTML
     assert "HISTORY_REFRESH_MS = 10 * 60000" in HTML
     assert "renderHistory();" in HTML
+
+def test_bus_ui_progressive_disclosure_and_timeline_order():
+    for element in ('journey-timeline','alarm-settings','settings-summary','clock-create','timer-create','open-settings'):
+        assert f'id="{element}"' in HTML
+    assert HTML.index('id="hero"') < HTML.index('id="journey-timeline"') < HTML.index('id="cards"') < HTML.index('id="alarm"')
+    assert '<script src="dashboard.js"></script>' in HTML
+    assert 'BD.buildView(' in HTML
+
+
+def test_bus_ui_timeline_and_browser_events_do_not_claim_delivery():
+    assert '이 브라우저의 알림 실행은 OS 알림 전달 완료를 뜻하지 않습니다.' in HTML
+    assert '계산된 예정' in HTML
+    assert 'busDashboard.v1.events' in HTML
+    assert 'id="alarm-undo-skip"' in HTML
+    assert '같은 요일 운행 시각 비교' in HTML
+    assert '점 하나가 운행 하나입니다.' in HTML
