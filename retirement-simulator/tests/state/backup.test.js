@@ -38,3 +38,11 @@ test('numeric drafts accept precision and units, reject empty/nonfinite/out of b
  assert.equal(parseNumericDraft('40.5',{min:20,max:70,integer:true}).valid,false);
  assert.equal(parseNumericDraft('1234',{min:0,max:50000}).value,1234);
 });
+test('complete backups with over twelve scenarios round trip without data loss',()=>{
+ const scenarios=Array.from({length:13},(_,n)=>({...base,id:`s${n}`,name:`계획 ${n}`,input:{...base.input,retireAge:60+n%5}})),restored=parseBackup(serializeBackup(scenarios,'s12'));
+ assert.equal(restored.scenarios.length,13);assert.equal(restored.activeId,'s12');assert.deepEqual(restored.scenarios.map(s=>s.input),scenarios.map(s=>s.input));
+});
+test('export and import share the same UTF-8 byte limit',()=>{
+ const scenarios=[{...base,name:'가'.repeat(700000)}];assert.throws(()=>serializeBackup(scenarios,'base'),/2MB/);assert.throws(()=>parseBackup(JSON.stringify({scenarios})),/2MB/);
+ assert.throws(()=>parseBackup(JSON.stringify({scenarios:[{...base,input:{...base.input,projectionStress:'true'}}]})),/시장 충격/);
+});

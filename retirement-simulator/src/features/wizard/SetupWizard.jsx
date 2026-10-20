@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { UI_RANGES } from '../../model/defaults.js';
 import { CURRENT_YEAR } from '../../model/assumptions.js';
 import { estimatedPensionMonthlyFor } from '../../model/pension.js';
@@ -18,6 +18,10 @@ export function SetupWizard({ initial, scenarioId, onComplete, onClose }) {
  const [createComparison,setCreateComparison]=useState(false);
  const [saveError,setSaveError]=useState(false);
  const [invalidDrafts,setInvalidDrafts]=useState({});
+ const reportValidity=useCallback((key, invalid)=>setInvalidDrafts(prev=>{
+  if (!!prev[key] === invalid) return prev;
+  const next={...prev};if(invalid)next[key]=true;else delete next[key];return next;
+ }),[]);
  const closeRef=useModalBehavior(onClose);
  useEffect(()=>{setSaveError(!saveWizardDraft(scenarioId,{step,input:draft,changed}));},[scenarioId,step,draft,changed]);
  const set=k=>v=>{setDraft(prev=>({...prev,[k]:v}));setChanged(prev=>prev.includes(k)?prev:[...prev,k]);};
@@ -30,7 +34,7 @@ export function SetupWizard({ initial, scenarioId, onComplete, onClose }) {
  const allErrors=[0,1,2,3].flatMap(n=>Object.values(wizardErrors(input,n)));
  const finish=()=>{if(allErrors.length)return;onComplete({input,createComparison});removeWizardDraft(scenarioId);};
  const fieldNames={currentAge:'현재 나이',retireAge:'희망 퇴직 나이',bridgeLivingCost:'브릿지 생활비',retirementLivingCost:'은퇴 생활비',selfCurrentSalary:'본인 소득',spouseCurrentSalary:'배우자 소득',selfNpInputMode:'연금 입력 방식',selfNpManualMonthly:'예상 국민연금',housingMode:'주거 형태',savingsBalance:'저축성 자산',investmentBalance:'투자성 자산',housePrice:'주택 시세',mortgageBalance:'대출 잔액',monthlyMortgagePayment:'월 원리금',deposit:'보증금',monthlyRent:'월세',spouseEnabled:'배우자 여부',spouseCurrentAge:'배우자 나이',spouseRetireAge:'배우자 퇴직 나이',children:'자녀',postRetireSideIncome:'퇴직 후 부수입'};
- return <FieldContext.Provider value={{input:draft,errors,onValidityChange:(k,invalid)=>setInvalidDrafts(prev=>({...prev,[k]:invalid}))}}>
+ return <FieldContext.Provider value={{input:draft,errors,onValidityChange:reportValidity}}>
   <div className="wizard-overlay" onClick={onClose}><div className="wizard-card" role="dialog" aria-modal="true" aria-labelledby="wizard-title" onClick={e=>e.stopPropagation()}>
    <div className="flex justify-between items-center"><h2 id="wizard-title" className="font-semibold text-lg">은퇴 계획 만들기</h2><button type="button" ref={closeRef} onClick={onClose} aria-label="빠른 설정 닫기">✕</button></div>
    <p className="text-xs text-slate-500 mb-2">{step+1}/5 · {WIZARD_STEPS[step]}{saved?' · 저장된 초안에서 재개':''}</p>

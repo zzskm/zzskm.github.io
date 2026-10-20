@@ -7,13 +7,16 @@ export const FieldContext = createContext({});
 export function NumericField({ label, value, min = 0, max = 100000000, step = 1, onChange, format, hint, changed, showAnnual, unit, typedMax, fieldKey, slider = true, integer = false }) {
   const id = useId();
   const context = useContext(FieldContext);
+  const reportValidity = context.onValidityChange;
+  const validityKey = fieldKey ?? label;
+  useEffect(() => () => reportValidity?.(validityKey, false), [reportValidity, validityKey]);
   const [scale, setScale] = useState(1);
   const [draft, setDraft] = useState(String(value));
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState('');
   const cancelled = useRef(false);
   const hardMax = Math.max(max, typedMax ?? max);
-  useEffect(() => { if (!focused) setDraft(String((value ?? 0) / scale)); }, [value, scale, focused]);
+  useEffect(() => { if (!focused && !error) setDraft(String((value ?? 0) / scale)); }, [value, scale, focused, error]);
   const isInteger = integer || ['세', '년'].includes(unit);
   const parsed = parseNumericDraft(draft, { value, min, max: hardMax, scale, integer: isInteger });
   const commit = () => {
@@ -21,6 +24,7 @@ export function NumericField({ label, value, min = 0, max = 100000000, step = 1,
     if (cancelled.current) { cancelled.current = false; setError(''); return; }
     if (!parsed.valid) { setError(parsed.error); return; }
     setError('');
+    reportValidity?.(validityKey, false);
     setDraft(String(parsed.value / scale));
     if (parsed.value !== value) onChange(parsed.value);
   };

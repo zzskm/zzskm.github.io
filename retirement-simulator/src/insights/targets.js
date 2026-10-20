@@ -17,7 +17,7 @@ export function exploreTargets(input) {
  const spending=costs.filter(n=>holds(calculate({retirementLivingCost:n}))).at(-1)??null;
  const longevityPatch={selfLifeExpectancy:Math.min(105,input.selfLifeExpectancy+5),...(input.spouseEnabled?{spouseLifeExpectancy:Math.min(105,input.spouseLifeExpectancy+5)}:{})};
  const longevity=calculate(longevityPatch);
- const shockPatch={stressTest:'severe'};
+ const shockPatch={stressTest:'severe',projectionStress:true};
  const shock=runScenarioBand(normalizeInput({...input,...shockPatch})).sequenceShock;
  return {earliest,additionalAssets,monthlySaving,spending,baseEndAge:base.simEndAge,
   longevity:{patch:longevityPatch,depletionAge:longevity.depletionAge,endAge:longevity.simEndAge,final:longevity.yearlyAssetFlow.at(-1)?.financialAssets??0},

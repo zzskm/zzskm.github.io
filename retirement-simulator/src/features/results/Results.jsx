@@ -56,7 +56,7 @@ function ResultBanner({ input, result, npMonthly, mc, onApplyLife90 }) {
       </div>
       <div className="mt-1 text-xs text-slate-600">
         {mc.medianDepletionAge != null && <>실패한 경우 중앙 고갈 시점 <b>{mc.medianDepletionAge}세</b> · </>}
-        수익률이 고정이라면(중간 시나리오): {det.text} · 준비율 {result.readinessRatio}%
+        {input.projectionStress === true ? "선택한 시장 충격을 반영한 경로" : "수익률이 고정이라면(중간 시나리오)"}: {det.text} · 준비율 {result.readinessRatio}%
       </div>
       <div className="mt-0.5 text-xs text-slate-600 num">
         최종 금융자산 분포{(mc.p10Final < 0 || mc.p50Final < 0) ? "(음수 = 부족액)" : ""} — 하위10% {fmt만원(mc.p10Final)} · 중앙 {fmt만원(mc.p50Final)} · 상위10% {fmt만원(mc.p90Final)} · 본인 국민연금 {fmt만원월(npMonthly)}

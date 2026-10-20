@@ -3,18 +3,25 @@ import { KR_DEFAULTS, UI_RANGES, SCENARIO_COLORS } from '../model/defaults.js';
 import { normalizeInput } from './migration.js';
 import { validateInput } from '../model/validation.js';
 export const BACKUP_FORMAT = 'retirement-simulator';
+export const MAX_BACKUP_BYTES = 2_000_000;
+function checkSize(text) {
+  if (new TextEncoder().encode(text).byteLength > MAX_BACKUP_BYTES) throw new Error('백업 파일은 2MB 이하여야 합니다.');
+}
 export function serializeBackup(scenarios, activeId) {
-  return JSON.stringify({format:BACKUP_FORMAT,version:1,assumptionVersion:ASSUMPTIONS.version,exportedAt:new Date().toISOString(),activeId,scenarios},null,2);
+  const text = JSON.stringify({format:BACKUP_FORMAT,version:1,assumptionVersion:ASSUMPTIONS.version,exportedAt:new Date().toISOString(),activeId,scenarios},null,2);
+  checkSize(text);
+  return text;
 }
 export function parseBackup(text) {
-  if (text.length > 2_000_000) throw new Error('백업 파일은 2MB 이하여야 합니다.');
+  checkSize(text);
   const obj=JSON.parse(text);
   if (!obj || typeof obj !== 'object' || (obj.format && obj.format!==BACKUP_FORMAT) || (obj.version && obj.version!==1)) throw new Error('지원하지 않는 백업 형식입니다.');
-  if (!Array.isArray(obj.scenarios) || !obj.scenarios.length || obj.scenarios.length>12) throw new Error('시나리오는 한 번에 12개까지 가져올 수 있습니다.');
+  if (!Array.isArray(obj.scenarios) || !obj.scenarios.length) throw new Error('시나리오가 포함된 백업 파일이 필요합니다.');
   const ids=new Set();
   const scenarios=obj.scenarios.map((s,idx)=>{
     if (!s || typeof s.input!=='object' || !s.input || Array.isArray(s.input)) throw new Error('시나리오 입력이 없습니다.');
     if (Array.isArray(s.input.children) && s.input.children.length>5) throw new Error('자녀는 시나리오마다 5명까지 입력할 수 있습니다.');
+    if ('projectionStress' in s.input && typeof s.input.projectionStress !== 'boolean') throw new Error('시장 충격 적용 여부를 확인해주세요.');
     const input=normalizeInput(s.input);
     for(const [key,def] of Object.entries(KR_DEFAULTS)) {
       if(typeof def==='number' && (typeof input[key]!=='number'||!Number.isFinite(input[key]))) throw new Error(`${key}: 숫자가 필요합니다.`);
