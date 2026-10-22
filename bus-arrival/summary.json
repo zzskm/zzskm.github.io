@@ -5,7 +5,7 @@
     "alpha": 0.05,
     "min_trips": 20,
     "fallback_sec": 660,
-    "trained_through": "2026-10-20",
+    "trained_through": "2026-10-21",
     "training_days": [
       "2026-09-28",
       "2026-09-29",
@@ -21,43 +21,44 @@
       "2026-10-15",
       "2026-10-16",
       "2026-10-19",
-      "2026-10-20"
+      "2026-10-20",
+      "2026-10-21"
     ],
     "bins": {
       "global": {
-        "trips": 151,
+        "trips": 162,
         "offset_sec": -762,
-        "mean_offset_sec": -98,
+        "mean_offset_sec": -102,
         "method": "trip_lower_quantile"
       },
       "far:other": {
-        "trips": 111,
-        "offset_sec": -617,
-        "mean_offset_sec": -90,
+        "trips": 118,
+        "offset_sec": -626,
+        "mean_offset_sec": -100,
         "method": "trip_lower_quantile"
       },
       "far:last": {
-        "trips": 62,
-        "offset_sec": -788,
-        "mean_offset_sec": -318,
+        "trips": 67,
+        "offset_sec": -810,
+        "mean_offset_sec": -326,
         "method": "trip_lower_quantile"
       },
       "near:last": {
-        "trips": 143,
-        "offset_sec": -271,
-        "mean_offset_sec": -44,
+        "trips": 154,
+        "offset_sec": -280,
+        "mean_offset_sec": -45,
         "method": "trip_lower_quantile"
       },
       "mid:other": {
-        "trips": 67,
+        "trips": 70,
         "offset_sec": -250,
-        "mean_offset_sec": -10,
+        "mean_offset_sec": -12,
         "method": "trip_lower_quantile"
       },
       "mid:last": {
-        "trips": 122,
-        "offset_sec": -347,
-        "mean_offset_sec": -68,
+        "trips": 129,
+        "offset_sec": -350,
+        "mean_offset_sec": -71,
         "method": "trip_lower_quantile"
       }
     },
@@ -77,7 +78,7 @@
     "missing_endpoints": 0,
     "quick_reappearance": 1,
     "overlapping_trip": 0,
-    "prediction_rows": 4046,
+    "prediction_rows": 4047,
     "arrival_rows": 166,
     "short_track_trips": 7,
     "reasons": {
@@ -89,42 +90,42 @@
     "eligible_trips": 162,
     "api_signal_trips": 0,
     "no_bus_rows": 1953,
-    "unmatched_vehicle_rows": 16,
+    "unmatched_vehicle_rows": 17,
     "window_days": 42
   },
   "historical_alerts": {
-    "date": "2026-10-21",
+    "date": "2026-10-22",
     "slots": [],
     "source": "historical_not_realtime"
   },
-  "generated_at": "2026-10-21T22:01:01.462318+09:00",
+  "generated_at": "2026-10-22T16:00:04.086707+09:00",
   "latest": {
-    "ts_kst": "2026-10-21T21:59:01+09:00",
-    "vehId": "",
-    "plateNo": "",
-    "predict_sec": "",
-    "remain_seat": "",
+    "ts_kst": "2026-10-22T16:00:02+09:00",
+    "vehId": "204003593",
+    "plateNo": "경기70아6519",
+    "predict_sec": "218",
+    "remain_seat": "44",
     "state_cd": "",
     "flag": "PASS",
-    "location_no": ""
+    "location_no": "1"
   },
   "latest_valid": {
-    "ts_kst": "2026-10-21T21:40:01+09:00",
-    "vehId": "204003591",
-    "plateNo": "경기70아6517",
-    "predict_sec": "25",
-    "remain_seat": "43",
+    "ts_kst": "2026-10-22T16:00:02+09:00",
+    "vehId": "204003593",
+    "plateNo": "경기70아6519",
+    "predict_sec": "218",
+    "remain_seat": "44",
     "state_cd": "",
     "flag": "PASS",
     "location_no": "1"
   },
   "today": {
-    "samples": 126,
-    "min_predict_sec": 20,
-    "avg_predict_sec": 572
+    "samples": 1,
+    "min_predict_sec": 218,
+    "avg_predict_sec": 218
   },
-  "prediction_samples": 4046,
-  "valid_prediction_samples": 2093,
+  "prediction_samples": 4047,
+  "valid_prediction_samples": 2094,
   "no_bus_samples": 1953,
   "invalid_samples": 0,
   "arrival_records": 166,
@@ -233,19 +234,14 @@
       "samples": 126,
       "min_predict_sec": 20,
       "avg_predict_sec": 572
+    },
+    "2026-10-22": {
+      "samples": 1,
+      "min_predict_sec": 218,
+      "avg_predict_sec": 218
     }
   },
   "recent_predictions": [
-    {
-      "ts_kst": "2026-10-21T21:11:01+09:00",
-      "vehId": "",
-      "plateNo": "",
-      "predict_sec": "",
-      "remain_seat": "",
-      "state_cd": "",
-      "flag": "PASS",
-      "location_no": ""
-    },
     {
       "ts_kst": "2026-10-21T21:13:01+09:00",
       "vehId": "",
@@ -535,6 +531,16 @@
       "state_cd": "",
       "flag": "PASS",
       "location_no": ""
+    },
+    {
+      "ts_kst": "2026-10-22T16:00:02+09:00",
+      "vehId": "204003593",
+      "plateNo": "경기70아6519",
+      "predict_sec": "218",
+      "remain_seat": "44",
+      "state_cd": "",
+      "flag": "PASS",
+      "location_no": "1"
     }
   ],
   "recent_arrivals": [
