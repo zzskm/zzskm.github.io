@@ -5,7 +5,7 @@
     "alpha": 0.05,
     "min_trips": 20,
     "fallback_sec": 660,
-    "trained_through": "2026-10-21",
+    "trained_through": "2026-10-22",
     "training_days": [
       "2026-09-28",
       "2026-09-29",
@@ -22,43 +22,44 @@
       "2026-10-16",
       "2026-10-19",
       "2026-10-20",
-      "2026-10-21"
+      "2026-10-21",
+      "2026-10-22"
     ],
     "bins": {
       "global": {
-        "trips": 162,
+        "trips": 173,
         "offset_sec": -762,
         "mean_offset_sec": -102,
         "method": "trip_lower_quantile"
       },
       "far:other": {
-        "trips": 118,
-        "offset_sec": -626,
-        "mean_offset_sec": -100,
+        "trips": 125,
+        "offset_sec": -617,
+        "mean_offset_sec": -97,
         "method": "trip_lower_quantile"
       },
       "far:last": {
-        "trips": 67,
+        "trips": 71,
         "offset_sec": -810,
-        "mean_offset_sec": -326,
+        "mean_offset_sec": -319,
         "method": "trip_lower_quantile"
       },
       "near:last": {
-        "trips": 154,
-        "offset_sec": -280,
-        "mean_offset_sec": -45,
+        "trips": 164,
+        "offset_sec": -271,
+        "mean_offset_sec": -46,
         "method": "trip_lower_quantile"
       },
       "mid:other": {
-        "trips": 70,
+        "trips": 75,
         "offset_sec": -250,
-        "mean_offset_sec": -12,
+        "mean_offset_sec": -14,
         "method": "trip_lower_quantile"
       },
       "mid:last": {
-        "trips": 129,
+        "trips": 139,
         "offset_sec": -350,
-        "mean_offset_sec": -71,
+        "mean_offset_sec": -73,
         "method": "trip_lower_quantile"
       }
     },
@@ -78,7 +79,7 @@
     "missing_endpoints": 0,
     "quick_reappearance": 1,
     "overlapping_trip": 0,
-    "prediction_rows": 4293,
+    "prediction_rows": 4296,
     "arrival_rows": 177,
     "short_track_trips": 8,
     "reasons": {
@@ -89,18 +90,18 @@
     "matched_trips": 177,
     "eligible_trips": 173,
     "api_signal_trips": 0,
-    "no_bus_rows": 2067,
+    "no_bus_rows": 2070,
     "unmatched_vehicle_rows": 16,
     "window_days": 42
   },
   "historical_alerts": {
-    "date": "2026-10-22",
+    "date": "2026-10-23",
     "slots": [],
     "source": "historical_not_realtime"
   },
-  "generated_at": "2026-10-22T22:01:02.468149+09:00",
+  "generated_at": "2026-10-23T16:05:01.589251+09:00",
   "latest": {
-    "ts_kst": "2026-10-22T21:59:02+09:00",
+    "ts_kst": "2026-10-23T16:04:01+09:00",
     "vehId": "",
     "plateNo": "",
     "predict_sec": "",
@@ -120,13 +121,13 @@
     "location_no": "1"
   },
   "today": {
-    "samples": 133,
-    "min_predict_sec": 25,
-    "avg_predict_sec": 520
+    "samples": 0,
+    "min_predict_sec": null,
+    "avg_predict_sec": null
   },
-  "prediction_samples": 4293,
+  "prediction_samples": 4296,
   "valid_prediction_samples": 2226,
-  "no_bus_samples": 2067,
+  "no_bus_samples": 2070,
   "invalid_samples": 0,
   "arrival_records": 177,
   "departure_reasons": {
@@ -242,36 +243,6 @@
     }
   },
   "recent_predictions": [
-    {
-      "ts_kst": "2026-10-22T21:11:02+09:00",
-      "vehId": "",
-      "plateNo": "",
-      "predict_sec": "",
-      "remain_seat": "",
-      "state_cd": "",
-      "flag": "PASS",
-      "location_no": ""
-    },
-    {
-      "ts_kst": "2026-10-22T21:13:02+09:00",
-      "vehId": "",
-      "plateNo": "",
-      "predict_sec": "",
-      "remain_seat": "",
-      "state_cd": "",
-      "flag": "PASS",
-      "location_no": ""
-    },
-    {
-      "ts_kst": "2026-10-22T21:15:02+09:00",
-      "vehId": "",
-      "plateNo": "",
-      "predict_sec": "",
-      "remain_seat": "",
-      "state_cd": "",
-      "flag": "PASS",
-      "location_no": ""
-    },
     {
       "ts_kst": "2026-10-22T21:17:02+09:00",
       "vehId": "",
@@ -534,6 +505,36 @@
     },
     {
       "ts_kst": "2026-10-22T21:59:02+09:00",
+      "vehId": "",
+      "plateNo": "",
+      "predict_sec": "",
+      "remain_seat": "",
+      "state_cd": "",
+      "flag": "PASS",
+      "location_no": ""
+    },
+    {
+      "ts_kst": "2026-10-23T16:00:01+09:00",
+      "vehId": "",
+      "plateNo": "",
+      "predict_sec": "",
+      "remain_seat": "",
+      "state_cd": "",
+      "flag": "PASS",
+      "location_no": ""
+    },
+    {
+      "ts_kst": "2026-10-23T16:02:01+09:00",
+      "vehId": "",
+      "plateNo": "",
+      "predict_sec": "",
+      "remain_seat": "",
+      "state_cd": "",
+      "flag": "PASS",
+      "location_no": ""
+    },
+    {
+      "ts_kst": "2026-10-23T16:04:01+09:00",
       "vehId": "",
       "plateNo": "",
       "predict_sec": "",
