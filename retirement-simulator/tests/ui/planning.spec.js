@@ -20,7 +20,7 @@ test('old URL preserves settings, query and fragment and boots the built app',as
  await expect(page).toHaveURL(/retirement-simulator\/\?source=legacy#plan/);
  await expect(page.getByRole('heading',{name:'은퇴 현금흐름 시뮬레이터'})).toBeVisible();
  await expect(page.getByText('이 모델의 표본에서', {exact:false})).toBeVisible();
- expect((await stored(page)).scenarios[0].input.investmentBalance).toBe(5000);
+ expect((await stored(page)).scenarios[0].input.investmentBalance).toBe(KR_DEFAULTS.investmentBalance);
  expect(errors).toEqual([]);
 });
 test('numeric editing preserves blank draft, Escape cancels, Enter commits and refresh keeps it',async({page})=>{
@@ -134,4 +134,36 @@ test('branch Pages entry serves compiled modules with JavaScript MIME types',asy
  const scripts=await page.locator('script[src]').evaluateAll(nodes=>nodes.map(n=>n.src));expect(scripts.length).toBeGreaterThan(0);
  for(const src of scripts){expect(new URL(src).pathname).toMatch(/\/assets\/[^/]+\.js$/);const response=await request.get(src);expect(response.ok()).toBe(true);expect(response.headers()['content-type']).toMatch(/javascript/);}
  expect(errors).toEqual([]);
+});
+
+
+test('current ages show birth years in the editor and wizard while retirement ages do not',async({page})=>{
+ const year=new Date().getFullYear();
+ await page.goto('/retirement-simulator/');await inputPanel(page);
+ const self=page.locator('[data-birth-year-for="currentAge"]');
+ await expect(self).toContainText(`${year-40}년생`);
+ const age=page.getByLabel('현재 나이',{exact:true});await age.fill('41');
+ await expect(self).toContainText(`${year-41}년생`);await age.press('Escape');
+ await expect(self).toContainText(`${year-40}년생`);
+ await age.fill('42');await age.press('Enter');await page.reload();await inputPanel(page);
+ await expect(page.locator('[data-birth-year-for="currentAge"]')).toContainText(`${year-42}년생`);
+ await expect(page.locator('[data-birth-year-for="retireAge"]')).toHaveCount(0);
+ await page.getByRole('button',{name:'🪄 빠른 설정'}).click();
+ const dialog=page.getByRole('dialog');
+ await expect(dialog.locator('[data-birth-year-for="currentAge"]')).toContainText(`${year-42}년생`);
+ await dialog.getByRole('button',{name:'다음',exact:true}).click();
+ const spouse=dialog.getByLabel('배우자 현재 나이',{exact:true});await spouse.fill('39');await spouse.press('Enter');
+ await expect(dialog.locator('[data-birth-year-for="spouseCurrentAge"]')).toContainText(`${year-39}년생`);
+ await expect(dialog.locator('[data-birth-year-for="spouseCurrentAge"]')).toContainText('생일 미반영');
+ await dialog.getByRole('button',{name:'빠른 설정 닫기'}).click();
+});
+
+test('median reference discloses household units, source dates and illustrative allocation',async({page})=>{
+ await page.goto('/retirement-simulator/');await inputPanel(page);
+ const reference=page.locator('#inputs-panel details').filter({has:page.getByText('중위 수준 참고 기본값 · 출처와 예시 가정',{exact:true})});
+ await reference.locator(':scope > summary').click();
+ await expect(reference).toContainText('2024년 세전 연 5,800만원');
+ await expect(reference).toContainText('23,860만원');
+ await expect(reference).toContainText('각 개인·자산 항목의 중위값은 아닙니다');
+ await expect(reference.getByRole('link',{name:/보통사람 금융생활 보고서 2024/})).toHaveAttribute('href',/notice_20240417\.pdf/);
 });

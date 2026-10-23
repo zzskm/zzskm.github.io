@@ -8,6 +8,7 @@ import { Toggle } from '../../components/Section.jsx';
 import { useModalBehavior } from '../../components/Modal.jsx';
 import { readWizardDraft, saveWizardDraft, removeWizardDraft, wizardErrors, applyWizardDraft } from '../../state/wizardDraft.js';
 import { fmt만원 } from '../../utils/formatting.js';
+import { DefaultReference } from '../../components/DefaultReference.jsx';
 const WIZARD_STEPS=['나의 은퇴 목표','가구 상황','소득과 연금','자산과 부채','결과 확인'];
 export function SetupWizard({ initial, scenarioId, onComplete, onClose }) {
  const [saved]=useState(()=>readWizardDraft(scenarioId));
@@ -39,6 +40,7 @@ export function SetupWizard({ initial, scenarioId, onComplete, onClose }) {
    <div className="flex justify-between items-center"><h2 id="wizard-title" className="font-semibold text-lg">은퇴 계획 만들기</h2><button type="button" ref={closeRef} onClick={onClose} aria-label="빠른 설정 닫기">✕</button></div>
    <p className="text-xs text-slate-500 mb-2">{step+1}/5 · {WIZARD_STEPS[step]}{saved?' · 저장된 초안에서 재개':''}</p>
    <progress value={step+1} max="5" className="w-full mb-3" aria-label="설정 진행"/>
+   {step===0&&<DefaultReference/>}
    {saveError&&<p role="alert" className="text-red-700 text-xs">초안을 저장하지 못했습니다. 이 창을 닫으면 입력을 잃을 수 있습니다.</p>}
    {step===0&&<><p className="text-sm mb-4">언제 퇴직하고 어느 정도로 생활할지 정합니다. 주거·의료·자녀 비용은 별도로 계산합니다.</p>{num('currentAge','현재 나이')}{num('retireAge','희망 퇴직 나이')}{num('bridgeLivingCost','퇴직 후 연금 전 월 생활비')}{num('retirementLivingCost','연금 수령 후 월 생활비','65세·75세 이후 기본 지출 감소 가정을 적용합니다.')}</>}
    {step===1&&<><p className="text-sm mb-4">함께 생활하는 가족과 주거 형태에 맞춰 필요한 항목만 입력합니다.</p><Toggle label="배우자 있음" value={draft.spouseEnabled} onChange={set('spouseEnabled')}/>{draft.spouseEnabled&&<>{num('spouseCurrentAge','배우자 현재 나이')}{num('spouseRetireAge','배우자 퇴직 나이')}</>}{housing}<label className="block text-sm">자녀 수<select className="border rounded p-2 ml-3" value={draft.children.length} onChange={e=>set('children')(Array.from({length:Number(e.target.value)},(_,n)=>draft.children[n]??{id:`wizard-child-${n}`,birthYear:CURRENT_YEAR}))}>{[0,1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>{draft.children.map((c,n)=><NumericField key={c.id} label={`자녀 ${n+1} 출생 연도`} value={c.birthYear} min={1900} max={CURRENT_YEAR} integer slider={false} onChange={v=>set('children')(draft.children.map((child,idx)=>idx===n?{...child,birthYear:v}:child))}/>)}</>}
@@ -50,3 +52,4 @@ export function SetupWizard({ initial, scenarioId, onComplete, onClose }) {
   </div></div>
  </FieldContext.Provider>;
 }
+

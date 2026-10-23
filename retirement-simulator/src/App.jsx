@@ -24,6 +24,7 @@ import { SetupWizard } from "./features/wizard/SetupWizard.jsx";
 import { normalizeInput } from "./state/migration.js";
 import { LS_KEY, uid, makeScenario, loadInitial, saveScenarios, ADV_KEY, VERSION_KEY, WIZARD_KEY, AUTO_NAME_RE, readFlag, writeFlag } from "./state/scenarioStore.js";
 import { ScenarioNameEditor } from "./features/comparison/ScenarioNameEditor.jsx";
+import { DefaultReference } from "./components/DefaultReference.jsx";
 
 function App() {
   const [initial] = useState(() => loadInitial());
@@ -487,6 +488,7 @@ function App() {
             </div>
 
             {/* 프로필 */}
+            <DefaultReference />
             <Section title="프로필" defaultOpen summary={`${i.currentAge}→${i.retireAge}→${i.selfPensionStartAge}세`}>
               <Slider label="현재 나이" value={i.currentAge} {...UI_RANGES.currentAge} fieldKey="currentAge" onChange={setInputField("currentAge")} format={v => `${v}세`} changed={changedFrom("currentAge")} />
               <Slider label="퇴직 나이" value={i.retireAge} {...UI_RANGES.retireAge} min={i.currentAge} fieldKey="retireAge" onChange={setInputField("retireAge")} format={v => `${v}세`} changed={changedFrom("retireAge")} />
@@ -1251,3 +1253,4 @@ function App() {
 
 
 export { App };
+
