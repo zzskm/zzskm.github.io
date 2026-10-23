@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useId, useRef, useState } 
 import { basisAnnualToNet, netToBasisAnnual } from '../model/taxation.js';
 import { parseNumericDraft } from '../utils/units.js';
 import { fmt만원 } from '../utils/formatting.js';
+import { birthYearLabel } from '../utils/age.js';
 export const FieldContext = createContext({});
 
 export function NumericField({ label, value, min = 0, max = 100000000, step = 1, onChange, format, hint, changed, showAnnual, unit, typedMax, fieldKey, slider = true, integer = false }) {
@@ -47,6 +48,7 @@ export function NumericField({ label, value, min = 0, max = 100000000, step = 1,
     </div>
     <div id={`${id}-help`} className="text-[11px] mt-1 text-slate-500" aria-live="polite">
       {(error || externalError) && <p role="alert" className="text-red-700">{error || externalError}</p>}
+      {['currentAge', 'spouseCurrentAge'].includes(fieldKey) && <p data-birth-year-for={fieldKey}>{birthYearLabel(conversion)}</p>}
       {format && <p>{format(conversion)}</p>}
       {showAnnual && <p>연 {Math.round(Number(conversion) * 12).toLocaleString()}만원</p>}
       {hint && <p>{hint}</p>}
@@ -68,3 +70,4 @@ export function SalaryInput({ name, netAnnual, basis, onChangeNet, onChangeBasis
     <p className="text-[11px] text-slate-500">세후 약 {fmt만원(netAnnual)}/년 · 월 {Math.round(netAnnual/12).toLocaleString()}만원{basis==='gross'?' (4대보험·본인 1인 공제 기준 추정)':''}</p>
   </div>;
 }
+

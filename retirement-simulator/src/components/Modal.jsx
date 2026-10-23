@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { ASSUMPTIONS } from "../model/assumptions.js";
+import { DefaultReference } from "./DefaultReference.jsx";
 
 function useModalBehavior(onClose) {
   const closeRef = useRef(null);
@@ -59,6 +60,7 @@ function AssumptionsModal({ onClose }) {
         </div>
 
         <div className="space-y-4">
+          <DefaultReference />
           {/* 국민연금 */}
           <div>
             <H3>국민연금·기초연금 (2026 기준)</H3>
@@ -136,3 +138,4 @@ function AssumptionsModal({ onClose }) {
 
 
 export { useModalBehavior, AssumptionsModal };
+

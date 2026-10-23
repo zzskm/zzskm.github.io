@@ -26,7 +26,7 @@ const fixtures = [
 ];
 for (const [idx,patch] of fixtures.entries()) {
  test(`legacy parity: complete yearly flows, housing, pension, withdrawal and seeded MC ${idx}`,()=>{
-  const input=normalizeInput({...KR_DEFAULTS,...patch});
+  const input=normalizeInput({...legacy.KR_DEFAULTS,...patch});
   assert.deepEqual(input,legacy.normalizeInput({...legacy.KR_DEFAULTS,...patch}));
   assert.deepEqual(calculateScenario(input),legacy.calculateScenario(input));
   assert.deepEqual(runScenarioBand(input),legacy.runScenarioBand(input));
@@ -34,8 +34,8 @@ for (const [idx,patch] of fixtures.entries()) {
   assert.ok(calculateScenario(input).yearlyAssetFlow.every(r=>Object.values(r).every(v=>typeof v!=='number'||Number.isFinite(v))));
  });
 }
-test('2026 default regression golden values',()=>{
- const actual=calculateScenario(normalizeInput(KR_DEFAULTS));
+test('historical 2026 default regression golden values stay unchanged',()=>{
+ const actual=calculateScenario(normalizeInput(legacy.KR_DEFAULTS));
  const golden=JSON.parse(requireGolden());
  for(const [key,value] of Object.entries(golden)) assert.deepEqual(actual[key],value,key);
 });
@@ -59,4 +59,12 @@ test('manual pension and claim adjustment boundaries',()=>{
  const input=normalizeInput({...KR_DEFAULTS,selfNpInputMode:'manual',selfNpManualMonthly:123});
  assert.equal(estimatedPensionMonthlyFor(input,'self'),legacy.estimatedPensionMonthlyFor(input,'self'));
  assert.equal(healthInsuranceYearly({earnedIncome:0,pensionIncome:2000,houseValue:50000}),legacy.healthInsuranceYearly({earnedIncome:0,pensionIncome:2000,houseValue:50000}));
+});
+
+
+test('new middle-household preset uses the unchanged calculation model',()=>{
+ const input=normalizeInput(KR_DEFAULTS);
+ assert.deepEqual(calculateScenario(input),legacy.calculateScenario(input));
+ assert.deepEqual(runScenarioBand(input),legacy.runScenarioBand(input));
+ assert.deepEqual(runMonteCarlo(input,undefined,{runs:50}),legacy.runMonteCarlo(input,undefined,{runs:50}));
 });
