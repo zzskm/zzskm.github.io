@@ -38,7 +38,8 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
-def simulate(directory, responses, start, state=None, extra_args=(), poll_times=None, secondary=None):
+def simulate(directory, responses, start, state=None, extra_args=(), poll_times=None, secondary=None,
+             failure_detail=None):
     """가짜 시계로 run_loop 를 돌린다. 1차 정류장 응답만 responses 순서대로 돌려준다.
 
     poll_times 리스트를 주면 1차 조회 시각을, secondary 리스트를 주면 2차 조회 시각을 채운다.
@@ -49,11 +50,14 @@ def simulate(directory, responses, start, state=None, extra_args=(), poll_times=
     clock = {"now": start}
     queue = iter(responses)
 
-    def fake_fetch(service_key, station_id, route_id, sta_order):
+    def fake_fetch(service_key, station_id, route_id, sta_order, **kwargs):
         if station_id == SCRAPER.STATION_ID:
             if poll_times is not None:
                 poll_times.append(clock["now"])
-            return next(queue)
+            result = next(queue)
+            if result is None and failure_detail:
+                kwargs.get("diagnostics", {}).update(failure_detail)
+            return result
         if secondary is not None:
             secondary.append(clock["now"])
         return None
@@ -136,6 +140,63 @@ class BusArrivalLogicTests(unittest.TestCase):
             self.assertEqual(summary["today"]["min_predict_sec"], 180)
             self.assertEqual(len(summary["recent_predictions"]), 2)
             self.assertEqual(summary["recent_arrivals"], [{"departure_reason": "vehicle_changed"}])
+
+
+class BusArrivalApiDiagnosticsTests(unittest.TestCase):
+    def fetch(self, response=None, error=None):
+        detail = {"old": "must be cleared"}
+        with mock.patch.object(SCRAPER.httpx, "get", return_value=response, side_effect=error):
+            result = SCRAPER.fetch_arrival("secret-key", 206000565, 204000170, 6, diagnostics=detail)
+        return result, detail
+
+    def response(self, status, body):
+        return SCRAPER.httpx.Response(status, text=body, request=SCRAPER.httpx.Request(
+            "GET", "https://apis.data.go.kr/?serviceKey=secret-key"))
+
+    def test_timeouts_distinguish_connection_from_response_without_leaking_key(self):
+        for cls, phase in ((SCRAPER.httpx.ConnectTimeout, "connect"), (SCRAPER.httpx.ReadTimeout, "read")):
+            with self.subTest(phase=phase), self.assertLogs(level="WARNING") as logs:
+                result, detail = self.fetch(error=cls("URL contains serviceKey=secret-key"))
+            self.assertIsNone(result)
+            self.assertEqual(detail, {"kind": "timeout", "phase": phase})
+            self.assertNotIn("secret-key", "\n".join(logs.output) + json.dumps(detail))
+
+    def test_gateway_reason_survives_http_403_and_does_not_log_response_text(self):
+        body = "<OpenAPI_ServiceResponse><cmmMsgHeader><returnReasonCode>22</returnReasonCode><returnAuthMsg>secret-key</returnAuthMsg></cmmMsgHeader></OpenAPI_ServiceResponse>"
+        with self.assertLogs(level="WARNING") as logs:
+            result, detail = self.fetch(self.response(403, body))
+        self.assertIsNone(result)
+        self.assertEqual(detail, {"kind": "http_error", "http_status": 403, "gateway_code": "22"})
+        self.assertNotIn("secret-key", "\n".join(logs.output) + json.dumps(detail))
+
+    def test_non_xml_http_error_is_not_reported_as_xml_error(self):
+        result, detail = self.fetch(self.response(503, "Service unavailable"))
+        self.assertIsNone(result)
+        self.assertEqual(detail, {"kind": "http_error", "http_status": 503})
+
+    def test_no_bus_is_still_a_success_and_clears_old_diagnostics(self):
+        result, detail = self.fetch(self.response(200, "<response><msgHeader><resultCode>4</resultCode></msgHeader></response>"))
+        self.assertIsNone(result["veh_id"])
+        self.assertEqual(detail, {})
+
+    def test_successful_vehicle_response_keeps_existing_fields(self):
+        result, detail = self.fetch(self.response(200, "<response><msgHeader><resultCode>0</resultCode></msgHeader><msgBody><busArrivalItem><vehId1>111</vehId1><predictTimeSec1>600</predictTimeSec1><locationNo1>3</locationNo1></busArrivalItem></msgBody></response>"))
+        self.assertEqual((result["veh_id"], result["predict_sec"], result["location_no"]), (111, 600, 3))
+        self.assertEqual(detail, {})
+
+    def test_primary_failure_detail_is_published_and_cleared_after_recovery(self):
+        start = dt.datetime(2026, 9, 28, 17, 0, tzinfo=KST)
+        detail = {"kind": "timeout", "phase": "read"}
+        with tempfile.TemporaryDirectory() as directory:
+            simulate(directory, [None], start, failure_detail=detail)
+            path = Path(directory) / "status.json"
+            status = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(status["error"], "api_error")
+            self.assertEqual(status["api_error_detail"], detail)
+            simulate(directory, [NO_BUS], start + dt.timedelta(minutes=1))
+            status = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(status["error"], "no_bus")
+            self.assertNotIn("api_error_detail", status)
 
 
 class BusArrivalGateTests(unittest.TestCase):

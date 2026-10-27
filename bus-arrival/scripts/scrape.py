@@ -130,7 +130,18 @@ def no_bus_info(flag: str = "") -> dict:
     }
 
 
-def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: int) -> dict | None:
+def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: int,
+                  *, diagnostics: dict | None = None) -> dict | None:
+    # Public status contains only controlled error types/codes, never URLs,
+    # exception messages or response bodies (which can include serviceKey).
+    detail = diagnostics if diagnostics is not None else {}
+    detail.clear()
+
+    def failed(kind, **codes):
+        detail.update(kind=kind, **codes)
+        logging.warning("API 실패 station=%d detail=%s", station_id, json.dumps(detail))
+        return None
+
     params = {
         "serviceKey": service_key,
         "stationId": str(station_id),
@@ -141,18 +152,26 @@ def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: i
     try:
         r = httpx.get(f"{ARRIVAL_BASE}/getBusArrivalItemv2",
                       params=params, headers={"User-Agent": USER_AGENT}, timeout=15)
-        r.raise_for_status()
-        root = ET.fromstring(r.text)
+        try:
+            root = ET.fromstring(r.text)
+        except ET.ParseError:
+            r.raise_for_status()
+            return failed("invalid_response")
+        # Gateway errors often use HTTP 403. Preserve their numeric reason.
+        codes = {}
+        for field, tag in (("result_code", "resultCode"), ("gateway_code", "returnReasonCode")):
+            value = xml_text(root, ".//" + tag)
+            if value.isascii() and value.isdigit() and len(value) <= 3:
+                codes[field] = value
+        if not r.is_success:
+            return failed("http_error", http_status=r.status_code, **codes)
+        if "gateway_code" in codes:
+            return failed("gateway_error", **codes)
         code = xml_text(root, ".//resultCode")
         if code == RESULT_NO_DATA:
             return no_bus_info()
         if code != "0":
-            # data.go.kr 게이트웨이 오류는 resultCode 대신 returnReasonCode 로 온다 (예: 22 호출 한도 초과)
-            logging.warning("API 오류 station=%d resultCode=%s msg=%s reason=%s",
-                            station_id, code or "-",
-                            xml_text(root, ".//resultMessage", "-"),
-                            xml_text(root, ".//returnAuthMsg", xml_text(root, ".//returnReasonCode", "-")))
-            return None
+            return failed("api_response_error", **codes)
         n = root.find(".//busArrivalItem")
         if n is None:
             return no_bus_info()
@@ -177,12 +196,15 @@ def fetch_arrival(service_key: str, station_id: int, route_id: int, sta_order: i
             "next_predict_sec": ti("predictTimeSec2"),
             "next_remain_seat": ti("remainSeatCnt2"),
         }
-    except Exception as e:
-        # 예외 메시지에는 serviceKey 가 담긴 요청 URL 이 포함될 수 있어 종류/상태코드만 남긴다 (공개 로그)
-        status = getattr(getattr(e, "response", None), "status_code", None)
-        logging.warning("API 실패 station=%d: %s%s", station_id, type(e).__name__,
-                        f" HTTP {status}" if status else "")
-        return None
+    except httpx.TimeoutException as e:
+        phase = "connect" if isinstance(e, httpx.ConnectTimeout) else "read" if isinstance(e, httpx.ReadTimeout) else "other"
+        return failed("timeout", phase=phase)
+    except httpx.HTTPStatusError as e:
+        return failed("http_error", http_status=e.response.status_code)
+    except httpx.RequestError:
+        return failed("connection_error")
+    except Exception:
+        return failed("unexpected_error")
 
 
 def resolve_station_id(service_key: str, route_id: int, mobile_no: str, station_seq: int) -> int | None:
@@ -519,7 +541,9 @@ def run_loop(args: argparse.Namespace):
             break
 
         request_started = time.monotonic()
-        info = fetch_arrival(service_key, STATION_ID, route_id, sta_order)
+        api_error_detail = {}
+        info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                             diagnostics=api_error_detail)
         api_latency_sec = round(time.monotonic() - request_started, 3)
         api_received_ts = kst_iso()
         # 2차 정류장은 1차에 버스가 있을 때만 조회한다 (버스가 없으면 기록할 것이 없다)
@@ -536,6 +560,7 @@ def run_loop(args: argparse.Namespace):
             state["consec_fail"] = state.get("consec_fail", 0) + 1
             status = {
                 "error": "api_error",
+                "api_error_detail": api_error_detail,
                 "consec_fail": state["consec_fail"],
                 "last_success": state.get("last_success"),
                 "state_reset": state_reset,
