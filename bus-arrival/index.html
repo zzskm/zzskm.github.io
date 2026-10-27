@@ -894,6 +894,22 @@
       : "<li class=\"empty\">운행 기록 수집 대기 중입니다. 차량 추적이 종료되면 추정 기록이 쌓입니다.</li>";
   }
 
+  function apiFailureLabel(st) {
+    const detail = st && st.api_error_detail;
+    if (!detail || !detail.kind) return st && st.error || "조회 실패";
+    const labels = {
+      timeout:detail.phase === "connect" ? "API 연결 시간 초과" : detail.phase === "read" ? "API 응답 대기 시간 초과" : "API 요청 시간 초과",
+      connection_error:"API 연결 실패", http_error:"API HTTP 오류",
+      gateway_error:"공공데이터 게이트웨이 오류", api_response_error:"버스 API 오류 응답",
+      invalid_response:"API 응답 형식 오류", unexpected_error:"API 처리 오류"
+    };
+    const codes = [];
+    if (detail.http_status) codes.push("HTTP " + detail.http_status);
+    if (detail.gateway_code) codes.push("게이트웨이 코드 " + detail.gateway_code);
+    if (detail.result_code) codes.push("결과 코드 " + detail.result_code);
+    return (labels[detail.kind] || "조회 실패") + (codes.length ? " (" + codes.join(", ") + ")" : "");
+  }
+
   function renderSystem() {
     const st = cache.status, sm = cache.summary;
     const conf = CONFIDENCE[st && st.confidence] || CONFIDENCE.unknown;
@@ -913,14 +929,14 @@
       "2차 정류장 ID " + escapeHtml((st && st.secondary_station_id) || "해석 대기")
     ];
     const head = st && st.error && st.error !== "no_bus"
-      ? "<strong style=\"color:var(--danger)\">조회 오류: " + escapeHtml(st.error) + "</strong> · 연속 실패 " + escapeHtml(st.consec_fail || 0) + "회<br>"
+      ? "<strong style=\"color:var(--danger)\">조회 오류: " + escapeHtml(apiFailureLabel(st)) + "</strong> · 연속 실패 " + escapeHtml(st.consec_fail || 0) + "회<br>"
       : (st && st.error === "no_bus" ? "현재 정류장에 표시된 버스가 없습니다.<br>" : "정상 수집 중<br>");
     $("#system").innerHTML = head + bits.join(" · ");
 
     const card = $("#error-card");
     const message = cache.loadError
       ? cache.loadError
-      : (st && st.error && st.error !== "no_bus" ? "도착 정보 조회에 실패했습니다: " + st.error : "");
+      : (st && st.error && st.error !== "no_bus" ? "도착 정보 조회에 실패했습니다: " + apiFailureLabel(st) : "");
     card.textContent = message;
     card.classList.toggle("show", Boolean(message));
   }
