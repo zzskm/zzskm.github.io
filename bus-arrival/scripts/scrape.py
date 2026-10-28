@@ -557,6 +557,14 @@ def run_loop(args: argparse.Namespace):
                 info = batch["info"]
                 route_rows = batch["routes"]
                 primary_source = "station_list"
+                # 목록 API가 대상 차량을 갑자기 빠뜨려도 도착 확정하지 않는다.
+                # 기존 추적 차량 소실 직전에만 항목조회로 재확인한다.
+                if (info["veh_id"] is None and state.get("cur_vid") is not None
+                        and state["daily_calls"] + 1 < args.max_daily_calls):
+                    primary_calls += 1
+                    primary_source = "station_list_confirmed"
+                    info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                                         diagnostics=api_error_detail)
             elif state["daily_calls"] + 1 < args.max_daily_calls:
                 # 목록이 정상이라면 추가 호출은 없다. 오류 때만 기존 노선 API로 폴백한다.
                 primary_calls += 1
