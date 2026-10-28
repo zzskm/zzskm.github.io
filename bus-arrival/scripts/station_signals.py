@@ -140,7 +140,7 @@ def signal_rows(ts_iso, station_id, routes):
                 "ts_kst": ts_iso, "station_id": station_id,
                 "route_id": route["route_id"], "route_name": route["route_name"],
                 "sta_order": route["sta_order"], "vehicle_rank": rank,
-                "veh_id": veh_id, "plate_no": route.get(prefix + "plate_no") or "",
+                "veh_id": veh_id,
                 "predict_sec": route.get(prefix + "predict_sec"),
                 "location_no": route.get("location_no") if rank == 1 else "",
                 "state_cd": route.get("state_cd") if rank == 1 else "",
