@@ -20,7 +20,7 @@
 
   function buildReadiness(input) {
     return {
-      setting: input.enabled ? '알림 켜짐' : '알림 꺼짐',
+      setting: input.enabled ? '버스 알림 켜짐' : '버스 알림 꺼짐',
       permission: !input.notificationSupported ? 'OS 알림 미지원'
         : input.permission === 'granted' ? 'OS 알림 허용'
         : input.permission === 'denied' ? 'OS 알림 차단' : 'OS 알림 허용 필요',

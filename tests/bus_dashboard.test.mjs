@@ -214,11 +214,11 @@ test('compact timeline contains at most four planned and now milestones',()=>{
 test('readiness keeps setting permission and sound independent',()=>{
  for (const permission of ['granted','default','denied']) {
    const v=BD.buildReadiness({enabled:true,notificationSupported:true,permission,audioSupported:true,audioState:'suspended'});
-   assert.equal(v.setting,'알림 켜짐');assert.equal(v.soundReady,false);
+   assert.equal(v.setting,'버스 알림 켜짐');assert.equal(v.soundReady,false);
    assert.equal(v.permissionAction,permission==='default'?'request':'guide');
  }
  const unsupported=BD.buildReadiness({enabled:false,notificationSupported:false,audioSupported:false});
- assert.equal(unsupported.setting,'알림 꺼짐');assert.equal(unsupported.permission,'OS 알림 미지원');assert.equal(unsupported.sound,'소리 미지원');
+ assert.equal(unsupported.setting,'버스 알림 꺼짐');assert.equal(unsupported.permission,'OS 알림 미지원');assert.equal(unsupported.sound,'소리 미지원');
  assert.equal(BD.buildReadiness({enabled:true,notificationSupported:true,permission:'granted',audioSupported:true,audioState:'running'}).soundReady,true);
 });
 
