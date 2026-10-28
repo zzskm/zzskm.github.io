@@ -3,7 +3,9 @@
 """
 GBIS 버스 도착 로그 수집기 — 유라코퍼레이션.SK케미칼(07511) × 3100번
 
-공공데이터포털 '경기도_버스도착정보 조회' (busarrivalservice/v2/getBusArrivalItemv2)
+공공데이터포털 '경기도_버스도착정보 조회' (getBusArrivalItemv2 / getBusArrivalListv2)
+- BUS_PRIMARY_MODE=station-list 선택 시 07511 전체 노선 1회 조회, 3100번만 기존 추적에 반영
+- 나머지 노선은 route_signal_log.csv 로 관측. 3100번 알림 보정에는 아직 사용하지 않음
 - 유라코퍼레이션 + 성남시청전면 동시 조회
 - 평일 퇴근 시간대(기본 KST 16:00~22:00)에만 수집
 - 차량 ID 매칭으로 도착 판정 (다른 차량으로 교체 / 후속 차량 없이 사라짐 모두 감지)
@@ -33,6 +35,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from safety_model import safety_prediction, timestamp, model_for_day, publication_decision
+from station_signals import fetch_station_list, signal_rows
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -483,6 +486,7 @@ def run_loop(args: argparse.Namespace):
     predict_path = os.path.join(base_dir, "predict_log.csv")
     arrival_path = args.output_csv
     segment_path = os.path.join(base_dir, "segment_log.csv")
+    signal_path = os.path.join(base_dir, "route_signal_log.csv")
     status_path = args.status_json
 
     state = load_state(state_path)
@@ -542,17 +546,40 @@ def run_loop(args: argparse.Namespace):
 
         request_started = time.monotonic()
         api_error_detail = {}
-        info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
-                             diagnostics=api_error_detail)
+        station_list_error = {}
+        route_rows = None
+        primary_calls = 1
+        primary_source = "item"
+        if args.primary_mode == "station-list":
+            batch = fetch_station_list(service_key, STATION_ID, route_id, sta_order,
+                                       diagnostics=station_list_error)
+            if batch is not None:
+                info = batch["info"]
+                route_rows = batch["routes"]
+                primary_source = "station_list"
+            elif state["daily_calls"] + 1 < args.max_daily_calls:
+                # 목록이 정상이라면 추가 호출은 없다. 오류 때만 기존 노선 API로 폴백한다.
+                primary_calls += 1
+                primary_source = "item_fallback"
+                info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                                     diagnostics=api_error_detail)
+            else:
+                primary_source = "station_list_error"
+                api_error_detail = station_list_error
+                info = None
+        else:
+            info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                                 diagnostics=api_error_detail)
         api_latency_sec = round(time.monotonic() - request_started, 3)
         api_received_ts = kst_iso()
         # 2차 정류장은 1차에 버스가 있을 때만 조회한다 (버스가 없으면 기록할 것이 없다)
         info_secondary = None
         secondary_called = False
-        if info is not None and info["veh_id"] and secondary_station_id is not None and state["daily_calls"] + 1 < args.max_daily_calls:
+        if (info is not None and info["veh_id"] and secondary_station_id is not None
+                and state["daily_calls"] + primary_calls < args.max_daily_calls):
             info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
             secondary_called = True
-        state["daily_calls"] += 1 + (1 if secondary_called else 0)
+        state["daily_calls"] += primary_calls + (1 if secondary_called else 0)
         state["last_poll"] = ts_iso
         previous_vid = state.get("cur_vid")
 
@@ -569,6 +596,9 @@ def run_loop(args: argparse.Namespace):
         else:
             vid = info["veh_id"] or None
             predict = info["predict_sec"]
+            if route_rows is not None:
+                for signal in signal_rows(ts_iso, STATION_ID, route_rows):
+                    append_csv(signal_path, signal)
 
             # 예측 로깅 (유라코 기준)
             append_csv(predict_path, {
@@ -629,6 +659,12 @@ def run_loop(args: argparse.Namespace):
                     "state_reset": state_reset,
                 }
 
+        status["primary_source"] = primary_source
+        if station_list_error:
+            status["station_list_error_detail"] = station_list_error
+        if route_rows is not None:
+            status["station_route_count"] = len(route_rows)
+
         # 추적 중(차량 있음, 소실 확인 대기, API 실패 직후)이면 촘촘히, 버스가 없으면 성기게 조회한다
         tracking = info is None or state.get("cur_vid") is not None
         interval = args.interval if tracking else args.idle_interval
@@ -675,6 +711,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--gate-only", action="store_true",
                    help="수집 여부만 판정하고 종료 (평일/공휴일/시간대/호출 상한)")
     p.add_argument("--route-id", type=int, default=None)
+    p.add_argument("--primary-mode", choices=("item", "station-list"),
+                   default=os.getenv("BUS_PRIMARY_MODE", "item"))
     p.add_argument("--sta-order", type=int, default=STA_ORDER)
     p.add_argument("--secondary-station-id", type=int,
                    default=int(os.getenv("BUS_SECONDARY_STATION_ID", "0")) or None)
