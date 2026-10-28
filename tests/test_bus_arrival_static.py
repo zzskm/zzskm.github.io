@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "bus-arrival" / "index.html").read_text(encoding="utf-8")
+HTML += (ROOT / "bus-arrival" / "app.js").read_text(encoding="utf-8")
 
 
 def test_bus_arrival_verdict_leads_the_hero():
@@ -184,7 +185,9 @@ def test_bus_arrival_alarm_panel_and_engine_are_wired():
 
 def test_bus_arrival_alarm_survives_hidden_tabs_and_reloads():
     """숨겨진 탭(타이머 스로틀링)과 탭 복귀/재연결에서도 제시간에 판정한다."""
-    assert "new Worker(URL.createObjectURL(new Blob(" in HTML
+    assert 'const workerUrl = URL.createObjectURL(new Blob(' in HTML
+    assert 'new Worker(workerUrl)' in HTML
+    assert 'URL.revokeObjectURL(workerUrl)' in HTML
     assert "if (document.hidden) tick();" in HTML
     assert 'document.addEventListener("visibilitychange"' in HTML
     assert 'window.addEventListener("online", refreshNow)' in HTML

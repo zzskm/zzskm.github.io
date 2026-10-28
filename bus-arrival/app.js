@@ -1,0 +1,1205 @@
+/* Shared controller for the standalone page and personal dashboard. */
+window.BusApp = { mount(root = document, options = {}) {
+  const $ = (s) => root.querySelector(s);
+  const body = options.body || document.body;
+  const activeElement = () => root.activeElement || document.activeElement;
+  const baseUrl = new URL(options.baseUrl || './', document.baseURI);
+  const escapeHtml = (value) => String(value ?? "-").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+  const BA = window.BusAlarm || null;
+  const BD = window.BusDashboard;
+  const store = {
+    get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { /* 저장 불가 환경 */ return false; } }
+  };
+  const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
+
+  function updateList(box, html, fallback) {
+    const template=document.createElement("template"); template.innerHTML=html;
+    const active=activeElement(), hadFocus=box.contains(active);
+    const controls=[...box.querySelectorAll("button,input")], position=controls.indexOf(active);
+    const key=el => el.getAttribute("data-id") ?? el.getAttribute("data-i") ?? el.getAttribute("data-lead");
+    function sync(parent, next) {
+      const old=[...parent.children], incoming=[...next.children];
+      incoming.forEach((fresh,i) => {
+        const k=key(fresh);
+        let el=k != null ? old.find(e=>key(e)===k) : old[i];
+        if (!el || el.tagName!==fresh.tagName) { parent.insertBefore(fresh,parent.children[i] || null); return; }
+        if (parent.children[i]!==el) parent.insertBefore(el,parent.children[i] || null);
+        [...el.attributes].forEach(a=>{ if (!fresh.hasAttribute(a.name)) el.removeAttribute(a.name); });
+        [...fresh.attributes].forEach(a=>{ if (el===active && a.name==="value") return; if (el.getAttribute(a.name)!==a.value) el.setAttribute(a.name,a.value); });
+        if (el.tagName==="INPUT") { if (el!==active) el.value=fresh.value; }
+        else if (fresh.children.length) sync(el,fresh);
+        else if (el.textContent!==fresh.textContent) el.textContent=fresh.textContent;
+      });
+      while (parent.children.length>incoming.length) parent.lastElementChild.remove();
+    }
+    // A removed keyed row must not be reused as another row.
+    const keys=new Set([...template.content.children].map(key).filter(k=>k!=null));
+    [...box.children].forEach(el=>{ if (key(el)!=null && !keys.has(key(el))) el.remove(); });
+    sync(box,template.content);
+    if (hadFocus && !active.isConnected) {
+      const next=[...box.querySelectorAll("button,input")];
+      let target=next[Math.min(Math.max(0,position),next.length-1)] || $(fallback);
+      const details=target && target.closest("details");
+      if (details && !details.open) target=details.querySelector("summary");
+      target?.focus({preventScroll:true});
+    }
+  }
+
+  // ?mock=<초> : 실제 버스 없이 알림을 시험한다 (지금부터 <초> 뒤 도착하는 가짜 차량)
+  const MOCK_SEC = Number(new URLSearchParams(location.search).get("mock"));
+  const MOCK = Number.isFinite(MOCK_SEC) && MOCK_SEC > 0 && new URLSearchParams(location.search).has("mock");
+  const MOCK_START = Date.now();
+
+  const CONFIDENCE = {
+    high:    { label:"높음",       sub:"도착 신호 또는 임박 예측 · 실제 도착 미측정" },
+    medium:  { label:"보통",       sub:"도착 임박 구간" },
+    low:     { label:"낮음",       sub:"예측값만으로 추정" },
+    unknown: { label:"알 수 없음", sub:"판단 근거 부족" }
+  };
+  const reasonLabel = (v) => ({observed_arrival:"도착 추정(예측/신호)", estimated_arrival:"도착 추정", vehicle_changed:"차량 변경", data_gap:"데이터 공백", service_end:"운행 종료", vanished:"차량 사라짐", stale:"추적 중단"}[v] || "미분류");
+
+  const csvRows = (text) => {
+    const lines = String(text || "").trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",");
+    return lines.slice(1).map(line => {
+      const values = line.split(",");
+      return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""]));
+    });
+  };
+
+  // 수집: 평일 수집 시간대(status.collect_window, 기본 16:00~22:00)에 조회 · 5분마다 게시 (bus_arrival.yml 세션 기준)
+  // 버스가 없을 때는 조회 간격이 길어지므로(status.poll_interval_sec) 최신성 임계값도 그만큼 늘린다.
+  const PUBLISH_MINUTES = 5;
+  const WINDOW_RE = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/;
+  function parseWindow(text) {
+    const m = WINDOW_RE.exec(String(text || "").trim()) || WINDOW_RE.exec("16:00-22:00");
+    const pad = (v) => String(v).padStart(2, "0");
+    return { start:+m[1] * 60 + +m[2], end:+m[3] * 60 + +m[4], label:pad(m[1]) + ":" + m[2] + "~" + pad(m[3]) + ":" + m[4] };
+  }
+  // KST 는 서머타임이 없어 고정 +9시간 오프셋으로 날짜/요일/시각을 구한다
+  function kstClock(ms) {
+    const d = new Date(ms + 9 * 3600000);
+    return { day:d.getUTCDay(), minutes:d.getUTCHours() * 60 + d.getUTCMinutes(), date:d.toISOString().slice(0, 10) };
+  }
+  const isHoliday = (date) => Boolean(cache.holidays && cache.holidays.has(date));
+  // 시간대 시작 직후 첫 게시 전까지(게시 주기 + 3분)는 아직 수집 전으로 본다
+  function collectingAt(ms, win) {
+    if (MOCK) return true;
+    const c = kstClock(ms);
+    return c.day >= 1 && c.day <= 5 && !isHoliday(c.date)
+      && c.minutes >= win.start + PUBLISH_MINUTES + 3 && c.minutes < win.end;
+  }
+
+  function agoText(min) {
+    if (min < 1) return "방금";
+    if (min < 60) return Math.floor(min) + "분 전";
+    return Math.floor(min / 60) + "시간 " + Math.floor(min % 60) + "분 전";
+  }
+  function etaParts(sec) {
+    if (sec == null) return { num:"--", unit:"도착 정보 없음" };
+    if (sec < 60) return { num:"곧", unit:"도착" };
+    return { num:String(Math.round(sec / 60)), unit:"분 후 도착" };
+  }
+  const etaPlain = (p) => p.num === "--" ? p.unit : (p.num === "곧" ? "곧 도착" : p.num + p.unit);
+  const hhmm = (ms) => new Date(ms).toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit", hour12:false, timeZone:"Asia/Seoul" });
+  const stopsText = (n) => n == null ? null : (n <= 0 ? "정류장 도착" : n + "정거장 전");
+
+  const cache = { status:null, summary:null, predictions:[], arrivals:[], history:null, holidays:null, loadError:null, netError:false, lastOkMs:null, lastGoodStatus:null };
+  let lastAnnounced = "";
+  const BASE_TITLE = "3100 퇴근 버스";
+  let lastFavicon = "";
+
+  let appliedWalk = 5, appliedMargin = 60, preferenceSaveError = "";
+  const walkMinutes = () => appliedWalk;
+
+  const marginSeconds = () => appliedMargin;
+  const safetySnapshot = (st, now) => BA ? BA.assessStatus(st, now, { maxAgeMin:3, safetyMode:true }) : null;
+
+  function statusInfo() {
+    const st = cache.status;
+    const pollMs = st && st.last_poll ? Date.parse(st.last_poll) : NaN;
+    const win = parseWindow(st && st.collect_window);
+    const interval = st ? Number(st.poll_interval_sec) : NaN;
+    return { st, pollMs, win, interval };
+  }
+
+  function setFavicon(text) {
+    if (options.manageTitle === false) return;
+    if (text === lastFavicon) return;
+    lastFavicon = text;
+    const label = text || "3";
+    const size = label.length > 2 ? 15 : (label.length > 1 ? 19 : 22);
+    const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='#1769aa'/>"
+      + "<text x='16' y='" + (size > 19 ? 24 : 23) + "' font-size='" + size + "' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'>" + escapeHtml(label) + "</text></svg>";
+    $("#favicon").href = "data:image/svg+xml," + encodeURIComponent(svg);
+  }
+
+  // 1초 tick: 마지막 조회 이후 경과분을 차감한 실시간 카운트다운
+  let dashboardView = null, previousDeparture = null, departureChange = null;
+  const EVENTS_KEY = "busDashboard.v1.events";
+  let chartMode = "arrival", undoSkip = null, chartFresh = null, chartIdentity = "", chartRenderKey="";
+  function browserEvents() {
+    const rows = store.get(EVENTS_KEY);
+    return Array.isArray(rows) ? rows.filter(e => e && Number.isFinite(e.atMs)).slice(-40) : [];
+  }
+
+  let renderQueued=false, chartDirty=true;
+  function announceStatus(text) { setText($("#sr-live"), text); }
+  function queueRender(chart=false) {
+    chartDirty = chartDirty || chart;
+    if (options.pauseHiddenPaint && document.hidden) return;
+    if (renderQueued) return;
+    renderQueued=true;
+    const flush=() => {
+      renderQueued=false;
+      if (options.pauseHiddenPaint && document.hidden) return;
+      renderAlarm(); paint();
+      if (chartDirty) { chartDirty=false; renderChart(); }
+    };
+    if (document.hidden) { flush(); } else requestAnimationFrame(flush);
+  }
+
+  function targetExcluded(target) {
+    if (!target || !BA) return false;
+    const skipped=BA.sanitizeLedger(store.get(LEDGER_KEY)).skipped[String(target.vehId)];
+    return skipped!==undefined && target.arrivalAtMs < skipped + BA.TRIP_TTL_MS;
+  }
+
+  function paint() {
+    const now = Date.now();
+    const { st, pollMs, win, interval } = statusInfo();
+    const holiday = !MOCK && isHoliday(kstClock(now).date);
+    const off = !MOCK && (holiday || kstClock(now).day === 0 || kstClock(now).day === 6
+      || kstClock(now).minutes < win.start || kstClock(now).minutes >= win.end);
+    const decisionSnap = safetySnapshot(st, now);
+    const savedLastGood = store.get("busDashboard.v1.lastGoodStatus");
+    const lastGood = cache.lastGoodStatus || (savedLastGood && typeof savedLastGood === "object" ? savedLastGood : null);
+    const skips = BA ? BA.sanitizeLedger(store.get(LEDGER_KEY)).skipped : {};
+    const reference = decisionSnap && decisionSnap.usable ? decisionSnap.arrivalAtMs
+      : lastGood && Date.parse(lastGood.last_poll) + Number(lastGood.predict_sec) * 1000;
+    const referenceVeh = Number(st && st.current_veh_id || lastGood && lastGood.current_veh_id || 0);
+    const skipValue = skips[String(referenceVeh)];
+    const currentSkipped = skipValue !== undefined && Number.isFinite(reference) && reference < skipValue + BA.TRIP_TTL_MS;
+    const alarmTargetSkipped = Boolean(alarmView && alarmView.target && skips[String(alarmView.target.vehId)] !== undefined
+      && alarmView.target.arrivalAtMs < skips[String(alarmView.target.vehId)] + BA.TRIP_TTL_MS);
+    const view = BD.buildView({ status:st, observationStatus:lastGood || st, snapshot:decisionSnap, alarmView, nowMs:now,
+      walkMinutes:walkMinutes(), marginSec:marginSeconds(), off, holiday, loadError:cache.loadError,
+      currentSkipped, alarmTargetSkipped,
+      predictions:cache.predictions, events:browserEvents(), previous:previousDeparture });
+    dashboardView = view;
+    if (Number.isFinite(view.changeMinutes) && Math.abs(view.changeMinutes) >= 1) {
+      departureChange = {vehId:view.targetVehId,comparisonKey:view.comparisonKey,pollMs,text:"직전 조회보다 출발 권장 시각이 "
+        + Math.abs(view.changeMinutes) + "분 " + (view.changeMinutes < 0 ? "앞당겨졌습니다." : "늦춰졌습니다.")};
+    }
+    if (!view.uncertain && Number.isFinite(view.departureAtMs)) {
+      previousDeparture = {vehId:view.targetVehId,comparisonKey:view.comparisonKey,pollMs,departureAtMs:view.departureAtMs};
+    }
+    setText($("#verdict-text"), view.title);
+    $("#verdict-text").classList.remove("skeleton");
+    $("#verdict").className = "verdict " + view.tone;
+    setText($("#verdict-glyph"), {go:"▶",wait:"◷",warn:"⚠",danger:"!"}[view.tone]);
+    if (!Number.isFinite(view.departureAtMs)) { previousDeparture=null; departureChange=null; }
+    const available = Number.isFinite(view.correctedAtMs);
+    const graphIdentity=[view.targetVehId,view.selectedNext,view.state === "skipped",available].join("|");
+    if (chartFresh !== available || chartIdentity !== graphIdentity) { chartFresh=available; chartIdentity=graphIdentity; chartDirty=true; }
+    const parts = available ? etaParts(Math.max(0, (view.correctedAtMs - now) / 1000)) : {num:"--",unit:"도착 예상 확인 불가"};
+    setText($("#eta-num"), parts.num);
+    setText($("#eta-unit"), available ? parts.unit + " 추정" : parts.unit);
+    setText($("#arrival-clock"), available ? hhmm(view.correctedAtMs) + " 도착 예상 · 실제 도착 미측정" : "");
+    $("#eta-row").hidden = parts.num === "--";
+    $("#eta-unavailable").hidden = available;
+    const modelMethod = view.safetyMethod || decisionSnap && decisionSnap.safetyMethod;
+    const modelSamples = view.sampleTrips ?? 0;
+    setText($("#model-note"), available ? (modelMethod === "trip_lower_quantile"
+      ? "보정 근거: 과거 " + modelSamples + "운행 · 조기 도착 대비"
+      : modelMethod === "retained_margin" ? "보정 근거: 오래된 모델의 여유 유지" : "보정 근거: 표본 부족 · 고정 11분 여유") : "현재 보정 판단 불가");
+    setText($("#safe-time"), Number.isFinite(view.safeAtMs) ? hhmm(view.safeAtMs) : "—");
+    $("#hero").classList.toggle("is-stale", !available);
+    $("#hero").classList.toggle("is-passed", false);
+    setText($("#departure-context"), Number.isFinite(view.departureAtMs)
+      ? hhmm(view.departureAtMs) + (view.uncertain ? " 이전 정보 기준 · " : " 출발 권장 · ")
+        + "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분"
+      : "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분 · 최신 차량 정보로 다시 판단합니다.");
+    setText($("#freshness"), view.ageSec == null ? "차량 정보 확인 시각 불명"
+      : hhmm(view.observationAtMs) + " 차량 확인 · " + (view.ageSec < 60 ? view.ageSec + "초 전" : Math.floor(view.ageSec / 60) + "분 전") + ""
+        + (off ? " · 수집 시간 외" : " · API 조회 " + (interval > 0 ? Math.round(interval) + "초 간격" : "간격 확인 중")));
+    let statusLabel = "최신 정보", statusClass = "fresh";
+    if (cache.loadError || !st) { statusLabel = "조회 오류"; statusClass = "error"; }
+    else if (off) { statusLabel = holiday ? "휴일" : "수집 시간 외"; statusClass = "stale"; }
+    else if (st.error && st.error !== "no_bus") { statusLabel = "조회 오류"; statusClass = "error"; }
+    else if (cache.netError) { statusLabel = "연결 불안정 · 마지막 정상 " + agoText((now - cache.lastOkMs) / 60000); statusClass = "aging"; }
+    else if (view.state === "no_bus") { statusLabel = "실시간에서 확인된 차량 없음"; statusClass = "aging"; }
+    else if (!decisionSnap || !decisionSnap.usable) { statusLabel = "오래되거나 불확실한 정보"; statusClass = "stale"; }
+    $("#status-chip").className = "status-chip " + statusClass;
+    setText($("#status-chip"), statusLabel);
+    setText($("#safety-detail"), available
+      ? "API 예상 " + hhmm(view.apiAtMs) + " · 보정 예상 " + hhmm(view.correctedAtMs)
+        + " · 조기 도착 대비 기준 " + hhmm(view.safeAtMs) + " · 출발 권장 " + hhmm(view.departureAtMs)
+        + " · " + (modelMethod === "trip_lower_quantile"
+          ? "과거 " + modelSamples + "운행의 하위 분위수 기반 보정"
+          : modelMethod === "retained_margin" ? "오래된 모델의 보수적 여유 유지" : "표본 부족/모델 없음: 고정 11분 여유")
+        + (view.stalled ? " · 마지막 정류장 예측 정체 보정" : "")
+        + " · 실제 도착 미측정. 조기 도착 대비 기준은 확률 구간이나 도착 보장이 아닙니다."
+      : "안전 출발 판단 보류 · 실시간 수집 3분 이내 자료가 필요합니다. 예약 경고는 마지막 정상 정보 기준이며 현재 위치·도착은 미확인입니다.");
+    let decisionNote = "";
+    if (off) decisionNote = "실시간 정보는 평일 " + win.label + "에 수집합니다.";
+    else if (view.state === "no_bus") decisionNote = "API에 차량이 아직 나타나지 않았을 수 있습니다. 실제 운행이 없다는 뜻은 아닙니다.";
+    else if (view.state === "elapsed") decisionNote = "예상 시각이 지났지만 실제 통과를 확인한 것은 아닙니다. 최신 정보를 확인하세요.";
+    else if (view.state === "skipped") decisionNote = "제외한 차량으로 출발을 권장하지 않습니다. 다음 차량 정보를 확인합니다.";
+    else if (view.state === "reserved") decisionNote = "마지막 정상 정보로 만든 예약만 유지합니다. 출발 여부를 확인하세요.";
+    else if (!available) decisionNote = "최신 차량 정보를 확인하기 전까지 출발 판단을 보류합니다.";
+    setText($("#decision-note"), decisionNote);
+    $("#decision-note").hidden = !decisionNote;
+    const vehOk = st && Number(st.current_veh_id || 0) !== 0;
+    const lastObservedVehicle = Number(lastGood && lastGood.current_veh_id || 0);
+    setText($("#hero-detail"), view.uncertain ? "마지막 정상 확인 기준 차량 " + view.targetVehId + " · 현재 위치 미확인"
+      : st && st.error && st.error !== "no_bus" && lastObservedVehicle ? "마지막 정상 확인 차량 " + lastObservedVehicle + " · 현재 위치 미확인"
+      : view.selectedNext ? "다음 알림 대상 차량 " + view.targetVehId + " · 좌석·위치 미제공"
+      : vehOk && !available ? "마지막 확인 차량 " + (st.current_plate || st.current_veh_id) + " · 현재 위치 미확인"
+      : vehOk ? "차량 " + (st.current_plate || st.current_veh_id) + " · " + (stopsText(stopsAwayOf(st)) || "위치 미확인") : "차량 미확인");
+    const announce = [view.state,view.targetVehId,statusClass,view.uncertain].join("|");
+    if (announce !== lastAnnounced) { lastAnnounced=announce; announceStatus(view.title + " · " + statusLabel); }
+    const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;
+    setText($("#card-next"), nextSec != null && nextSec > 0 ? etaPlain(etaParts(nextSec)) : "미확인");
+    setText($("#card-next-sub"), "API 예측 · 후속 차량");
+    $("#cards").hidden = !(vehOk && !off);
+    $("#cards").classList.toggle("is-stale", !available);
+    if (view.selectedNext) {
+      setText($("#card-next"), "선택 차량 " + view.targetVehId);
+      setText($("#card-next-sub"), "상단 출발 판단·알림 대상 차량");
+      setText($("#card-seat"), "미제공"); setText($("#card-stops"), "미제공");
+      setText($("#card-seat-sub"), "다음 차량 좌석 정보 없음"); setText($("#card-stops-sub"), "다음 차량 위치 정보 없음");
+    } else if (!available) {
+      setText($("#card-seat"), "미확인"); setText($("#card-stops"), "미확인");
+      setText($("#card-seat-sub"), "최신 좌석 정보 필요"); setText($("#card-stops-sub"), "최신 위치 정보 필요");
+    }
+    else renderCards();
+    const heroAlarm = !alarmCfg || !alarmCfg.enabled ? "알림 꺼짐" : view.state === "skipped"
+      ? "제외한 차량 알림 없음 · 다음 차량 확인 중" : alarmView && alarmView.pendingUncertain
+      ? "예약 경고 유지 · 마지막 확인 " + (view.ageSec == null ? "시각 불명" : Math.floor(view.ageSec/60) + "분 전")
+      : alarmView && alarmView.nextFireAtMs
+        ? (alarmView.target && Number(alarmView.target.vehId) !== Number(st && st.current_veh_id)
+          ? "후속 차량 " + alarmView.target.vehId + " 알림 " : "다음 알림 ") + hhmm(alarmView.nextFireAtMs)
+        : alarmView && alarmView.done ? "이번 차량의 예약 알림 없음" : "알림 대상 차량 대기 중";
+    setText($("#hero-next"), heroAlarm);
+    setText($("#settings-summary"), (alarmCfg && alarmCfg.enabled ? "알림 켜짐" : "알림 꺼짐")
+      + " · 도보 " + walkMinutes() + "분 · 추가 여유 " + marginSeconds()/60 + "분 · "
+      + (alarmCfg && alarmCfg.windows.length ? BA.windowsText(alarmCfg.windows) : "시간대 제한 없음"));
+    setText($("#settings-feedback"), "적용값: 도보 " + walkMinutes() + "분 · 추가 여유 " + marginSeconds()/60 + "분 · "
+      + (Number.isFinite(view.departureAtMs) ? "출발 권장 " + hhmm(view.departureAtMs) : "출발 판단 보류")
+      + (alarmView && Number.isFinite(alarmView.nextFireAtMs) ? " · 다음 알림 " + hhmm(alarmView.nextFireAtMs) : "")
+      + " · 입력 완료 시 자동 적용" + preferenceSaveError);
+    renderTimeline(view, now);
+    const etaShort = view.state === "overdue" ? "출발 권장 경과" : view.state === "skipped" ? "다음 차량 확인 중" : view.state === "waiting" ? "출발 " + Math.ceil((view.departureAtMs-now)/60000) + "분"
+      : view.state === "due" ? "출발 권장" : view.state === "reserved" ? "정보 지연" : "";
+    const bell = ringing ? "⏰ " : (anyAlarmActive() ? "🔔 " : "");
+    const title = bell + (etaShort ? etaShort + " · " : "") + BASE_TITLE;
+    if (options.manageTitle !== false && document.title !== title) document.title = title;
+    setFavicon(view.state === "waiting" ? String(Math.ceil((view.departureAtMs-now)/60000)) : ["due","overdue"].includes(view.state) ? "!" : "");
+  }
+
+  function renderTimeline(view, now) {
+    const markup = rows => rows.map(e => '<li class="' + e.kind + '"><time datetime="' + new Date(e.atMs).toISOString() + '">' + hhmm(e.atMs)
+      + '</time><span class="symbol" aria-hidden="true">' + ({observed:"●",planned:"◇",now:"→"}[e.kind])
+      + '</span><div>' + escapeHtml(e.label) + '<small>' + BD.relativeTime(e.atMs,now)
+      + (e.kind === "planned" ? " · 계산된 예정" + (e.elapsed ? " · 실제 통과 미확인" : "") : e.kind === "observed" ? " · 확인된 사건" : "") + '</small></div></li>').join("");
+    [["#journey-timeline",view.summaryTimeline],["#journey-details",view.detailTimeline]].forEach(([id,rows]) => {
+      const html=markup(rows);
+      if ($(id).innerHTML !== html) $(id).innerHTML=html;
+    });
+    setText($("#timeline-note"), (view.uncertain ? "마지막 확인 기준의 예정입니다. " : "")
+      + "항목 간격은 시간에 비례하지 않습니다. 이 브라우저의 알림 실행은 OS 알림 전달 완료를 뜻하지 않습니다.");
+    const showChange = departureChange && departureChange.comparisonKey === view.comparisonKey
+      && departureChange.vehId === view.targetVehId && now - departureChange.pollMs < 3 * 60000 && !view.uncertain;
+    $("#departure-change").hidden = !showChange;
+    if (showChange) setText($("#departure-change"), departureChange.text);
+  }
+
+  const stopsAwayOf = (st) => {
+    if (!st || st.location_no === null || st.location_no === undefined || st.location_no === "") return null;
+    const n = Number(st.location_no);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  function renderCards() {
+    const st = cache.status;
+    const seat = st ? Number(st.remain_seat) : NaN;
+    if (Number.isFinite(seat) && seat >= 0) {
+      setText($("#card-seat"), seat + "석");
+      setText($("#card-seat-sub"), seat === 0 ? "잔여 좌석 없음 · 다음 차 권장" : "착석 가능");
+    } else {
+      setText($("#card-seat"), "정보 없음");
+      setText($("#card-seat-sub"), "좌석 정보 미제공");
+    }
+    const stops = stopsAwayOf(st);
+    setText($("#card-stops"), stopsText(stops) || "정보 없음");
+    setText($("#card-stops-sub"), stops == null ? "위치 정보 미제공" : "GBIS 위치 기준");
+  }
+
+  // ---- 조회 시점별 API 예측 변화 (현재 보정 기호는 한 건만 표시) ----
+  function renderChart() {
+    const info = statusInfo();
+    const st = info.st && info.st.error && info.st.error !== "no_bus" ? cache.lastGoodStatus : info.st;
+    const pollMs = st && Date.parse(st.last_poll);
+    const key=JSON.stringify([st,cache.predictions,chartMode,$("#chart").clientWidth,dashboardView && [dashboardView.targetVehId,
+      dashboardView.selectedNext,dashboardView.state==="skipped",dashboardView.correctedAtMs,dashboardView.safeAtMs]]);
+    if (key===chartRenderKey) return;
+    chartRenderKey=key;
+    const pts = BD.targetSeries(st, cache.predictions, dashboardView);
+    const note = $("#chart-note"), tbody = $("#chart-table tbody");
+    const veh = dashboardView && dashboardView.targetVehId;
+    if (!pts.length) {
+      $("#chart").innerHTML = "<div class=\"empty\">" + (veh ? "선택 차량의 예측 이력을 기다리고 있습니다." : "현재 추적 중인 차량이 없습니다.") + "</div>";
+      $("#chart").setAttribute("aria-label", "도착 예측 기록 없음"); tbody.innerHTML="";
+      note.textContent="API 예측 기록이며 실제 도착 관측이 아닙니다."; return;
+    }
+    const remaining = chartMode === "remaining";
+    const snap = safetySnapshot(st, Date.now());
+    const usable = snap && snap.usable && dashboardView && Number.isFinite(dashboardView.correctedAtMs)
+      && ["waiting","due","overdue"].includes(dashboardView.state);
+    const W=Math.max(240,Math.round($("#chart").clientWidth)), H=240, L=58, R=18, T=24, B=36;
+    const t0=pts[0].t, t1=pts[pts.length-1].t;
+    const mid=(t0+t1)/2, span=Math.max(120000,t1-t0);
+    const x=t => L + (t-(mid-span/2))/span*(W-L-R);
+    const value=p => remaining ? p.remainingSec/60 : p.arrivalAtMs;
+    const values=pts.map(value);
+    const markers=[];
+    if (usable) {
+      markers.push({at:dashboardView.correctedAtMs,label:"보정 예상",cls:"corrected"});
+      markers.push({at:dashboardView.safeAtMs,label:"조기 대비",cls:"safe"});
+    }
+    markers.forEach(m=>values.push(remaining ? (m.at-pollMs)/60000 : m.at));
+    let lo=Math.min(...values), hi=Math.max(...values);
+    const pad=remaining ? Math.max(1,(hi-lo)*.15) : Math.max(60000,(hi-lo)*.15);
+    lo-=pad; hi+=pad;
+    const y=v => T+(hi-v)/(hi-lo)*(H-T-B);
+    const fmt=v=>v.toFixed(1);
+    let svg="";
+    for (let i=0;i<3;i++) {
+      const v=lo+(hi-lo)*i/2, yy=y(v);
+      svg+='<line class="grid" x1="'+L+'" x2="'+(W-R)+'" y1="'+fmt(yy)+'" y2="'+fmt(yy)+'"/>'
+        +'<text class="axis" x="'+(L-8)+'" y="'+fmt(yy+4)+'" text-anchor="end">'+escapeHtml(remaining ? v.toFixed(1)+'분' : hhmm(v))+'</text>';
+    }
+    const groups=BD.splitGaps(pts,st && st.poll_interval_sec);
+    groups.forEach(group=>{ svg+='<polyline class="line" points="'+group.map(p=>fmt(x(p.t))+','+fmt(y(value(p)))).join(' ')+'"/>'; });
+    pts.forEach(p=>{ svg+='<circle class="dot" cx="'+fmt(x(p.t))+'" cy="'+fmt(y(value(p)))+'" r="3"><title>'
+      +escapeHtml(hhmm(p.t)+' 조회 · API 도착 예상 '+hhmm(p.arrivalAtMs)+' · '+(p.remainingSec/60).toFixed(1)+'분')+'</title></circle>'; });
+    markers.forEach(m=>{
+      const yy=y(remaining ? (m.at-pollMs)/60000 : m.at), xx=x(pollMs);
+      const path=m.cls==='corrected' ? `M ${xx} ${yy-5} l 5 5 -5 5 -5 -5 Z` : `M ${xx} ${yy-5} l 5 10 -10 0 Z`;
+      svg+='<path class="'+m.cls+'" d="'+path+'"><title>'+escapeHtml(m.label+' '+hhmm(m.at)+' · 현재 조회 한 건 기준')+'</title></path>';
+    });
+    svg+='<text class="axis" x="'+L+'" y="'+(H-10)+'">'+hhmm(mid-span/2)+'</text>'
+      +'<text class="axis" x="'+(W-R)+'" y="'+(H-10)+'" text-anchor="end">'+hhmm(mid+span/2)+' 조회</text>';
+    $("#chart").innerHTML='<svg class="trend" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+svg+'</svg>';
+    $("#chart").setAttribute("aria-label", "선택 차량 " + veh + " API 예측 "+pts.length+"건. 마지막 도착 예상 "+hhmm(pts[pts.length-1].arrivalAtMs)+". "+(groups.length>1 ? "수집 공백은 선을 끊어 표시합니다." : ""));
+    tbody.innerHTML=pts.map(p=>'<tr><td>'+hhmm(p.t)+'</td><td>'+hhmm(p.arrivalAtMs)+'</td><td>'+(p.remainingSec/60).toFixed(1)+'</td></tr>').join('');
+    note.textContent=(dashboardView && dashboardView.selectedNext ? "선택한 후속 차량의 누적 예측 이력 부족 · 현재 조회 한 건입니다. " : "") + "가로축은 조회 시각, 세로축은 "+(remaining ? "당시 API 잔여시간" : "당시 API 도착 예정 시각")+"입니다. "
+      +(pts.length===1 ? "관측 한 건만 있어 추이는 아직 알 수 없습니다. " : "")
+      +(groups.length>1 ? "긴 수집 공백에서는 선을 끊었습니다. " : "")
+      +(usable ? "보정·조기 대비 기호는 현재 조회 한 건의 값이며, 과거 보정 이력이나 확률 구간이 아닙니다. " : "최신 판단이 불가능해 현재 보정 기호를 숨겼습니다. ")
+      +(usable && dashboardView.stalled ? "마지막 정류장 예측 정체 보정 중. " : "")
+      +"실제 도착은 미측정입니다. 알림 예정은 위 타임라인을 확인하세요.";
+  }
+
+  // ---- 최근 운행 추정 기록 ----
+  function arrivalWhen(iso) {
+    const s = String(iso || "");
+    const date = s.slice(0, 10), time = s.slice(11, 16);
+    if (!date || !time) return "-";
+    const today = kstClock(Date.now()).date, yesterday = kstClock(Date.now() - 86400000).date;
+    return (date === today ? "오늘 " : date === yesterday ? "어제 " : date.slice(5).replace("-", "/") + " ") + time;
+  }
+  function renderArrivals() {
+    const rows = cache.arrivals;
+    $("#arrivals").innerHTML = rows.length
+      ? rows.slice(0, 12).map(r => "<li><span><span class=\"arrival-when\">" + escapeHtml(arrivalWhen(r.est_arrival_ts || r.ts_kst)) + "</span> "
+          + "<span class=\"arrival-plate\">" + escapeHtml(r.plateNo || r.vehId) + "</span></span>"
+          + "<span class=\"tag\">" + escapeHtml(reasonLabel(r.departure_reason)) + "</span></li>").join("")
+      : "<li class=\"empty\">운행 기록 수집 대기 중입니다. 차량 추적이 종료되면 추정 기록이 쌓입니다.</li>";
+  }
+
+  function apiFailureLabel(st) {
+    const detail = st && st.api_error_detail;
+    if (!detail || !detail.kind) return st && st.error || "조회 실패";
+    const labels = {
+      timeout:detail.phase === "connect" ? "API 연결 시간 초과" : detail.phase === "read" ? "API 응답 대기 시간 초과" : "API 요청 시간 초과",
+      connection_error:"API 연결 실패", http_error:"API HTTP 오류",
+      gateway_error:"공공데이터 게이트웨이 오류", api_response_error:"버스 API 오류 응답",
+      invalid_response:"API 응답 형식 오류", unexpected_error:"API 처리 오류"
+    };
+    const codes = [];
+    if (detail.http_status) codes.push("HTTP " + detail.http_status);
+    if (detail.gateway_code) codes.push("게이트웨이 코드 " + detail.gateway_code);
+    if (detail.result_code) codes.push("결과 코드 " + detail.result_code);
+    return (labels[detail.kind] || "조회 실패") + (codes.length ? " (" + codes.join(", ") + ")" : "");
+  }
+
+  function renderSystem() {
+    const st = cache.status, sm = cache.summary;
+    const conf = CONFIDENCE[st && st.confidence] || CONFIDENCE.unknown;
+    const bits = [
+      "예측 신뢰도 " + escapeHtml(conf.label) + " (" + escapeHtml(conf.sub) + ")",
+      "추적 표본 " + escapeHtml(st && st.tracking_samples != null ? st.tracking_samples + "회" : "-"),
+      "오늘 표본 " + escapeHtml((sm && sm.today && sm.today.samples) || 0) + "건",
+      "유효 예측 " + escapeHtml((sm && sm.valid_prediction_samples) || 0) + "건",
+      "버스 없음 " + escapeHtml((sm && sm.no_bus_samples) || 0) + "건",
+      "누적 도착 기록 " + escapeHtml((sm && sm.arrival_records) || 0) + "건",
+      "API 응답 소요 " + escapeHtml(st && st.api_request_duration_sec != null ? st.api_request_duration_sec + "초" : "미측정"),
+      "조회→게시 준비 " + escapeHtml(st && st.poll_to_publish_prepare_sec != null ? st.poll_to_publish_prepare_sec + "초" : "미측정"),
+      "게시 목표 " + escapeHtml(st && st.publish_interval_sec ? st.publish_interval_sec + "초 (push·Pages 배포 지연 별도, 미측정)" : "300초 (배포 지연 미측정)"),
+      "API 호출 " + escapeHtml((st && st.daily_calls) || 0) + "회",
+      "조회 간격 " + escapeHtml(st && st.poll_interval_sec ? st.poll_interval_sec + "초" : "-"),
+      "수집 시간대 평일 " + escapeHtml(parseWindow(st && st.collect_window).label),
+      "2차 정류장 ID " + escapeHtml((st && st.secondary_station_id) || "해석 대기")
+    ];
+    const head = st && st.error && st.error !== "no_bus"
+      ? "<strong style=\"color:var(--danger)\">조회 오류: " + escapeHtml(apiFailureLabel(st)) + "</strong> · 연속 실패 " + escapeHtml(st.consec_fail || 0) + "회<br>"
+      : (st && st.error === "no_bus" ? "현재 정류장에 표시된 버스가 없습니다.<br>" : "정상 수집 중<br>");
+    $("#system").innerHTML = head + bits.join(" · ");
+
+    const card = $("#error-card");
+    const message = cache.loadError
+      ? cache.loadError
+      : (st && st.error && st.error !== "no_bus" ? "도착 정보 조회에 실패했습니다: " + apiFailureLabel(st) : "");
+    card.textContent = message;
+    card.classList.toggle("show", Boolean(message));
+  }
+
+  // ---- 도착 알림 ----
+  const CFG_KEY = "busAlarm.v1.cfg", LEDGER_KEY = "busAlarm.v1.fired";
+  const PRESET_LEADS = [5, 7, 10];
+  let alarmCfg = BA ? BA.sanitizeConfig(store.get(CFG_KEY)) : null;
+  let alarmPrev = store.get("busAlarm.v2.pending"), alarmView = null, alarmOff = false, alarmNotice = "";
+  let ringing = false, alarmNotification = null, chipsSig = "";
+  const audio = { ctx:null, master:null };
+  let audioError=false, permissionError=false;
+  const CLOCKS_KEY = "busAlarm.v1.clocks", TIMERS_KEY = "busAlarm.v1.timers", CLOCK_LEDGER_KEY = "busAlarm.v1.clockFired";
+  let clocks = BA ? BA.sanitizeClocks(store.get(CLOCKS_KEY)) : [];
+  let timers = BA ? BA.sanitizeTimers(store.get(TIMERS_KEY)) : [];
+  let clockNotice = "", clockSig = "", timerSig = "", windowsSig = "";
+
+  function saveCfg(rearm) {
+    if (rearm) { alarmPrev = null; store.set("busAlarm.v2.pending", null); }
+    if (rearm) alarmCfg.armedAtMs = Date.now();   // 설정을 바꾼 시점 이전의 알림 시점은 조용히 넘긴다
+    if (!store.set(CFG_KEY, alarmCfg)) alarmNotice="저장 실패 · 현재 탭에서만 설정을 적용합니다. 새로 열면 유지되지 않을 수 있습니다.";
+    runAlarm(); queueRender(true);
+  }
+
+  function ensureAudio() {
+    const AC=window.AudioContext || window.webkitAudioContext;
+    if (!AC) { queueRender(); return null; }
+    try {
+      if (!audio.ctx || audio.ctx.state === "closed") {
+        audio.ctx=new AC();
+        audio.ctx.addEventListener("statechange",() => { if (audio.ctx.state==="running") audioError=false; queueRender(); });
+      }
+      audioError=false;
+      if (audio.ctx.state !== "running") audio.ctx.resume().then(() => { audioError=false; queueRender(); })
+        .catch(() => { audioError=true; queueRender(); });
+    } catch(e) { audioError=true; queueRender(); return null; }
+    queueRender(); return audio.ctx;
+  }
+  function requestPermission() {
+    if (!("Notification" in window) || Notification.permission !== "default") return;
+    try { Promise.resolve(Notification.requestPermission()).then(() => { permissionError=false; queueRender(); })
+      .catch(() => { permissionError=true; queueRender(); }); }
+    catch(e) { permissionError=true; queueRender(); }
+  }
+  function unlockAudio() {
+    if (anyAlarmActive()) ensureAudio();
+    if (audio.ctx && audio.ctx.state === "running") {
+      ["pointerdown", "keydown"].forEach(ev => window.removeEventListener(ev, unlockAudio));
+    }
+  }
+  function stopBeeps() {
+    if (audio.master) { try { audio.master.gain.value = 0; audio.master.disconnect(); } catch (e) {} audio.master = null; }
+  }
+  function playBeeps(seconds) {
+    const ctx = ensureAudio();
+    if (!ctx || ctx.state !== "running") return;   // 소리가 잠겨 있으면 배너/알림만 나간다
+    stopBeeps();
+    const master = ctx.createGain();
+    master.gain.value = 0.35;
+    master.connect(ctx.destination);
+    audio.master = master;
+    // 발화 시점에 한 번에 예약해 두므로 이후 타이머 스로틀링의 영향을 받지 않는다
+    const t0 = ctx.currentTime + 0.05;
+    BA.beepSchedule(seconds).forEach(b => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = "sine"; osc.frequency.value = b.freq;
+      gain.gain.setValueAtTime(0, t0 + b.t);
+      gain.gain.linearRampToValueAtTime(1, t0 + b.t + 0.02);
+      gain.gain.linearRampToValueAtTime(0, t0 + b.t + b.dur);
+      osc.connect(gain); gain.connect(master);
+      osc.start(t0 + b.t); osc.stop(t0 + b.t + b.dur + 0.05);
+    });
+  }
+  function notifyOs(msg, tag) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    try {
+      const n = new Notification(msg.title, { body:msg.body, tag, renotify:true, requireInteraction:true });
+      n.onclick = () => { window.focus(); n.close(); ackAlarm(); };
+      // OS 알림을 직접 닫아도 소리를 끈다 (새 알림으로 교체돼 닫힌 이전 알림은 무시)
+      n.onclose = () => { if (alarmNotification === n) ackAlarm(); };
+      alarmNotification = n;
+    } catch (e) { alarmNotice="OS 알림 실행 실패 · 화면 배너를 확인하세요. 사이트·운영체제 알림 설정을 확인할 수 있습니다."; queueRender(); }
+  }
+  function ring(fire, tag) { showRing(BA.formatFireMessage(fire), tag); }
+  // 버스 알림/시각 알람/타이머가 함께 쓰는 발화: 배너 + 소리 + OS 알림 (silent 이면 소리 없이 알리기만)
+  function showRing(msg, tag, silent) {
+    ringing = true;
+    $("#alarm-banner-text").textContent = "🔔 " + msg.title + " — " + msg.body;
+    $("#alarm-banner").hidden = false;
+    $("#sr-live").textContent = msg.title + ". " + msg.body;
+    if (!silent) playBeeps(45);
+    notifyOs(msg, tag);
+    queueRender();
+  }
+  function ackAlarm() {
+    ringing = false;
+    $("#alarm-banner").hidden = true;
+    stopBeeps();
+    if (alarmNotification) { try { alarmNotification.close(); } catch (e) {} alarmNotification = null; }
+    queueRender();
+  }
+  function handleAlarmAction(action, snap, now) {
+    if (action.type === "fire") {
+      store.set(EVENTS_KEY, browserEvents().concat({type:"fire",vehId:action.vehId,atMs:now,uncertain:!!action.uncertain}).slice(-40));
+    }
+    if (action.type === "historical") {
+      showRing({ title:"3100번 과거 운행 사전 준비", body:"반복 운행 사례에 따른 준비 안내입니다. 차량은 미확인이고 실제 안전 출발 경고는 별도로 판단합니다." }, "history-" + action.slotId + "-" + Math.max(...action.leads));
+    } else if (action.type === "historical_candidate") {
+      alarmNotice = "사전 시간대에 차량이 나타났습니다. 동일 운행은 미확인으로, 안전 출발 알림을 별도로 유지합니다.";
+    } else if (action.type === "clock" || action.type === "clock_missed") {
+      showRing(BA.formatClockMessage(action, BA.busHint(snap, now)), "clock-" + action.id + "-" + action.scheduledMs, action.type === "clock_missed");
+    } else if (action.type === "timer") {
+      showRing(BA.formatTimerMessage(action), "timer-" + action.id);
+    } else if (action.type === "fire") {
+      alarmNotice = "";
+      ring(action, "bus-" + action.vehId + "-" + Math.max(...action.leads));
+    } else if (action.type === "passed") {
+      alarmNotice = "차량이 알림 없이 지나갔을 수 있습니다 (예측이 멈춘 채 통과하면 짧은 알림은 울리지 않습니다).";
+    }
+  }
+
+  function runAlarm() {
+    if (!BA || !alarmCfg) return;
+    const evalOnce = () => {
+      const now = Date.now();
+      const { st, win } = statusInfo();
+      const snap = BA.assessStatus(st, now, { maxAgeMin:3, safetyMode:true });
+      const off = !collectingAt(now, win);
+      // 다른 탭이 이미 울렸을 수 있으므로 원장은 저장소에서 다시 읽는다
+      let ledger = BA.sanitizeLedger(store.get(LEDGER_KEY));
+      const historyOut = BA.evaluateHistorical({ cfg:alarmCfg, snap, nowMs:now,
+        history:cache.summary && cache.summary.historical_alerts,
+        enabled:$("#historical-alert").checked, ledger:store.get("busAlarm.v1.historical"), busLedger:ledger,
+        walkMinutes:walkMinutes(), marginSec:marginSeconds() });
+      saveIfChanged("busAlarm.v1.historical", store.get("busAlarm.v1.historical"), historyOut.ledger);
+      ledger = historyOut.busLedger;
+      historyOut.actions.forEach(a => handleAlarmAction(a, snap, now));
+      const out = BA.evaluate({ cfg:alarmCfg, snap, ledger, nowMs:now, prevTarget:store.get("busAlarm.v2.pending") || alarmPrev, walkMinutes:walkMinutes(), marginSec:marginSeconds() });
+      if (JSON.stringify(out.ledger) !== JSON.stringify(store.get(LEDGER_KEY))) store.set(LEDGER_KEY, out.ledger);
+      saveIfChanged("busAlarm.v2.pending", store.get("busAlarm.v2.pending"), out.prevTarget);
+      alarmPrev = out.prevTarget; alarmView = out.view; alarmOff = off;
+      out.actions.forEach(a => handleAlarmAction(a, snap, now));
+      // 시각 알람/타이머도 같은 잠금 안에서 저장소를 다시 읽어 한 번만 울린다
+      const storedClocks = BA.sanitizeClocks(store.get(CLOCKS_KEY)), storedLedger = store.get(CLOCK_LEDGER_KEY) || {};
+      const storedTimers = BA.sanitizeTimers(store.get(TIMERS_KEY));
+      const clockOut = BA.evaluateClocks({ clocks:storedClocks, ledger:storedLedger, nowMs:now });
+      const timerOut = BA.evaluateTimers({ timers:storedTimers, nowMs:now });
+      saveIfChanged(CLOCKS_KEY, storedClocks, clockOut.clocks);
+      saveIfChanged(CLOCK_LEDGER_KEY, storedLedger, clockOut.ledger);
+      saveIfChanged(TIMERS_KEY, storedTimers, timerOut.timers);
+      clocks = clockOut.clocks; timers = timerOut.timers;
+      clockOut.actions.concat(timerOut.actions).forEach(a => handleAlarmAction(a, snap, now));
+      queueRender();
+    };
+    // 여러 탭이 동시에 열려 있어도 한 탭만 판정/발화한다
+    if (navigator.locks && navigator.locks.request) {
+      navigator.locks.request("busAlarm:eval", { ifAvailable:true }, (lock) => { if (lock) evalOnce(); });
+    } else {
+      evalOnce();
+    }
+  }
+
+  function alarmNextText() {
+    if (!alarmCfg.enabled) return { text:"알림 꺼짐 · 출발 권장 시각을 확인하고 알림을 켜세요.", problem:false };
+    const v = alarmView;
+    if (!v || v.state === "off") return { text:"알림 상태를 계산하는 중입니다.", problem:false };
+    if (targetExcluded(v.target)) return {text:"이번 차량 제외됨 · 버스를 기다리는 중",problem:false};
+    if (v.state === "unavailable") {
+      if (v.pendingUncertain) return { text:"최신 차량 정보 없음 · 마지막 정상 정보의 예약 경고를 유지합니다"
+        + (v.nextFireAtMs ? " (" + hhmm(v.nextFireAtMs) + ")" : ""), problem:true };
+      const why = { too_old:"수집이 멈춘 것 같아요 · 알림을 믿을 수 없습니다", api_error:"조회 오류 · 복구되면 다시 계산합니다",
+                    clock_skew:"PC 시계가 어긋난 것 같아요 · 시계를 확인하세요", bad:"도착 정보를 읽을 수 없습니다" }[v.why] || "도착 정보를 읽을 수 없습니다";
+      return { text:alarmOff ? "수집 시간 외입니다 · 평일 " + parseWindow(cache.status && cache.status.collect_window).label + "에 동작합니다" : why, problem:!alarmOff };
+    }
+    if (v.state === "armed" && !v.target) {
+      return { text:v.outside ? "지금 오는 버스는 알림 시간대(" + BA.windowsText(alarmCfg.windows) + ") 밖이라 알리지 않습니다"
+        : "버스를 기다리는 중 · 시간대 " + BA.windowsText(alarmCfg.windows) + "에 오는 버스를 알려 드립니다", problem:false };
+    }
+    if (v.state === "passed") return { text:"도착 예정 시각 지남 · 실제 통과 미확인 · 다음 차량을 기다립니다", problem:false };
+    if (!v.target) return { text:"알림 상태를 계산하는 중입니다.", problem:false };
+    const eta = "알림 대상 차량 " + v.target.vehId + " · 출발 권장 " + hhmm(v.safeDepartureAtMs) + " (실제 도착 미확인)";
+    if (v.nextFireAtMs) {
+      const inMin = Math.max(0, Math.round((v.nextFireAtMs - Date.now()) / 60000));
+      return { text:"다음 알림 " + hhmm(v.nextFireAtMs) + " (" + (inMin < 1 ? "곧" : inMin + "분 뒤") + ") · " + eta, problem:false };
+    }
+    if (v.skipped.length) return { text:"이 버스는 이미 " + Math.max(...v.skipped) + "분 이내라 다음 버스부터 알려 드립니다 · " + eta, problem:false };
+    return { text:"이번 버스 알림을 마쳤습니다 · " + eta, problem:false };
+  }
+
+  function renderAlarm() {
+    const panel = $("#alarm");
+    if (!BA || !alarmCfg) { panel.hidden = true; return; }
+    const on = alarmCfg.enabled;
+    const toggle = $("#alarm-toggle");
+    toggle.setAttribute("aria-checked", String(on));
+    toggle.classList.toggle("on", on);
+    setText(toggle, on ? "켜짐" : "꺼짐");
+
+    const leads = [...new Set([...PRESET_LEADS, ...alarmCfg.leads])].sort((a, b) => a - b);
+    const sig = leads.join(",") + "|" + alarmCfg.leads.join(",");
+    if (sig !== chipsSig) {
+      chipsSig = sig;
+      updateList($("#alarm-chips"), leads.map(n => "<button type=\"button\" class=\"chip\" data-lead=\"" + n + "\" aria-pressed=\""
+        + alarmCfg.leads.includes(n) + "\">" + n + "분 전</button>").join(""), "#alarm-add");
+    }
+
+    const next = alarmNextText();
+    setText($("#alarm-next"), next.text);
+    $("#alarm-next").classList.toggle("problem", next.problem);
+    setText($("#alarm-notice"), alarmNotice);
+    $("#alarm-notice").hidden = !alarmNotice;
+
+    const warns = [];
+    if (permissionError) warns.push("OS 알림 권한 요청 실패 · 사이트 설정을 확인하세요.");
+    if (audioError) warns.push("소리 활성화 실패 · 브라우저 재생 허용과 기기 음량을 확인하세요.");
+
+    const warnHtml = warns.map(w => "<li>" + escapeHtml(w) + "</li>").join("");
+    if ($("#alarm-warn").innerHTML !== warnHtml) $("#alarm-warn").innerHTML = warnHtml;
+    $("#alarm-warn").hidden = !warns.length;
+
+    const readiness=BD.buildReadiness({enabled:on,notificationSupported:"Notification" in window,
+      permission:"Notification" in window ? Notification.permission : "unsupported",
+      audioSupported:Boolean(window.AudioContext || window.webkitAudioContext),audioState:audio.ctx && audio.ctx.state});
+    setText($("#hero-alarm-toggle"),readiness.setting);
+    $("#hero-alarm-toggle").setAttribute("aria-pressed",String(on));
+    [["#hero-alarm-perm",readiness.permission,"Notification" in window && Notification.permission === "granted"],
+      ["#alarm-perm",readiness.permission + (readiness.permissionAction === "guide" ? " · 알림 동작과 한계 참고" : ""),"Notification" in window && Notification.permission === "granted"],
+      ["#hero-alarm-sound",readiness.sound,readiness.soundReady],
+      ["#alarm-sound",readiness.sound,readiness.soundReady]].forEach(([id,text,ok]) => {
+        setText($(id),text); $(id).className="pill " + (ok ? "ok" : "bad");
+      });
+    ["#alarm-sound","#hero-alarm-sound"].forEach(id => { $(id).disabled=!Boolean(window.AudioContext || window.webkitAudioContext); });
+    const activeAction=activeElement();
+    $("#alarm-skip").hidden = !(on && alarmView && (alarmView.state === "armed" || alarmView.pendingUncertain) && alarmView.target && !targetExcluded(alarmView.target));
+    if (alarmView && alarmView.target) setText($("#alarm-skip"),"차량 " + alarmView.target.vehId + " 제외");
+    $("#alarm-undo-skip").hidden = !undoSkip || Date.now() - undoSkip.atMs > 30000;
+    if (activeAction===$("#alarm-skip") && $("#alarm-skip").hidden && !$("#alarm-undo-skip").hidden) $("#alarm-undo-skip").focus({preventScroll:true});
+    if (activeAction===$("#alarm-undo-skip") && $("#alarm-undo-skip").hidden) ($("#alarm-skip").hidden ? $("#hero-alarm-toggle") : $("#alarm-skip")).focus({preventScroll:true});
+    renderWindows();
+    renderHistory();
+    renderClocks();
+  }
+
+  // ---- 알림 시간대 / 시각 알람 / 타이머 ----
+  const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0], DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+  const dayButtons = (days) => DAY_ORDER.map(d => "<button type=\"button\" class=\"day\" data-day=\"" + d + "\" aria-pressed=\""
+    + days.includes(d) + "\">" + DAY_NAMES[d] + "</button>").join("");
+  const anyAlarmActive = () => Boolean((alarmCfg && alarmCfg.enabled) || clocks.some(c => c.enabled) || timers.length);
+  const saveIfChanged = (key, before, after) => { if (JSON.stringify(before) !== JSON.stringify(after)) store.set(key, after); };
+  function prepareAlarmPermission() {
+    ensureAudio();
+    if ("Notification" in window && Notification.permission === "default") requestPermission();
+  }
+  const fmtRemain = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+    const two = (n) => String(n).padStart(2, "0");
+    return h ? h + ":" + two(m) + ":" + two(sec) : m + ":" + two(sec);
+  };
+
+  function renderWindows() {
+    const sig = JSON.stringify(alarmCfg.windows);
+    if (sig !== windowsSig) {
+      windowsSig = sig;
+      updateList($("#alarm-windows"), alarmCfg.windows.map((w, i) => "<div class=\"win\" data-i=\"" + i + "\">"
+        + "<input type=\"time\" data-f=\"start\" value=\"" + w.start + "\" aria-label=\"알림 시간대 " + (i + 1) + " 시작 시각\"> ~ "
+        + "<input type=\"time\" data-f=\"end\" value=\"" + w.end + "\" aria-label=\"알림 시간대 " + (i + 1) + " 끝 시각\">"
+        + "<span class=\"days\" role=\"group\" aria-label=\"요일\">" + dayButtons(w.days) + "</span>"
+        + "<button type=\"button\" class=\"ghost\" data-del aria-label=\"알림 시간대 " + (i + 1) + " 삭제\">삭제</button></div>").join(""), "#window-add");
+    }
+    setText($("#window-hint"), alarmCfg.windows.length
+      ? "이 시간대에 도착하는 버스만 알립니다."
+      : "시간대 제한 없음 — 도착하는 모든 버스에 알립니다.");
+    $("#window-add").hidden = alarmCfg.windows.length >= BA.MAX_WINDOWS;
+  }
+  // 지난 4주 같은 요일에 알림 시간대 안으로 도착한 버스 (안내용). renderAlarm 이 1초마다 불리므로 바뀔 때만 그린다.
+  let historySig = "";
+  function renderHistory() {
+    const now = Date.now(), p = BA.kstParts(now);
+    const sig = JSON.stringify(alarmCfg.windows) + "|" + (cache.history ? cache.history.length : -1) + "|" + p.date + "|" + p.minutes;
+    if (sig === historySig) return;
+    historySig = sig;
+    const list = $("#alarm-history"), note = $("#alarm-history-note");
+    if (!cache.history) { list.innerHTML = "<li class=\"empty\">도착 기록을 불러오는 중입니다.</li>"; note.textContent = ""; return; }
+    const slots = cache.summary && cache.summary.historical_alerts;
+    setText($("#historical-availability"), slots && slots.date === p.date && slots.slots.length
+      ? "오늘 사전 알림 가능 " + slots.slots.length + "개 시간대 · 가장 이른 운행 사례보다 2분 여유 · 배차 변동 시 놓칠 수 있음"
+      : "오늘 사전 알림 제한: 같은 요일 표본 부족·휴일·운행 변동 또는 최신 통계 없음 (같은 요일 4일 이상 필요)");
+    renderHistoryChart(now);
+    const r = BA.weeklyArrivalSlots({ rows:cache.history, windows:alarmCfg.windows, nowMs:now });
+    const day = DAY_NAMES[r.day];
+    if (r.noWindowToday) {
+      list.innerHTML = "<li class=\"empty\">오늘(" + day + ")은 알림 시간대가 없어 안내하지 않습니다.</li>";
+      note.textContent = "";
+      return;
+    }
+    list.innerHTML = r.slots.length
+      ? r.slots.map(s => "<li class=\"" + s.status + "\">" + escapeHtml(BA.formatSlot(s, r.weeksWithData))
+          + (s.status === "next" ? " ← 다음" : "") + "</li>").join("")
+      : "<li class=\"empty\">" + (r.weeksWithData
+          ? "같은 " + day + "요일 기록은 있지만 알림 시간대 안에 도착한 버스는 없었습니다."
+          : "같은 " + day + "요일 기록이 아직 없습니다. 수집이 쌓이면 표시됩니다.") + "</li>";
+    note.textContent = "최근 " + r.weeksRequested + "주 중 " + r.weeksWithData + "주 데이터 · 같은 " + day + "요일의 도착 추정 시각 최소~최대 범위";
+  }
+  function renderHistoryChart(now) {
+    const pts=BD.historyPoints(cache.history,now), chart=$("#history-chart"), note=$("#history-chart-note");
+    if (!pts.length) {
+      chart.innerHTML='<div class="empty">지난 4주 같은 요일의 비교 가능한 도착 추정 기록이 없습니다.</div>';
+      $("#history-table").innerHTML='';
+      note.textContent="도착 추정 유형의 운행만 사용하며 추적 중단·공백 기록은 제외합니다."; return;
+    }
+    const dates=[...new Set(pts.map(p=>p.date))], W=Math.max(240,Math.round(chart.clientWidth)), L=58, R=25, H=dates.length*36+58;
+    const lo=Math.floor(Math.min(...pts.map(p=>p.minute))/30)*30;
+    const hi=Math.max(lo+30,Math.ceil(Math.max(...pts.map(p=>p.minute))/30)*30);
+    const x=m=>L+(m-lo)/(hi-lo)*(W-L-R), y=d=>20+dates.indexOf(d)*36;
+    const clock=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+    let svg=dates.map(d=>'<text class="axis" x="0" y="'+(y(d)+4)+'">'+d.slice(5)+'</text><line class="grid" x1="'+L+'" x2="'+(W-R)+'" y1="'+y(d)+'" y2="'+y(d)+'"/>').join('');
+    pts.forEach(p=>{ svg+='<circle class="dot" cx="'+x(p.minute).toFixed(1)+'" cy="'+y(p.date)+'" r="4"><title>'+escapeHtml(p.date+' '+clock(p.minute)+' 도착 추정 · 차량 '+p.vehId)+'</title></circle>'; });
+    svg+='<text class="axis" x="'+L+'" y="'+(H-8)+'">'+clock(lo)+'</text><text class="axis" x="'+(W-R)+'" y="'+(H-8)+'" text-anchor="end">'+clock(hi)+'</text>';
+    chart.innerHTML='<svg class="trend" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+svg+'</svg>';
+    chart.setAttribute('aria-label','지난 4주 같은 요일 '+dates.length+'일, '+pts.length+'운행의 도착 추정 시각. 실제 도착 미측정.');
+    note.textContent=dates.length+'일 · '+pts.length+'운행 · 점 하나가 운행 하나입니다. 전체 시간대를 표시하며 실제 도착이나 다음 배차를 보장하지 않습니다.';
+    $("#history-table").innerHTML=pts.map(p=>'<tr><td>'+p.date+'</td><td>'+clock(p.minute)+'</td><td>'+p.vehId+'</td></tr>').join('');
+  }
+
+  function setWindows(next) {
+    alarmCfg = BA.sanitizeConfig({ ...alarmCfg, windows:next });
+    alarmNotice = "";
+    $("#window-error").hidden=true;
+    root.querySelectorAll("#alarm-windows input").forEach(el=>{el.removeAttribute("aria-invalid");el.removeAttribute("aria-describedby");});
+    windowsSig = "";
+    saveCfg(true);
+  }
+  function initWindows() {
+    const box = $("#alarm-windows");
+    box.addEventListener("change", (e) => {
+      const input = e.target.closest("input[data-f]");
+      if (!input) return;
+      const i = Number(input.closest(".win").dataset.i);
+      const next = alarmCfg.windows.map(w => ({ ...w }));
+      input.closest(".win").querySelectorAll("input").forEach(el=>{ next[i][el.dataset.f]=el.value; });
+      const valid = BA.sanitizeWindows(next);
+      if (valid.length !== next.length) {
+        const error=$("#window-error"); error.hidden=false;
+        setText(error,"끝 시각은 시작 시각보다 늦어야 해요. 시작과 끝을 모두 입력하세요. 이전 적용값을 유지합니다.");
+        input.closest(".win").querySelectorAll("input").forEach(el=>{el.setAttribute("aria-invalid","true");el.setAttribute("aria-describedby","window-error");});
+        announceStatus(error.textContent); return;
+      }
+      setWindows(valid);
+    });
+    box.addEventListener("click", (e) => {
+      const win = e.target.closest(".win");
+      if (!win) return;
+      const i = Number(win.dataset.i);
+      const next = alarmCfg.windows.map(w => ({ ...w, days:[...w.days] }));
+      const dayBtn = e.target.closest("button[data-day]");
+      if (dayBtn) {
+        const d = Number(dayBtn.dataset.day), has = next[i].days.includes(d);
+        if (has && next[i].days.length === 1) { alarmNotice="요일은 하나 이상 선택해야 합니다."; announceStatus(alarmNotice); queueRender(); return; }   // 요일은 하나 이상
+        next[i].days = has ? next[i].days.filter(x => x !== d) : [...next[i].days, d];
+        setWindows(next);
+      } else if (e.target.closest("button[data-del]")) {
+        next.splice(i, 1);
+        setWindows(next);
+      }
+    });
+    $("#window-add").addEventListener("click", () => {
+      if (alarmCfg.windows.length >= BA.MAX_WINDOWS) return;
+      setWindows([...alarmCfg.windows, { start:"17:30", end:"19:30", days:[1, 2, 3, 4, 5] }]);
+    });
+  }
+
+  function saveClocks() { store.set(CLOCKS_KEY, clocks); clockSig = ""; runAlarm(); queueRender(); }
+  function saveTimers() { store.set(TIMERS_KEY, timers); timerSig = null; runAlarm(); queueRender(); }
+  function renderClocks() {
+    if (!BA) return;
+    const now = Date.now();
+    const clockSigNow = JSON.stringify(clocks) + BA.kstParts(now).date;
+    if (clockSigNow !== clockSig) {
+      clockSig = clockSigNow;
+      updateList($("#clock-list"), clocks.length
+        ? clocks.slice().sort((a, b) => a.time.localeCompare(b.time)).map(c => {
+            const name = c.label || "알람";
+            return "<li data-id=\"" + escapeHtml(c.id) + "\"><span class=\"clock-time\">" + escapeHtml(c.time) + "</span>"
+              + "<span class=\"clock-meta\"><strong>" + escapeHtml(name) + "</strong><br><span class=\"muted\">" + escapeHtml(BA.clockOccurrenceText(c, now))
+              + (c.bus ? " · 버스 정보 포함" : "") + "</span></span>"
+              + "<button type=\"button\" class=\"switch mini" + (c.enabled ? " on" : "") + "\" role=\"switch\" data-toggle aria-checked=\"" + c.enabled
+              + "\" aria-label=\"" + escapeHtml(name + " " + c.time) + " 알람\">" + (c.enabled ? "켜짐" : "꺼짐") + "</button>"
+              + "<button type=\"button\" class=\"ghost\" data-del aria-label=\"" + escapeHtml(name + " " + c.time) + " 삭제\">삭제</button></li>";
+          }).join("")
+        : "<li class=\"empty\">등록된 알람이 없습니다.</li>", "#clock-form button[type=submit]");
+    }
+    const timerSigNow = timers.map(t => t.id).join(",");
+    if (timerSigNow !== timerSig) {
+      timerSig = timerSigNow;
+      updateList($("#timer-list"), timers.length
+        ? timers.map(t => "<li data-id=\"" + escapeHtml(t.id) + "\"><span class=\"clock-time\" data-end=\"" + t.endsAtMs + "\">--:--</span>"
+            + "<span class=\"clock-meta\"><strong>" + escapeHtml(t.label || "타이머") + "</strong><br><span class=\"muted\">" + t.minutes + "분 타이머</span></span>"
+            + "<button type=\"button\" class=\"ghost\" data-cancel aria-label=\"" + escapeHtml((t.label || "타이머") + " 취소") + "\">취소</button></li>").join("")
+        : "", "#timer-form button[type=submit]");
+    }
+    root.querySelectorAll("#timer-list [data-end]").forEach(el => setText(el, fmtRemain(Number(el.dataset.end) - now)));
+    setText($("#clock-notice"), clockNotice);
+    $("#clock-notice").hidden = !clockNotice;
+  }
+  function initClocks() {
+    $("#clock-days").innerHTML = dayButtons([1, 2, 3, 4, 5]);   // 기본은 평일 반복: 울린 뒤에도 꺼지지 않는다
+    $("#clock-days").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-day]");
+      if (btn) btn.setAttribute("aria-pressed", String(btn.getAttribute("aria-pressed") !== "true"));
+    });
+    const pickDays = (days) => root.querySelectorAll("#clock-days button").forEach(b => b.setAttribute("aria-pressed", String(days.includes(Number(b.dataset.day)))));
+    $("#clock-weekdays").addEventListener("click", () => pickDays([1, 2, 3, 4, 5]));
+    $("#clock-everyday").addEventListener("click", () => pickDays([0, 1, 2, 3, 4, 5, 6]));
+    $("#clock-once").addEventListener("click", () => pickDays([]));
+    $("#clock-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (clocks.length >= BA.MAX_CLOCKS) { clockNotice = "알람은 최대 " + BA.MAX_CLOCKS + "개까지 등록할 수 있어요."; renderClocks(); return; }
+      const days = [...root.querySelectorAll("#clock-days button[aria-pressed='true']")].map(b => Number(b.dataset.day));
+      const clock = BA.newClock({ time:$("#clock-time").value, label:$("#clock-label").value.trim(), days, bus:$("#clock-bus").checked }, Date.now());
+      if (!clock) { $("#clock-time").focus(); return; }
+      clockNotice = "";
+      clocks = [...clocks, clock];
+      $("#clock-label").value = "";
+      prepareAlarmPermission();
+      saveClocks();
+    });
+    $("#clock-list").addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-id]");
+      if (!li) return;
+      const id = li.dataset.id;
+      if (e.target.closest("button[data-toggle]")) {
+        clocks = clocks.map(c => c.id !== id ? c : (c.enabled ? { ...c, enabled:false } : BA.rearmClock(c, Date.now())));
+        if (clocks.some(c => c.enabled)) prepareAlarmPermission();
+        saveClocks();
+      } else if (e.target.closest("button[data-del]")) {
+        clocks = clocks.filter(c => c.id !== id);
+        saveClocks();
+      }
+    });
+    const startTimer = (minutes, label) => {
+      if (timers.length >= BA.MAX_TIMERS) { clockNotice = "타이머는 최대 " + BA.MAX_TIMERS + "개까지 동시에 돌릴 수 있어요."; renderClocks(); return; }
+      const timer = BA.newTimer(minutes, label, Date.now());
+      if (!timer) { $("#timer-custom").focus(); return; }
+      clockNotice = "";
+      timers = [...timers, timer];
+      prepareAlarmPermission();
+      saveTimers();
+    };
+    $("#timer-presets").innerHTML = [5, 10, 15, 30].map(n => "<button type=\"button\" class=\"chip\" data-min=\"" + n + "\">" + n + "분</button>").join("");
+    $("#timer-presets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-min]");
+      if (btn) startTimer(Number(btn.dataset.min), $("#timer-label").value.trim());
+    });
+    $("#timer-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      startTimer($("#timer-custom").value, $("#timer-label").value.trim());
+      $("#timer-custom").value = "";
+    });
+    $("#timer-list").addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-id]");
+      if (li && e.target.closest("button[data-cancel]")) { timers = timers.filter(t => t.id !== li.dataset.id); saveTimers(); }
+    });
+    renderClocks();
+  }
+
+  function initAlarm() {
+    if (!BA || !alarmCfg) { $("#alarm").hidden = true; $("#clock-panel").hidden = true; return; }
+    $("#alarm-toggle").addEventListener("click", () => {
+      alarmCfg.enabled = !alarmCfg.enabled;
+      if (alarmCfg.enabled) {
+        ensureAudio();
+        if ("Notification" in window && Notification.permission === "default") requestPermission();
+      } else {
+        ackAlarm(); alarmPrev = null; alarmNotice = "";
+      }
+      saveCfg(true);
+    });
+    $("#alarm-chips").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-lead]");
+      if (!btn) return;
+      const n = Number(btn.dataset.lead);
+      const next = alarmCfg.leads.includes(n) ? alarmCfg.leads.filter(v => v !== n) : [...alarmCfg.leads, n];
+      if (!next.length) { alarmNotice="알림 시점은 하나 이상 선택해야 합니다."; announceStatus(alarmNotice); queueRender(); return; }   // 최소 하나는 남긴다
+      alarmCfg = BA.sanitizeConfig({ ...alarmCfg, leads:next });
+      saveCfg(true);
+    });
+    $("#alarm-add").addEventListener("click", () => {
+      const input = $("#alarm-custom");
+      const n = Math.round(Number(input.value));
+      if (!Number.isFinite(n) || n < BA.LEAD_MIN || n > BA.LEAD_MAX) { input.focus(); return; }
+      const cfg = BA.sanitizeConfig({ ...alarmCfg, leads:[...alarmCfg.leads, n] });
+      if (!cfg.leads.includes(n)) { alarmNotice = "알림 시점은 최대 " + BA.MAX_LEADS + "개까지 고를 수 있어요."; }
+      alarmCfg = BA.sanitizeConfig({ ...alarmCfg, leads:cfg.leads });
+      input.value = "";
+      saveCfg(true);
+    });
+    $("#alarm-test").addEventListener("click", () => {
+      ensureAudio();
+      if ("Notification" in window && Notification.permission === "default") requestPermission();
+      const lead = Math.max(...alarmCfg.leads);
+      // 오디오 컨텍스트가 막 깨어나는 중일 수 있어 약간 늦춰 울린다
+      setTimeout(() => ring({ kind:"ontime", leads:[lead], vehId:0, remainingSec:lead * 60 }, "bus-test"), 150);
+    });
+    $("#alarm-skip").addEventListener("click", () => {
+      if (!alarmView || !alarmView.target) return;
+      const target={...alarmView.target};
+      const apply=() => {
+        undoSkip={atMs:Date.now(),vehId:target.vehId,arrivalAtMs:target.arrivalAtMs};
+        store.set(LEDGER_KEY, BA.skipTarget(BA.sanitizeLedger(store.get(LEDGER_KEY)),target));
+        alarmPrev=null; store.set("busAlarm.v2.pending",null); runAlarm(); queueRender(true);
+      };
+      if (navigator.locks && navigator.locks.request) navigator.locks.request("busAlarm:eval",apply); else apply();
+    });
+    $("#alarm-undo-skip").addEventListener("click", () => {
+      if (!undoSkip || Date.now() - undoSkip.atMs > 30000) return;
+      const apply = () => {
+        const ledger = BA.sanitizeLedger(store.get(LEDGER_KEY));
+        if (ledger.skipped[String(undoSkip.vehId)] === undoSkip.arrivalAtMs) {
+          delete ledger.skipped[String(undoSkip.vehId)]; store.set(LEDGER_KEY, ledger);
+        }
+        undoSkip=null; runAlarm();
+      };
+      if (navigator.locks && navigator.locks.request) navigator.locks.request("busAlarm:eval", apply); else apply();
+    });
+    const activateSound=() => { ensureAudio(); setTimeout(() => queueRender(),200); };
+    $("#alarm-sound").addEventListener("click",activateSound);
+    $("#hero-alarm-sound").addEventListener("click",activateSound);
+    $("#hero-alarm-toggle").addEventListener("click",() => $("#alarm-toggle").click());
+    $("#hero-alarm-perm").addEventListener("click",() => {
+      if ("Notification" in window && Notification.permission === "default") {
+        requestPermission();
+      } else {
+        options.revealSettings?.();
+        $("#alarm-help").open=true; $("#alarm-help summary").focus();
+        $("#alarm-help").scrollIntoView({block:"start"});
+      }
+    });
+    window.addEventListener("focus",() => queueRender());
+    $("#alarm-ack").addEventListener("click", ackAlarm);
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape" && ringing) ackAlarm(); });
+    ["pointerdown", "keydown"].forEach(ev => window.addEventListener(ev, unlockAudio));
+    window.addEventListener("storage", (e) => {
+      if (e.key === "busWalkMinutes") {
+        const value=Number(e.newValue);
+        if (Number.isFinite(value)) { appliedWalk=Math.min(60,Math.max(0,Math.round(value)));
+          if (activeElement() !== $("#walk")) $("#walk").value=String(appliedWalk); runAlarm(); queueRender(true); }
+      }
+      if (e.key === "busSafetyMarginMinutes") {
+        const value=Number(e.newValue);
+        if (Number.isFinite(value)) { appliedMargin=Math.min(10,Math.max(0,value))*60;
+          if (activeElement() !== $("#safety-margin")) $("#safety-margin").value=String(appliedMargin/60); runAlarm(); queueRender(true); }
+      }
+      if (e.key === CFG_KEY) alarmCfg = BA.sanitizeConfig(store.get(CFG_KEY));
+      if (e.key === CLOCKS_KEY) clocks = BA.sanitizeClocks(store.get(CLOCKS_KEY));
+      if (e.key === TIMERS_KEY) timers = BA.sanitizeTimers(store.get(TIMERS_KEY));
+      runAlarm(); queueRender(true);
+    });
+    initWindows();
+    initClocks();
+    queueRender();
+    if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({name:"notifications"})
+      .then(state=>state.addEventListener("change",() => queueRender())).catch(() => {});
+  }
+
+  // ---- 데이터 로드 ----
+  let lastLoadAt = 0, loading = null, lastHistoryAt = 0, loadGeneration = 0;
+  const HISTORY_REFRESH_MS = 10 * 60000;
+  const requests = new Map();
+  // Include body parsing in the per-request deadline; concurrent consumers share one request.
+  function get(path, asText=false, generation=loadGeneration) {
+    const key=generation + "|" + path;
+    if (requests.has(key)) return requests.get(key);
+    const controller=new AbortController();
+    let timer;
+    const deadline=new Promise(resolve => { timer=setTimeout(() => { controller.abort(); resolve(null); },10000); });
+    const request=Promise.race([fetch(new URL(path + "?t=" + Date.now(), baseUrl),{signal:controller.signal})
+      .then(r=>r.ok ? (asText ? r.text() : r.json()) : null).catch(()=>null),deadline])
+      .finally(()=>{ clearTimeout(timer); if (requests.get(key)===request) requests.delete(key); });
+    requests.set(key,request); return request;
+  }
+  async function loadAux(generation) {
+    setText($("#aux-status"),"예측·운행 기록을 확인 중입니다.");
+    const summary=await get("summary.json", false);
+    if (generation!==loadGeneration) return;
+    let predictions=summary && Array.isArray(summary.recent_predictions) ? summary.recent_predictions : null;
+    let arrivals=summary && Array.isArray(summary.recent_arrivals) ? summary.recent_arrivals : null;
+    const needsHistory=Date.now()-lastHistoryAt>=HISTORY_REFRESH_MS;
+    const [predictionText,arrivalText]=await Promise.all([
+      predictions ? null : get("predict_log.csv",true,generation),
+      !arrivals || needsHistory ? get("arrival_log.csv", true,generation) : null
+    ]);
+    if (generation!==loadGeneration) return;
+    if (summary) cache.summary=summary;
+    if (!predictions && predictionText!=null) predictions=csvRows(predictionText);
+    if (!arrivals && arrivalText!=null) arrivals=csvRows(arrivalText);
+    if (predictions) cache.predictions=predictions.slice(-60);
+    if (arrivals) cache.arrivals=arrivals.slice(-30).reverse();
+    if (needsHistory && arrivalText!=null) { cache.history=csvRows(arrivalText); lastHistoryAt=Date.now(); }
+    historySig="";
+    setText($("#aux-status"), predictions && arrivals && (!needsHistory || arrivalText!=null)
+      ? "예측·운행 기록을 확인했습니다."
+      : "일부 보조 기록 확인 실패 · 이전 기록이 있으면 유지합니다.");
+    renderArrivals(); renderSystem(); runAlarm(); queueRender(true);
+  }
+  function load() {
+    if (loading) return loading;
+    const generation=++loadGeneration;
+    lastLoadAt=Date.now();
+    setText($("#refresh-status"),"최신 차량 정보를 확인 중입니다.");
+    // Auxiliary records never hold up the departure decision.
+    if (!MOCK) loadAux(generation).catch(()=>{
+      if (generation===loadGeneration) setText($("#aux-status"),"보조 기록 확인 실패 · 이전 기록을 유지합니다.");
+    });
+    loading=(async () => {
+      const statusPromise=MOCK ? Promise.resolve({last_poll:new Date(MOCK_START).toISOString(),current_veh_id:999001,
+        current_plate:"모의 차량",predict_sec:MOCK_SEC,location_no:4,remain_seat:40,confidence:"medium",
+        collect_window:"00:00-24:00",poll_interval_sec:60,next_veh_id:999002,next_plate_no:"모의 후속",next_predict_sec:MOCK_SEC+1800})
+        : get("status.json", false);
+      const holidaysPromise=MOCK || cache.holidays ? null : get("holidays.json", false);
+      const status=await statusPromise;
+      if (generation!==loadGeneration) return;
+      const validStatus=status && typeof status==="object" && Number.isFinite(Date.parse(status.last_poll));
+      const previousPoll=cache.status && Date.parse(cache.status.last_poll);
+      const older=validStatus && Number.isFinite(previousPoll) && Date.parse(status.last_poll)<previousPoll;
+      let result;
+      if (validStatus && !older) {
+        result=JSON.stringify(cache.status)===JSON.stringify(status) ? "확인 완료 · 차량 자료가 이전과 같습니다." : "새 차량 자료를 반영했습니다.";
+        cache.status = status;
+        cache.netError=false; cache.lastOkMs=Date.now();
+        if ((!status.error || status.error==="no_bus") && Number(status.current_veh_id || 0)) {
+          cache.lastGoodStatus=status; store.set("busDashboard.v1.lastGoodStatus",status);
+        }
+        if (status.error && status.error!=="no_bus") result="차량 API 확인 실패 · 마지막 정상 관측과 예약을 확인하세요.";
+      } else {
+        cache.netError = Boolean(cache.status);
+        result=older ? "이전 시각의 응답입니다. 마지막 정상 자료를 유지합니다." : "확인 실패 · 마지막 정상 자료와 원래 확인 시각을 유지합니다.";
+      }
+      cache.loadError=cache.status ? null : "도착 상태 정보(status.json)를 불러올 수 없습니다. 네트워크 또는 배포 상태를 확인하세요.";
+      body.classList.remove("loading");
+      setText($("#refresh-status"),result); announceStatus(result);
+      renderSystem(); runAlarm(); queueRender(true);
+      // Calendar is optional metadata, but its arrival must update collection/holiday labels.
+      if (holidaysPromise) holidaysPromise.then(holidays=>{
+        if (generation!==loadGeneration) return;
+        if (holidays && holidays.dates) { cache.holidays=new Set(Object.keys(holidays.dates)); runAlarm(); queueRender(); }
+      });
+      return result;
+    })().finally(()=>{ if (generation===loadGeneration) loading=null; });
+    return loading;
+  }
+
+  const marginInput = $("#safety-margin");
+  const storedMargin = store.get("busSafetyMarginMinutes");
+  appliedMargin = (storedMargin == null ? 1 : Math.min(10, Math.max(0, Number(storedMargin) || 0))) * 60;
+  marginInput.value = String(appliedMargin / 60);
+  $("#historical-alert").checked = store.get("busHistoricalEnabled") === true;
+  $("#historical-alert").addEventListener("change", () => { store.set("busHistoricalEnabled", $("#historical-alert").checked); runAlarm(); });
+  const walkInput = $("#walk");
+  let storedWalk = null;
+  try { storedWalk = localStorage.getItem("busWalkMinutes"); } catch (e) { /* 기본값 사용 */ }
+  appliedWalk = storedWalk !== null && Number.isFinite(Number(storedWalk)) ? Math.min(60, Math.max(0, Math.round(Number(storedWalk)))) : 5;
+  walkInput.value = String(appliedWalk);
+  function commitPreference(input, kind) {
+    const walk=kind === "walk", max=walk ? 60 : 10, error=$(walk ? "#walk-error" : "#margin-error");
+    const value=Number(input.value);
+    const invalid=input.value.trim() === "" || !Number.isFinite(value) || value < 0 || value > max;
+    input.setAttribute("aria-invalid",String(invalid)); error.hidden=!invalid;
+    if (invalid) {
+      setText(error,"0~" + max + "분을 입력하세요. 이전 적용값을 유지합니다.");
+      announceStatus(error.textContent); return;
+    }
+    const next=walk ? Math.round(value) : value;
+    if (walk) appliedWalk=next; else appliedMargin=next*60;
+    input.value=String(next);
+    let saved=true;
+    try { localStorage.setItem(walk ? "busWalkMinutes" : "busSafetyMarginMinutes",String(next)); } catch(e) { saved=false; }
+    preferenceSaveError=saved ? "" : " · 저장 실패: 이 탭에서만 적용됩니다.";
+    runAlarm(); queueRender(true);
+    announceStatus((walk ? "도보 " : "추가 여유 ") + next + "분 적용됨" + (saved ? "" : " · 저장 실패: 이 탭에서만 적용됩니다."));
+  }
+  [walkInput,marginInput].forEach(input => {
+    const kind=input === walkInput ? "walk" : "margin";
+    input.addEventListener("input", () => { input.removeAttribute("aria-invalid"); $(kind === "walk" ? "#walk-error" : "#margin-error").hidden=true; });
+    input.addEventListener("change", () => commitPreference(input,kind));
+    input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); commitPreference(input,kind); } });
+  });
+  const setWalk = value => { walkInput.value=String(Math.min(60,Math.max(0,value))); commitPreference(walkInput,"walk"); };
+  $("#walk-dec").addEventListener("click", () => setWalk(walkMinutes() - 1));
+  $("#walk-inc").addEventListener("click", () => setWalk(walkMinutes() + 1));
+
+  ["arrival", "remaining"].forEach(mode => $("#chart-"+mode).addEventListener("click", () => {
+    chartMode=mode;
+    ["arrival", "remaining"].forEach(m => $("#chart-"+m).setAttribute("aria-pressed", String(m===mode)));
+    queueRender(true);
+  }));
+
+  $("#open-settings").addEventListener("click", () => {
+    options.revealSettings?.();
+    $("#alarm-settings").open=true;
+    $("#alarm-settings summary").focus();
+    $("#alarm-settings").scrollIntoView({block:"start"});
+  });
+
+  const refreshButton = $("#refresh");
+  refreshButton.addEventListener("click", async () => {
+    refreshButton.disabled = true; refreshButton.textContent = "조회 중...";
+    try { await load(); } finally { refreshButton.disabled = false; refreshButton.textContent = "새로고침"; }
+  });
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { historySig=""; queueRender(true); }, 180); });
+
+  function tick() {
+    runAlarm();
+    queueRender();
+    if (Date.now() - lastLoadAt >= 60000) load().catch(() => {});
+  }
+  // 탭이 다시 보이거나 네트워크가 돌아오면 바로 갱신한다 (숨겨진 탭의 타이머는 분당 1회로 제한된다)
+  const refreshNow = () => { load().catch(() => {}); tick(); };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshNow(); });
+  window.addEventListener("online", refreshNow);
+  window.addEventListener("pageshow", (e) => { if (e.persisted) refreshNow(); });
+
+  initAlarm();
+  load().catch(e => {
+    cache.loadError = "화면 데이터 로드 실패: " + e.message;
+    body.classList.remove("loading");
+    renderSystem(); queueRender();
+  });
+  setInterval(tick, 1000);
+  // 숨겨진 탭에서도 정확한 시각에 알림이 울리도록 Web Worker 로 1초 틱을 보조한다
+  try {
+    const workerUrl = URL.createObjectURL(new Blob(["setInterval(function(){postMessage(0)},1000)"], { type:"text/javascript" }));
+    const worker = new Worker(workerUrl);
+    URL.revokeObjectURL(workerUrl);
+    window.addEventListener('pagehide', e => { if (!e.persisted) worker.terminate(); });
+    worker.onmessage = () => { if (document.hidden) tick(); };
+  } catch (e) { /* 워커를 쓸 수 없으면 메인 스레드 타이머만 사용 */ }
+} };

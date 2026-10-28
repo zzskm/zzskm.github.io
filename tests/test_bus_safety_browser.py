@@ -34,7 +34,7 @@ class SafetyBrowserTests(unittest.TestCase):
         cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True)
         cls.thread.start()
         cls.pw=sync_playwright().start()
-        cls.browser=cls.pw.chromium.launch(executable_path=shutil.which('chromium') or cls.pw.chromium.executable_path,headless=True,args=['--no-sandbox'])
+        cls.browser=cls.pw.chromium.launch(executable_path=os.getenv('BROWSER_EXECUTABLE') or shutil.which('chromium') or cls.pw.chromium.executable_path,headless=True,args=['--no-sandbox'])
 
     @classmethod
     def tearDownClass(cls):
@@ -425,15 +425,16 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertEqual(len(pending),1)
             # A new core refresh gets a new auxiliary generation.
             page.locator('#refresh').click()
-            page.wait_for_function('loadGeneration === 2')
+            expect(page.locator('#refresh')).to_be_enabled()
             self.assertEqual(len(pending),2)
             current={'recent_predictions':[],'recent_arrivals':[],'today':{}}
             pending[1].fulfill(json=current)
             expect(page.locator('#aux-status')).to_contain_text('확인했습니다')
             old={'recent_predictions':[],'recent_arrivals':[{'vehId':999,'est_arrival_ts':T.isoformat()}]}
-            pending[0].fulfill(json=old)
-            page.wait_for_function('!requests.size')
-            self.assertEqual(page.evaluate('cache.arrivals.length'),0)
+            with page.expect_response('**/summary.json?*') as response:
+                pending[0].fulfill(json=old)
+            response.value.finished()
+            expect(page.locator('#arrivals')).not_to_contain_text('999')
             self.assertEqual(errors,[])
         finally: page.close()
 
@@ -450,8 +451,8 @@ class SafetyBrowserTests(unittest.TestCase):
             page.clock.fast_forward(10001)
             expect(page.locator('#refresh')).to_be_enabled()
             expect(page.locator('#refresh-status')).to_contain_text('확인 실패')
-            self.assertEqual(page.evaluate('cache.status.last_poll'),T.isoformat())
-            self.assertEqual(page.evaluate('cache.lastGoodStatus.last_poll'),T.isoformat())
+            expect(page.locator('#freshness')).to_contain_text('18:00 차량 확인')
+            self.assertEqual(page.evaluate('JSON.parse(localStorage.getItem("busDashboard.v1.lastGoodStatus")).last_poll'),T.isoformat())
             self.assertEqual(errors,[])
         finally: page.close()
 
@@ -468,7 +469,7 @@ class SafetyBrowserTests(unittest.TestCase):
             page.route('**/status.json?*',lambda r:r.fulfill(json=self.ready_status()))
             page.locator('#refresh').click()
             expect(page.locator('#refresh-status')).to_contain_text('이전 시각의 응답')
-            self.assertEqual(page.evaluate('cache.status.last_poll'),newer['last_poll'])
+            self.assertEqual(page.evaluate('JSON.parse(localStorage.getItem("busDashboard.v1.lastGoodStatus")).last_poll'),newer['last_poll'])
             self.assertEqual(errors,[])
         finally: page.close()
 
@@ -479,7 +480,7 @@ class SafetyBrowserTests(unittest.TestCase):
         try:
             page.locator('#alarm-skip').click()
             expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
-            page.wait_for_function('store.get("busAlarm.v2.pending")?.vehId === 22')
+            page.wait_for_function('JSON.parse(localStorage.getItem("busAlarm.v2.pending"))?.vehId === 22')
             page.clock.fast_forward(181000)
             expect(page.locator('#verdict-text')).to_contain_text('예약 경고')
             expect(page.locator('#hero-detail')).to_contain_text('차량 22')
@@ -509,7 +510,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(start).to_have_attribute('aria-describedby','window-error')
             end.fill('21:00'); end.dispatch_event('change')
             expect(page.locator('#window-error')).to_be_hidden()
-            self.assertEqual(page.evaluate('alarmCfg.windows[0].start'),'20:00')
+            self.assertEqual(page.evaluate('JSON.parse(localStorage.getItem("busAlarm.v1.cfg")).windows[0].start'),'20:00')
             end.focus();page.evaluate('window.savedTime=document.activeElement')
             page.clock.fast_forward(1000)
             self.assertTrue(page.evaluate('savedTime===document.activeElement'))
@@ -586,7 +587,7 @@ class SafetyBrowserTests(unittest.TestCase):
                     constructor(){super();this.state='suspended';window.testAudio=this;}
                     resume(){return Promise.reject(new Error('blocked'));}
                 };
-                ensureAudio();
+                window.dispatchEvent(new Event('pointerdown'));
             }""")
             expect(page.locator('#alarm-warn')).to_contain_text('소리 활성화 실패')
             page.evaluate("testAudio.state='running'; testAudio.dispatchEvent(new Event('statechange'))")

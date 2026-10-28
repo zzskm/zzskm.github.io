@@ -4,15 +4,20 @@ on:
     paths:
       - 'bus-arrival/**'
       - 'tests/*bus*'
+      - 'dashboard*'
+      - 'tests/*dashboard*'
       - '.github/workflows/bus_*.yml'
   push:
     branches: [main]
     paths:
       - 'bus-arrival/alarm.js'
       - 'bus-arrival/dashboard.js'
+      - 'bus-arrival/app.js'
       - 'bus-arrival/index.html'
       - 'bus-arrival/scripts/**'
       - 'tests/*bus*'
+      - 'dashboard*'
+      - 'tests/*dashboard*'
       - '.github/workflows/bus_*.yml'
 permissions:
   contents: read
@@ -35,13 +40,17 @@ jobs:
       - name: Unit, replay and browser regressions
         env:
           BUS_REQUIRE_BROWSER_TESTS: '1'
+          DASHBOARD_SCREENSHOT_DIR: '/tmp/dashboard-preview'
         run: |
-          python -m pytest tests/test_bus*.py
+          python -m pytest tests/test_bus*.py tests/test_dashboard_browser.py
+          node --test tests/dashboard.test.mjs
           bash -n bus-arrival/scripts/session.sh
       - name: Upload UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bus-ui-screenshots
-          path: /tmp/bus-ui-*.png
+          path: |
+            /tmp/bus-ui-*.png
+            /tmp/dashboard-preview/*.png
           if-no-files-found: ignore
