@@ -535,11 +535,13 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(toggle).to_have_attribute('aria-checked','false')
             self.assertTrue(page.evaluate('savedToggle===document.activeElement'))
             page.locator('#clock-list [data-del]').click()
-            expect(page.locator('#clock-form button[type=submit]')).to_be_focused()
-            page.locator('#timer-create summary').click()
+            expect(page.locator('#clock-undo')).to_be_focused()     # 삭제 직후 다음 조작은 되돌리기
+            page.keyboard.press('Enter')
+            expect(page.locator('#clock-list li[data-id]')).to_have_count(1)
+            expect(page.locator('#clock-list')).to_contain_text('퇴근')
             page.locator('#timer-presets [data-min="5"]').click()
             page.locator('#timer-list [data-cancel]').click()
-            expect(page.locator('#timer-form button[type=submit]')).to_be_focused()
+            expect(page.locator('#timer-presets [data-min="5"]')).to_be_focused()
             self.assertEqual(errors,[])
         finally: page.close()
 

@@ -14,20 +14,38 @@
   let state = M.normalize(read('wht.state.v2'));
   let summary = null, config = null, range = 30, weightLoading = null, lastWeightAttempt = 0;
   let previousWork = null;
-  let theme = read('personalDashboard.theme');
-  if (!['light','dark'].includes(theme)) theme = 'auto';
-  function applyTheme() {
-    if (theme === 'auto') delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
-    set('theme', `테마: ${{auto:'자동',light:'밝게',dark:'어둡게'}[theme]}`);
-    // The bus widget inherits these variables even across its shadow boundary.
-    $('bus-widget').dataset.theme = theme;
+  // Colors follow the OS light/dark preference only; the bus widget inherits them across its shadow boundary.
+
+  // General alarms, the shared banner and sound/permission state never wait for the bus widget.
+  const R = window.AlertRuntime;
+  R.init(document);
+  window.ClockView.mount($('clock-view'), {simple:true});
+  function readinessIssues() {
+    const r = R.readiness(), issues = [];
+    if (R.state.permissionError) issues.push('OS 알림 권한 요청 실패');
+    else if (r.permission === 'default') issues.push('OS 알림 허용 필요');
+    else if (r.permission === 'denied') issues.push('OS 알림 차단 · 화면 알림만');
+    else if (r.permission === 'unsupported') issues.push('OS 알림 미지원 · 화면 알림만');
+    if (R.state.audioError) issues.push('소리 활성화 실패');
+    else if (r.sound === 'locked') issues.push('소리 켜기 필요');
+    else if (r.sound === 'unsupported') issues.push('소리 미지원');
+    return {r, issues};
   }
-  $('theme').addEventListener('click', () => {
-    theme = {auto:'light',light:'dark',dark:'auto'}[theme];
-    save('personalDashboard.theme', theme); applyTheme();
+  function renderReadiness() {
+    const {issues} = readinessIssues();
+    set('alert-ready', issues.length ? issues.join(' · ') : '알림 준비됨');
+    $('alert-ready').classList.toggle('is-ready', !issues.length);
+  }
+  $('alert-ready').addEventListener('click', () => {
+    const {r} = readinessIssues();
+    if (r.sound === 'locked' || R.state.audioError) R.ensureAudio();
+    if (r.permission === 'default') R.requestPermission();
+    const note = r.permission === 'denied' ? '알림이 차단되어 있습니다. 브라우저 주소창의 사이트 설정에서 알림을 허용해 주세요.'
+      : r.permission === 'unsupported' ? '이 브라우저는 OS 알림을 지원하지 않아 화면 배너와 소리로만 알립니다.' : '';
+    set('alert-ready-note', note); $('alert-ready-note').hidden = !note;
+    setTimeout(renderReadiness, 200);
   });
-  applyTheme();
+  R.subscribe(renderReadiness); renderReadiness();
 
   function syncInputs() {
     $('work-start').value = time(state.start);
@@ -188,7 +206,9 @@
       // Keep the original controls and IDs so the shared alarm controller works unchanged.
       const details = document.createElement('details');
       details.className = 'dashboard-bus-details';
-      const toggle = document.createElement('summary'); toggle.textContent = '버스 상세 · 알림 설정 · 타이머'; details.append(toggle);
+      const toggle = document.createElement('summary'); toggle.textContent = '버스 상세 · 도보·알림 설정'; details.append(toggle);
+      // Alarms/timers and the ringing banner live in the dashboard document, shared with the bus.
+      main.querySelector('#clock-panel')?.remove(); main.querySelector('#alarm-banner')?.remove();
       let afterHero = false;
       for (const child of [...main.children]) {
         if (afterHero && child.id !== 'cards' && child.id !== 'error-card') details.append(child);
@@ -197,7 +217,10 @@
       main.append(details); body.append(main);
       const styles = document.createElement('style');
       styles.textContent = css + `
-        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft); --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent); --on-brand:var(--dash-bg); --hero-from:#274d3b; --hero-to:#274d3b; --hero-sub:#d9e6d7; color:var(--ink); }
+        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft); --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent); --on-brand:var(--dash-bg); --hero-from:var(--dash-soft); --hero-to:var(--dash-soft); --hero-sub:var(--dash-muted); color:var(--ink); }
+        .hero { color:var(--ink); }
+        /* OS permission and sound are shown once, in the dashboard header. */
+        #hero-alarm-perm, #hero-alarm-sound { display:none; }
         .bus-body { padding:0; background:none; color:inherit; font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
         main { max-width:none; } header { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; gap:8px; flex-wrap:wrap; }
         header h1, header .detail-link { display:none; } header .muted { font-size:11px; } header #refresh-status { flex-basis:100%; margin:0; }

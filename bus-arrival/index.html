@@ -104,6 +104,9 @@
                     margin:0 0 12px; padding:14px 16px; border-radius:14px; background:var(--brand); color:var(--on-brand);
                     font-size:17px; font-weight:800; box-shadow:0 8px 24px rgba(0,0,0,.25); }
     .alarm-banner button { background:var(--on-brand); color:var(--brand); }
+    #alarm-banner-text { flex:1 1 220px; }
+    #alarm-queue-count { font-size:13px; font-weight:600; opacity:.85; }
+    #alarm-queue-count:empty { display:none; }
 
     /* 알림 시간대 / 시각 알람 / 타이머 */
     .alarm-sub { margin-top:14px; font-size:13px; font-weight:700; }
@@ -292,6 +295,7 @@
       .status-chip { font-size:11px; }
     }
   </style>
+  <link rel="stylesheet" href="clock-view.css">
 </head>
 <body class="loading">
 <main>
@@ -307,7 +311,9 @@
 
   <div class="alarm-banner" id="alarm-banner" role="alert" hidden>
     <span id="alarm-banner-text"></span>
-    <button id="alarm-ack" type="button" aria-label="알람 끄기 (Esc)">알람 끄기</button>
+    <span id="alarm-queue-count"></span>
+    <button id="alarm-ack" type="button" aria-label="현재 알림 확인 (Esc)">확인</button>
+    <button id="alarm-ack-all" type="button" hidden>전체 확인</button>
   </div>
 
   <section class="hero" id="hero">
@@ -446,31 +452,8 @@
 
   <section class="alarm" id="clock-panel" aria-labelledby="clock-title">
     <h2 class="alarm-title" id="clock-title">⏰ 알람 · 타이머</h2>
-    <details id="clock-create"><summary>시각 알람 추가</summary>
-    <form class="clock-form" id="clock-form">
-      <label>시각<input type="time" id="clock-time" value="18:00" required></label>
-      <label>이름(선택)<input type="text" id="clock-label" maxlength="30" placeholder="예: 퇴근 준비" style="width:150px"></label>
-      <div class="days" id="clock-days" role="group" aria-label="반복 요일"></div>
-      <button type="button" class="ghost" id="clock-weekdays">평일</button>
-      <button type="button" class="ghost" id="clock-everyday">매일</button>
-      <button type="button" class="ghost" id="clock-once">한 번만</button>
-      <label class="check"><input type="checkbox" id="clock-bus" checked>다음 버스 도착 정보 함께 표시</label>
-      <button type="submit">알람 추가</button>
-    </form>
-    <div class="muted" style="margin-top:6px">기본은 평일 반복입니다. 요일을 고르지 않으면 다음에 오는 그 시각에 한 번만 울립니다.</div>
-    </details>
-    <ul class="clock-list" id="clock-list"></ul>
-    <details id="timer-create"><summary>타이머 시작</summary>
-    <div class="chips" id="timer-presets" role="group" aria-label="타이머 빠른 시작"></div>
-    <form class="timer-form" id="timer-form">
-      <label>분<input type="number" id="timer-custom" min="1" max="720" step="1" inputmode="numeric" style="width:72px" placeholder="직접" required></label>
-      <label>이름(선택)<input type="text" id="timer-label" maxlength="30" placeholder="예: 회의 시작" style="width:150px"></label>
-      <button type="submit" class="ghost">타이머 시작</button>
-    </form>
-    </details>
-    <ul class="clock-list" id="timer-list"></ul>
-    <div class="alarm-notice" id="clock-notice" hidden></div>
-    <p class="muted" style="margin:10px 0 0">알람과 타이머도 이 탭이 열려 있을 때 울립니다. 탭이 닫혀 있는 동안 지난 알람은 다시 열 때 &quot;놓친 알람&quot;으로 알려 드립니다.</p>
+    <!-- 버스 자료와 무관하게 동작하는 공용 화면 (clock-view.js) -->
+    <div id="clock-view"></div>
   </section>
 
   <h2>수집 상태</h2>
@@ -478,8 +461,10 @@
 </main>
 <script src="alarm.js"></script>
 <script src="dashboard.js"></script>
+<script src="alert-runtime.js"></script>
+<script src="clock-view.js"></script>
 <script src="app.js"></script>
-<script>BusApp.mount();</script>
+<script>AlertRuntime.init(); ClockView.mount(document.getElementById("clock-view")); BusApp.mount();</script>
 </body>
 </html>
 
