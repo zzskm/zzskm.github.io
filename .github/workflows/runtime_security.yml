@@ -1,0 +1,45 @@
+name: Runtime security
+on:
+  pull_request:
+    paths: ['**/requirements.txt', 'security-constraints.txt', 'scripts/check-*-runtime.*', 'tests/test_brotli_runtime.py', 'tests/node_runtime.test.mjs', '.node-version', 'retirement-simulator/package*.json', 'retirement-simulator/.npmrc', '.github/workflows/**']
+  push:
+    branches: [main]
+    paths: ['**/requirements.txt', 'security-constraints.txt', 'scripts/check-*-runtime.*', 'tests/test_brotli_runtime.py', 'tests/node_runtime.test.mjs', '.node-version', 'retirement-simulator/package*.json', 'retirement-simulator/.npmrc', '.github/workflows/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        requirements: ['requirements.txt', 'bus-arrival/requirements.txt', 'yuc/requirements.txt']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r "${{ matrix.requirements }}"
+      - run: python -m pip check
+      - name: Verify installed native and optional decoders
+        env:
+          REQUIREMENTS: ${{ matrix.requirements }}
+        run: |
+          if [ "$REQUIREMENTS" = requirements.txt ]; then
+            python scripts/check-brotli-runtime.py --require-curl
+          else
+            python scripts/check-brotli-runtime.py
+          fi
+      - run: python -m unittest discover -s tests -p test_brotli_runtime.py -v
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          check-latest: true
+      - run: node scripts/check-node-runtime.mjs
+      - run: node --test tests/node_runtime.test.mjs
