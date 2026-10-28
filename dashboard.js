@@ -1,0 +1,243 @@
+'use strict';
+
+(() => {
+  const M = window.PersonalDashboard;
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, '0');
+  const time = t => `${pad(t.h)}:${pad(t.m)}`;
+  const duration = mins => `${mins < 0 ? '−' : ''}${Math.floor(Math.abs(mins) / 60)}시간 ${pad(Math.abs(mins) % 60)}분`;
+  const set = (id, text) => { if ($(id).textContent !== String(text)) $(id).textContent = text; };
+  function read(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
+  }
+  let state = M.normalize(read('wht.state.v2'));
+  let summary = null, config = null, range = 30, weightLoading = null, lastWeightAttempt = 0;
+  let previousWork = null;
+  let theme = read('personalDashboard.theme');
+  if (!['light','dark'].includes(theme)) theme = 'auto';
+  function applyTheme() {
+    if (theme === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    set('theme', `테마: ${{auto:'자동',light:'밝게',dark:'어둡게'}[theme]}`);
+    // The bus widget inherits these variables even across its shadow boundary.
+    $('bus-widget').dataset.theme = theme;
+  }
+  $('theme').addEventListener('click', () => {
+    theme = {auto:'light',light:'dark',dark:'auto'}[theme];
+    save('personalDashboard.theme', theme); applyTheme();
+  });
+  applyTheme();
+
+  function syncInputs() {
+    $('work-start').value = time(state.start);
+    $('work-end').value = time(state.end);
+    $('work-base').value = state.baseH * 60 + state.baseM;
+    $('work-rest').value = state.breakH * 60 + state.breakM;
+    const enabled = state.notifyEnabled;
+    set('work-notify', `퇴근 알림 ${enabled ? '켜짐' : '꺼짐'}`);
+    $('work-notify').setAttribute('aria-pressed', String(enabled));
+  }
+  function commit() {
+    const saved = save('wht.state.v2', state);
+    set('work-message', saved ? '설정을 저장했습니다.' : '브라우저 저장소를 사용할 수 없어 이 탭에서만 적용됩니다.');
+    previousWork = null;
+    syncInputs(); tick();
+  }
+  for (const [id, key] of [['work-start','start'],['work-end','end']]) {
+    $(id).addEventListener('change', () => {
+      if (!$(id).reportValidity()) return;
+      const [h,m] = $(id).value.split(':').map(Number);
+      state[key] = {h,m}; commit();
+    });
+  }
+  for (const [id, prefix] of [['work-base','base'],['work-rest','break']]) {
+    $(id).addEventListener('change', () => {
+      if (!$(id).reportValidity()) return;
+      const n = Number($(id).value);
+      state[`${prefix}H`] = Math.floor(n / 60);
+      state[`${prefix}M`] = n % 60;
+      commit();
+    });
+  }
+  $('start-now').addEventListener('click', () => {
+    const now = new Date();
+    state.start = {h:now.getHours(),m:now.getMinutes()}; commit();
+  });
+  $('work-notify').addEventListener('click', async () => {
+    if (state.notifyEnabled) { state.notifyEnabled = false; commit(); return; }
+    if (!('Notification' in window)) { set('work-message', '이 브라우저에서는 OS 알림을 지원하지 않습니다.'); return; }
+    try {
+      const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission;
+      if (permission !== 'granted') { set('work-message', '브라우저의 사이트 설정에서 알림을 허용해 주세요.'); return; }
+      state.notifyEnabled = true; commit();
+    } catch { set('work-message', '알림 권한을 확인할 수 없습니다.'); }
+  });
+  function notifyWork(view) {
+    const prev = previousWork;
+    previousWork = view;
+    if (!prev || prev.end.getTime() !== view.end.getTime() || !state.notifyEnabled) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const threshold = [0,60,300].find(n => prev.remain > n && view.remain <= n);
+    if (threshold === undefined) return;
+    const title = threshold === 0 ? '퇴근 시각입니다' : `${threshold / 60}분 뒤 퇴근`;
+    try { new Notification(title, {body:'오늘 하루 수고하셨습니다.',tag:'wht'}); } catch { /* OS notification unavailable */ }
+  }
+  function tick() {
+    const now = new Date(), view = M.work(state, now);
+    notifyWork(view);
+    if (document.hidden) return;
+    set('clock', `${pad(now.getHours())}:${pad(now.getMinutes())}`);
+    $('clock').dateTime = now.toISOString();
+    set('today', new Intl.DateTimeFormat('ko-KR', {year:'numeric',month:'long',day:'numeric',weekday:'long'}).format(now));
+    set('work-state', {waiting:'출근 전',working:'근무 중',done:'오늘 근무 완료'}[view.phase]);
+    set('remain-label', view.phase === 'waiting' ? '오늘 예정된 근무 시간 · 휴게 포함' : view.phase === 'done' ? '오늘도 수고하셨습니다' : '퇴근까지 남은 시간');
+    set('remain', `${pad(Math.floor(view.remain / 3600))}:${pad(Math.floor(view.remain % 3600 / 60))}`);
+    set('remain-seconds', pad(view.remain % 60));
+    set('work-elapsed', `${duration(Math.floor(view.elapsed / 60))} 경과`);
+    set('work-percent', `${view.percent.toFixed(1)}%`);
+    $('work-fill').style.width = `${view.percent}%`;
+    $('work-progress').setAttribute('aria-valuenow', String(Math.round(view.percent)));
+    set('work-total', duration(view.workM));
+    set('work-extra', `${view.extraM >= 0 ? '+' : ''}${duration(view.extraM)}`);
+    set('work-break', duration(view.breakM));
+    if (view.workM < 0) set('work-message', '휴게시간이 전체 근무시간보다 깁니다. 설정을 확인해 주세요.');
+    document.title = view.phase === 'working' ? `${$('remain').textContent} · 오늘의 대시보드` : '오늘의 대시보드';
+  }
+  syncInputs(); tick();
+  setInterval(tick, 1000);
+
+  const fmt = (value, digits = 1) => Number.isFinite(value) ? value.toLocaleString('ko-KR', {minimumFractionDigits:digits,maximumFractionDigits:digits}) : '—';
+  function renderChart() {
+    const points = M.points(summary, range), host = $('weight-chart');
+    document.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.days) === range)));
+    if (!points.length) {
+      host.textContent = '이 기간에 측정 기록이 없습니다.';
+      host.setAttribute('aria-label', '선택 기간에 체중 측정 기록 없음');
+      set('chart-start','—'); set('chart-end','—'); return;
+    }
+    const values = points.map(p => p.valueKg), low = Math.min(...values) - .3, high = Math.max(...values) + .3;
+    const first = Date.parse(points[0].date), last = Date.parse(points.at(-1).date);
+    const x = p => 8 + (Date.parse(p.date) - first) / (last - first || 1) * 436;
+    const y = p => 112 - (p.valueKg - low) / (high - low) * 100;
+    const xy = points.map(p => `${x(p).toFixed(2)},${y(p).toFixed(2)}`);
+    const chartDate = value => value.slice(5).replace('-', '.');
+    const label = `${points[0].date}부터 ${points.at(-1).date}까지 실측 ${points.length}건. 최저 ${fmt(Math.min(...values))}, 최고 ${fmt(Math.max(...values))}kg.`;
+    // Every interpolated value is a finite number or an ISO date from validated points.
+    host.innerHTML = `<svg viewBox="0 0 500 130" preserveAspectRatio="none" aria-hidden="true"><path class="chart-grid" d="M0 30H452M0 70H452M0 112H452"/><polygon class="chart-area" points="${x(points[0])},122 ${xy.join(' ')} ${x(points.at(-1))},122"/><polyline class="chart-line" points="${xy.join(' ')}"/>${points.map(p => `<circle class="chart-dot" cx="${x(p)}" cy="${y(p)}" r="2.4"/>`).join('')}<text class="chart-axis" x="462" y="33">${high.toFixed(1)}</text><text class="chart-axis" x="462" y="115">${low.toFixed(1)}</text></svg>`;
+    host.setAttribute('aria-label', label);
+    set('chart-start', chartDate(points[0].date)); set('chart-end', chartDate(points.at(-1).date));
+  }
+  function renderWeight() {
+    const c = summary.current || {}, r = summary.rolling || {}, change = M.weightChange(summary);
+    set('weight', fmt(c.weightKg));
+    set('weight-change', Number.isFinite(change) ? `${change > 0 ? '+' : change < 0 ? '−' : ''}${fmt(Math.abs(change))} kg` : '—');
+    const p = M.points(summary, 30);
+    set('weight-period', p.length > 1 ? `${p[0].date.slice(5).replace('-','.')} → ${p.at(-1).date.slice(5).replace('-','.')}` : '최근 30일 변화');
+    const age = c.weightDate ? Math.floor((Date.parse(new Date().toLocaleDateString('sv-SE', {timeZone:'Asia/Seoul'})) - Date.parse(c.weightDate)) / 86400000) : null;
+    set('weight-measured', c.weightDate ? `${c.weightDate} 측정${age > 1 ? ` · ${age}일 전 기록` : ''}` : '측정 기록 없음');
+    set('weight-goal', config ? `${fmt(config.targetWeightKg)} kg` : '—');
+    set('weight-fat', `${fmt(c.bodyFatPercent)} %`);
+    set('weight-steps', `${fmt(r.last7StepsAvg,0)} 보`);
+    set('weight-exercise', `${fmt(r.last7ExerciseMinutes,0)} 분`);
+    const stamp = Date.parse(summary.generatedAt);
+    const generated = Number.isFinite(stamp) ? new Intl.DateTimeFormat('ko-KR', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Seoul'}).format(stamp) : '시각 미확인';
+    set('weight-status', `자료 생성 ${generated}${config ? '' : ' · 목표 설정 조회 실패'}`);
+    renderChart();
+  }
+  async function get(url, asText = false) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(url, {cache:'no-cache',signal:controller.signal});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await (asText ? res.text() : res.json());
+    } finally { clearTimeout(timer); }
+  }
+  function loadWeight() {
+    if (weightLoading) return weightLoading;
+    lastWeightAttempt = Date.now();
+    $('weight-refresh').disabled = true;
+    weightLoading = (async () => {
+      const [s,c] = await Promise.allSettled([get('garmin-weight/data/summary.json'),get('garmin-weight/config.json')]);
+      if (c.status === 'fulfilled') config = c.value;
+      if (s.status === 'fulfilled' && s.value && typeof s.value.current === 'object') {
+        summary = s.value; renderWeight();
+      } else {
+        set('weight-status', summary ? '새로고침 실패 · 마지막으로 받은 자료를 표시합니다.' : '체중 자료를 불러오지 못했습니다. 다시 시도해 주세요.');
+        if (!summary) { $('weight-chart').textContent = '자료 연결을 기다리고 있습니다.'; set('weight-measured', '자료 조회 실패'); }
+      }
+    })().finally(() => { weightLoading = null; $('weight-refresh').disabled = false; });
+    return weightLoading;
+  }
+  $('weight-refresh').addEventListener('click', loadWeight);
+  document.querySelectorAll('[data-days]').forEach(b => b.addEventListener('click', () => { range = Number(b.dataset.days); renderChart(); }));
+
+  let busLoading = false;
+  async function loadBus() {
+    if (busLoading || $('bus-widget').shadowRoot) return;
+    busLoading = true; $('bus-error').hidden = true;
+    try {
+      const html = await get('bus-arrival/index.html', true);
+      const source = new DOMParser().parseFromString(html, 'text/html');
+      const main = source.querySelector('main');
+      if (!main || !window.BusApp || !window.BusAlarm || !window.BusDashboard) throw new Error('버스 구성요소 없음');
+      const css = source.querySelector('style').textContent.replace(/:root/g, ':host').replace(/\bbody\b/g, '.bus-body');
+      const body = document.createElement('div');
+      body.className = 'bus-body loading';
+      // Keep the original controls and IDs so the shared alarm controller works unchanged.
+      const details = document.createElement('details');
+      details.className = 'dashboard-bus-details';
+      const toggle = document.createElement('summary'); toggle.textContent = '버스 상세 · 알림 설정 · 타이머'; details.append(toggle);
+      let afterHero = false;
+      for (const child of [...main.children]) {
+        if (afterHero && child.id !== 'cards' && child.id !== 'error-card') details.append(child);
+        if (child.id === 'hero') afterHero = true;
+      }
+      main.append(details); body.append(main);
+      const styles = document.createElement('style');
+      styles.textContent = css + `
+        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft); --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent); --on-brand:var(--dash-bg); --hero-from:#274d3b; --hero-to:#274d3b; --hero-sub:#d9e6d7; color:var(--ink); }
+        .bus-body { padding:0; background:none; color:inherit; font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
+        main { max-width:none; } header { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; gap:8px; flex-wrap:wrap; }
+        header h1, header .detail-link { display:none; } header .muted { font-size:11px; } header #refresh-status { flex-basis:100%; margin:0; }
+        header #refresh { font-size:11px; min-height:32px; padding:5px 9px; }
+        .hero { border-radius:12px; padding:18px; box-shadow:none; }
+        .verdict { font-size:21px; padding:11px 12px; border-radius:8px; }
+        .hero-evidence { font-size:12px; } .hero-time-label { font-size:11px; }
+        .cards { gap:7px; } .card { border-radius:9px; padding:10px; } .card-value { font-size:18px; }
+        .dashboard-bus-details { border-top:1px solid var(--line); margin-top:18px; padding-top:10px; }
+        .dashboard-bus-details > summary { cursor:pointer; padding:8px 0; font-size:12px; color:var(--muted); }
+        .dashboard-bus-details h2 { font-size:15px; } .dashboard-bus-details .panel { padding:12px; }
+        .alarm-banner { top:8px; } input { max-width:100%; } .clock-list { overflow-wrap:anywhere; }
+        @media(max-width:380px) { .hero{padding:14px} .verdict{font-size:19px} }
+      `;
+      // Preserve document-level h1/main semantics in the containing dashboard.
+      const content = document.createElement('div'); content.append(...main.childNodes); body.replaceChildren(content);
+      const shadow = $('bus-widget').attachShadow({mode:'open'});
+      shadow.append(styles, body);
+      window.BusApp.mount(shadow, {body,baseUrl:'bus-arrival/',manageTitle:false,pauseHiddenPaint:true,revealSettings:() => { details.open = true; }});
+      $('bus-widget').querySelector('p')?.remove();
+    } catch (error) {
+      $('bus-error').hidden = false;
+      $('bus-widget').querySelector('p')?.remove();
+    } finally { busLoading = false; }
+  }
+  $('bus-retry').addEventListener('click', loadBus);
+  loadBus(); loadWeight();
+  // Garmin publishes infrequently. Avoid polling it every minute alongside the bus.
+  setInterval(() => { if (!document.hidden) loadWeight(); }, 30 * 60000);
+  function onResume() {
+    tick();
+    if (Date.now() - lastWeightAttempt >= 30 * 60000) loadWeight();
+  }
+  document.addEventListener('visibilitychange', () => {
+    set('page-status', document.hidden ? '화면 갱신 대기 · 알림 유지' : '한 화면에 필요한 일상만.');
+    if (!document.hidden) onResume();
+  });
+  window.addEventListener('online', () => { loadWeight(); loadBus(); });
+  window.addEventListener('pageshow', e => { if (e.persisted) onResume(); });
+  window.addEventListener('storage', e => {
+    if (e.key === 'wht.state.v2' || e.key === null) { state = M.normalize(read('wht.state.v2')); previousWork = null; syncInputs(); tick(); }
+  });
+})();

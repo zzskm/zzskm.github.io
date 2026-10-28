@@ -26,7 +26,7 @@ for version,source in [('before',before),('after',root)]:
      p.locator('#alarm-skip').click();p.wait_for_function('JSON.parse(localStorage.getItem("busAlarm.v1.fired")).skipped["11"]')
      if state=='next':p.wait_for_function("document.querySelector('#verdict-text').textContent.startsWith('다음 차량 ·')")
      if state=='skipped' and version=='after':p.wait_for_function("document.querySelector('#verdict-text').textContent.includes('이번 차량 제외됨')")
-    if version=='after':p.wait_for_function('!renderQueued')
+    if version=='after':p.wait_for_function("document.querySelector('#verdict-text').textContent !== '출발 판단 중'")
     p.evaluate('window.scrollTo(0,0)')
     p.screenshot(path=str(out/f'{version}-{state}-390.png'))
     results.append({'version':version,'state':state,'verdict':p.locator('#verdict-text').inner_text(),'overflow':p.evaluate('document.documentElement.scrollWidth>innerWidth'),'errors':errors})
