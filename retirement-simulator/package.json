@@ -3,7 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1 <27"
+  },
   "scripts": {
+    "preinstall": "node ../scripts/check-node-runtime.mjs",
+    "predev": "node ../scripts/check-node-runtime.mjs",
+    "prebuild": "node ../scripts/check-node-runtime.mjs",
+    "pretest": "node ../scripts/check-node-runtime.mjs",
+    "prepreview": "node ../scripts/check-node-runtime.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",

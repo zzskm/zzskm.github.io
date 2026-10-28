@@ -1,10 +1,10 @@
 name: Retirement simulator
 on:
   pull_request:
-    paths: ['retirement-simulator/**', 'retirement_simulator.html', 'tests/test_retirement_simulator_static.py', '.github/workflows/retirement-simulator.yml']
+    paths: ['retirement-simulator/**', 'retirement_simulator.html', 'tests/test_retirement_simulator_static.py', '.github/workflows/retirement-simulator.yml', '.node-version', 'scripts/check-node-runtime.mjs']
   push:
     branches: [main]
-    paths: ['retirement-simulator/**', 'retirement_simulator.html', '.github/workflows/retirement-simulator.yml']
+    paths: ['retirement-simulator/**', 'retirement_simulator.html', '.github/workflows/retirement-simulator.yml', '.node-version', 'scripts/check-node-runtime.mjs']
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,7 +18,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.node-version'
+          check-latest: true
+      - name: Check Node runtime
+        run: node scripts/check-node-runtime.mjs
       - run: npm ci --no-audit --no-fund
         working-directory: retirement-simulator
       - run: npm test && npm run build
@@ -54,7 +57,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: '.node-version'
+          check-latest: true
+      - name: Check Node runtime
+        run: node scripts/check-node-runtime.mjs
       - uses: actions/download-artifact@v4
         with:
           name: retirement-build
@@ -64,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Data sync workflows may advance main while this build runs.
-          source_paths=(retirement-simulator/app retirement-simulator/src retirement-simulator/scripts retirement-simulator/tests retirement-simulator/package.json retirement-simulator/package-lock.json retirement-simulator/vite.config.js retirement-simulator/tailwind.config.js retirement-simulator/postcss.config.js .github/workflows/retirement-simulator.yml)
+          source_paths=(retirement-simulator/app retirement-simulator/src retirement-simulator/scripts retirement-simulator/tests retirement-simulator/package.json retirement-simulator/package-lock.json retirement-simulator/.npmrc retirement-simulator/vite.config.js retirement-simulator/tailwind.config.js retirement-simulator/postcss.config.js .github/workflows/retirement-simulator.yml .node-version scripts/check-node-runtime.mjs)
           git diff --quiet "$GITHUB_SHA" HEAD -- "${source_paths[@]}" || { echo "App sources advanced; a newer run must publish them."; exit 1; }
           node retirement-simulator/scripts/publish-build.js
           git add retirement-simulator/index.html retirement-simulator/assets

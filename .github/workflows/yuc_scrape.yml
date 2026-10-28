@@ -36,13 +36,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-httpx
+          key: ${{ runner.os }}-pip-yuc-${{ hashFiles('yuc/requirements.txt', 'security-constraints.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
-          python -m pip install --disable-pip-version-check -r requirements.txt
+          python -m pip install --disable-pip-version-check -r yuc/requirements.txt
+
+      - name: Check Brotli runtime
+        run: python scripts/check-brotli-runtime.py
 
       - name: Make folders
         run: |
