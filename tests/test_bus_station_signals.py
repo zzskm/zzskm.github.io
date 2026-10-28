@@ -160,6 +160,16 @@ class StationListRuntimeTests(unittest.TestCase):
         self.assertEqual(secondary_calls, 1)
         self.assertEqual(status["primary_source"], "station_list")
 
+    def test_tracked_vehicle_missing_in_list_is_double_checked(self):
+        first = parse_station_list(xml([arrival_node()]), 204000170, 6)
+        missing = parse_station_list(xml([arrival_node(route_id=233000392, name="6011")]), 204000170, 6)
+        signals, predictions, state, status, legacy_calls = self.simulate([first, missing])
+        self.assertEqual(legacy_calls, 2)  # 첫 3100의 2차 정류장 + 다음 목록 소실 확인
+        self.assertEqual(state["daily_calls"], 4)
+        self.assertEqual(status["primary_source"], "station_list_confirmed")
+        self.assertEqual([p["vehId"] for p in predictions], ["111", ""])
+        self.assertEqual(state["cur_vid"], 111)  # 원거리 소실 첫 관측에서 즉시 통과 확정 금지
+
     def test_list_failure_uses_legacy_only_as_fallback(self):
         signals, predictions, state, status, legacy_calls = self.simulate([None])
         self.assertFalse(signals)
