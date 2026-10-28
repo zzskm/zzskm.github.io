@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 KST = dt.timezone(dt.timedelta(hours=9))
-LOGS = ("predict_log.csv", "arrival_log.csv", "segment_log.csv")
+LOGS = ("predict_log.csv", "arrival_log.csv", "segment_log.csv", "route_signal_log.csv")
 RECENT_DAYS = 2
 
 

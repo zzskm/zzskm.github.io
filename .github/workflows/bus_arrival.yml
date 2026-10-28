@@ -66,6 +66,8 @@ jobs:
           BUS_PUBLISH_SECONDS: "300"
           # <=15 min or <=2 stops: publish after each existing 60s poll; no extra API calls.
           BUS_URGENT_PREDICT_SEC: "900"
+          # 기본 정류장 07511은 전체 노선 1회 호출로 대체. 실패 시 3100 항목 API 폴백.
+          BUS_PRIMARY_MODE: "station-list"
           # 성남시청전면(06004, staOrder 12) — 매 구간 노선 API 로 다시 해석하지 않도록 고정
           BUS_SECONDARY_STATION_ID: "205000029"
 
