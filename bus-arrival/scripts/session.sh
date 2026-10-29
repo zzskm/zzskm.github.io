@@ -9,6 +9,7 @@
 #   BUS_SESSION_MINUTES  세션 최대 길이(분, 기본 330 · 잡 타임아웃 안쪽으로 제한)
 #   BUS_PUBLISH_SECONDS  커밋 주기(초, 기본 300)
 #   BUS_WINDOW           수집 시간대 (scrape.py 가 읽음, 기본 16:00-22:00)
+#   BUS_MAX_CONNECT_TIMEOUTS  연속 연결 시간 초과 후 runner 교체 (기본 8회)
 set -uo pipefail
 
 BASE=bus-arrival
@@ -56,6 +57,9 @@ main() {
     echo "::error::최신 브랜치 동기화 실패 — 오래된 상태로 수집하지 않습니다"
     return 1
   fi
+  # Keep the streak across scraper processes, but never inherit another runner's streak.
+  BUS_SESSION_ID=$(python -c 'import uuid; print(uuid.uuid4().hex)') || return 1
+  export BUS_SESSION_ID
 
   while :; do
     local remaining gate reason wait_s
@@ -81,9 +85,13 @@ main() {
     # Build calibration before the first poll, including after a code update pulled by publish().
     python "$BASE/scripts/build_summary.py" || return 1
     # --exit-on-change: 버스를 처음 발견하거나 추적이 끝나면 구간을 끝내 바로 게시한다 (알람 지연 최소화)
+    local scrape_result=0
     python "$BASE/scripts/scrape.py" --exit-on-change \
       --run-seconds $(( remaining < publish_seconds ? remaining : publish_seconds )) \
-      || echo "::warning::scraper 비정상 종료 (exit $?)"
+      || scrape_result=$?
+    if (( scrape_result != 0 && scrape_result != 75 )); then
+      echo "::warning::scraper 비정상 종료 (exit $scrape_result)"
+    fi
     collected=1
     # Keep unpushed commits and rows on this runner; retry before collecting more.
     # Never continue for hours with an unpublishable dataset and lose it at timeout.
@@ -96,6 +104,10 @@ main() {
       fi
       sleep 15
     done
+    if (( scrape_result == 75 )); then
+      echo "::error::연속 API 연결 시간 초과 — 기록 게시 완료, 다음 실행에 수집을 넘깁니다"
+      return 75
+    fi
   done
 
   if (( collected == 0 )); then

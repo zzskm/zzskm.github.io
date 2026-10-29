@@ -39,7 +39,7 @@ def read_csv(path):
 
 
 def simulate(directory, responses, start, state=None, extra_args=(), poll_times=None, secondary=None,
-             failure_detail=None):
+             failure_detail=None, failure_details=None, exit_codes=None):
     """가짜 시계로 run_loop 를 돌린다. 1차 정류장 응답만 responses 순서대로 돌려준다.
 
     poll_times 리스트를 주면 1차 조회 시각을, secondary 리스트를 주면 2차 조회 시각을 채운다.
@@ -49,14 +49,16 @@ def simulate(directory, responses, start, state=None, extra_args=(), poll_times=
         (base / "tracker_state.json").write_text(json.dumps(state), encoding="utf-8")
     clock = {"now": start}
     queue = iter(responses)
+    details = iter(failure_details) if failure_details is not None else None
 
     def fake_fetch(service_key, station_id, route_id, sta_order, **kwargs):
         if station_id == SCRAPER.STATION_ID:
             if poll_times is not None:
                 poll_times.append(clock["now"])
             result = next(queue)
-            if result is None and failure_detail:
-                kwargs.get("diagnostics", {}).update(failure_detail)
+            detail = next(details) if details is not None else failure_detail
+            if result is None and detail:
+                kwargs.get("diagnostics", {}).update(detail)
             return result
         if secondary is not None:
             secondary.append(clock["now"])
@@ -83,7 +85,9 @@ def simulate(directory, responses, start, state=None, extra_args=(), poll_times=
             mock.patch.object(SCRAPER, "fetch_arrival", fake_fetch), \
             mock.patch.object(SCRAPER, "kst_now", lambda: clock["now"]), \
             mock.patch.object(SCRAPER, "time", FakeTime):
-        SCRAPER.run_loop(args)
+        code = SCRAPER.run_loop(args)
+        if exit_codes is not None:
+            exit_codes.append(code)
     state_path = base / "tracker_state.json"
     return (
         read_csv(base / "arrival_log.csv"),
