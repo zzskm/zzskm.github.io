@@ -32,6 +32,7 @@ import logging
 import os
 import time
 import sys
+import uuid
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from safety_model import safety_prediction, timestamp, model_for_day, publication_decision
@@ -66,6 +67,8 @@ VANISH_CONFIRM_POLLS = 2
 RESULT_NO_DATA = "4"
 # 버스가 없을 때의 조회 간격(초). GBIS 는 약 2분마다 갱신되므로 정보 손실이 거의 없다.
 IDLE_INTERVAL_SEC = 120
+# The session publishes saved observations before releasing this runner.
+ROTATE_RUNNER_EXIT_CODE = 75
 
 HOLIDAYS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "holidays.json")
 
@@ -510,6 +513,10 @@ def run_loop(args: argparse.Namespace):
         state["consec_fail"] = 0
         state_reset = True
     state.setdefault("consec_fail", 0)
+    connection_health = state.get("connection_health", {})
+    if connection_health.get("session_id") != args.session_id or state_reset:
+        connection_health = {"session_id": args.session_id, "consecutive_timeouts": 0}
+    state["connection_health"] = connection_health
 
     logging.info("시작: routeId=%d staOrder=%d (성남시청전면 %s/%d) cur_vid=%s 호출=%d/%d 시간대=%s",
                  route_id, sta_order, secondary_station_id, sta_order_secondary,
@@ -673,6 +680,23 @@ def run_loop(args: argparse.Namespace):
         if route_rows is not None:
             status["station_route_count"] = len(route_rows)
 
+        # Count failed polls, not HTTP attempts. Any successful primary endpoint,
+        # authentication/quota error, or response timeout breaks this streak.
+        connect_timeout = {"kind": "timeout", "phase": "connect"}
+        connection_failed = (
+            info is None and api_error_detail == connect_timeout
+            and primary_source != "station_list_confirmed"
+            and (not station_list_error or station_list_error == connect_timeout)
+        )
+        connection_health["consecutive_timeouts"] = (
+            connection_health["consecutive_timeouts"] + 1 if connection_failed else 0
+        )
+        status["consecutive_connect_timeouts"] = connection_health["consecutive_timeouts"]
+        rotate_runner = (args.max_connect_timeouts > 0
+                         and connection_health["consecutive_timeouts"] >= args.max_connect_timeouts)
+        if rotate_runner:
+            status["recovery_action"] = "rotate_runner"
+
         # 추적 중(차량 있음, 소실 확인 대기, API 실패 직후)이면 촘촘히, 버스가 없으면 성기게 조회한다
         tracking = info is None or state.get("cur_vid") is not None
         interval = args.interval if tracking else args.idle_interval
@@ -696,6 +720,11 @@ def run_loop(args: argparse.Namespace):
                                                 "model_status": model['model_status'],
                                                 "model_trained_through": model.get('trained_through')})
         state_reset = False
+
+        if rotate_runner:
+            logging.error("연결 시간 초과 %d회 연속 — 상태 저장 후 다른 runner에 수집을 넘깁니다.",
+                          connection_health["consecutive_timeouts"])
+            return ROTATE_RUNNER_EXIT_CODE
 
         polls += 1
         if args.max_polls is not None and polls >= args.max_polls:
@@ -742,8 +771,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--run-seconds", type=int, default=None,
                    help="이 시간(초)이 지나면 다음 조회 전에 종료")
     p.add_argument("--max-daily-calls", type=int, default=900)
+    p.add_argument("--session-id", default=os.getenv("BUS_SESSION_ID") or uuid.uuid4().hex,
+                   help="같은 runner의 수집 구간 사이에 연결 실패 횟수를 이어갈 세션 ID")
+    p.add_argument("--max-connect-timeouts", type=int,
+                   default=os.getenv("BUS_MAX_CONNECT_TIMEOUTS", "8"),
+                   help="연속 연결 시간 초과 시 runner 교체 요청 (기본 8회, 0이면 비활성)")
     p.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.max_connect_timeouts < 0:
+        p.error("--max-connect-timeouts must be non-negative")
+    return args
 
 
 def main():
@@ -760,11 +797,11 @@ def main():
         return
 
     try:
-        run_loop(args)
+        return run_loop(args)
     except KeyboardInterrupt:
         logging.info("사용자 중지")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
 
