@@ -54,6 +54,11 @@ jobs:
       - name: Check Brotli runtime
         run: python scripts/check-brotli-runtime.py
 
+      - name: Record runner network diagnostics
+        continue-on-error: true
+        timeout-minutes: 1
+        run: python bus-arrival/scripts/runner_diagnostics.py --output "$RUNNER_TEMP/bus-arrival-network.json"
+
       - name: Collect session
         run: |
           git config user.name "github-actions"
@@ -64,6 +69,8 @@ jobs:
           BUS_WINDOW: ${{ inputs.window || '16:00-22:00' }}
           BUS_SESSION_MINUTES: ${{ inputs.session_minutes || '330' }}
           BUS_PUBLISH_SECONDS: "300"
+          # Retire an unreachable runner after 8 failed polls; retain state/call budget.
+          BUS_MAX_CONNECT_TIMEOUTS: "8"
           # <=15 min or <=2 stops: publish after each existing 60s poll; no extra API calls.
           BUS_URGENT_PREDICT_SEC: "900"
           # 기본 정류장 07511은 전체 노선 1회 호출로 대체. 실패 시 3100 항목 API 폴백.
@@ -72,11 +79,20 @@ jobs:
           BUS_SECONDARY_STATION_ID: "205000029"
 
 
+      - name: Preserve runner network diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bus-arrival-network-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bus-arrival-network.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Preserve collection on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: bus-arrival-recovery-${{ github.run_id }}
+          name: bus-arrival-recovery-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             bus-arrival/*_log.csv
             bus-arrival/tracker_state.json
