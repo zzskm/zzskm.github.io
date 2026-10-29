@@ -17,6 +17,7 @@
   <script defer src="dashboard.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#work-panel">본문으로 건너뛰기</a>
   <div class="shell">
     <header class="masthead">
       <div><p class="eyebrow">MY DAILY DESK <span class="small-dot"></span></p><h1>오늘의 대시보드<span>.</span></h1><p id="today" class="muted">오늘의 일상, 한곳에서.</p></div>
@@ -24,38 +25,47 @@
     </header>
     <div class="alarm-banner" id="alarm-banner" role="region" aria-label="울리는 알림" hidden><span id="alarm-banner-text"></span><span id="alarm-queue-count"></span><button id="alarm-ack" type="button" aria-label="현재 알림 확인 (Esc)">확인</button><button id="alarm-ack-all" type="button" hidden>전체 확인</button></div>
     <p id="sr-live" class="sr-only" role="status" aria-live="assertive"></p>
+    <nav class="section-nav" aria-label="대시보드 바로가기"><a href="#work-panel"><span>01</span> 근무</a><a href="#bus-panel"><span>02</span> 버스</a><a href="#clock-card"><span>03</span> 알람</a><a href="#weight-panel"><span>04</span> 체중·활동</a></nav>
     <main class="dashboard-grid">
-      <section class="panel work-panel" aria-labelledby="work-title">
+      <section id="work-panel" class="panel work-panel" aria-labelledby="work-title" tabindex="-1">
         <div class="panel-heading"><h2 id="work-title"><span class="section-index">01</span> 오늘의 근무</h2><a href="work_hours_calculator.html" class="text-link">전체 보기 ↗</a></div>
         <div class="work-status"><span id="work-state" class="badge">대기 중</span><button id="work-notify" class="subtle" type="button" aria-pressed="false">퇴근 알림 꺼짐</button></div>
         <p id="remain-label" class="metric-label">퇴근까지 남은 시간</p>
         <div class="countdown" aria-label="퇴근까지 남은 시간"><span id="remain">--:--</span><span id="remain-seconds">00</span></div>
         <div class="progress-label"><span id="work-elapsed">0시간 00분 경과</span><span id="work-percent">0%</span></div>
         <div id="work-progress" class="progress" role="progressbar" aria-label="오늘 근무 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="work-fill"></div></div>
-        <div class="time-fields"><label>출근<input id="work-start" type="time" required></label><span class="time-arrow" aria-hidden="true">→</span><label>퇴근<input id="work-end" type="time" required></label><button id="start-now" class="subtle" type="button">지금 출근</button></div>
+        <div class="time-fields">
+          <div class="time-control"><div class="time-control-heading"><label for="work-start">출근 시각</label><button id="start-now" class="subtle" type="button">지금 출근</button></div><input id="work-start" type="time" required aria-describedby="time-adjust-help"><div class="time-nudges" role="group" aria-label="출근 시각 분 조정"><button type="button" data-start-nudge="-5" aria-label="출근 5분 앞당기기">−5</button><button type="button" data-start-nudge="-1" aria-label="출근 1분 앞당기기">−1</button><button type="button" data-start-nudge="1" aria-label="출근 1분 늦추기">+1</button><button type="button" data-start-nudge="5" aria-label="출근 5분 늦추기">+5</button><button type="button" data-start-nudge="10" aria-label="출근 10분 늦추기">+10</button></div></div>
+          <div class="time-control"><div class="time-control-heading"><label for="work-end">퇴근 시각</label><span class="muted">분 단위 조정</span></div><input id="work-end" type="time" required aria-describedby="time-adjust-help"><div class="time-nudges" role="group" aria-label="퇴근 시각 분 조정"><button type="button" data-end-nudge="-5" aria-label="퇴근 5분 앞당기기">−5</button><button type="button" data-end-nudge="-1" aria-label="퇴근 1분 앞당기기">−1</button><button type="button" data-end-nudge="1" aria-label="퇴근 1분 늦추기">+1</button><button type="button" data-end-nudge="5" aria-label="퇴근 5분 늦추기">+5</button><button type="button" data-end-nudge="10" aria-label="퇴근 10분 늦추기">+10</button></div></div>
+        </div>
+        <p id="time-adjust-help" class="sr-only">버튼으로 표시된 분만큼 시각을 조정합니다. 변경은 자동으로 저장됩니다.</p>
         <div class="work-stats"><div><span>실 근무</span><strong id="work-total">—</strong></div><div><span>추가 근로</span><strong id="work-extra">—</strong></div><div><span>휴게</span><strong id="work-break">—</strong></div></div>
         <details class="work-settings"><summary>근무 기준 설정</summary><div class="settings-grid"><label>기본 근로 (분)<input id="work-base" type="number" min="0" max="1439" step="1" required></label><label>휴게 (분)<input id="work-rest" type="number" min="0" max="1439" step="1" required></label></div><p class="muted">출근·퇴근 시각은 직접 조정할 수 있습니다. 기존 계산기와 설정을 공유합니다.</p></details>
         <p id="work-message" class="feedback" role="status"></p>
       </section>
 
-      <section class="panel bus-panel" aria-labelledby="bus-title">
+      <section id="bus-panel" class="panel bus-panel" aria-labelledby="bus-title" tabindex="-1">
         <div class="panel-heading"><h2 id="bus-title"><span class="section-index">02</span> 버스 알림 · 3100번</h2><a href="bus-arrival/index.html" class="text-link">전체 보기 ↗</a></div>
         <div id="bus-widget"><p class="muted" role="status">버스 정보와 알림을 준비하고 있습니다.</p></div>
         <div id="bus-error" hidden><p class="feedback" role="alert">버스 화면을 불러오지 못했습니다. 다시 시도하거나 전체 보기를 이용해 주세요.</p><button id="bus-retry" type="button" class="subtle">다시 시도</button></div>
       </section>
 
-      <section class="panel clock-card" aria-labelledby="clock-title">
+      <section id="clock-card" class="panel clock-card" aria-labelledby="clock-title" tabindex="-1">
         <div class="panel-heading"><h2 id="clock-title"><span class="section-index">03</span> 알람 · 타이머</h2><span class="muted">버스 알림과 별도로 동작</span></div>
         <div id="clock-view"><p class="muted" role="status">알람을 준비하고 있습니다.</p></div>
       </section>
 
-      <section class="panel weight-panel" aria-labelledby="weight-title">
+      <section id="weight-panel" class="panel weight-panel" aria-labelledby="weight-title" tabindex="-1">
         <div class="panel-heading"><h2 id="weight-title"><span class="section-index">04</span> 체중과 활동</h2><a href="garmin-weight/index.html" class="text-link">전체 분석 ↗</a></div>
         <div class="weight-heading"><div><p class="metric-label">최근 측정 체중</p><p class="weight-number"><span id="weight">—</span><span>kg</span></p></div><div class="weight-change"><strong id="weight-change">—</strong><span id="weight-period" class="muted">최근 30일 변화</span></div></div>
-        <div class="chart-header"><span id="weight-measured" class="muted">측정 기록 확인 중</span><div class="range-buttons" role="group" aria-label="체중 차트 기간"><button type="button" data-days="30" aria-pressed="true">30일</button><button type="button" data-days="60" aria-pressed="false">60일</button></div></div>
+        <div class="chart-header"><span id="weight-measured" class="muted">측정 기록 확인 중</span><div class="range-buttons" role="group" aria-label="체중 과거 기록 기간"><button type="button" data-days="30" aria-pressed="true">30일</button><button type="button" data-days="60" aria-pressed="false">60일</button></div></div>
+        <div class="chart-toolbar"><div class="chart-legend" aria-label="차트 범례"><span class="legend-actual">실측</span><span class="legend-trend">추세</span><span class="legend-prediction">예측</span><span class="legend-band">80% 신뢰띠</span></div><button id="weight-prediction-toggle" class="subtle" type="button" aria-pressed="true">예측 켜짐</button></div>
         <div id="weight-chart" class="weight-chart" role="img" aria-label="체중 추이, 데이터 확인 중"></div>
-        <div class="chart-labels"><span id="chart-start">—</span><span>실측 체중</span><span id="chart-end">—</span></div>
+        <div class="chart-labels"><span id="chart-start">—</span><span id="chart-caption">최근 기록과 향후 3개월</span><span id="chart-end">—</span></div>
+        <div class="forecast-summary" aria-label="체중 추세와 예측 요약"><div><span>주간 추세</span><strong id="weight-trend">—</strong></div><div><span>1개월 후 예상</span><strong id="weight-month">—</strong></div><div><span>3개월 후 예상</span><strong id="weight-quarter">—</strong></div></div>
+        <p id="weight-prediction-note" class="prediction-note" role="status">추세·예측 자료를 확인하고 있습니다.</p>
         <div class="weight-stats"><div><span>목표 체중</span><strong id="weight-goal">—</strong></div><div><span>체지방률</span><strong id="weight-fat">—</strong></div><div><span>7일 평균 걸음</span><strong id="weight-steps">—</strong></div><div><span>7일 운동</span><strong id="weight-exercise">—</strong></div></div>
+        <p id="weight-activity-trend" class="activity-note"></p>
         <div class="weight-footer"><p id="weight-status" class="muted" role="status">데이터를 불러오는 중입니다.</p><button id="weight-refresh" class="subtle" type="button">새로고침</button></div>
       </section>
     </main>

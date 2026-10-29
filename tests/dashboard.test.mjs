@@ -4,6 +4,33 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const M = require('../dashboard-model.js');
 
+test('minute nudges carry across hours and wrap midnight in both directions', () => {
+  assert.deepEqual(M.nudgeTime({h:8,m:59},5),{h:9,m:4});
+  assert.deepEqual(M.nudgeTime({h:0,m:0},-1),{h:23,m:59});
+  assert.deepEqual(M.nudgeTime({h:23,m:55},10),{h:0,m:5});
+});
+
+test('weight chart shares one history window, preserves forecast values and aligns confidence bands', () => {
+  const s = {series:{daily:[{date:'2026-10-28',valueKg:84},{date:'2026-10-29',valueKg:null}],
+    ewma:[{date:'2026-09-01',valueKg:85},{date:'2026-10-29',valueKg:83.98}],
+    prediction:[{date:'bad',valueKg:90},{date:'2026-11-05',valueKg:84.07},{date:'2026-11-12',valueKg:null}]},
+    predictionCI:{series:[{date:'2026-11-05',central:84,lower80:83,upper80:85},{date:'2026-11-12',central:84,lower80:null,upper80:85}]}};
+  const chart = M.weightChart(s);
+  assert.deepEqual(chart.trend,[{date:'2026-10-29',valueKg:83.98}]);
+  assert.deepEqual(chart.prediction,[{date:'2026-11-05',valueKg:84.07}]);
+  assert.deepEqual(chart.band,[{date:'2026-11-05',lower:83.07,upper:85.07}]);
+  assert.deepEqual(M.weightChart(s,30,false).band,[]);
+  assert.deepEqual(M.weightChart({...s,modelDiagnostics:{trend:{predictionEnabled:false}}}).prediction,[]);
+  assert.deepEqual(M.weightChart(null).actual,[]);
+});
+
+test('weight data rejects malformed dates, missing values and invalid series without losing valid points', () => {
+  const s = {series:{daily:[null,{date:'2026-10-28',valueKg:84},{date:'2026-10-01',valueKg:86},{date:'2026-10-29',valueKg:null},{date:'2026-10-29<script>',valueKg:90}],ewma:{},prediction:[null]}};
+  assert.deepEqual(M.points(s).map(p => p.valueKg),[86,84]);
+  assert.equal(M.weightChange(s),-2);
+  assert.deepEqual(M.weightChart(s).prediction,[]);
+});
+
 test('work settings preserve the existing storage shape and reject malformed values', () => {
   const s = M.normalize({start:{h:8,m:37},end:{h:17,m:40},breakH:0,breakM:45,notifyEnabled:true});
   assert.deepEqual(s.start,{h:8,m:37});

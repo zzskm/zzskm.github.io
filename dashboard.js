@@ -12,7 +12,7 @@
     try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
   }
   let state = M.normalize(read('wht.state.v2'));
-  let summary = null, config = null, range = 30, weightLoading = null, lastWeightAttempt = 0;
+  let summary = null, config = null, range = 30, showPrediction = true, weightLoading = null, lastWeightAttempt = 0;
   let previousWork = null;
   // Colors follow the OS light/dark preference only; the bus widget inherits them across its shadow boundary.
 
@@ -56,9 +56,9 @@
     set('work-notify', `퇴근 알림 ${enabled ? '켜짐' : '꺼짐'}`);
     $('work-notify').setAttribute('aria-pressed', String(enabled));
   }
-  function commit() {
+  function commit(message = '설정을 저장했습니다.') {
     const saved = save('wht.state.v2', state);
-    set('work-message', saved ? '설정을 저장했습니다.' : '브라우저 저장소를 사용할 수 없어 이 탭에서만 적용됩니다.');
+    set('work-message', saved ? message : '브라우저 저장소를 사용할 수 없어 이 탭에서만 적용됩니다.');
     previousWork = null;
     syncInputs(); tick();
   }
@@ -68,6 +68,13 @@
       const [h,m] = $(id).value.split(':').map(Number);
       state[key] = {h,m}; commit();
     });
+  }
+  for (const key of ['start','end']) {
+    document.querySelectorAll(`[data-${key}-nudge]`).forEach(button => button.addEventListener('click', () => {
+      const delta = Number(button.getAttribute(`data-${key}-nudge`));
+      state[key] = M.nudgeTime(state[key], delta);
+      commit(`${key === 'start' ? '출근' : '퇴근'} ${time(state[key])} · ${Math.abs(delta)}분 ${delta < 0 ? '앞당겼습니다' : '늦췄습니다'}.`);
+    }));
   }
   for (const [id, prefix] of [['work-base','base'],['work-rest','break']]) {
     $(id).addEventListener('change', () => {
@@ -109,6 +116,7 @@
     $('clock').dateTime = now.toISOString();
     set('today', new Intl.DateTimeFormat('ko-KR', {year:'numeric',month:'long',day:'numeric',weekday:'long'}).format(now));
     set('work-state', {waiting:'출근 전',working:'근무 중',done:'오늘 근무 완료'}[view.phase]);
+    $('work-panel').dataset.phase = view.phase;
     set('remain-label', view.phase === 'waiting' ? '오늘 예정된 근무 시간 · 휴게 포함' : view.phase === 'done' ? '오늘도 수고하셨습니다' : '퇴근까지 남은 시간');
     set('remain', `${pad(Math.floor(view.remain / 3600))}:${pad(Math.floor(view.remain % 3600 / 60))}`);
     set('remain-seconds', pad(view.remain % 60));
@@ -127,24 +135,59 @@
 
   const fmt = (value, digits = 1) => Number.isFinite(value) ? value.toLocaleString('ko-KR', {minimumFractionDigits:digits,maximumFractionDigits:digits}) : '—';
   function renderChart() {
-    const points = M.points(summary, range), host = $('weight-chart');
+    const {actual:points,trend,prediction,band} = M.weightChart(summary, range, showPrediction), host = $('weight-chart');
     document.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.days) === range)));
+    $('weight-prediction-toggle').setAttribute('aria-pressed', String(showPrediction));
+    set('weight-prediction-toggle', `예측 ${showPrediction ? '켜짐' : '꺼짐'}`);
+    document.querySelector('.legend-trend').hidden = !trend.length;
+    document.querySelector('.legend-prediction').hidden = !prediction.length;
+    document.querySelector('.legend-band').hidden = !band.length;
     if (!points.length) {
       host.textContent = '이 기간에 측정 기록이 없습니다.';
       host.setAttribute('aria-label', '선택 기간에 체중 측정 기록 없음');
-      set('chart-start','—'); set('chart-end','—'); return;
+      set('chart-start','—'); set('chart-end','—'); set('chart-caption','측정 기록 없음'); return;
     }
-    const values = points.map(p => p.valueKg), low = Math.min(...values) - .3, high = Math.max(...values) + .3;
-    const first = Date.parse(points[0].date), last = Date.parse(points.at(-1).date);
-    const x = p => 8 + (Date.parse(p.date) - first) / (last - first || 1) * 436;
-    const y = p => 112 - (p.valueKg - low) / (high - low) * 100;
-    const xy = points.map(p => `${x(p).toFixed(2)},${y(p).toFixed(2)}`);
+    const all = [...points,...trend,...prediction];
+    const values = [...all.map(p => p.valueKg),...band.flatMap(p => [p.lower,p.upper])];
+    const low = Math.min(...values) - .3, high = Math.max(...values) + .3;
+    const dates = all.map(p => p.date).sort();
+    const first = Date.parse(dates[0]), last = Date.parse(dates.at(-1));
+    const x = p => 8 + (Date.parse(p.date) - first) / (last - first || 1) * 432;
+    const y = value => 170 - (value - low) / (high - low) * 150;
+    const xy = list => list.map(p => `${x(p).toFixed(2)},${y(p.valueKg).toFixed(2)}`).join(' ');
     const chartDate = value => value.slice(5).replace('-', '.');
-    const label = `${points[0].date}부터 ${points.at(-1).date}까지 실측 ${points.length}건. 최저 ${fmt(Math.min(...values))}, 최고 ${fmt(Math.max(...values))}kg.`;
+    const label = `${points[0].date}부터 ${points.at(-1).date}까지 실측 ${points.length}건.${trend.length ? ' 추세선 포함.' : ''}${prediction.length ? ` ${prediction.at(-1).date} 예측 ${fmt(prediction.at(-1).valueKg)}kg.${band.length ? ' 80% 신뢰띠 포함.' : ''}` : ''}`;
+    const line = (list, cls) => list.length ? `<polyline class="${cls}" points="${xy(list)}"/>${list.length === 1 ? `<circle class="${cls}" cx="${x(list[0])}" cy="${y(list[0].valueKg)}" r="3"/>` : ''}` : '';
+    const bandPoints = [...band.map(p => `${x(p)},${y(p.upper)}`),...band.slice().reverse().map(p => `${x(p)},${y(p.lower)}`)].join(' ');
+    const ticks = [high,(high + low) / 2,low];
     // Every interpolated value is a finite number or an ISO date from validated points.
-    host.innerHTML = `<svg viewBox="0 0 500 130" preserveAspectRatio="none" aria-hidden="true"><path class="chart-grid" d="M0 30H452M0 70H452M0 112H452"/><polygon class="chart-area" points="${x(points[0])},122 ${xy.join(' ')} ${x(points.at(-1))},122"/><polyline class="chart-line" points="${xy.join(' ')}"/>${points.map(p => `<circle class="chart-dot" cx="${x(p)}" cy="${y(p)}" r="2.4"/>`).join('')}<text class="chart-axis" x="462" y="33">${high.toFixed(1)}</text><text class="chart-axis" x="462" y="115">${low.toFixed(1)}</text></svg>`;
+    host.innerHTML = `<svg viewBox="0 0 500 190" preserveAspectRatio="none" aria-hidden="true">
+      ${ticks.map(v => `<path class="chart-grid" d="M0 ${y(v)}H448"/><text class="chart-axis" x="458" y="${y(v)+4}">${v.toFixed(1)}</text>`).join('')}
+      ${band.length > 1 ? `<polygon class="chart-band" points="${bandPoints}"/>` : ''}
+      <polygon class="chart-area" points="${x(points[0])},178 ${xy(points)} ${x(points.at(-1))},178"/>
+      ${line(points,'chart-line')}${line(trend,'chart-trend')}${line(prediction,'chart-prediction')}
+      ${points.map(p => `<circle class="chart-dot" cx="${x(p)}" cy="${y(p.valueKg)}" r="2.5"/>`).join('')}
+      ${prediction.length ? `<path class="chart-boundary" d="M${x(prediction[0])} 12V178"/>` : ''}
+      </svg>`;
     host.setAttribute('aria-label', label);
-    set('chart-start', chartDate(points[0].date)); set('chart-end', chartDate(points.at(-1).date));
+    set('chart-start', chartDate(dates[0])); set('chart-end', chartDate(dates.at(-1)));
+    set('chart-caption', prediction.length ? `과거 ${range}일 · 향후 3개월 예측` : `최근 ${range}일 기록`);
+  }
+  function renderPrediction() {
+    const diag = summary.modelDiagnostics || {}, forecast = summary.predictions || {};
+    const enabled = diag.trend?.predictionEnabled !== false;
+    const loss = summary.rolling?.lossRateDetail?.blended;
+    set('weight-trend', Number.isFinite(loss) ? `${loss > 0 ? '−' : loss < 0 ? '+' : ''}${fmt(Math.abs(loss),2)} kg/주` : '자료 부족');
+    set('weight-month', enabled && Number.isFinite(forecast.oneMonthWeightKg) ? `${fmt(forecast.oneMonthWeightKg)} kg` : '예측 보류');
+    set('weight-quarter', enabled && Number.isFinite(forecast.threeMonthWeightKg) ? `${fmt(forecast.threeMonthWeightKg)} kg` : '예측 보류');
+    const available = enabled && (M.weightChart(summary).prediction.length > 0 || Number.isFinite(forecast.oneMonthWeightKg) || Number.isFinite(forecast.threeMonthWeightKg));
+    const confidence = diag.confidence || {};
+    const confidenceLabel = {low:'낮음',medium:'보통',high:'높음'}[confidence.level] || '미확인';
+    const reasons = Array.isArray(confidence.reasons) ? confidence.reasons.filter(r => typeof r === 'string').join(' · ') : '';
+    set('weight-prediction-note', available ? `현재 운동량 유지 기준 · 신뢰도 ${confidenceLabel}${reasons ? ` — ${reasons}` : ''}. 자료 생성 시점의 참고용 예측입니다.` : `예측 보류 · ${diag.trend?.disabledReason || '예측에 필요한 자료가 부족합니다.'}`);
+    $('weight-prediction-note').classList.toggle('is-caution', !available || confidence.level !== 'high');
+    const activity = summary.rolling?.exerciseTrend;
+    set('weight-activity-trend', Number.isFinite(activity?.deltaPct) ? `운동 칼로리 ${activity.deltaPct > 0 ? '+' : activity.deltaPct < 0 ? '−' : ''}${fmt(Math.abs(activity.deltaPct * 100),1)}% · 최근 7일 평균 / 이전 21일 평균` : '운동량 비교 자료가 아직 없습니다.');
   }
   function renderWeight() {
     const c = summary.current || {}, r = summary.rolling || {}, change = M.weightChange(summary);
@@ -161,7 +204,7 @@
     const stamp = Date.parse(summary.generatedAt);
     const generated = Number.isFinite(stamp) ? new Intl.DateTimeFormat('ko-KR', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Seoul'}).format(stamp) : '시각 미확인';
     set('weight-status', `자료 생성 ${generated}${config ? '' : ' · 목표 설정 조회 실패'}`);
-    renderChart();
+    renderPrediction(); renderChart();
   }
   async function get(url, asText = false) {
     const controller = new AbortController();
@@ -183,12 +226,13 @@
         summary = s.value; renderWeight();
       } else {
         set('weight-status', summary ? '새로고침 실패 · 마지막으로 받은 자료를 표시합니다.' : '체중 자료를 불러오지 못했습니다. 다시 시도해 주세요.');
-        if (!summary) { $('weight-chart').textContent = '자료 연결을 기다리고 있습니다.'; set('weight-measured', '자료 조회 실패'); }
+        if (!summary) { $('weight-chart').textContent = '자료 연결을 기다리고 있습니다.'; set('weight-measured', '자료 조회 실패'); set('weight-prediction-note','추세·예측 자료를 불러오지 못했습니다. 새로고침해 주세요.'); }
       }
     })().finally(() => { weightLoading = null; $('weight-refresh').disabled = false; });
     return weightLoading;
   }
   $('weight-refresh').addEventListener('click', loadWeight);
+  $('weight-prediction-toggle').addEventListener('click', () => { showPrediction = !showPrediction; renderChart(); });
   document.querySelectorAll('[data-days]').forEach(b => b.addEventListener('click', () => { range = Number(b.dataset.days); renderChart(); }));
 
   let busLoading = false;
@@ -227,12 +271,30 @@
         header #refresh { font-size:11px; min-height:32px; padding:5px 9px; }
         .hero { border-radius:12px; padding:18px; box-shadow:none; }
         .verdict { font-size:21px; padding:11px 12px; border-radius:8px; }
+        .departure-context { font-size:16px; margin:10px 0; }
+        .readiness { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; margin-top:8px; }
+        .readiness .alarm-state, .readiness p { margin:0; }
+        .readiness > .hero-time-label { flex-basis:100%; }
+        .hero-next { font-size:12px; }
+        .freshness, .hero-detail { font-size:12px; margin-top:8px; }
+        .hero button, .hero summary { min-height:44px; }
+        .hero .pill, .hero-settings { background:var(--surface); color:var(--ink); border-color:var(--line); }
+        .hero :focus-visible { outline-color:var(--accent); }
         .hero-evidence { font-size:12px; } .hero-time-label { font-size:11px; }
+        .hero-evidence { margin-top:8px; }
+        .hero-evidence summary { display:flex; align-items:center; }
+        .hero-evidence summary::before { content:'▸'; margin-right:6px; }
+        .hero-evidence[open] summary::before { content:'▾'; }
+        .hero-evidence summary::-webkit-details-marker { display:none; }
         .cards { gap:7px; } .card { border-radius:9px; padding:10px; } .card-value { font-size:18px; }
+        .cards { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .cards .next-card { grid-column:auto; }
+        .card-label, .card-sub { font-size:11px; }
         .dashboard-bus-details { border-top:1px solid var(--line); margin-top:18px; padding-top:10px; }
         .dashboard-bus-details > summary { cursor:pointer; padding:8px 0; font-size:12px; color:var(--muted); }
         .dashboard-bus-details h2 { font-size:15px; } .dashboard-bus-details .panel { padding:12px; }
         .alarm-banner { top:8px; } input { max-width:100%; } .clock-list { overflow-wrap:anywhere; }
+        @media(max-width:599px) { .card{padding:10px 7px} .card-value{font-size:16px} .hero-settings{font-size:12px} }
         @media(max-width:380px) { .hero{padding:14px} .verdict{font-size:19px} }
       `;
       // Preserve document-level h1/main semantics in the containing dashboard.
