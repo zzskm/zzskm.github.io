@@ -36,10 +36,16 @@
           background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center;
           transition:transform .1s, background .15s; flex-shrink:0; }
   #play:hover { background:var(--accent2); transform:scale(1.05); }
-  .tbtn { height:32px; padding:0 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel);
-          cursor:pointer; font-size:12.5px; color:var(--dim); transition:all .15s; }
+  .tbtn { min-height:40px; padding:0 12px; border:1px solid var(--line); background:var(--panel);
+          cursor:pointer; font-size:12.5px; color:var(--dim); transition:background .15s, border-color .15s; }
   .tbtn:hover { border-color:var(--accent); color:var(--text); }
   .tbtn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #play-modes { display:flex; align-items:center; flex-wrap:nowrap; }
+  #play-modes .tbtn { border-radius:0; white-space:nowrap; }
+  #play-modes .tbtn + .tbtn { border-left:0; }
+  #play-modes .tbtn:first-child { border-radius:8px 0 0 8px; }
+  #play-modes .tbtn:last-child { border-radius:0 8px 8px 0; }
+  button:focus-visible { outline:2px solid var(--accent2); outline-offset:2px; }
   #meta { flex:1; min-width:140px; overflow:hidden; }
   #now { font-weight:600; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #time { font-family:Consolas,monospace; font-size:12px; color:var(--dim); }
@@ -47,12 +53,13 @@
   .badge { font-family:Consolas,monospace; font-size:12px; padding:3px 8px; border:1px solid var(--line);
            border-radius:6px; background:var(--panel); color:var(--text); min-width:52px; text-align:center; }
   input[type=range] { accent-color:var(--accent); width:90px; }
-  #pick { height:32px; padding:0 14px; border-radius:8px; border:none; background:var(--panel2);
+  #pick { min-height:40px; padding:0 14px; border-radius:8px; border:none; background:var(--panel2);
           border:1px solid var(--line); cursor:pointer; font-size:12.5px; transition:all .15s; }
   #pick:hover { border-color:var(--accent); }
 
   /* ================= BOTTOM : dirs | files | crate ================= */
-  #bottom { display:grid; grid-template-columns:230px 1fr 310px; grid-template-rows:minmax(0,1fr); overflow:hidden; }
+  #bottom { display:grid; grid-template-columns:minmax(160px,230px) minmax(0,1fr) minmax(260px,310px);
+            grid-template-rows:minmax(0,1fr); overflow:hidden; min-height:0; }
   .pane { overflow-y:auto; border-right:1px solid var(--line); background:var(--bg); min-height:0; }
   #files { display:flex; flex-direction:column; overflow:hidden; min-height:0; }
   #file-list { flex:1; overflow-y:auto; min-height:0; }
@@ -68,7 +75,7 @@
   #filter:focus { border-color:var(--accent); }
   #filter::placeholder { color:var(--dim); }
 
-  .row { padding:6px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;
+  .row { min-height:48px; padding:4px 10px 4px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;
          border-left:2px solid transparent; transition:background .1s; }
   .row .ico { width:18px; text-align:center; flex-shrink:0; opacity:.8; font-size:12px; }
   .row .lbl { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -77,11 +84,13 @@
   .active .row.sel { background:#4f8cff26; border-left-color:var(--accent); }
   .row.playing { color:var(--accent2); }
   .row.playing .lbl::after { content:"  ♪"; }
-  .addbtn { border:1px solid var(--line); background:transparent; border-radius:6px; cursor:pointer;
-            padding:0 7px; height:22px; color:var(--dim); font-size:13px; opacity:0; transition:all .15s; flex-shrink:0; }
-  .row:hover .addbtn, .row.sel .addbtn { opacity:1; }
-  .addbtn:hover { border-color:var(--accent); color:var(--accent); }
-  .addbtn.added { opacity:1; color:var(--accent); border-color:transparent; cursor:default; }
+  .addbtn { display:grid; place-items:center; width:40px; height:40px; padding:0;
+            border:1px solid #455269; background:var(--panel2); border-radius:9px; cursor:pointer;
+            color:var(--text); font-size:22px; font-weight:600; transition:background .15s, border-color .15s;
+            flex-shrink:0; }
+  .addbtn:hover { border-color:var(--accent); background:#4f8cff22; color:var(--accent2); }
+  .addbtn.added { color:var(--accent2); border-color:transparent; background:transparent; cursor:default; }
+  .addbtn:disabled { opacity:1; }
 
   .empty { padding:26px 16px; color:var(--dim); font-size:13px; line-height:2; }
   kbd { font-family:Consolas,monospace; font-size:11px; background:var(--panel2); border:1px solid var(--line);
@@ -98,8 +107,8 @@
   .crate-item .top { display:flex; gap:8px; align-items:center; }
   .crate-item .name { flex:1; font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis;
                       white-space:nowrap; cursor:default; }
-  .crate-item .del { border:none; background:transparent; cursor:pointer; color:var(--dim); font-size:14px;
-                     padding:2px 4px; border-radius:4px; }
+  .crate-item .del { border:none; background:transparent; cursor:pointer; color:var(--dim); font-size:16px;
+                     width:40px; height:40px; border-radius:8px; flex-shrink:0; }
   .crate-item .del:hover { color:var(--danger); background:#ff6b6b1a; }
   .crate-item textarea { width:100%; margin-top:6px; resize:vertical; min-height:30px; font:12.5px/1.4 inherit;
       font-family:inherit; background:var(--bg); color:var(--text); border:1px solid var(--line);
@@ -111,6 +120,23 @@
   #export { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
   #export:hover { background:var(--accent2); }
   #clear:hover { border-color:var(--danger); color:var(--danger); }
+  @media (max-width:850px) {
+    #top { padding:10px; }
+    #wave-wrap { height:84px; flex-shrink:0; }
+    #bottom { grid-template-columns:minmax(100px,32%) minmax(0,1fr);
+              grid-template-rows:minmax(0,60%) minmax(0,40%); }
+    #crate { grid-column:1 / -1; border-top:1px solid var(--line); }
+    .pane-head { padding:8px 10px; }
+  }
+  @media (max-width:480px) {
+    #bottom { grid-template-columns:minmax(100px,35%) minmax(0,1fr); }
+    #play-modes { width:100%; }
+    #play-modes .tbtn { flex:1; }
+    .row { padding:4px 5px 4px 7px; gap:4px; }
+    .row .ico { width:16px; }
+    .addbtn { width:44px; height:44px; }
+    #meta { min-width:120px; }
+  }
 </style>
 </head>
 <body>
@@ -122,12 +148,16 @@
     <div id="wave-msg">파일을 재생하면 waveform이 표시됩니다</div>
   </div>
   <div id="transport">
-    <button id="play" title="재생/일시정지 (Space)">▶</button>
+    <button id="play" aria-label="재생/일시정지 (Space)" title="재생/일시정지 (Space)">▶</button>
     <div id="meta">
       <div id="now">재생 중인 파일 없음</div>
       <div id="time">0:00 / 0:00</div>
     </div>
-    <button id="loop" class="tbtn on" title="현재 곡 반복">∞ 반복</button>
+    <div id="play-modes" role="group" aria-label="재생 모드">
+      <button class="tbtn" data-mode="once" aria-pressed="false" title="선택한 곡만 한 번 재생한 뒤 정지">1회 재생</button>
+      <button class="tbtn" data-mode="continue" aria-pressed="false" title="선택한 곡부터 목록 끝까지 차례로 재생">이어 듣기</button>
+      <button class="tbtn on" data-mode="repeat" aria-pressed="true" title="현재 곡 무한 반복">∞ 반복</button>
+    </div>
     <div class="ctl">배속 <span id="rate" class="badge">1.00×</span></div>
     <div class="ctl">🔊 <input id="vol" type="range" min="0" max="1" step="0.05" value="1"></div>
     <button id="pick">📁 폴더 선택</button>
@@ -147,7 +177,7 @@
     <div id="file-list">
       <div class="empty">
         <b>📁 폴더 선택</b> 버튼을 누르거나 폴더를 창에 <b>드래그&드롭</b> 하세요.<br>
-        <kbd>Tab</kbd> 패널 전환 &nbsp; <kbd>↑↓</kbd>/<kbd>j k</kbd> 이동 &nbsp; <kbd>Enter</kbd> 진입/재생 &nbsp;
+        <kbd>d</kbd> 패널 전환 &nbsp; <kbd>Tab</kbd> 버튼 이동 &nbsp; <kbd>↑↓</kbd>/<kbd>j k</kbd> 목록 이동 &nbsp; <kbd>Enter</kbd> 진입/재생 &nbsp;
         <kbd>a</kbd> 크레이트 담기 &nbsp; <kbd>⌫</kbd> 상위 폴더<br>
         <kbd>Space</kbd> 재생/정지 &nbsp; <kbd>← →</kbd> 5초 탐색 &nbsp; <kbd>[ ]</kbd> 배속 &nbsp; <kbd>0</kbd> 배속 리셋
       </div>
@@ -177,6 +207,9 @@ let dirRows = [], fileRows = [];
 let selDir = 0, selFile = 0;
 let activePane = "files";
 let playingKey = null, curURL = null;
+let playQueue = [];       // 파일 선택 당시의 정렬/필터 목록
+let playMode = "repeat"; // once | continue | repeat
+let waveRequestId = 0;
 let peaks = [];
 let crate = [];            // [{key, name, path, memo}]
 let filter = "";           // 현재 폴더 파일명 필터 (소문자)
@@ -187,6 +220,18 @@ $("#dir").onchange = e => buildTree([...e.target.files].map(f => ({file:f, rel:f
 
 // items: [{file, rel}]  rel = "root/sub/song.mp3" (webkitdirectory 또는 drop entry.fullPath)
 function buildTree(items){
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+  if(curURL) URL.revokeObjectURL(curURL);
+  curURL = null; playingKey = null; playQueue = [];
+  ++waveRequestId; peaks = [];
+  $("#now").textContent = "재생 중인 파일 없음";
+  $("#time").textContent = "0:00 / 0:00";
+  $("#wave-msg").textContent = "파일을 재생하면 waveform이 표시됩니다";
+  $("#wave-msg").style.display = "flex";
+  paintWave();
+  filter = ""; $("#filter").value = "";
   tree = new Map();
   const ensure = d => { if(!tree.has(d)) tree.set(d,{dirs:new Set(),files:[]}); return tree.get(d); };
   ensure("");
@@ -297,6 +342,8 @@ function paintList(sel, rows, cur, pane, emptyMsg){
       add.className = "addbtn" + (inCrate ? " added" : "");
       add.textContent = inCrate ? "✓" : "＋";
       add.title = inCrate ? "크레이트에 있음" : "크레이트에 담기";
+      add.setAttribute("aria-label", r.label + (inCrate ? " (크레이트에 추가됨)" : " 크레이트에 담기"));
+      add.disabled = inCrate;
       add.onclick = ev => { ev.stopPropagation(); addToCrate(r); };
       el.appendChild(add);
     }
@@ -316,23 +363,45 @@ function activate(){
   }
 }
 
-async function play(r){
-  if(curURL) URL.revokeObjectURL(curURL);
+function play(r, keepQueue = false){
+  if(!keepQueue) playQueue = fileRows.slice();
+  const oldURL = curURL;
   curURL = URL.createObjectURL(r.file);
-  audio.src = curURL; audio.play().catch(()=>{});
-  playingKey = r.key; $("#now").textContent = r.label;
+  audio.src = curURL;
+  if(oldURL) URL.revokeObjectURL(oldURL);
+  playingKey = r.key;
+  $("#now").textContent = r.label;
+  audio.play().catch(()=>{});
   render();
   drawWaveform(r.file);
 }
 
-// repeat current track by default; when loop is OFF, auto-advance to next
-$("#loop").onclick = () => { audio.loop = !audio.loop; $("#loop").classList.toggle("on", audio.loop); };
-audio.loop = true;
+// 세 모드는 상호 배타적이다. 기존 사용성을 유지하기 위해 기본값은 반복이다.
+function setPlayMode(mode){
+  if(!["once", "continue", "repeat"].includes(mode)) return;
+  playMode = mode;
+  audio.loop = (mode === "repeat");
+  document.querySelectorAll("#play-modes button").forEach(btn => {
+    const selected = btn.dataset.mode === mode;
+    btn.classList.toggle("on", selected);
+    btn.setAttribute("aria-pressed", String(selected));
+  });
+}
+document.querySelectorAll("#play-modes button").forEach(btn => {
+  btn.onclick = () => setPlayMode(btn.dataset.mode);
+});
+setPlayMode(playMode);
+
 audio.onended = () => {
-  if(audio.loop) return;
-  const idx = fileRows.findIndex(x => x.key===playingKey);
-  const next = fileRows.slice(idx+1).find(x => x.type==="file");
-  if(next){ selFile = fileRows.indexOf(next); activePane="files"; play(next); }
+  $("#play").textContent = "▶";
+  paintWave();
+  if(playMode !== "continue") return;
+  const idx = playQueue.findIndex(x => x.key === playingKey);
+  if(idx < 0 || idx + 1 >= playQueue.length) return;
+  const next = playQueue[idx + 1];
+  const visibleIdx = fileRows.findIndex(x => x.key === next.key);
+  if(visibleIdx >= 0){ selFile = visibleIdx; activePane = "files"; }
+  play(next, true);
 };
 audio.onplay  = () => { $("#play").textContent = "⏸"; startTick(); };
 audio.onpause = () => { $("#play").textContent = "▶"; paintWave(); };
@@ -427,6 +496,7 @@ function saveCsvOnly(){                           // 폴백: 색인 CSV만 다�
 
 // ---- waveform : 재생 곡 1개만 디코드 ----
 async function drawWaveform(file){
+  const requestId = ++waveRequestId;
   peaks = []; $("#wave-msg").textContent = "waveform 분석 중…"; $("#wave-msg").style.display="flex"; paintWave();
   try {
     const buf = await file.arrayBuffer();
@@ -435,10 +505,13 @@ async function drawWaveform(file){
     actx.close();
     const data = audioBuf.getChannelData(0);
     const N = 800, step = Math.max(1, Math.floor(data.length/N));
-    for(let i=0;i<N;i++){ let peak=0; for(let j=i*step;j<(i+1)*step&&j<data.length;j++){const v=Math.abs(data[j]); if(v>peak)peak=v;} peaks.push(peak); }
-    const max = Math.max(...peaks, 0.01); peaks = peaks.map(p => p/max);
+    const nextPeaks = [];
+    for(let i=0;i<N;i++){ let peak=0; for(let j=i*step;j<(i+1)*step&&j<data.length;j++){const v=Math.abs(data[j]); if(v>peak)peak=v;} nextPeaks.push(peak); }
+    if(requestId !== waveRequestId) return;
+    const max = Math.max(...nextPeaks, 0.01); peaks = nextPeaks.map(p => p/max);
     $("#wave-msg").style.display="none";
   } catch(e){
+    if(requestId !== waveRequestId) return;
     peaks = []; $("#wave-msg").textContent = "이 포맷은 waveform 미지원 (재생은 됩니다)"; $("#wave-msg").style.display="flex";
   }
   resizeCanvas();                              // 새 파일: 캔버스 실측 크기 반영 후 그리기
@@ -480,13 +553,13 @@ addEventListener("resize", resizeCanvas);
 function setRate(v){ audio.playbackRate = Math.min(4, Math.max(0.25, +v.toFixed(2))); $("#rate").textContent = audio.playbackRate.toFixed(2)+"×"; }
 
 document.addEventListener("keydown", e => {
-  if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if(e.ctrlKey || e.altKey || e.metaKey || e.target.closest("input, textarea, button, select, [contenteditable]")) return;
   const k = e.key;
   const rows = activePane==="dirs" ? dirRows : fileRows;
   const cur  = () => activePane==="dirs" ? selDir : selFile;
   const setCur = v => activePane==="dirs" ? (selDir=v) : (selFile=v);
 
-  if(k==="Tab"){ activePane = activePane==="dirs" ? "files" : "dirs"; render(); e.preventDefault(); }
+  if(k==="d"){ activePane = activePane==="dirs" ? "files" : "dirs"; render(); e.preventDefault(); }
   else if(k==="ArrowDown"||k==="j"){ setCur(Math.min(rows.length-1, cur()+1)); render(); e.preventDefault(); }
   else if(k==="ArrowUp"||k==="k"){ setCur(Math.max(0, cur()-1)); render(); e.preventDefault(); }
   else if(k==="Enter"){ activate(); e.preventDefault(); }
