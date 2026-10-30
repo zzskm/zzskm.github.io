@@ -6,7 +6,7 @@
   "window_minutes": 20,
   "minimum_days": 10,
   "minimum_vehicle_signals": 15,
-  "signals_count": 9479,
+  "signals_count": 9520,
   "target_estimated_arrivals_count": 207,
   "candidate_routes": [
     {
@@ -49,20 +49,6 @@
       "median_lead_minutes": 12.15,
       "min_lead_minutes": 1.07,
       "max_lead_minutes": 19.7,
-      "sufficient_for_screening": false
-    },
-    {
-      "route_id": 241223004,
-      "route_name": "602-1A",
-      "sta_order": 30,
-      "observed_days": 2,
-      "vehicle_signals": 16,
-      "followed_by_3100_within_20m": 9,
-      "follow_rate": 0.562,
-      "target_coverage": 0.545,
-      "median_lead_minutes": 11.22,
-      "min_lead_minutes": 3.25,
-      "max_lead_minutes": 16.93,
       "sufficient_for_screening": false
     },
     {
@@ -161,6 +147,20 @@
       "median_lead_minutes": 8.22,
       "min_lead_minutes": 4.55,
       "max_lead_minutes": 19.42,
+      "sufficient_for_screening": false
+    },
+    {
+      "route_id": 241223004,
+      "route_name": "602-1A",
+      "sta_order": 30,
+      "observed_days": 2,
+      "vehicle_signals": 16,
+      "followed_by_3100_within_20m": 8,
+      "follow_rate": 0.5,
+      "target_coverage": 0.545,
+      "median_lead_minutes": 11.71,
+      "min_lead_minutes": 3.25,
+      "max_lead_minutes": 16.93,
       "sufficient_for_screening": false
     },
     {
@@ -346,20 +346,6 @@
       "sufficient_for_screening": false
     },
     {
-      "route_id": 241223008,
-      "route_name": "602-2B",
-      "sta_order": 12,
-      "observed_days": 2,
-      "vehicle_signals": 9,
-      "followed_by_3100_within_20m": 2,
-      "follow_rate": 0.222,
-      "target_coverage": 0.182,
-      "median_lead_minutes": 4.63,
-      "min_lead_minutes": 0.2,
-      "max_lead_minutes": 9.07,
-      "sufficient_for_screening": false
-    },
-    {
       "route_id": 241215003,
       "route_name": "3",
       "sta_order": 8,
@@ -386,9 +372,23 @@
       "min_lead_minutes": 1.6,
       "max_lead_minutes": 5.17,
       "sufficient_for_screening": false
+    },
+    {
+      "route_id": 241223008,
+      "route_name": "602-2B",
+      "sta_order": 12,
+      "observed_days": 2,
+      "vehicle_signals": 9,
+      "followed_by_3100_within_20m": 1,
+      "follow_rate": 0.111,
+      "target_coverage": 0.091,
+      "median_lead_minutes": 9.07,
+      "min_lead_minutes": 9.07,
+      "max_lead_minutes": 9.07,
+      "sufficient_for_screening": false
     }
   ],
   "status": "collecting",
   "warning": "상관관계는 예측 개선을 입증하지 않음. 시간대 통제 및 미래 날짜 검증, 기존 알림 안전율 비교가 필요함.",
-  "generated_at": "2026-10-30T19:05:03.953688+09:00"
+  "generated_at": "2026-10-30T19:06:04.568176+09:00"
 }
