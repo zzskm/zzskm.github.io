@@ -6,23 +6,9 @@
   "window_minutes": 20,
   "minimum_days": 10,
   "minimum_vehicle_signals": 15,
-  "signals_count": 5796,
+  "signals_count": 5840,
   "target_estimated_arrivals_count": 204,
   "candidate_routes": [
-    {
-      "route_id": 204000131,
-      "route_name": "370",
-      "sta_order": 9,
-      "observed_days": 2,
-      "vehicle_signals": 8,
-      "followed_by_3100_within_20m": 6,
-      "follow_rate": 0.75,
-      "target_coverage": 0.75,
-      "median_lead_minutes": 9.28,
-      "min_lead_minutes": 2.57,
-      "max_lead_minutes": 19.37,
-      "sufficient_for_screening": false
-    },
     {
       "route_id": 228000179,
       "route_name": "101",
@@ -49,6 +35,20 @@
       "median_lead_minutes": 6.29,
       "min_lead_minutes": 1.53,
       "max_lead_minutes": 15.32,
+      "sufficient_for_screening": false
+    },
+    {
+      "route_id": 204000131,
+      "route_name": "370",
+      "sta_order": 9,
+      "observed_days": 2,
+      "vehicle_signals": 9,
+      "followed_by_3100_within_20m": 6,
+      "follow_rate": 0.667,
+      "target_coverage": 0.75,
+      "median_lead_minutes": 9.28,
+      "min_lead_minutes": 2.57,
+      "max_lead_minutes": 19.37,
       "sufficient_for_screening": false
     },
     {
@@ -84,9 +84,9 @@
       "route_name": "55",
       "sta_order": 8,
       "observed_days": 2,
-      "vehicle_signals": 22,
+      "vehicle_signals": 23,
       "followed_by_3100_within_20m": 13,
-      "follow_rate": 0.591,
+      "follow_rate": 0.565,
       "target_coverage": 0.875,
       "median_lead_minutes": 7.15,
       "min_lead_minutes": 2.05,
@@ -364,9 +364,9 @@
       "route_name": "3",
       "sta_order": 8,
       "observed_days": 2,
-      "vehicle_signals": 9,
+      "vehicle_signals": 10,
       "followed_by_3100_within_20m": 2,
-      "follow_rate": 0.222,
+      "follow_rate": 0.2,
       "target_coverage": 0.25,
       "median_lead_minutes": 11.34,
       "min_lead_minutes": 5.37,
@@ -378,9 +378,9 @@
       "route_name": "4000",
       "sta_order": 47,
       "observed_days": 2,
-      "vehicle_signals": 5,
+      "vehicle_signals": 6,
       "followed_by_3100_within_20m": 1,
-      "follow_rate": 0.2,
+      "follow_rate": 0.167,
       "target_coverage": 0.125,
       "median_lead_minutes": 18.08,
       "min_lead_minutes": 18.08,
@@ -390,5 +390,5 @@
   ],
   "status": "collecting",
   "warning": "상관관계는 예측 개선을 입증하지 않음. 시간대 통제 및 미래 날짜 검증, 기존 알림 안전율 비교가 필요함.",
-  "generated_at": "2026-10-30T17:00:10.180045+09:00"
+  "generated_at": "2026-10-30T17:01:03.513709+09:00"
 }
