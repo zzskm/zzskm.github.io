@@ -344,7 +344,9 @@
     .departure-time-main { font-size:20px; font-weight:800; }
     .verdict #verdict-text { display:block; font-size:16px; font-weight:600; margin:12px 0 0; }
     .verdict .departure-context { font-size:13px; margin:16px 0 0; border-top:1px solid currentColor; border-radius:0; padding:14px 0 0; background:none; color:inherit; font-weight:500; opacity:.88; }
-    .hero .arrival-next { display:flex; align-items:center; margin:18px 0 0; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--ink); font-size:15px; }
+    .hero .arrival-next { display:flex; align-items:center; gap:12px; margin:18px 0 0; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--ink); font-size:15px; }
+    .hero .arrival-next strong { font-size:21px; margin-left:auto; }
+    .hero .arrival-next span:last-child { color:var(--muted); font-size:13px; }
     .hero .decision-note { color:var(--muted); font-size:13px; }
     .hero-actions { margin:12px 0 0; }
     .hero-actions .hero-settings { background:var(--surface-2); color:var(--ink); }
@@ -427,7 +429,9 @@
       <p id="verdict-text" class="skeleton">출발 판단 중</p>
       <p class="departure-context" id="departure-context">도보시간을 반영해 출발 시각을 계산합니다.</p>
     </div>
-    <p class="arrival-next" id="arrival-next" hidden></p>
+    <div class="arrival-next" id="arrival-next" hidden aria-label="다음 버스 도착 예상">
+      <span>다음 버스</span><strong id="arrival-next-time">--:--</strong><span id="arrival-next-remaining"></span>
+    </div>
     <div class="decision-note" id="decision-note" hidden></div>
     <div class="hero-actions">
       <button id="alarm-skip" type="button" class="hero-settings" hidden>이 차량 제외</button>
