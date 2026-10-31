@@ -1,25 +1,17 @@
-/* One notification/audio/scheduling lifetime per document, shared by both views. */
+/* Bus notification/audio/scheduling lifetime per document. */
 window.AlertRuntime = (() => {
   'use strict';
   const BA = window.BusAlarm;
-  const keys = {clocks:'busAlarm.v1.clocks', timers:'busAlarm.v1.timers', ledger:'busAlarm.v1.clockFired'};
-  const volatile = new Map(), listeners = new Set(), ticks = new Set(), evaluators = new Map();
+  const listeners = new Set(), ticks = new Set(), evaluators = new Map();
   const audio = {ctx:null, master:null};
   const state = {audioError:false, permissionError:false, storageError:false};
-  let root, worker, interval, pending = false, notification = null, lastTag = '', hint = () => '';
+  let root, worker, interval, pending = false, notification = null, lastTag = '';
   const queue = [];
   const $ = id => root?.querySelector('#'+id);
-  function read(key) {
-    if (volatile.has(key)) return volatile.get(key);
-    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+  function busAlarmEnabled() {
+    try { return JSON.parse(localStorage.getItem('busAlarm.v1.cfg'))?.enabled === true; }
+    catch { return false; }
   }
-  function write(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); volatile.delete(key); return true; }
-    catch { volatile.set(key,value); state.storageError=true; return false; }
-  }
-  function saveChanged(key,before,after) { if (JSON.stringify(before)!==JSON.stringify(after)) write(key,after); }
-  const clocks = () => BA.sanitizeClocks(read(keys.clocks));
-  const timers = () => BA.sanitizeTimers(read(keys.timers));
   function emit() { listeners.forEach(fn => fn()); }
   function ensureAudio() {
     const AC=window.AudioContext || window.webkitAudioContext;
@@ -94,29 +86,21 @@ window.AlertRuntime = (() => {
   }
   function evaluateInside() {
     const now=Date.now();
-    // Bus actions enter the queue before clocks/timers due at the same evaluation.
-    // A failing bus evaluation must not stop general alarms from firing.
+    // Evaluate only registered bus alerts. Legacy clock/timer data is never executed.
     evaluators.forEach((fn,name)=>{try{fn(now);}catch(error){console.error('AlertRuntime evaluator failed:',name,error);}});
-    const beforeClocks=clocks(),beforeTimers=timers(),ledger=read(keys.ledger)||{};
-    const c=BA.evaluateClocks({clocks:beforeClocks,ledger,nowMs:now});
-    const t=BA.evaluateTimers({timers:beforeTimers,nowMs:now});
-    saveChanged(keys.clocks,beforeClocks,c.clocks);saveChanged(keys.ledger,ledger,c.ledger);saveChanged(keys.timers,beforeTimers,t.timers);
-    c.actions.forEach(a=>showRing(BA.formatClockMessage(a,hint(now)),`clock-${a.id}-${a.scheduledMs}`,a.type==='clock_missed','시각 알람'));
-    t.actions.forEach(a=>showRing(BA.formatTimerMessage(a),`timer-${a.id}`,false,'타이머'));
     emit();
   }
   function evaluate(){
     if(pending)return;pending=true;
     return locked(evaluateInside,true).finally(()=>{pending=false;});
   }
-  function mutate(fn){return locked(()=>{const result=fn();evaluateInside();return result;});}
   function tick(){evaluate();ticks.forEach(fn=>fn());}
   function init(target=document){
     if(root)return;root=target;
     $('alarm-ack')?.addEventListener('click',()=>ack());
     $('alarm-ack-all')?.addEventListener('click',()=>ack(true));
     window.addEventListener('keydown',e=>{if(e.key==='Escape'&&queue.length)ack();});
-    const unlock=()=>{if(audio.ctx?.state==='running')return;if(clocks().some(c=>c.enabled)||timers().length||read('busAlarm.v1.cfg')?.enabled)ensureAudio();};
+    const unlock=()=>{if(audio.ctx?.state==='running')return;if(busAlarmEnabled())ensureAudio();};
     window.addEventListener('pointerdown',unlock);window.addEventListener('keydown',unlock);
     window.addEventListener('storage',()=>{tick();});
     window.addEventListener('focus',emit);
@@ -131,9 +115,9 @@ window.AlertRuntime = (() => {
     window.addEventListener('pagehide',e=>{if(!e.persisted){clearInterval(interval);worker?.terminate();stopBeeps();}});
     tick();
   }
-  return {init,keys,read,write,clocks,timers,audio,state,ensureAudio,requestPermission,prepare,readiness,showRing,ack,clearBus,evaluate,mutate,
+  return {init,audio,state,ensureAudio,requestPermission,prepare,readiness,showRing,ack,clearBus,evaluate,
     subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},
     onTick(fn){ticks.add(fn);return()=>ticks.delete(fn);},
-    addEvaluator(name,fn){evaluators.set(name,fn);},setBusHint(fn){hint=fn;},
+    addEvaluator(name,fn){evaluators.set(name,fn);},
     get ringing(){return queue.length>0;},get queue(){return [...queue];}};
 })();
