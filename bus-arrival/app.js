@@ -201,13 +201,20 @@ window.BusApp = { mount(root = document, options = {}) {
     $("#verdict").className = "verdict " + view.tone;
     setText($("#verdict-glyph"), {go:"▶",wait:"◷",warn:"⚠",danger:"!"}[view.tone]);
     if (!Number.isFinite(view.departureAtMs)) { previousDeparture=null; departureChange=null; }
-    const available = Number.isFinite(view.correctedAtMs);
+    // Arrival is shown from the API. Model correction is reserved for the labelled details.
+    // A safe-departure bound must never masquerade as the expected bus arrival time.
+    const available = Number.isFinite(view.correctedAtMs) && Number.isFinite(view.apiAtMs);
     const graphIdentity=[view.targetVehId,view.selectedNext,view.state === "skipped",available].join("|");
     if (chartFresh !== available || chartIdentity !== graphIdentity) { chartFresh=available; chartIdentity=graphIdentity; chartDirty=true; }
-    const parts = available ? etaParts(Math.max(0, (view.correctedAtMs - now) / 1000)) : {num:"--",unit:"도착 예상 확인 불가"};
+    const parts = available ? etaParts(Math.max(0, (view.apiAtMs - now) / 1000)) : {num:"--",unit:"도착 예상 확인 불가"};
+    setText($("#arrival-main-time"), available ? hhmm(view.apiAtMs) : "--:--");
+    if (available) $("#arrival-main-time").setAttribute("datetime", new Date(view.apiAtMs).toISOString());
+    else $("#arrival-main-time").removeAttribute("datetime");
     setText($("#eta-num"), parts.num);
-    setText($("#eta-unit"), available ? parts.unit + " 추정" : parts.unit);
-    setText($("#arrival-clock"), available ? hhmm(view.correctedAtMs) + " 도착 예상 · 실제 도착 미측정" : "");
+    setText($("#eta-unit"), available ? (parts.num === "곧" ? "도착 예정" : "분 후") : parts.unit);
+    setText($("#arrival-clock"), available
+      ? "공공 API 예측 · 실제 도착 미확인 · 도착 시각은 달라질 수 있습니다."
+      : "최신 도착 예정 시각을 확인할 수 없습니다. 과거 예측을 현재 시각처럼 표시하지 않습니다.");
     $("#eta-row").hidden = parts.num === "--";
     $("#eta-unavailable").hidden = available;
     const modelMethod = view.safetyMethod || decisionSnap && decisionSnap.safetyMethod;
@@ -262,6 +269,10 @@ window.BusApp = { mount(root = document, options = {}) {
     const announce = [view.state,view.targetVehId,statusClass,view.uncertain].join("|");
     if (announce !== lastAnnounced) { lastAnnounced=announce; announceStatus(view.title + " · " + statusLabel); }
     const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;
+    const showNextArrival = available && !view.selectedNext && nextSec != null && nextSec > 0;
+    $("#arrival-next").hidden = !showNextArrival;
+    if (showNextArrival) setText($("#arrival-next"),
+      "그다음 3100번 " + hhmm(decisionSnap.next.arrivalAtMs) + " · " + etaPlain(etaParts(nextSec)) + " (API 예측)");
     setText($("#card-next"), nextSec != null && nextSec > 0 ? etaPlain(etaParts(nextSec)) : "미확인");
     setText($("#card-next-sub"), "API 예측 · 후속 차량");
     $("#cards").hidden = !(vehOk && !off);
