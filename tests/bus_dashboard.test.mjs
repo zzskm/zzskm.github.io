@@ -248,3 +248,17 @@ test('expired next reservation never borrows the preceding vehicle graph or meta
  const excluded=BD.buildView({status:st,snapshot:stale,alarmView:next.view,nowMs:now,currentSkipped:true,alarmTargetSkipped:true});
  assert.equal(excluded.state,'skipped');assert.equal(excluded.departureAtMs,null);
 });
+
+test('v0 departure presentation preserves the conservative engine state',()=>{
+ const safe=view();
+ assert.deepEqual(BD.decisionPresentation(safe),{heading:'여유 있어요',urgency:'calm',showDeparture:true});
+ const due=view(status(),{nowMs:NOW+8*M,snapshot:BA.assessStatus(status(),NOW+8*M,{maxAgeMin:15,safetyMode:true})});
+ // Evaluate presentation independently from whether the stale snapshot is valid.
+ assert.equal(BD.decisionPresentation({...safe,state:'due'}).heading,'지금 출발하세요');
+ assert.equal(BD.decisionPresentation({...safe,state:'overdue'}).urgency,'late');
+ for(const state of ['reserved','unavailable','no_bus','off','elapsed','skipped']){
+   const p=BD.decisionPresentation({...safe,state});
+   assert.equal(p.showDeparture,false, state+' must not suggest a live departure deadline');
+ }
+ assert.ok(due.state); // The display mapping never changes the engine output.
+});

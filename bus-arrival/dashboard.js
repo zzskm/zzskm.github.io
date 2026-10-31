@@ -18,6 +18,21 @@
       : minutes + (delta > 0 ? '분 후' : '분 지남');
   }
 
+  // Pure presentation state. Actual arrival and conservative departure remain separate.
+  function decisionPresentation(view) {
+    switch (view && view.state) {
+      case 'waiting': return { heading:'여유 있어요', urgency:'calm', showDeparture:true };
+      case 'due': return { heading:'지금 출발하세요', urgency:'go', showDeparture:true };
+      case 'overdue': return { heading:'출발 권장 시각이 지났어요', urgency:'late', showDeparture:true };
+      case 'elapsed': return { heading:'예정 시각이 지났어요', urgency:'uncertain', showDeparture:false };
+      case 'skipped': return { heading:'다음 버스를 확인해요', urgency:'uncertain', showDeparture:false };
+      case 'no_bus': return { heading:'현재 확인된 버스가 없어요', urgency:'uncertain', showDeparture:false };
+      case 'off': return { heading:'수집 시간 외예요', urgency:'uncertain', showDeparture:false };
+      case 'reserved': return { heading:'최신 정보를 확인할 수 없어요', urgency:'uncertain', showDeparture:false };
+      default: return { heading:'출발 판단을 보류해요', urgency:'uncertain', showDeparture:false };
+    }
+  }
+
   function buildReadiness(input) {
     return {
       setting: input.enabled ? '버스 알림 켜짐' : '버스 알림 꺼짐',
@@ -189,5 +204,5 @@
     });
     return groups;
   }
-  return { currentSeries, targetSeries, buildView, buildReadiness, relativeTime, splitGaps, historyPoints };
+  return { currentSeries, targetSeries, buildView, decisionPresentation, buildReadiness, relativeTime, splitGaps, historyPoints };
 });
