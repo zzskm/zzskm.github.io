@@ -384,6 +384,11 @@
     @media(prefers-reduced-motion:reduce) { .prediction-details > summary span { transition:none; } }
     .change-alert { padding:12px 14px; background:#fbe5e5; border-radius:14px; color:#852a29; margin:0 0 12px; font-size:14px; font-weight:700; }
     @media(prefers-color-scheme:dark) { .change-alert { background:#4d2424; color:#ffd0ca; } }
+    /* Keep the accessible forecast table semantic while clipping its off-screen painting. */
+    .sr-only:has(#chart-table) { contain:paint; }
+    @media(prefers-color-scheme:dark) {
+      .hero .readiness .pill.bad { color:#ffaaa0; }
+    }
     /* 200% browser zoom: preserve the actual content rather than clipping overflow. */
     .route-heading,.route-heading h1,.route-heading-top > * { min-width:0; overflow-wrap:anywhere; }
     .route-heading h1 span { overflow-wrap:anywhere; word-break:break-word; }
