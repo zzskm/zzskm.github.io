@@ -60,6 +60,50 @@ class SafetyBrowserTests(unittest.TestCase):
         page.wait_for_function('!document.body.classList.contains("loading")')
         return page, errors
 
+    def test_v0_arrival_hierarchy_and_settings_drawer(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            expect(page.locator('#arrival-main-time')).to_have_text('18:20')
+            expect(page.locator('#eta-num')).to_have_text('20')
+            expect(page.locator('#verdict-heading')).to_have_text('여유 있어요')
+            expect(page.locator('#departure-time-main')).to_have_text('출발 18:08')
+            expect(page.locator('#verdict-text')).to_contain_text('출발까지 8분')
+            expect(page.locator('#prediction-details')).not_to_have_attribute('open','')
+            expect(page.locator('#alarm')).to_be_hidden()
+            self.assertLess(page.locator('#arrival-main-time').bounding_box()['y'],
+                            page.locator('#verdict').bounding_box()['y'])
+            page.locator('#open-settings').click()
+            expect(page.locator('#alarm')).to_be_visible()
+            expect(page.locator('#settings-close')).to_be_focused()
+            expect(page.locator('#alarm-settings')).to_have_attribute('open','')
+            page.keyboard.press('Escape')
+            expect(page.locator('#alarm')).to_be_hidden()
+            expect(page.locator('#open-settings')).to_be_focused()
+            page.locator('#prediction-details > summary').click()
+            expect(page.locator('#journey-timeline')).to_contain_text('18:08')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_v0_stale_and_overdue_have_different_decision_copy(self):
+        from playwright.sync_api import expect
+        stale={**self.ready_status(),'last_poll':(T-dt.timedelta(minutes=4)).isoformat()}
+        page,errors=self.open_page(stale)
+        try:
+            expect(page.locator('#verdict-heading')).to_have_text('출발 판단을 보류해요')
+            expect(page.locator('#arrival-main-time')).to_have_text('--:--')
+            expect(page.locator('#departure-time-main')).to_have_text('')
+            self.assertEqual(errors,[])
+        finally: page.close()
+        overdue={**self.ready_status()}
+        overdue['safety']={**overdue['safety'],'safe_arrival_ts':(T+dt.timedelta(minutes=5)).isoformat()}
+        page,errors=self.open_page(overdue)
+        try:
+            expect(page.locator('#verdict-heading')).to_have_text('출발 권장 시각이 지났어요')
+            expect(page.locator('#verdict')).to_have_class(__import__('re').compile('is-overdue'))
+            self.assertEqual(errors,[])
+        finally: page.close()
+
     def test_mobile_decision_uses_safety_and_preserves_bus_settings(self):
         status={'last_poll':T.isoformat(),'current_veh_id':11,'predict_sec':1200,'location_no':4,
                 'collect_window':'16:00-22:00','poll_interval_sec':60,'safety':{
