@@ -73,7 +73,8 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('.hero-evidence summary').click()
             self.assertIn('18:14',page.locator('#safety-detail').inner_text())
             self.assertIn('실제 도착 미측정',page.locator('#safety-detail').inner_text())
-            self.assertEqual(page.locator('#eta-num').inner_text(),'18')
+            self.assertEqual(page.locator('#eta-num').inner_text(),'20')
+            self.assertEqual(page.locator('#arrival-main-time').inner_text(),'18:20')
             from playwright.sync_api import expect
             expect(page.locator('#alarm-next')).to_contain_text('18:08')
             page.locator('#open-settings').click()
@@ -91,6 +92,44 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertEqual(errors,[])
         finally:
             page.close()
+
+    def test_arrival_first_separates_api_eta_from_safety_and_shows_next_bus(self):
+        from playwright.sync_api import expect
+        st={**self.ready_status(), 'next_veh_id':22, 'next_predict_sec':1800}
+        page,errors=self.open_page(st)
+        try:
+            expect(page.locator('#arrival-main-time')).to_have_text('18:20')
+            expect(page.locator('#eta-num')).to_have_text('20')
+            expect(page.locator('#arrival-next')).to_contain_text('18:30')
+            expect(page.locator('#arrival-clock')).to_contain_text('공공 API 예측')
+            self.assertLess(
+                page.locator('#arrival-main-time').evaluate('(e)=>e.getBoundingClientRect().top'),
+                page.locator('#verdict').evaluate('(e)=>e.getBoundingClientRect().top'))
+            self.assertLess(
+                page.locator('#verdict').evaluate('(e)=>e.getBoundingClientRect().top'),
+                page.locator('#hero-alarm-toggle').evaluate('(e)=>e.getBoundingClientRect().top'))
+            expect(page.locator('#departure-context')).to_contain_text('18:08')
+            page.locator('.hero-evidence summary').click()
+            expect(page.locator('#safety-detail')).to_contain_text('보정 예상 18:18')
+            page.clock.fast_forward(61000)
+            expect(page.locator('#arrival-main-time')).to_have_text('18:20')
+            expect(page.locator('#eta-num')).to_have_text('19')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_stale_and_no_bus_never_show_a_current_arrival_clock(self):
+        from playwright.sync_api import expect
+        old={**self.ready_status(),'last_poll':(T-dt.timedelta(minutes=4)).isoformat()}
+        for status in (old, {'last_poll':T.isoformat(), 'current_veh_id':0,
+                            'error':'no_bus', 'collect_window':'16:00-22:00'}):
+            page,errors=self.open_page(status)
+            try:
+                expect(page.locator('#arrival-main-time')).to_have_text('--:--')
+                expect(page.locator('#eta-row')).to_be_hidden()
+                expect(page.locator('#arrival-next')).to_be_hidden()
+                expect(page.locator('#arrival-clock')).to_contain_text('확인할 수 없습니다')
+                self.assertEqual(errors,[])
+            finally: page.close()
 
     def test_old_data_keeps_uncertainty_and_suppresses_live_alarm(self):
         page,errors=self.open_page({'last_poll':(T-dt.timedelta(minutes=4)).isoformat(),
