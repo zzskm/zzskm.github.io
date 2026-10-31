@@ -148,8 +148,10 @@ def test_bus_arrival_live_region_is_scoped_not_whole_hero():
 
 
 def test_bus_arrival_accessibility_basics():
-    assert 'name="color-scheme" content="light dark"' in HTML
-    assert "@media (prefers-color-scheme: dark)" in HTML
+    assert 'name="color-scheme" content="light"' in HTML
+    assert "color-scheme:light;" in HTML
+    assert "prefers-color-scheme:dark" not in HTML
+    assert "prefers-color-scheme: dark" not in HTML
     assert ":focus-visible { outline:2px solid var(--brand)" in HTML
     assert "font-variant-numeric:tabular-nums" in HTML
     assert 'aria-label="정류장까지 걸리는 도보 시간(분)"' in HTML
