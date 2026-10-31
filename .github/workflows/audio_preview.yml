@@ -1,0 +1,26 @@
+name: Audio Preview regression
+on:
+  pull_request:
+    paths:
+      - 'audio-preview.html'
+      - 'tests/audio_preview.test.mjs'
+      - '.github/workflows/audio_preview.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'audio-preview.html'
+      - 'tests/audio_preview.test.mjs'
+      - '.github/workflows/audio_preview.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+      - run: node --check tests/audio_preview.test.mjs
+      - run: node --test tests/audio_preview.test.mjs
