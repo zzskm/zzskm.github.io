@@ -199,6 +199,10 @@ window.BusApp = { mount(root = document, options = {}) {
     setText($("#verdict-text"), view.title);
     $("#verdict-text").classList.remove("skeleton");
     $("#verdict").className = "verdict " + view.tone;
+    const presentation=BD.decisionPresentation(view);
+    $("#verdict").classList.toggle("is-overdue",presentation.urgency==="late");
+    setText($("#verdict-heading"),presentation.heading);
+    setText($("#departure-time-main"),presentation.showDeparture && Number.isFinite(view.departureAtMs) ? "출발 " + hhmm(view.departureAtMs) : "");
     setText($("#verdict-glyph"), {go:"▶",wait:"◷",warn:"⚠",danger:"!"}[view.tone]);
     if (!Number.isFinite(view.departureAtMs)) { previousDeparture=null; departureChange=null; }
     // Arrival is shown from the API. Model correction is reserved for the labelled details.
@@ -212,6 +216,7 @@ window.BusApp = { mount(root = document, options = {}) {
     else $("#arrival-main-time").removeAttribute("datetime");
     setText($("#eta-num"), parts.num);
     setText($("#eta-unit"), available ? (parts.num === "곧" ? "도착 예정" : "분 후") : parts.unit);
+    setText($("#eta-stops"),available && !view.selectedNext ? (stopsText(stopsAwayOf(st)) || "") : "");
     setText($("#arrival-clock"), available
       ? "공공 API 예측 · 더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요."
       : "최신 도착 예정 시각을 확인할 수 없습니다. 과거 예측을 현재 시각처럼 표시하지 않습니다.");
@@ -226,12 +231,12 @@ window.BusApp = { mount(root = document, options = {}) {
     $("#hero").classList.toggle("is-stale", !available);
     $("#hero").classList.toggle("is-passed", false);
     setText($("#departure-context"), Number.isFinite(view.departureAtMs)
-      ? hhmm(view.departureAtMs) + (view.uncertain ? " 이전 정보 기준 · " : " 출발 권장 · ")
+      ? (view.uncertain ? "이전 정보 기준 · " : "조기 도착 대비 · ")
         + "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분"
       : "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분 · 최신 차량 정보로 다시 판단합니다.");
-    setText($("#freshness"), view.ageSec == null ? "차량 정보 확인 시각 불명"
-      : hhmm(view.observationAtMs) + " 차량 확인 · " + (view.ageSec < 60 ? view.ageSec + "초 전" : Math.floor(view.ageSec / 60) + "분 전") + ""
-        + (off ? " · 수집 시간 외" : " · API 조회 " + (interval > 0 ? Math.round(interval) + "초 간격" : "간격 확인 중")));
+    setText($("#freshness"), view.ageSec == null ? "조회 시각 미확인"
+      : hhmm(view.observationAtMs) + " 확인 · " + (view.ageSec < 60 ? view.ageSec + "초 전" : Math.floor(view.ageSec / 60) + "분 전")
+        + (off ? " · 수집 시간 외" : ""));
     let statusLabel = "최신 정보", statusClass = "fresh";
     if (cache.loadError || !st) { statusLabel = "조회 오류"; statusClass = "error"; }
     else if (off) { statusLabel = holiday ? "휴일" : "수집 시간 외"; statusClass = "stale"; }
@@ -271,8 +276,10 @@ window.BusApp = { mount(root = document, options = {}) {
     const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;
     const showNextArrival = available && !view.selectedNext && nextSec != null && nextSec > 0;
     $("#arrival-next").hidden = !showNextArrival;
-    if (showNextArrival) setText($("#arrival-next"),
-      "그다음 3100번 " + hhmm(decisionSnap.next.arrivalAtMs) + " · " + etaPlain(etaParts(nextSec)) + " (API 예측)");
+    if (showNextArrival) {
+      setText($("#arrival-next-time"), hhmm(decisionSnap.next.arrivalAtMs));
+      setText($("#arrival-next-remaining"), etaPlain(etaParts(nextSec)));
+    }
     setText($("#card-next"), nextSec != null && nextSec > 0 ? etaPlain(etaParts(nextSec)) : "미확인");
     setText($("#card-next-sub"), "API 예측 · 후속 차량");
     $("#cards").hidden = !(vehOk && !off);
@@ -804,9 +811,8 @@ window.BusApp = { mount(root = document, options = {}) {
       if ("Notification" in window && Notification.permission === "default") {
         requestPermission();
       } else {
-        options.revealSettings?.();
+        showSettings();
         $("#alarm-help").open=true; $("#alarm-help summary").focus();
-        $("#alarm-help").scrollIntoView({block:"start"});
       }
     });
     window.addEventListener("storage", (e) => {
@@ -962,11 +968,39 @@ window.BusApp = { mount(root = document, options = {}) {
     queueRender(true);
   }));
 
-  $("#open-settings").addEventListener("click", () => {
+  const settingsDialog=$("#alarm"), settingsBackdrop=$("#settings-backdrop");
+  let settingsReturnFocus=null, previousOverflow="";
+  function showSettings() {
     options.revealSettings?.();
+    settingsReturnFocus=activeElement();
+    settingsDialog.hidden=false;
+    settingsBackdrop.hidden=false;
     $("#alarm-settings").open=true;
-    $("#alarm-settings summary").focus();
-    $("#alarm-settings").scrollIntoView({block:"start"});
+    previousOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    $("#settings-close").focus({preventScroll:true});
+  }
+  function hideSettings() {
+    if (settingsDialog.hidden) return;
+    settingsDialog.hidden=true;
+    settingsBackdrop.hidden=true;
+    document.body.style.overflow=previousOverflow;
+    if (settingsReturnFocus && settingsReturnFocus.isConnected) settingsReturnFocus.focus({preventScroll:true});
+  }
+  $("#open-settings").addEventListener("click", showSettings);
+  $("#settings-close").addEventListener("click", hideSettings);
+  settingsBackdrop.addEventListener("click", hideSettings);
+  document.addEventListener("keydown", e => {
+    if (settingsDialog.hidden) return;
+    if (e.key === "Escape") { e.preventDefault(); hideSettings(); return; }
+    if (e.key !== "Tab") return;
+    const focusable=[...settingsDialog.querySelectorAll("button:not(:disabled), input:not(:disabled), summary, a[href]")]
+      .filter(el=>el.getClientRects().length);
+    if (!focusable.length) return;
+    const first=focusable[0], last=focusable[focusable.length-1];
+    const focused=activeElement();
+    if (e.shiftKey && focused===first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && focused===last) { e.preventDefault(); first.focus(); }
   });
 
   const refreshButton = $("#refresh");
@@ -975,6 +1009,10 @@ window.BusApp = { mount(root = document, options = {}) {
     try { await load(); } finally { refreshButton.disabled = false; refreshButton.textContent = "새로고침"; }
   });
 
+  // Hidden charts have no measurable width. Repaint when the advanced panel becomes visible.
+  $("#prediction-details").addEventListener("toggle", () => {
+    if ($("#prediction-details").open) { historySig=""; queueRender(true); }
+  });
   let resizeTimer = null;
   window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { historySig=""; queueRender(true); }, 180); });
 

@@ -60,6 +60,50 @@ class SafetyBrowserTests(unittest.TestCase):
         page.wait_for_function('!document.body.classList.contains("loading")')
         return page, errors
 
+    def test_v0_arrival_hierarchy_and_settings_drawer(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page(self.ready_status())
+        try:
+            expect(page.locator('#arrival-main-time')).to_have_text('18:20')
+            expect(page.locator('#eta-num')).to_have_text('20')
+            expect(page.locator('#verdict-heading')).to_have_text('여유 있어요')
+            expect(page.locator('#departure-time-main')).to_have_text('출발 18:08')
+            expect(page.locator('#verdict-text')).to_contain_text('출발까지 8분')
+            expect(page.locator('#prediction-details')).not_to_have_attribute('open','')
+            expect(page.locator('#alarm')).to_be_hidden()
+            self.assertLess(page.locator('#arrival-main-time').bounding_box()['y'],
+                            page.locator('#verdict').bounding_box()['y'])
+            page.locator('#open-settings').click()
+            expect(page.locator('#alarm')).to_be_visible()
+            expect(page.locator('#settings-close')).to_be_focused()
+            expect(page.locator('#alarm-settings')).to_have_attribute('open','')
+            page.keyboard.press('Escape')
+            expect(page.locator('#alarm')).to_be_hidden()
+            expect(page.locator('#open-settings')).to_be_focused()
+            page.locator('#prediction-details > summary').click()
+            expect(page.locator('#journey-timeline')).to_contain_text('18:08')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
+    def test_v0_stale_and_overdue_have_different_decision_copy(self):
+        from playwright.sync_api import expect
+        stale={**self.ready_status(),'last_poll':(T-dt.timedelta(minutes=4)).isoformat()}
+        page,errors=self.open_page(stale)
+        try:
+            expect(page.locator('#verdict-heading')).to_have_text('출발 판단을 보류해요')
+            expect(page.locator('#arrival-main-time')).to_have_text('--:--')
+            expect(page.locator('#departure-time-main')).to_have_text('')
+            self.assertEqual(errors,[])
+        finally: page.close()
+        overdue={**self.ready_status()}
+        overdue['safety']={**overdue['safety'],'safe_arrival_ts':(T+dt.timedelta(minutes=5)).isoformat()}
+        page,errors=self.open_page(overdue)
+        try:
+            expect(page.locator('#verdict-heading')).to_have_text('출발 권장 시각이 지났어요')
+            expect(page.locator('#verdict')).to_have_class(__import__('re').compile('is-overdue'))
+            self.assertEqual(errors,[])
+        finally: page.close()
+
     def test_mobile_decision_uses_safety_and_preserves_bus_settings(self):
         status={'last_poll':T.isoformat(),'current_veh_id':11,'predict_sec':1200,'location_no':4,
                 'collect_window':'16:00-22:00','poll_interval_sec':60,'safety':{
@@ -108,7 +152,7 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertLess(
                 page.locator('#verdict').evaluate('(e)=>e.getBoundingClientRect().top'),
                 page.locator('#hero-alarm-toggle').evaluate('(e)=>e.getBoundingClientRect().top'))
-            expect(page.locator('#departure-context')).to_contain_text('18:08')
+            expect(page.locator('#departure-time-main')).to_contain_text('18:08')
             page.locator('.hero-evidence summary').click()
             expect(page.locator('#safety-detail')).to_contain_text('보정 예상 18:18')
             page.clock.fast_forward(61000)
@@ -139,7 +183,7 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertIn('알림을 믿을 수 없습니다',page.locator('#alarm-next').inner_text())
             self.assertTrue(page.locator('#alarm-banner').is_hidden())
             self.assertIn('현재 위치 미확인',page.locator('#hero-detail').inner_text())
-            self.assertIn('최신 좌석 정보 필요',page.locator('#card-seat-sub').inner_text())
+            self.assertIn('최신 좌석 정보 필요',page.locator('#card-seat-sub').text_content())
             self.assertEqual(errors,[])
         finally:
             page.close()
@@ -175,6 +219,7 @@ class SafetyBrowserTests(unittest.TestCase):
         from playwright.sync_api import expect
         page,errors=self.open_page(self.ready_status())
         try:
+            page.locator('#prediction-details > summary').click()
             page.locator('.timeline-details summary').click()
             expect(page.locator('#journey-details')).to_contain_text('17:55')
             expect(page.locator('#journey-timeline')).to_contain_text('18:08')
@@ -223,6 +268,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#chart-note')).to_contain_text('공백')
             self.assertEqual(page.locator('#chart .line').count(),2)
             self.assertEqual(page.locator('#chart .corrected').count(),1)
+            page.locator('#prediction-details > summary').click()
             page.locator('#chart-remaining').click()
             expect(page.locator('#chart-note')).to_contain_text('당시 API 잔여시간')
             for width in [360,390,1280]:
@@ -279,6 +325,7 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#alarm-skip').click()
             expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
             expect(page.locator('#hero-detail')).to_contain_text('22')
+            page.locator('#prediction-details > summary').click()
             page.locator('.timeline-details summary').click()
             expect(page.locator('#journey-details')).to_contain_text('후속 알림 대상 차량 확인')
             expect(page.locator('#card-seat')).to_have_text('미제공')
@@ -301,6 +348,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#verdict-text')).to_contain_text('최신 정보 없음')
             expect(page.locator('#freshness')).to_contain_text('4분 전')
             expect(page.locator('#hero-detail')).to_contain_text('마지막 정상 확인 기준 차량 11')
+            page.locator('#prediction-details > summary').click()
             page.locator('.timeline-details summary').click()
             expect(page.locator('#journey-details')).to_contain_text('마지막 정상 정보에서 차량 확인')
             expect(page.locator('#journey-timeline')).not_to_contain_text('후속 알림 대상 차량 확인')
@@ -367,6 +415,7 @@ class SafetyBrowserTests(unittest.TestCase):
         history='ts_kst,vehId,first_seen_ts,est_arrival_ts,departure_reason\n2026-10-12T18:01:00+09:00,11,2026-10-12T17:45:00+09:00,2026-10-12T18:00:00+09:00,estimated_arrival\n'
         page,errors=self.open_page(self.ready_status(),history=history)
         try:
+            page.locator('#prediction-details > summary').click()
             page.locator('.history-panel > summary').click()
             expect(page.locator('#history-chart-note')).to_contain_text('1일 · 1운행')
             self.assertEqual(page.locator('#history-chart .dot').count(),1)
@@ -386,7 +435,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#verdict-text')).to_contain_text('1분 미만')
             page.clock.fast_forward(3000)
             expect(page.locator('#verdict-text')).to_contain_text('1분 미만 지남')
-            expect(page.locator('#verdict')).to_have_class('verdict warn')
+            expect(page.locator('#verdict')).to_have_class(__import__('re').compile(r'verdict warn.*is-overdue'))
             expect(page.locator('#journey-timeline')).to_contain_text('계산된 예정')
             self.assertEqual(errors,[])
         finally: page.close()
@@ -489,7 +538,7 @@ class SafetyBrowserTests(unittest.TestCase):
             page.clock.fast_forward(10001)
             expect(page.locator('#refresh')).to_be_enabled()
             expect(page.locator('#refresh-status')).to_contain_text('확인 실패')
-            expect(page.locator('#freshness')).to_contain_text('18:00 차량 확인')
+            expect(page.locator('#freshness')).to_contain_text('18:00 확인')
             self.assertEqual(page.evaluate('JSON.parse(localStorage.getItem("busDashboard.v1.lastGoodStatus")).last_poll'),T.isoformat())
             self.assertEqual(errors,[])
         finally: page.close()
@@ -565,6 +614,8 @@ class SafetyBrowserTests(unittest.TestCase):
         page,errors=self.open_page(self.ready_status(),history=history)
         try:
             page.locator('#open-settings').click();page.locator('#window-add').click()
+            page.locator('#settings-close').click()
+            page.locator('#prediction-details > summary').click()
             page.locator('.history-panel > summary').click();page.locator('.history-panel details summary').click()
             for width in [360,390,1280]:
                 for scheme in ['light','dark']:
@@ -572,7 +623,20 @@ class SafetyBrowserTests(unittest.TestCase):
                     page.emulate_media(color_scheme=scheme,reduced_motion='reduce')
                     page.evaluate('document.documentElement.style.zoom="2"; window.dispatchEvent(new Event("resize"))')
                     page.clock.fast_forward(200)
-                    self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'),(width,scheme))
+                    overflow=page.evaluate("""() => ({
+                        scrollWidth:document.documentElement.scrollWidth,
+                        innerWidth,
+                        widthNodes:[...document.querySelectorAll('html,body,body *')].filter(e=>e.scrollWidth>e.clientWidth+3)
+                            .slice(0,24).map(e=>({tag:e.tagName,id:e.id,cls:String(e.className?.baseVal||e.className||'').slice(0,35),
+                                scrollWidth:e.scrollWidth,clientWidth:e.clientWidth,
+                                x:Math.round(e.getBoundingClientRect().x),w:Math.round(e.getBoundingClientRect().width)})),
+                        offenders:[...document.querySelectorAll('body *')].filter(e=>{
+                            const r=e.getBoundingClientRect();
+                            return r.width && (r.right>innerWidth+1 || r.left<-1);
+                        }).slice(0,12).map(e=>({tag:e.tagName,id:e.id,cls:e.className?.baseVal||e.className,
+                            bounds:[Math.round(e.getBoundingClientRect().left),Math.round(e.getBoundingClientRect().right)]}))
+                    })""")
+                    self.assertFalse(overflow['scrollWidth']>overflow['innerWidth'],(width,scheme,overflow))
                     self.assertTrue(page.evaluate("""() => [...document.querySelectorAll('button,input')].filter(e=>e.getClientRects().length).every(e=>{
                         const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;
                     })"""))

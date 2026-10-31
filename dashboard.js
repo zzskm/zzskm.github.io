@@ -14,7 +14,7 @@
   let state = M.normalize(read('wht.state.v2'));
   let summary = null, config = null, range = 30, showPrediction = true, weightLoading = null, lastWeightAttempt = 0;
   let previousWork = null;
-  // Colors follow the OS light/dark preference only; the bus widget inherits them across its shadow boundary.
+  // Dashboard and embedded bus widget use the same light-only color scheme.
 
   // Bus notification state is initialized independently from the bus widget.
   const R = window.AlertRuntime;
@@ -246,61 +246,83 @@
       const css = source.querySelector('style').textContent.replace(/:root/g, ':host').replace(/\bbody\b/g, '.bus-body');
       const body = document.createElement('div');
       body.className = 'bus-body loading';
-      // Keep the original controls and IDs so the shared alarm controller works unchanged.
-      const details = document.createElement('details');
-      details.className = 'dashboard-bus-details';
-      const toggle = document.createElement('summary'); toggle.textContent = '버스 상세 · 도보·알림 설정'; details.append(toggle);
-      // The ringing bus-alert banner belongs to the dashboard document.
+      // The standalone page owns a native expandable diagnostics section and a settings drawer.
+      // Do not reparent either into a second closed details element.
       main.querySelector('#alarm-banner')?.remove();
-      let afterHero = false;
-      for (const child of [...main.children]) {
-        if (afterHero && child.id !== 'cards' && child.id !== 'error-card') details.append(child);
-        if (child.id === 'hero') afterHero = true;
-      }
-      main.append(details); body.append(main);
+      body.append(main);
       const styles = document.createElement('style');
       styles.textContent = css + `
-        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft); --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent); --on-brand:var(--dash-bg); --hero-from:var(--dash-soft); --hero-to:var(--dash-soft); --hero-sub:var(--dash-muted); color:var(--ink); }
-        .hero { color:var(--ink); }
-        /* OS permission and sound are shown once, in the dashboard header. */
-        #hero-alarm-perm, #hero-alarm-sound { display:none; }
-        .bus-body { padding:0; background:none; color:inherit; font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
-        main { max-width:none; } header { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; gap:8px; flex-wrap:wrap; }
-        header h1, header .detail-link { display:none; } header .muted { font-size:11px; } header #refresh-status { flex-basis:100%; margin:0; }
-        header #refresh { font-size:11px; min-height:32px; padding:5px 9px; }
-        .hero { border-radius:12px; padding:18px; box-shadow:none; }
-        .verdict { font-size:21px; padding:11px 12px; border-radius:8px; }
-        .departure-context { font-size:16px; margin:10px 0; }
-        .readiness { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; margin-top:8px; }
-        .readiness .alarm-state, .readiness p { margin:0; }
-        .readiness > .hero-time-label { flex-basis:100%; }
-        .hero-next { font-size:12px; }
-        .freshness, .hero-detail { font-size:12px; margin-top:8px; }
-        .hero button, .hero summary { min-height:44px; }
-        .hero .pill, .hero-settings { background:var(--surface); color:var(--ink); border-color:var(--line); }
-        .hero :focus-visible { outline-color:var(--accent); }
-        .hero-evidence { font-size:12px; } .hero-time-label { font-size:11px; }
-        .hero-evidence { margin-top:8px; }
-        .hero-evidence summary { display:flex; align-items:center; }
-        .hero-evidence summary::before { content:'▸'; margin-right:6px; }
-        .hero-evidence[open] summary::before { content:'▾'; }
-        .hero-evidence summary::-webkit-details-marker { display:none; }
-        .cards { gap:7px; } .card { border-radius:9px; padding:10px; } .card-value { font-size:18px; }
-        .cards { grid-template-columns:repeat(3,minmax(0,1fr)); }
-        .cards .next-card { grid-column:auto; }
-        .card-label, .card-sub { font-size:11px; }
-        .dashboard-bus-details { border-top:1px solid var(--line); margin-top:18px; padding-top:10px; }
-        .dashboard-bus-details > summary { cursor:pointer; padding:8px 0; font-size:12px; color:var(--muted); }
-        .dashboard-bus-details h2 { font-size:15px; } .dashboard-bus-details .panel { padding:12px; }
-        .alarm-banner { top:8px; } input { max-width:100%; } .clock-list { overflow-wrap:anywhere; }
-        @media(max-width:599px) { .card{padding:10px 7px} .card-value{font-size:16px} .hero-settings{font-size:12px} }
-        @media(max-width:380px) { .hero{padding:14px} .verdict{font-size:19px} }
+        /* The embedded bus card uses the standalone arrival-first hierarchy,
+           with a compact footprint and no system-dependent dark palette. */
+        :host {
+          color-scheme:light;
+          --bg:#ffffff; --surface:#ffffff; --surface-2:#f0f1f3;
+          --ink:#13161d; --muted:#5c626b; --line:#e2e4e7;
+          --brand:#1769aa; --on-brand:#ffffff;
+          color:var(--ink);
+        }
+        .bus-body { box-sizing:border-box; padding:0; background:transparent; color:var(--ink);
+          font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
+        .bus-body main { max-width:none; }
+        .route-header { margin:0 0 12px; }
+        .route-heading h1 { font-size:22px; }
+        .route-heading h1 strong { font-size:1.2em; }
+        .route-heading h1 span { font-size:12px; }
+        .route-subtitle { font-size:12px; margin:3px 0 9px; }
+        .route-header .detail-link { display:none; }
+        .route-live-row { padding:6px 0; gap:8px; }
+        .route-data-state { gap:4px 8px; }
+        .route-data-state .status-chip { font-size:12px; }
+        .route-data-state .freshness { font-size:11px; }
+        .route-header #refresh { margin:0; }
+        .hero { background:transparent; padding:0; }
+        .hero-times { padding-top:10px; margin-bottom:18px; }
+        .hero .arrival-label { font-size:12px; }
+        .arrival-main-time { font-size:clamp(54px,7vw,78px); }
+        .hero .eta-row { margin-top:10px; }
+        .hero .eta-num { font-size:30px; }
+        .hero .eta-unit,.hero .eta-stops { font-size:12px; }
+        .hero .arrival-priority-note { font-size:11px; }
+        .verdict { border-radius:16px; padding:18px; }
+        .decision-heading { font-size:clamp(20px,2.4vw,25px); }
+        .departure-time-main { font-size:17px; }
+        .verdict #verdict-text { margin-top:8px; font-size:14px; }
+        .verdict .departure-context { font-size:12px; margin-top:12px; padding-top:10px; }
+        .hero .arrival-next { margin-top:14px; padding:11px 0; font-size:13px; gap:8px; }
+        .hero .arrival-next strong { font-size:19px; }
+        .hero .arrival-next span:last-child { font-size:12px; }
+        .hero-detail,.decision-note { font-size:12px; }
+        .hero-actions { margin:6px 0 0; }
+        .hero-settings { font-size:12px; }
+        /* Global dashboard header already exposes OS permission and sound readiness. */
+        #hero-alarm-perm,#hero-alarm-sound,.readiness .hero-time-label { display:none; }
+        .readiness { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:10px 0 0; padding:8px 0; }
+        .readiness .hero-next { font-size:11px; margin:0; }
+        .readiness .alarm-state { margin:0; }
+        .readiness .pill { background:var(--surface-2); color:var(--ink); border-color:var(--line); font-size:11px; }
+        .hero-evidence summary,.prediction-details > summary { font-size:12px; }
+        #alarm:not([hidden]) { width:min(96vw,620px); }
+        @media(max-width:599px) {
+          .route-heading h1 { font-size:20px; }
+          .route-heading h1 span { font-size:11px; }
+          .arrival-main-time { font-size:clamp(56px,19vw,78px); }
+          .hero .eta-num { font-size:28px; }
+          .verdict { padding:16px; }
+          .decision-heading { font-size:21px; }
+        }
+        @media(max-width:359px) {
+          .route-heading h1 { font-size:18px; }
+          .route-settings span { display:none; }
+          .route-live-row { flex-wrap:wrap; }
+          .arrival-main-time { font-size:clamp(50px,18vw,65px); }
+          .hero .arrival-next { flex-wrap:wrap; }
+        }
       `;
       // Preserve document-level h1/main semantics in the containing dashboard.
       const content = document.createElement('div'); content.append(...main.childNodes); body.replaceChildren(content);
       const shadow = $('bus-widget').attachShadow({mode:'open'});
       shadow.append(styles, body);
-      window.BusApp.mount(shadow, {body,baseUrl:'bus-arrival/',manageTitle:false,pauseHiddenPaint:true,revealSettings:() => { details.open = true; }});
+      window.BusApp.mount(shadow, {body,baseUrl:'bus-arrival/',manageTitle:false,pauseHiddenPaint:true,revealSettings:() => {}});
       $('bus-widget').querySelector('p')?.remove();
     } catch (error) {
       $('bus-error').hidden = false;

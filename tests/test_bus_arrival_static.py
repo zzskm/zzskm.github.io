@@ -148,8 +148,10 @@ def test_bus_arrival_live_region_is_scoped_not_whole_hero():
 
 
 def test_bus_arrival_accessibility_basics():
-    assert 'name="color-scheme" content="light dark"' in HTML
-    assert "@media (prefers-color-scheme: dark)" in HTML
+    assert 'name="color-scheme" content="light"' in HTML
+    assert "color-scheme:light;" in HTML
+    assert "prefers-color-scheme:dark" not in HTML
+    assert "prefers-color-scheme: dark" not in HTML
     assert ":focus-visible { outline:2px solid var(--brand)" in HTML
     assert "font-variant-numeric:tabular-nums" in HTML
     assert 'aria-label="정류장까지 걸리는 도보 시간(분)"' in HTML
@@ -284,4 +286,18 @@ def test_bus_hero_arrival_first_uses_raw_api_time_not_safety_departure():
     assert 'available ? hhmm(view.apiAtMs) : "--:--"' in HTML
     assert 'view.correctedAtMs - now' not in HTML
     assert '더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요.' in HTML
-    assert '그다음 3100번 ' in HTML
+    assert 'id="arrival-next-time"' in HTML
+    assert 'id="arrival-next-remaining"' in HTML
+
+
+def test_v0_layout_priority_and_drawer_are_connected():
+    assert '<header class="route-header">' in HTML
+    assert HTML.index('id="arrival-main-time"') < HTML.index('id="verdict-heading"') < HTML.index('id="arrival-next"')
+    assert 'id="eta-stops"' in HTML
+    assert 'id="prediction-details"' in HTML
+    assert 'id="settings-backdrop"' in HTML
+    assert 'id="settings-close"' in HTML
+    assert 'role="dialog"' in HTML
+    assert 'function showSettings()' in HTML and 'function hideSettings()' in HTML
+    assert 'BD.decisionPresentation(view)' in HTML
+    assert 'id="clock-panel"' not in HTML

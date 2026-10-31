@@ -101,7 +101,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
-    def test_mobile_dark_theme_and_single_measurement_chart(self):
+    def test_entire_dashboard_stays_light_under_dark_os(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(width=360)
         expect(page.locator('#weight-chart svg')).to_be_visible()
@@ -111,11 +111,31 @@ class DashboardBrowserTests(unittest.TestCase):
         if artifact:
             Path(artifact).mkdir(parents=True,exist_ok=True)
             page.screenshot(path=str(Path(artifact)/'dashboard-mobile.png'),full_page=True)
-        # No manual theme switch: the dashboard and bus widget follow the OS color scheme.
+        # All three panels and the embedded bus stay light regardless of OS preference.
         self.assertEqual(page.locator('#theme').count(),0)
+        light_palette=page.evaluate("""() => ({
+            scheme:getComputedStyle(document.documentElement).colorScheme,
+            ink:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
+            background:getComputedStyle(document.body).backgroundColor,
+            panels:['#work-panel','#bus-panel','#weight-panel'].map(sel=>
+                getComputedStyle(document.querySelector(sel)).backgroundColor)
+        })""")
         page.emulate_media(color_scheme='dark')
+        dark_os_palette=page.evaluate("""() => ({
+            scheme:getComputedStyle(document.documentElement).colorScheme,
+            ink:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
+            background:getComputedStyle(document.body).backgroundColor,
+            panels:['#work-panel','#bus-panel','#weight-panel'].map(sel=>
+                getComputedStyle(document.querySelector(sel)).backgroundColor)
+        })""")
+        self.assertEqual(dark_os_palette,light_palette)
+        self.assertEqual(light_palette['scheme'],'light')
+        self.assertEqual(light_palette['ink'],'#24352e')
+        self.assertEqual(light_palette['panels'][1],'rgb(255, 255, 255)')
         bus_ink=page.locator('#hero').evaluate('e=>getComputedStyle(e.getRootNode().host).getPropertyValue("--ink").trim()')
-        self.assertEqual(bus_ink,'#edf2e9')
+        self.assertEqual(bus_ink,'#13161d')
+        self.assertEqual(page.locator('#arrival-main-time').inner_text(),'18:20')
+        self.assertEqual(page.locator('#departure-time-main').inner_text(),'출발 18:08')
         page.locator('[data-days="60"]').click()
         expect(page.locator('[data-days="60"]')).to_have_attribute('aria-pressed','true')
         self.assertEqual(errors,[])
@@ -212,7 +232,11 @@ class DashboardBrowserTests(unittest.TestCase):
         source=json.loads((ROOT/'garmin-weight/data/summary.json').read_text(encoding='utf-8'))
         predicted=source.get('predictions',{}).get('threeMonthWeightKg')
         enabled=source.get('modelDiagnostics',{}).get('trend',{}).get('predictionEnabled') is not False
-        expect(page.locator('#weight-quarter')).to_have_text(f'{predicted:.1f} kg' if enabled and isinstance(predicted,(int,float)) else '예측 보류')
+        # JavaScript Intl.NumberFormat rounds decimal ties half-up, unlike Python's ties-to-even.
+        from decimal import Decimal, ROUND_HALF_UP
+        expected=(f'{Decimal(str(predicted)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)} kg'
+                  if enabled and isinstance(predicted,(int,float)) else '예측 보류')
+        expect(page.locator('#weight-quarter')).to_have_text(expected)
         self.assertEqual(page.locator('.chart-trend').count(),1)
         artifact=os.getenv('DASHBOARD_SCREENSHOT_DIR')
         if artifact:
