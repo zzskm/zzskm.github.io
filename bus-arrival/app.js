@@ -276,8 +276,10 @@ window.BusApp = { mount(root = document, options = {}) {
     const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;
     const showNextArrival = available && !view.selectedNext && nextSec != null && nextSec > 0;
     $("#arrival-next").hidden = !showNextArrival;
-    if (showNextArrival) setText($("#arrival-next"),
-      "그다음 3100번 " + hhmm(decisionSnap.next.arrivalAtMs) + " · " + etaPlain(etaParts(nextSec)) + " (API 예측)");
+    if (showNextArrival) {
+      setText($("#arrival-next-time"), hhmm(decisionSnap.next.arrivalAtMs));
+      setText($("#arrival-next-remaining"), etaPlain(etaParts(nextSec)));
+    }
     setText($("#card-next"), nextSec != null && nextSec > 0 ? etaPlain(etaParts(nextSec)) : "미확인");
     setText($("#card-next-sub"), "API 예측 · 후속 차량");
     $("#cards").hidden = !(vehOk && !off);
