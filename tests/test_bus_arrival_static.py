@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "bus-arrival" / "index.html").read_text(encoding="utf-8")
 HTML += (ROOT / "bus-arrival" / "app.js").read_text(encoding="utf-8")
 HTML += (ROOT / "bus-arrival" / "alert-runtime.js").read_text(encoding="utf-8")
-HTML += (ROOT / "bus-arrival" / "clock-view.js").read_text(encoding="utf-8")
 
 
 def test_bus_arrival_eta_leads_the_hero():
@@ -239,31 +238,16 @@ def test_bus_arrival_alarm_windows_limit_which_buses_alert():
     assert "시간대 제한 없음" in HTML                  # 시간대를 모두 지우면 모든 버스에 알림
 
 
-def test_bus_arrival_custom_clock_alarms_and_timers_replace_the_extension():
-    """참고한 확장 프로그램처럼 시각 알람(요일 반복/한 번)과 타이머를 등록할 수 있다."""
-    for element in ("clock-panel", "clock-form", "clock-time", "clock-label", "clock-days", "clock-weekdays", "clock-bus",
-                    "clock-list", "timer-presets", "timer-form", "timer-custom", "timer-label", "timer-list", "clock-notice"):
-        assert f'id="{element}"' in HTML
-    assert '<input id="clock-time" type="time"' in HTML
-    assert '<div id="clock-view"></div>' in HTML          # 버스 자료 없이 그리는 공용 화면
-    assert "clocks:'busAlarm.v1.clocks', timers:'busAlarm.v1.timers'" in HTML
-    # 버스 알림과 같은 잠금 안에서 판정해 여러 탭에서도 한 번만 울린다
-    assert "BA.evaluateClocks({" in HTML and "BA.evaluateTimers({" in HTML
-    assert "navigator.locks.request('busAlarm:eval'" in HTML
-    assert 'R.addEvaluator("bus", evaluateBus)' in HTML
-    assert "BA.rearmClock(c,Date.now())" in HTML
+def test_generic_clock_and_timer_feature_is_removed():
+    assert 'id="clock-panel"' not in HTML
+    assert 'id="clock-view"' not in HTML
+    assert 'src="clock-view.js"' not in HTML
+    assert "ClockView.mount" not in HTML
+    assert "BA.evaluateClocks(" not in HTML
+    assert "BA.evaluateTimers(" not in HTML
+    assert "시각 알람·타이머" not in HTML
+    assert "R.addEvaluator(\"bus\", evaluateBus)" in HTML
     assert "function showRing(msg,tag,silent=false,source='버스')" in HTML
-    assert "a.type==='clock_missed','시각 알람'" in HTML   # 놓친 알람은 소리 없이 알린다
-    assert "BA.busHint(safetySnapshot(cache.status, now), now)" in HTML   # 알람 메시지에 다음 버스 정보를 덧붙인다
-
-
-def test_bus_arrival_clock_alarms_default_to_one_shot_with_explicit_repeat():
-    """새 시각 알람은 '한 번만'으로 시작하고, 평일·매일·요일 반복은 명시적으로 고른다."""
-    assert "customDays=false;pickDays([]);" in HTML
-    for element in ("clock-once", "clock-weekdays", "clock-everyday", "clock-custom-days"):
-        assert f'id="{element}"' in HTML
-    assert "['clock-weekdays',[1,2,3,4,5]],['clock-everyday',[0,1,2,3,4,5,6]]" in HTML
-    assert "반복할 요일을 선택하거나 한 번만을 선택해 주세요." in HTML
 
 
 def test_bus_arrival_shows_same_weekday_arrivals_from_previous_weeks():
@@ -276,7 +260,7 @@ def test_bus_arrival_shows_same_weekday_arrivals_from_previous_weeks():
     assert "renderHistory();" in HTML
 
 def test_bus_ui_progressive_disclosure_and_timeline_order():
-    for element in ('journey-timeline','alarm-settings','settings-summary','clock-create','timer-create','open-settings'):
+    for element in ('journey-timeline','alarm-settings','settings-summary','open-settings'):
         assert f'id="{element}"' in HTML
     assert HTML.index('id="hero"') < HTML.index('id="journey-timeline"') < HTML.index('id="cards"') < HTML.index('id="alarm"')
     assert '<script src="dashboard.js"></script>' in HTML
