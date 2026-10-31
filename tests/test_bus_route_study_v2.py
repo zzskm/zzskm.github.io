@@ -70,6 +70,20 @@ class RouteStudyV2Tests(unittest.TestCase):
         self.assertEqual(route['nonmatched'], 0)
         self.assertEqual(route['censored'], 1)
 
+    def test_last_poll_before_outcome_horizon_is_censored(self):
+        a, b, _ = sample(1, arrival=None, last=24)
+        r = study.summarize(a, b, [])['candidate_routes'][0]
+        self.assertEqual(r['censored'], 1)
+        self.assertEqual(r['nonmatched'], 0)
+
+    def test_unreliable_disappearance_is_not_negative(self):
+        a, b, _ = sample(1, arrival=None)
+        uncertain = [{'departure_reason': 'vanished',
+                      'est_arrival_ts': at(1, 15).isoformat()}]
+        r = study.summarize(a, b, uncertain)['candidate_routes'][0]
+        self.assertEqual(r['censored'], 1)
+        self.assertEqual(r['nonmatched'], 0)
+
     def test_interval_overlapping_boundary_is_ambiguous(self):
         t = at(1, 5)
         self.assertIsNone(study.label_target({'2026-10-01': [(t - dt.timedelta(minutes=1), t)]},
