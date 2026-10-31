@@ -12,7 +12,7 @@ def test_bus_arrival_verdict_leads_the_hero():
     """출발/대기 판정이 ETA보다 위에 오고, 색 외에 글리프로도 구분된다."""
     assert 'id="verdict"' in HTML
     assert 'id="verdict-glyph"' in HTML
-    assert HTML.index('id="verdict"') < HTML.index('id="eta-num"')
+    assert HTML.index('id="arrival-main-time"') < HTML.index('id="verdict"')
     for state in ("verdict.go", "verdict.wait", "verdict.warn", "verdict.danger"):
         assert state in HTML
 
@@ -21,7 +21,8 @@ def test_bus_arrival_eta_splits_number_and_unit():
     """긴 한글 문장을 거대 폰트로 렌더하지 않고 숫자/단위를 분리한다."""
     assert 'id="eta-num"' in HTML
     assert 'id="eta-unit"' in HTML
-    assert ".eta-num { font-size:22px; }" in HTML
+    assert ".hero-times .eta-num { font-size:clamp(25px,5.6vw,34px); }" in HTML
+    assert "font-size:clamp(45px,11vw,74px)" in HTML
     assert "function etaParts(sec)" in HTML
 
 
@@ -289,3 +290,14 @@ def test_bus_ui_timeline_and_browser_events_do_not_claim_delivery():
     assert 'id="alarm-undo-skip"' in HTML
     assert '같은 요일 운행 시각 비교' in HTML
     assert '점 하나가 운행 하나입니다.' in HTML
+
+
+def test_bus_hero_arrival_first_uses_raw_api_time_not_safety_departure():
+    assert 'id="arrival-main-time"' in HTML
+    assert 'id="arrival-next"' in HTML
+    assert 'view.apiAtMs - now' in HTML
+    assert 'hhmm(view.apiAtMs)' in HTML
+    assert 'available ? hhmm(view.apiAtMs) : "--:--"' in HTML
+    assert 'view.correctedAtMs - now' not in HTML
+    assert '도착 시각은 달라질 수 있습니다.' in HTML
+    assert '그다음 3100번 ' in HTML
