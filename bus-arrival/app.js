@@ -287,7 +287,7 @@ window.BusApp = { mount(root = document, options = {}) {
       setText($("#card-seat-sub"), "최신 좌석 정보 필요"); setText($("#card-stops-sub"), "최신 위치 정보 필요");
     }
     else renderCards();
-    const heroAlarm = !alarmCfg || !alarmCfg.enabled ? "버스 알림 꺼짐 · 시각 알람·타이머는 따로 동작" : view.state === "skipped"
+    const heroAlarm = !alarmCfg || !alarmCfg.enabled ? "버스 도착 알림 꺼짐" : view.state === "skipped"
       ? "제외한 차량 알림 없음 · 다음 차량 확인 중" : alarmView && alarmView.pendingUncertain
       ? "예약 경고 유지 · 마지막 확인 " + (view.ageSec == null ? "시각 불명" : Math.floor(view.ageSec/60) + "분 전")
       : alarmView && alarmView.nextFireAtMs
@@ -485,7 +485,7 @@ window.BusApp = { mount(root = document, options = {}) {
   let alarmCfg = BA ? BA.sanitizeConfig(store.get(CFG_KEY)) : null;
   let alarmPrev = store.get("busAlarm.v2.pending"), alarmView = null, alarmOff = false, alarmNotice = "";
   let chipsSig = "", windowsSig = "";
-  // 소리·OS 알림·배너와 시각 알람/타이머는 문서마다 하나인 공통 실행부(alert-runtime.js)가 맡는다
+  // 버스 알림의 소리·OS 알림·배너는 문서 공통 실행부가 담당한다.
   const R = window.AlertRuntime;
 
   function saveCfg(rearm) {
@@ -497,7 +497,7 @@ window.BusApp = { mount(root = document, options = {}) {
 
   const ensureAudio = () => R.ensureAudio();
   const requestPermission = () => R.requestPermission();
-  // 버스 알림도 시각 알람/타이머와 같은 배너·소리·OS 알림 대기열로 울린다 (silent 이면 소리 없이 알리기만)
+  // 버스 알림은 배너·소리·OS 알림 대기열로 울린다.
   const showRing = (msg, tag, silent) => R.showRing(msg, tag, silent, "버스");
   function ring(fire, tag) { showRing(BA.formatFireMessage(fire), tag); }
   function handleAlarmAction(action, snap, now) {
@@ -516,7 +516,7 @@ window.BusApp = { mount(root = document, options = {}) {
     }
   }
 
-  // 공통 실행부가 여러 탭 잠금 안에서 버스 → 시각 알람 → 타이머 순으로 부른다
+  // 여러 탭에서 중복 실행하지 않도록 잠금 안에서 버스만 평가한다.
   function evaluateBus(now) {
     const { st, win } = statusInfo();
     const snap = BA.assessStatus(st, now, { maxAgeMin:3, safetyMode:true });
@@ -540,7 +540,7 @@ window.BusApp = { mount(root = document, options = {}) {
   function runAlarm() { if (BA && alarmCfg) R.evaluate(); }
 
   function alarmNextText() {
-    if (!alarmCfg.enabled) return { text:"버스 알림 꺼짐 · 시각 알람·타이머는 따로 동작합니다.", problem:false };
+    if (!alarmCfg.enabled) return { text:"버스 도착 알림 꺼짐", problem:false };
     const v = alarmView;
     if (!v || v.state === "off") return { text:"알림 상태를 계산하는 중입니다.", problem:false };
     if (targetExcluded(v.target)) return {text:"이번 차량 제외됨 · 버스를 기다리는 중",problem:false};
@@ -623,7 +623,7 @@ window.BusApp = { mount(root = document, options = {}) {
   const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0], DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
   const dayButtons = (days) => DAY_ORDER.map(d => "<button type=\"button\" class=\"day\" data-day=\"" + d + "\" aria-pressed=\""
     + days.includes(d) + "\">" + DAY_NAMES[d] + "</button>").join("");
-  const anyAlarmActive = () => Boolean((alarmCfg && alarmCfg.enabled) || R.clocks().some(c => c.enabled) || R.timers().length);
+  const anyAlarmActive = () => Boolean(alarmCfg && alarmCfg.enabled);
   const saveIfChanged = (key, before, after) => { if (JSON.stringify(before) !== JSON.stringify(after)) store.set(key, after); };
   function renderWindows() {
     const sig = JSON.stringify(alarmCfg.windows);
@@ -825,7 +825,6 @@ window.BusApp = { mount(root = document, options = {}) {
     });
     initWindows();
     R.addEvaluator("bus", evaluateBus);
-    R.setBusHint(now => BA.busHint(safetySnapshot(cache.status, now), now));
     // 권한·소리·대기열 변화와 창 포커스는 공통 실행부가 알려 준다
     R.subscribe(() => queueRender());
     queueRender();
