@@ -152,7 +152,7 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertLess(
                 page.locator('#verdict').evaluate('(e)=>e.getBoundingClientRect().top'),
                 page.locator('#hero-alarm-toggle').evaluate('(e)=>e.getBoundingClientRect().top'))
-            expect(page.locator('#departure-context')).to_contain_text('18:08')
+            expect(page.locator('#departure-time-main')).to_contain_text('18:08')
             page.locator('.hero-evidence summary').click()
             expect(page.locator('#safety-detail')).to_contain_text('보정 예상 18:18')
             page.clock.fast_forward(61000)
@@ -435,7 +435,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#verdict-text')).to_contain_text('1분 미만')
             page.clock.fast_forward(3000)
             expect(page.locator('#verdict-text')).to_contain_text('1분 미만 지남')
-            expect(page.locator('#verdict')).to_have_class('verdict warn')
+            expect(page.locator('#verdict')).to_have_class(__import__('re').compile(r'verdict warn.*is-overdue'))
             expect(page.locator('#journey-timeline')).to_contain_text('계산된 예정')
             self.assertEqual(errors,[])
         finally: page.close()
