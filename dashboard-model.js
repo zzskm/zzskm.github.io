@@ -57,7 +57,12 @@
     const cutoff = Date.parse(lastDate) - (days - 1) * 86400000;
     const trend = dated(summary?.series?.ewma).filter(p => Number.isFinite(p.valueKg) && Date.parse(p.date) >= cutoff && p.date <= lastDate);
     const enabled = summary?.modelDiagnostics?.trend?.predictionEnabled !== false;
-    const prediction = enabled && showPrediction ? dated(summary?.series?.prediction).filter(p => Number.isFinite(p.valueKg) && p.date >= (actual.at(-1)?.date || lastDate || '')) : [];
+    // Visualize only four weeks (one third of the published 12-week forecast).
+    // The complete three-month forecast remains available to the summary cards.
+    const forecastEnd = Date.parse(lastDate) + 28 * 86400000;
+    const prediction = enabled && showPrediction ? dated(summary?.series?.prediction).filter(p =>
+      Number.isFinite(p.valueKg) && p.date >= (actual.at(-1)?.date || lastDate || '') &&
+      Date.parse(p.date) <= forecastEnd) : [];
     const central = new Map(prediction.map(p => [p.date,p.valueKg]));
     // Keep the original model's 80% band aligned with its published prediction.
     const band = dated(summary?.predictionCI?.series).filter(p => central.has(p.date) &&

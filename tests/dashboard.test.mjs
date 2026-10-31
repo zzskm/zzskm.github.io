@@ -24,6 +24,31 @@ test('weight chart shares one history window, preserves forecast values and alig
   assert.deepEqual(M.weightChart(null).actual,[]);
 });
 
+test('weight chart shows only the first 4 of 12 forecast weeks without changing published predictions', () => {
+  const s = {
+    series: {
+      daily:[{date:'2026-10-31',valueKg:84}],
+      prediction:[
+        {date:'2026-10-31',valueKg:84},
+        {date:'2026-11-07',valueKg:83.8},
+        {date:'2026-11-28',valueKg:83.2},
+        {date:'2026-12-05',valueKg:83},
+        {date:'2027-01-23',valueKg:82}
+      ]
+    },
+    predictionCI:{series:[
+      {date:'2026-11-28',central:83.2,lower80:82.2,upper80:84.2},
+      {date:'2026-12-05',central:83,lower80:82,upper80:84}
+    ]},
+    predictions:{threeMonthWeightKg:82}
+  };
+  const chart = M.weightChart(s,30,true);
+  assert.deepEqual(chart.prediction.map(p => p.date),['2026-10-31','2026-11-07','2026-11-28']);
+  assert.deepEqual(chart.band.map(p => p.date),['2026-11-28']);
+  assert.equal(s.predictions.threeMonthWeightKg,82);
+  assert.deepEqual(M.weightChart(s,30,false).prediction,[]);
+});
+
 test('weight data rejects malformed dates, missing values and invalid series without losing valid points', () => {
   const s = {series:{daily:[null,{date:'2026-10-28',valueKg:84},{date:'2026-10-01',valueKg:86},{date:'2026-10-29',valueKg:null},{date:'2026-10-29<script>',valueKg:90}],ewma:{},prediction:[null]}};
   assert.deepEqual(M.points(s).map(p => p.valueKg),[86,84]);
