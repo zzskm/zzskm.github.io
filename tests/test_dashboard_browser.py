@@ -63,10 +63,15 @@ class DashboardBrowserTests(unittest.TestCase):
             'rolling':{'last7StepsAvg':7359,'last7ExerciseMinutes':190,'lossRateDetail':{'blended':-0.09},'exerciseTrend':{'deltaPct':0.026}},
             'predictions':{'oneMonthWeightKg':84.34,'threeMonthWeightKg':85.07},
             'modelDiagnostics':{'confidence':{'level':'low','reasons':['최근 측정률이 낮음']},'trend':{'predictionEnabled':True}},
-            'predictionCI':{'series':[{'date':'2026-11-26','central':84.34,'lower80':83.26,'upper80':85.42},{'date':'2027-01-21','central':85.07,'lower80':83.2,'upper80':86.9}]},
+            'predictionCI':{'series':[{'date':'2026-11-04','central':84.05,'lower80':83.5,'upper80':84.6},
+                {'date':'2026-11-25','central':84.3,'lower80':83.3,'upper80':85.3},
+                {'date':'2026-11-26','central':84.34,'lower80':83.26,'upper80':85.42},
+                {'date':'2027-01-21','central':85.07,'lower80':83.2,'upper80':86.9}]},
             'series':{'daily':[{'date':'2026-10-01','valueKg':84.8},{'date':'2026-10-14','valueKg':None},{'date':'2026-10-28','valueKg':84.3}],
                 'ewma':[{'date':'2026-10-01','valueKg':84.7},{'date':'2026-10-28','valueKg':83.98}],
-                'prediction':[{'date':'2026-10-29','valueKg':83.98},{'date':'2026-11-26','valueKg':84.34},{'date':'2027-01-21','valueKg':85.07}]}}))
+                'prediction':[{'date':'2026-10-29','valueKg':83.98},{'date':'2026-11-04','valueKg':84.05},
+                    {'date':'2026-11-25','valueKg':84.3},{'date':'2026-11-26','valueKg':84.34},
+                    {'date':'2027-01-21','valueKg':85.07}]}}))
         page.route('**/garmin-weight/config.json',lambda r:r.fulfill(json={'targetWeightKg':78}))
         if fail_weight: page.route('**/garmin-weight/data/summary.json',lambda r:r.fulfill(status=503,body='unavailable'))
         if fail_bus: page.route('**/bus-arrival/index.html',lambda r:r.fulfill(status=503,body='unavailable'))
@@ -99,6 +104,20 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(page.locator('#clock-card')).to_have_count(0)
         expect(page.locator('#clock-view')).to_have_count(0)
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
+        self.assertEqual(errors,[])
+
+    def test_weight_chart_forecast_window_is_four_weeks(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page()
+        expect(page.locator('#chart-caption')).to_have_text('과거 30일 · 향후 4주 예측')
+        expect(page.locator('#weight-quarter')).to_have_text('85.1 kg')
+        # The published three-month summary remains; only the visualized points are trimmed.
+        self.assertIn('2026-11-25',page.locator('#weight-chart').get_attribute('aria-label'))
+        self.assertNotIn('2026-11-26',page.locator('#weight-chart').get_attribute('aria-label'))
+        self.assertNotIn('2027-01-21',page.locator('#weight-chart').get_attribute('aria-label'))
+        expect(page.locator('.chart-band')).to_have_count(1)
+        page.locator('[data-days="60"]').click()
+        expect(page.locator('#chart-caption')).to_have_text('과거 60일 · 향후 4주 예측')
         self.assertEqual(errors,[])
 
     def test_entire_dashboard_stays_light_under_dark_os(self):
