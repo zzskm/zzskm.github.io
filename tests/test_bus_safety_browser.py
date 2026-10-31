@@ -60,7 +60,7 @@ class SafetyBrowserTests(unittest.TestCase):
         page.wait_for_function('!document.body.classList.contains("loading")')
         return page, errors
 
-    def test_mobile_decision_uses_safety_and_preserves_settings_and_clock_timer_ui(self):
+    def test_mobile_decision_uses_safety_and_preserves_bus_settings(self):
         status={'last_poll':T.isoformat(),'current_veh_id':11,'predict_sec':1200,'location_no':4,
                 'collect_window':'16:00-22:00','poll_interval_sec':60,'safety':{
                     'observation_ts':T.isoformat(),'api_arrival_ts':(T+dt.timedelta(minutes=20)).isoformat(),
@@ -85,8 +85,8 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#safety-margin').dispatch_event('change')
             expect(page.locator('#verdict-text')).to_contain_text('2분')
             self.assertEqual(page.evaluate('localStorage.getItem("busWalkMinutes")'),'10')
-            self.assertEqual(page.locator('#clock-once').count(),1)
-            self.assertEqual(page.locator('#timer-custom').count(),1)
+            self.assertEqual(page.locator('#clock-panel').count(),0)
+            self.assertEqual(page.locator('#alarm-settings').count(),1)
             self.assertFalse(page.evaluate('document.documentElement.scrollWidth > window.innerWidth'))
             page.screenshot(path='/tmp/bus-ui-mobile.png',full_page=True)
             self.assertEqual(errors,[])
@@ -248,26 +248,25 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertEqual(errors,[])
         finally: page.close()
 
-    def test_clock_and_timer_forms_work_when_collapsed(self):
+    def test_legacy_general_alarm_data_no_longer_fires(self):
         from playwright.sync_api import expect
-        page,errors=self.open_page(self.ready_status())
+        def setup(page):
+            page.add_init_script("""() => {
+                localStorage.setItem('busAlarm.v1.clocks', JSON.stringify([{
+                    id:'old-clock',time:'18:00',date:'2026-10-19',
+                    days:[],enabled:true,since:1,label:'기존 시각 알람'
+                }]));
+                localStorage.setItem('busAlarm.v1.timers', JSON.stringify([{
+                    id:'old-timer',endsAtMs:Date.now()-1000,minutes:1,label:'기존 타이머'
+                }]));
+            }""")
+        page,errors=self.open_page(self.ready_status(),setup=setup)
         try:
-            page.locator('#clock-create summary').click()
-            page.locator('#clock-time').fill('19:00')
-            page.locator('#clock-label').fill('퇴근 정리')
-            page.locator('#clock-form button[type="submit"]').click()
-            page.locator('#clock-create summary').click()
-            expect(page.locator('#clock-list')).to_contain_text('19:00')
-            page.locator('#timer-create summary').click()
-            page.locator('#timer-custom').fill('1')
-            page.locator('#timer-label').fill('준비')
-            page.locator('#timer-form button[type="submit"]').click()
-            page.locator('#timer-create summary').click()
-            expect(page.locator('#timer-list')).to_contain_text('준비')
-            page.clock.fast_forward(60000)
-            expect(page.locator('#alarm-banner-text')).to_contain_text('준비')
-            page.locator('#alarm-ack').click()
+            expect(page.locator('#clock-panel')).to_have_count(0)
             expect(page.locator('#alarm-banner')).to_be_hidden()
+            page.clock.fast_forward(3000)
+            expect(page.locator('#alarm-banner')).to_be_hidden()
+            expect(page.locator('#verdict-text')).to_contain_text('8분')
             self.assertEqual(errors,[])
         finally: page.close()
 
@@ -560,37 +559,12 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertEqual(errors,[])
         finally: page.close()
 
-    def test_clock_toggle_and_delete_and_timer_cancel_preserve_keyboard_focus(self):
-        from playwright.sync_api import expect
-        page,errors=self.open_page(self.ready_status())
-        try:
-            page.locator('#clock-create summary').click()
-            page.locator('#clock-time').fill('19:00')
-            page.locator('#clock-label').fill('퇴근')
-            page.locator('#clock-form button[type=submit]').click()
-            toggle=page.locator('#clock-list [data-toggle]')
-            toggle.focus();page.evaluate('window.savedToggle=document.activeElement')
-            toggle.press('Space')
-            expect(toggle).to_have_attribute('aria-checked','false')
-            self.assertTrue(page.evaluate('savedToggle===document.activeElement'))
-            page.locator('#clock-list [data-del]').click()
-            expect(page.locator('#clock-undo')).to_be_focused()     # 삭제 직후 다음 조작은 되돌리기
-            page.keyboard.press('Enter')
-            expect(page.locator('#clock-list li[data-id]')).to_have_count(1)
-            expect(page.locator('#clock-list')).to_contain_text('퇴근')
-            page.locator('#timer-presets [data-min="5"]').click()
-            page.locator('#timer-list [data-cancel]').click()
-            expect(page.locator('#timer-presets [data-min="5"]')).to_be_focused()
-            self.assertEqual(errors,[])
-        finally: page.close()
-
     def test_all_forms_reflow_at_two_hundred_percent_without_hiding_controls(self):
         from playwright.sync_api import expect
         history='ts_kst,vehId,first_seen_ts,est_arrival_ts,departure_reason\n2026-10-12T18:01:00+09:00,11,2026-10-12T17:45:00+09:00,2026-10-12T18:00:00+09:00,estimated_arrival\n'
         page,errors=self.open_page(self.ready_status(),history=history)
         try:
             page.locator('#open-settings').click();page.locator('#window-add').click()
-            page.locator('#clock-create summary').click();page.locator('#timer-create summary').click()
             page.locator('.history-panel > summary').click();page.locator('.history-panel details summary').click()
             for width in [360,390,1280]:
                 for scheme in ['light','dark']:
@@ -638,22 +612,21 @@ class SafetyBrowserTests(unittest.TestCase):
         finally: page.close()
 
 
-    def test_tick_preserves_chart_and_live_text_and_form_selection(self):
+    def test_tick_preserves_chart_and_live_text_and_bus_setting_focus(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(self.ready_status())
         try:
             expect(page.locator('#chart .dot')).to_have_count(1)
-            page.locator('#clock-create summary').click()
-            text=page.locator('#clock-label');text.fill('퇴근 버스 알람');text.focus()
+            page.locator('#open-settings').click()
+            value=page.locator('#walk');value.focus()
             page.evaluate("""() => {
-                const el=document.querySelector('#clock-label');el.setSelectionRange(2,5);
-                window.chartNode=document.querySelector('#chart svg');window.liveText=document.querySelector('#sr-live').textContent;
+                window.chartNode=document.querySelector('#chart svg');
+                window.liveText=document.querySelector('#sr-live').textContent;
             }""")
             page.clock.fast_forward(5000)
             self.assertTrue(page.evaluate("chartNode===document.querySelector('#chart svg')"))
             self.assertTrue(page.evaluate("liveText===document.querySelector('#sr-live').textContent"))
-            self.assertEqual(text.evaluate('e=>[e.selectionStart,e.selectionEnd]'),[2,5])
-            expect(text).to_be_focused()
+            expect(value).to_be_focused()
             self.assertEqual(errors,[])
         finally: page.close()
 
