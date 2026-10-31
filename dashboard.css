@@ -141,3 +141,42 @@ input { font-size: 16px; background: var(--surface); }
   html { scroll-behavior: auto; }
   button:active { transform: none; }
 }
+
+/* The bus tile adopts the arrival-first v0 design and stays light even in OS dark mode.
+   Other dashboard sections retain their own appearance. */
+.bus-panel {
+  color-scheme:light;
+  --bus-ink:#13161d;
+  --bus-muted:#5c626b;
+  --bus-line:#e2e4e7;
+  background:#ffffff;
+  color:var(--bus-ink);
+  border-color:var(--bus-line);
+}
+.bus-panel .panel-heading {
+  border-bottom-color:var(--bus-line);
+  margin-bottom:12px;
+  padding-bottom:12px;
+}
+.bus-panel .panel-heading h2 { font-size:15px; font-weight:700; color:var(--bus-ink); }
+.bus-panel .section-index,.bus-panel .text-link { color:var(--bus-muted); }
+.bus-panel .text-link {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:44px;
+  padding:7px 8px;
+  border-radius:9px;
+  flex-shrink:0;
+}
+.bus-panel .text-link:hover,.bus-panel .text-link:focus-visible { background:#f0f1f3; color:var(--bus-ink); }
+.bus-panel #bus-error .feedback { color:#9e3329; }
+.bus-panel #bus-retry { color:var(--bus-ink); border-color:var(--bus-line); background:#f0f1f3; }
+.bus-panel #bus-widget { min-width:0; }
+@media(max-width:599px) {
+  .bus-panel { padding:20px 18px; }
+  .bus-panel .panel-heading { margin-bottom:10px; }
+}
+@media(max-width:359px) {
+  .bus-panel { padding:16px 12px; }
+}
