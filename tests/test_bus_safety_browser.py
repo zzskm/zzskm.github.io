@@ -183,7 +183,7 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertIn('알림을 믿을 수 없습니다',page.locator('#alarm-next').inner_text())
             self.assertTrue(page.locator('#alarm-banner').is_hidden())
             self.assertIn('현재 위치 미확인',page.locator('#hero-detail').inner_text())
-            self.assertIn('최신 좌석 정보 필요',page.locator('#card-seat-sub').inner_text())
+            self.assertIn('최신 좌석 정보 필요',page.locator('#card-seat-sub').text_content())
             self.assertEqual(errors,[])
         finally:
             page.close()
