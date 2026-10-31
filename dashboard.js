@@ -14,7 +14,7 @@
   let state = M.normalize(read('wht.state.v2'));
   let summary = null, config = null, range = 30, showPrediction = true, weightLoading = null, lastWeightAttempt = 0;
   let previousWork = null;
-  // The dashboard follows the OS theme. Its embedded bus panel intentionally stays light.
+  // Dashboard and embedded bus widget use the same light-only color scheme.
 
   // Bus notification state is initialized independently from the bus widget.
   const R = window.AlertRuntime;
