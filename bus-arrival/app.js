@@ -1009,6 +1009,10 @@ window.BusApp = { mount(root = document, options = {}) {
     try { await load(); } finally { refreshButton.disabled = false; refreshButton.textContent = "새로고침"; }
   });
 
+  // Hidden charts have no measurable width. Repaint when the advanced panel becomes visible.
+  $("#prediction-details").addEventListener("toggle", () => {
+    if ($("#prediction-details").open) { historySig=""; queueRender(true); }
+  });
   let resizeTimer = null;
   window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { historySig=""; queueRender(true); }, 180); });
 
