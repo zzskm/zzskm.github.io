@@ -391,6 +391,12 @@
     @media(prefers-color-scheme:dark) {
       .hero .readiness .pill.bad { color:#ffaaa0; }
     }
+    @media(prefers-color-scheme:dark) {
+      .route-data-state .status-chip { background:#12191f; color:#eef7f2; }
+      .route-data-state .status-chip.fresh { background:#12291d; color:#c6ffe0; }
+      .route-data-state .status-chip.aging { background:#3d2b19; color:#ffe5a6; }
+      .route-data-state .status-chip.stale,.route-data-state .status-chip.error { background:#3a1b1a; color:#ffada6; }
+    }
     /* 200% browser zoom: preserve the actual content rather than clipping overflow. */
     .route-heading,.route-heading h1,.route-heading-top > * { min-width:0; overflow-wrap:anywhere; }
     .route-heading h1 span { overflow-wrap:anywhere; word-break:break-word; }
@@ -399,6 +405,8 @@
       body { padding-inline:8px; }
       .route-settings { min-width:44px; padding:7px 8px; }
       .route-settings span { display:none; }
+      .route-live-row #refresh { font-size:0; width:44px; min-width:44px; max-width:44px; overflow:hidden; padding:0; }
+      .route-live-row #refresh::before { content:"↻"; font-size:24px; line-height:1; }
       .route-heading h1 { font-size:19px; }
       .route-heading h1 span { font-size:11px; }
       .decision-heading { font-size:19px; }
