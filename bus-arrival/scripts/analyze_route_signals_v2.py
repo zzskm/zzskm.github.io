@@ -70,18 +70,22 @@ def covered(times, start, end):
     if first >= len(times) or times[first] - start > MAX_GAP:
         return False
     prev = start
-    while first < len(times) and times[first] <= end:
+    # A sample strictly before the horizon cannot prove that no bus arrived later.
+    while first < len(times):
         if times[first] - prev > MAX_GAP:
             return False
         prev = times[first]
+        if prev >= end:
+            return True
         first += 1
-    return end - prev <= MAX_GAP
+    return False
 
 
 def build_targets(rows):
     targets = defaultdict(list)
     for row in rows:
-        if row.get('departure_reason') not in ('observed_arrival', 'estimated_arrival'):
+        reason = row.get('departure_reason')
+        if reason not in ('observed_arrival', 'estimated_arrival', 'vanished', 'stale', 'data_gap', 'vehicle_changed'):
             continue
         est = instant(row.get('est_arrival_ts'))
         if est is None:
@@ -90,7 +94,8 @@ def build_targets(rows):
         upper = instant(row.get('arrival_upper_ts'))
         if lower is None or upper is None or lower > upper or upper - lower > MAX_GAP:
             lower = upper = est
-        targets[day_key(est)].append((lower, upper))
+        trusted = reason in ('observed_arrival', 'estimated_arrival')
+        targets[day_key(est)].append((lower, upper, trusted))
     for values in targets.values():
         values.sort()
     return targets
@@ -100,8 +105,10 @@ def label_target(targets, day, start, end):
     """Conservative interval label. Boundary overlaps are ambiguous/censored."""
     positive = False
     ambiguous = False
-    for low, high in targets.get(day, ()):
-        if low >= start and high <= end:
+    for item in targets.get(day, ()):
+        low, high = item[:2]
+        trusted = item[2] if len(item) > 2 else True
+        if trusted and low >= start and high <= end:
             positive = True
         elif high >= start and low <= end:
             ambiguous = True
