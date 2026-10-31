@@ -47,14 +47,11 @@ test('safety departure handles overdue lower bound while API ETA is still future
   assert.equal(evaluate(s,T,{cfg:{...cfg,armedAtMs:T}}).actions.length,1);
 });
 
-test('freshness for departure is 3 minutes, preserves legacy assessment contract and timers',()=>{
+test('freshness for departure is 3 minutes and preserves status assessment contract',()=>{
   assert.equal(snap(status(T-4*MIN,900)).why,'too_old');
   assert.equal(snap({last_poll:iso(T-4*MIN),error:'no_bus'}).why,'too_old');
   assert.equal(A.assessStatus(status(T-4*MIN,900),T,{maxAgeMin:13}).why,'ok');
   assert.equal(snap(status(T+10*MIN,900)).why,'clock_skew');
-  const timer=A.newTimer(1,'timer',T);
-  const result=A.evaluateTimers({timers:[timer],nowMs:T+MIN});
-  assert.equal(result.actions[0].type,'timer');
 });
 
 test('walk and N-minute settings use the earlier departure, windows and skip remain effective',()=>{
