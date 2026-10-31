@@ -386,6 +386,8 @@
     @media(prefers-color-scheme:dark) { .change-alert { background:#4d2424; color:#ffd0ca; } }
     /* Keep the accessible forecast table semantic while clipping its off-screen painting. */
     .sr-only:has(#chart-table) { contain:paint; }
+    .sr-only #chart-table { table-layout:fixed; width:1px; max-width:1px; }
+    .sr-only #chart-table th, .sr-only #chart-table td { padding:0; overflow-wrap:anywhere; word-break:break-all; }
     @media(prefers-color-scheme:dark) {
       .hero .readiness .pill.bad { color:#ffaaa0; }
     }
