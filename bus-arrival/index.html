@@ -313,7 +313,7 @@
     .route-settings { padding:9px 12px; flex-shrink:0; }
     .route-live-row { border-bottom:2px solid var(--line); padding:12px 0; }
     .route-data-state { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; min-width:0; }
-    .route-data-state .status-chip { background:transparent; padding:0; color:var(--muted); border-radius:0; font-size:13px; }
+    .route-data-state .status-chip { background:var(--surface); padding:5px 9px; color:var(--muted); border-radius:8px; font-size:13px; }
     .route-data-state .status-chip.fresh { color:var(--go); }
     .route-data-state .status-chip.stale,.route-data-state .status-chip.error { color:#d14438; }
     .route-data-state .freshness { margin:0; color:var(--muted); font-size:12px; }
@@ -344,7 +344,7 @@
     .departure-time-main { font-size:20px; font-weight:800; }
     .verdict #verdict-text { display:block; font-size:16px; font-weight:600; margin:12px 0 0; }
     .verdict .departure-context { font-size:13px; margin:16px 0 0; border-top:1px solid currentColor; border-radius:0; padding:14px 0 0; background:none; color:inherit; font-weight:500; opacity:.88; }
-    .hero .arrival-next { display:flex; align-items:center; gap:12px; margin:18px 0 0; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--ink); font-size:15px; }
+    .hero .arrival-next { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:18px 0 0; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--ink); font-size:15px; }
     .hero .arrival-next strong { font-size:21px; margin-left:auto; }
     .hero .arrival-next span:last-child { color:var(--muted); font-size:13px; }
     .hero .decision-note { color:var(--muted); font-size:13px; }
@@ -382,6 +382,23 @@
     }
     @media(max-width:300px) { .route-live-row { flex-wrap:wrap; } .arrival-main-time { font-size:clamp(48px,18vw,70px); } }
     @media(prefers-reduced-motion:reduce) { .prediction-details > summary span { transition:none; } }
+    /* 200% browser zoom: preserve the actual content rather than clipping overflow. */
+    .route-heading,.route-heading h1,.route-heading-top > * { min-width:0; overflow-wrap:anywhere; }
+    .route-heading h1 span { overflow-wrap:anywhere; word-break:break-word; }
+    .decision-heading,.verdict { overflow-wrap:anywhere; word-break:break-word; }
+    @media(max-width:280px) {
+      body { padding-inline:8px; }
+      .route-settings { min-width:44px; padding:7px 8px; }
+      .route-settings span { display:none; }
+      .route-heading h1 { font-size:19px; }
+      .route-heading h1 span { font-size:11px; }
+      .decision-heading { font-size:19px; }
+      .verdict .departure-time-main { font-size:16px; }
+      .hero .arrival-next { gap:7px; }
+      .hero .arrival-next strong { font-size:17px; }
+      .hero .eta-num { font-size:28px; }
+      .route-live-row { flex-wrap:wrap; }
+    }
   </style>
 </head>
 <body class="loading">
@@ -433,6 +450,7 @@
       <span>다음 버스</span><strong id="arrival-next-time">--:--</strong><span id="arrival-next-remaining"></span>
     </div>
     <div class="decision-note" id="decision-note" hidden></div>
+    <p class="hero-detail" id="hero-detail">차량 정보 확인 중</p>
     <div class="hero-actions">
       <button id="alarm-skip" type="button" class="hero-settings" hidden>이 차량 제외</button>
       <button id="alarm-undo-skip" type="button" class="hero-settings" hidden>제외 되돌리기</button>
@@ -449,7 +467,6 @@
     <details class="hero-evidence"><summary>출발 판단 근거</summary>
       <div>조기 도착 대비 기준 <span id="safe-time">—</span> · 실제 도착을 뜻하지 않습니다</div>
       <p id="model-note"></p><p id="safety-detail"></p>
-      <p class="hero-detail" id="hero-detail"><span class="skeleton">차량 정보 확인 중</span></p>
     </details>
   </section>
 
