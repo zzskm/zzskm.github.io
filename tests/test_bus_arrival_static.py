@@ -8,8 +8,8 @@ HTML += (ROOT / "bus-arrival" / "alert-runtime.js").read_text(encoding="utf-8")
 HTML += (ROOT / "bus-arrival" / "clock-view.js").read_text(encoding="utf-8")
 
 
-def test_bus_arrival_verdict_leads_the_hero():
-    """출발/대기 판정이 ETA보다 위에 오고, 색 외에 글리프로도 구분된다."""
+def test_bus_arrival_eta_leads_the_hero():
+    """도착 ETA를 최상단에 표시하고 출발 판정은 색 외에 글리프로 구분한다."""
     assert 'id="verdict"' in HTML
     assert 'id="verdict-glyph"' in HTML
     assert HTML.index('id="arrival-main-time"') < HTML.index('id="verdict"')
@@ -299,5 +299,5 @@ def test_bus_hero_arrival_first_uses_raw_api_time_not_safety_departure():
     assert 'hhmm(view.apiAtMs)' in HTML
     assert 'available ? hhmm(view.apiAtMs) : "--:--"' in HTML
     assert 'view.correctedAtMs - now' not in HTML
-    assert '도착 시각은 달라질 수 있습니다.' in HTML
+    assert '더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요.' in HTML
     assert '그다음 3100번 ' in HTML
