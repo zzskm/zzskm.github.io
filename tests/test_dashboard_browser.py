@@ -101,6 +101,17 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
+    def test_weight_chart_forecast_window_is_four_weeks(self):
+        from playwright.sync_api import expect
+        page,errors=self.open_page()
+        expect(page.locator('#chart-caption')).to_have_text('과거 30일 · 향후 4주 예측')
+        expect(page.locator('#weight-quarter')).to_have_text('85.1 kg')
+        # The published three-month summary remains; only the visualized points are trimmed.
+        self.assertNotIn('2027-01-21',page.locator('#weight-chart').get_attribute('aria-label'))
+        page.locator('[data-days="60"]').click()
+        expect(page.locator('#chart-caption')).to_have_text('과거 60일 · 향후 4주 예측')
+        self.assertEqual(errors,[])
+
     def test_entire_dashboard_stays_light_under_dark_os(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(width=360)
