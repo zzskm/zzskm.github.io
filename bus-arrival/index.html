@@ -397,6 +397,11 @@
       .route-data-state .status-chip.aging { background:#3d2b19; color:#ffe5a6; }
       .route-data-state .status-chip.stale,.route-data-state .status-chip.error { background:#3a1b1a; color:#ffada6; }
     }
+    /* Zoom does not change CSS media-query width. Keep the refresh label within its narrow mobile slot. */
+    @media(max-width:650px) {
+      .route-live-row #refresh { font-size:0; flex:0 0 44px; width:44px; min-width:44px; max-width:44px; overflow:hidden; padding:0; }
+      .route-live-row #refresh::before { content:"↻"; font-size:23px; line-height:1; }
+    }
     /* 200% browser zoom: preserve the actual content rather than clipping overflow. */
     .route-heading,.route-heading h1,.route-heading-top > * { min-width:0; overflow-wrap:anywhere; }
     .route-heading h1 span { overflow-wrap:anywhere; word-break:break-word; }
@@ -433,7 +438,7 @@
         <span class="status-chip" id="status-chip">상태 확인 중</span>
         <span class="freshness" id="freshness">갱신 확인 중</span>
       </div>
-      <button id="refresh" class="ghost" type="button">↻ 새로고침</button>
+      <button id="refresh" class="ghost" type="button" aria-label="버스 정보 새로고침">↻ 새로고침</button>
     </div>
     <p id="refresh-status" class="muted" role="status"></p>
     <a class="detail-link" href="https://map.naver.com/p/entry/bus-route/11001069?c=16.00,0,0,0,dh&bsl=11001069,163603,1" target="_blank" rel="noopener noreferrer">네이버 지도에서 3100번 노선 보기</a>
