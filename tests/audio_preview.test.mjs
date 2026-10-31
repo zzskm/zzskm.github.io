@@ -79,7 +79,7 @@ test("export snapshots crate order during asynchronous writes", async () => {
 
 test("CSV spreadsheet formulas and quotes are escaped", () => {
   const { csvEsc, uniqueName } = harness([], fakeDirectory(new Map()));
-  assert.equal(csvEsc("+SUM(1,2)"), "'+SUM(1,2)");
+  assert.equal(csvEsc("+SUM(1,2)"), '"\'+SUM(1,2)"');
   assert.equal(csvEsc("-1+1"), "'-1+1");
   assert.equal(csvEsc('name "quoted"'), '"name ""quoted"""');
   const used = new Set(["file.wav"]);
