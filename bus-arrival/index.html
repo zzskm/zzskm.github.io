@@ -108,24 +108,14 @@
     #alarm-queue-count { font-size:13px; font-weight:600; opacity:.85; }
     #alarm-queue-count:empty { display:none; }
 
-    /* 알림 시간대 / 시각 알람 / 타이머 */
+    /* 버스 도착 알림 시간대 */
     .alarm-sub { margin-top:14px; font-size:13px; font-weight:700; }
     .win { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
-    .win input[type="time"], .clock-form input[type="time"], .clock-form input[type="text"], .timer-form input[type="text"] {
+    .win input[type="time"] {
       min-height:44px; padding:0 8px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); font:inherit; }
     .days { display:inline-flex; gap:4px; flex-wrap:wrap; }
     .day { min-width:36px; min-height:36px; padding:0 6px; background:var(--surface-2); color:var(--muted); border:1px solid var(--line); }
     .day[aria-pressed="true"] { background:var(--brand); color:var(--on-brand); border-color:var(--brand); }
-    .clock-form, .timer-form { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:10px; }
-    .clock-form label:not(.check), .timer-form label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
-    .check { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
-    .check input { width:18px; height:18px; }
-    .clock-list { list-style:none; margin:10px 0 0; padding:0; }
-    .clock-list li { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0; border-top:1px solid var(--line); }
-    .clock-list li.empty { border-top:0; padding:8px 0; text-align:left; }
-    .clock-time { min-width:64px; font-size:22px; font-weight:800; }
-    .clock-meta { flex:1 1 140px; font-size:14px; }
-    .switch.mini { min-width:56px; min-height:36px; padding:0 10px; }
     .alarm-history { list-style:none; margin:8px 0 0; padding:0; font-size:14px; }
     .alarm-history li { padding:6px 0; border-top:1px solid var(--line); }
     .alarm-history li.passed { color:var(--muted); }
@@ -271,10 +261,8 @@
     /* Narrow layouts, including a 390px viewport at 200% zoom. */
     .setting, .alarm-head, .section-head, .alarm-banner { flex-wrap:wrap; }
     .setting { max-width:100%; }
-    input, button, .clock-form label, .timer-form label, .win > * { min-width:0; max-width:100%; }
+    input, button, .win > * { min-width:0; max-width:100%; }
     .stepper { flex:0 1 auto; max-width:100%; }
-    .clock-form label, .timer-form label { flex:1 1 140px; }
-    .clock-form input, .timer-form input { width:100%; }
     .win input[type="time"] { width:126px; }
     .history-table { table-layout:fixed; overflow-wrap:anywhere; }
     @media (max-width:280px) {
@@ -304,7 +292,6 @@
       .status-chip { font-size:11px; }
     }
   </style>
-  <link rel="stylesheet" href="clock-view.css">
 </head>
 <body class="loading">
 <main>
@@ -465,21 +452,14 @@
     <div class="alarm-history-note" id="alarm-history-note"></div>
   </details>
 
-  <section class="alarm" id="clock-panel" aria-labelledby="clock-title">
-    <h2 class="alarm-title" id="clock-title">⏰ 알람 · 타이머</h2>
-    <!-- 버스 자료와 무관하게 동작하는 공용 화면 (clock-view.js) -->
-    <div id="clock-view"></div>
-  </section>
-
   <h2>수집 상태</h2>
   <details class="panel"><summary>상세 수집 정보 보기</summary><div id="system" class="muted" style="margin-top:10px">확인 중...</div></details>
 </main>
 <script src="alarm.js"></script>
 <script src="dashboard.js"></script>
 <script src="alert-runtime.js"></script>
-<script src="clock-view.js"></script>
 <script src="app.js"></script>
-<script>AlertRuntime.init(); ClockView.mount(document.getElementById("clock-view")); BusApp.mount();</script>
+<script>AlertRuntime.init(); BusApp.mount();</script>
 </body>
 </html>
 
