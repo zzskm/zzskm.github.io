@@ -175,6 +175,7 @@ class SafetyBrowserTests(unittest.TestCase):
         from playwright.sync_api import expect
         page,errors=self.open_page(self.ready_status())
         try:
+            page.locator('#prediction-details > summary').click()
             page.locator('.timeline-details summary').click()
             expect(page.locator('#journey-details')).to_contain_text('17:55')
             expect(page.locator('#journey-timeline')).to_contain_text('18:08')
@@ -223,6 +224,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#chart-note')).to_contain_text('공백')
             self.assertEqual(page.locator('#chart .line').count(),2)
             self.assertEqual(page.locator('#chart .corrected').count(),1)
+            page.locator('#prediction-details > summary').click()
             page.locator('#chart-remaining').click()
             expect(page.locator('#chart-note')).to_contain_text('당시 API 잔여시간')
             for width in [360,390,1280]:
@@ -279,6 +281,7 @@ class SafetyBrowserTests(unittest.TestCase):
             page.locator('#alarm-skip').click()
             expect(page.locator('#verdict-text')).to_contain_text('다음 차량')
             expect(page.locator('#hero-detail')).to_contain_text('22')
+            page.locator('#prediction-details > summary').click()
             page.locator('.timeline-details summary').click()
             expect(page.locator('#journey-details')).to_contain_text('후속 알림 대상 차량 확인')
             expect(page.locator('#card-seat')).to_have_text('미제공')
@@ -301,6 +304,7 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#verdict-text')).to_contain_text('최신 정보 없음')
             expect(page.locator('#freshness')).to_contain_text('4분 전')
             expect(page.locator('#hero-detail')).to_contain_text('마지막 정상 확인 기준 차량 11')
+            page.locator('#prediction-details > summary').click()
             page.locator('.timeline-details summary').click()
             expect(page.locator('#journey-details')).to_contain_text('마지막 정상 정보에서 차량 확인')
             expect(page.locator('#journey-timeline')).not_to_contain_text('후속 알림 대상 차량 확인')
@@ -367,6 +371,7 @@ class SafetyBrowserTests(unittest.TestCase):
         history='ts_kst,vehId,first_seen_ts,est_arrival_ts,departure_reason\n2026-10-12T18:01:00+09:00,11,2026-10-12T17:45:00+09:00,2026-10-12T18:00:00+09:00,estimated_arrival\n'
         page,errors=self.open_page(self.ready_status(),history=history)
         try:
+            page.locator('#prediction-details > summary').click()
             page.locator('.history-panel > summary').click()
             expect(page.locator('#history-chart-note')).to_contain_text('1일 · 1운행')
             self.assertEqual(page.locator('#history-chart .dot').count(),1)
@@ -565,6 +570,8 @@ class SafetyBrowserTests(unittest.TestCase):
         page,errors=self.open_page(self.ready_status(),history=history)
         try:
             page.locator('#open-settings').click();page.locator('#window-add').click()
+            page.locator('#settings-close').click()
+            page.locator('#prediction-details > summary').click()
             page.locator('.history-panel > summary').click();page.locator('.history-panel details summary').click()
             for width in [360,390,1280]:
                 for scheme in ['light','dark']:
