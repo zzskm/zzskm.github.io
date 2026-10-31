@@ -96,14 +96,9 @@ class DashboardBrowserTests(unittest.TestCase):
         page.locator('#walk').dispatch_event('change')
         expect(page.locator('#verdict-text')).to_contain_text('3분')
         self.assertEqual(page.evaluate('localStorage.getItem("busWalkMinutes")'),'10')
-        # Expanded details preserve keyboard controls, clocks and timers.
-        page.locator('#timer-create summary').click()
-        page.locator('#timer-custom').fill('1')
-        page.locator('#timer-form button[type=submit]').click()
-        expect(page.locator('#timer-list')).to_contain_text('1:00')
-        page.clock.fast_forward(60000)
-        expect(page.locator('#alarm-banner')).to_be_visible()
-        page.locator('#alarm-ack').click()
+        expect(page.locator('#clock-card')).to_have_count(0)
+        expect(page.locator('#clock-view')).to_have_count(0)
+        self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
     def test_mobile_dark_theme_and_single_measurement_chart(self):
@@ -204,9 +199,7 @@ class DashboardBrowserTests(unittest.TestCase):
         page.set_viewport_size({'width':320,'height':1000})
         page.locator('.section-nav a[href="#weight-panel"]').click()
         expect(page.locator('#weight-panel')).to_be_focused()
-        page.locator('.section-nav a[href="#clock-card"]').click()
-        page.locator('#clock-create summary').click()
-        page.locator('#timer-create summary').click()
+        expect(page.locator('.section-nav a')).to_have_count(3)
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
@@ -241,90 +234,42 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(page.locator('#bus-error')).to_be_hidden()
         self.assertEqual(errors,[])
 
-    def test_hidden_dashboard_skips_painting_but_keeps_timer_alarm(self):
+    def test_hidden_dashboard_skips_painting_then_refreshes_on_visibility(self):
         from playwright.sync_api import expect
         page,errors=self.open_page()
         expect(page.locator('#verdict-text')).to_contain_text('8분')
-        page.locator('.dashboard-bus-details > summary').click()
-        page.locator('#timer-create summary').click()
-        page.locator('#timer-custom').fill('1')
-        page.locator('#timer-form button[type=submit]').click()
         remain=page.locator('#remain').inner_text()
         page.evaluate("Object.defineProperty(document,'hidden',{configurable:true,get:()=>window.fakeHidden});window.fakeHidden=true;")
         page.clock.fast_forward(60000)
-        expect(page.locator('#alarm-banner')).to_be_visible()
+        expect(page.locator('#alarm-banner')).to_be_hidden()
         expect(page.locator('#remain')).to_have_text(remain)
-        expect(page.locator('#verdict-text')).to_contain_text('8분')
         page.evaluate("window.fakeHidden=false;document.dispatchEvent(new Event('visibilitychange'))")
         expect(page.locator('#remain')).not_to_have_text(remain)
         expect(page.locator('#verdict-text')).to_contain_text('7분')
         self.assertEqual(errors,[])
 
-    def test_general_alarms_run_without_bus_widget_and_queue_simultaneous_rings(self):
+    def test_no_general_alarm_card_even_if_bus_widget_fails(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(fail_bus=True)
         expect(page.locator('#bus-error')).to_be_visible()
-        # A quick timer starts with one click and creates exactly one entry.
-        page.locator('#timer-presets [data-min="5"]').click()
-        expect(page.locator('#timer-list li')).to_have_count(1)
-        expect(page.locator('#timer-list')).to_contain_text('5:00')
-        page.locator('#timer-create summary').click()
-        for label in ('회의','환기'):
-            page.locator('#timer-custom').fill('5'); page.locator('#timer-label').fill(label)
-            page.locator('#timer-form button[type=submit]').click()
-        expect(page.locator('#timer-list li')).to_have_count(3)
-        self.assertEqual(page.locator('#timer-custom').input_value(),'')
-        page.clock.fast_forward(5*60000)
-        expect(page.locator('#alarm-banner')).to_be_visible()
-        expect(page.locator('#alarm-banner-text')).to_contain_text('타이머 ·')
-        expect(page.locator('#alarm-queue-count')).to_have_text('미확인 3개')
-        page.keyboard.press('Escape')
-        expect(page.locator('#alarm-banner-text')).to_contain_text('회의')
-        expect(page.locator('#alarm-queue-count')).to_have_text('미확인 2개')
-        page.locator('#alarm-ack-all').click()
+        expect(page.locator('#weight')).to_have_text('84.3')
+        expect(page.locator('#clock-card')).to_have_count(0)
+        expect(page.locator('#clock-view')).to_have_count(0)
         expect(page.locator('#alarm-banner')).to_be_hidden()
-        expect(page.locator('#timer-list li')).to_have_count(0)
         self.assertEqual(errors,[])
 
-    def test_stored_alarms_move_to_their_own_card_and_edits_do_not_refire(self):
+    def test_saved_generic_clock_alarms_cannot_fire_on_dashboard(self):
         from playwright.sync_api import expect
         now=int(T.timestamp()*1000)
-        clocks=[{'id':'cWeek','time':'17:30','label':'평일 정리','days':[1,2,3,4,5],'enabled':True,'since':now-3*86400000,'bus':True},
-                {'id':'cOnce','time':'18:10','label':'한 번','days':[],'date':'2026-10-28','enabled':True,'since':now-60000,'bus':False}]
-        page,errors=self.open_page(storage={'busAlarm.v1.clocks':clocks,'busAlarm.v1.clockFired':{'cWeek|2026-10-28':now-1800000}})
+        clocks=[{'id':'old','time':'18:00','days':[1,2,3,4,5],
+                 'enabled':True,'since':now-86400000,'label':'종료된 기능'}]
+        timers=[{'id':'oldtimer','endsAtMs':now-1000,'minutes':1,'label':'종료된 타이머'}]
+        page,errors=self.open_page(storage={'busAlarm.v1.clocks':clocks,'busAlarm.v1.timers':timers})
         expect(page.locator('#verdict-text')).to_contain_text('8분')
-        # Sorted by the real next run, not by the time string.
-        expect(page.locator('#clock-next')).to_have_text('18:10 · 한 번')
-        expect(page.locator('#clock-next-detail')).to_contain_text('10분 후')
-        self.assertEqual(page.locator('#clock-list li[data-id]').evaluate_all('l=>l.map(e=>e.dataset.id)'),['cOnce','cWeek'])
-        # Bus panel no longer carries a second copy of the alarm form.
-        self.assertEqual(page.locator('#bus-widget').evaluate("h=>!!h.shadowRoot.querySelector('#clock-panel, #alarm-banner')"),False)
-        # New alarms default to one-shot without bus info and describe what will happen.
-        page.locator('#clock-create summary').click()
-        expect(page.locator('#clock-once')).to_have_attribute('aria-pressed','true')
-        self.assertFalse(page.locator('#clock-bus').is_checked())
-        expect(page.locator('#clock-preview')).to_have_text('내일 18:00에 한 번')
-        page.locator('#clock-weekdays').click()
-        expect(page.locator('#clock-preview')).to_have_text('평일 18:00 반복')
-        page.locator('#clock-create summary').click()
-        # Editing an alarm to an already-passed time keeps its id and does not ring now.
-        page.locator('#clock-list li[data-id="cWeek"] [data-edit]').click()
-        expect(page.locator('#clock-time')).to_be_focused()
-        page.locator('#clock-time').fill('17:00')
-        page.locator('#clock-form button[type=submit]').click()
-        expect(page.locator('#clock-list li[data-id="cWeek"] .clock-time')).to_have_text('17:00')
+        expect(page.locator('#clock-card')).to_have_count(0)
+        expect(page.locator('#alarm-banner')).to_be_hidden()
         page.clock.fast_forward(3000)
         expect(page.locator('#alarm-banner')).to_be_hidden()
-        # Delete → undo restores the same alarm once.
-        page.locator('#clock-list li[data-id="cWeek"] [data-del]').click()
-        expect(page.locator('#clock-undo')).to_be_focused()
-        page.locator('#clock-undo').click()
-        expect(page.locator('#clock-list li[data-id]')).to_have_count(2)
-        # The one-shot alarm rings as a clock alarm and then switches itself off.
-        page.clock.fast_forward(10*60000)
-        expect(page.locator('#alarm-banner-text')).to_contain_text('시각 알람 · 한 번')
-        page.locator('#alarm-ack').click()
-        expect(page.locator('#clock-list li[data-id="cOnce"] [data-toggle]')).to_have_attribute('aria-checked','false')
         self.assertEqual(errors,[])
 
 

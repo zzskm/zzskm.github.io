@@ -16,10 +16,9 @@
   let previousWork = null;
   // Colors follow the OS light/dark preference only; the bus widget inherits them across its shadow boundary.
 
-  // General alarms, the shared banner and sound/permission state never wait for the bus widget.
+  // Bus notification state is initialized independently from the bus widget.
   const R = window.AlertRuntime;
   R.init(document);
-  window.ClockView.mount($('clock-view'), {simple:true});
   function readinessIssues() {
     const r = R.readiness(), issues = [];
     if (R.state.permissionError) issues.push('OS 알림 권한 요청 실패');
@@ -251,8 +250,8 @@
       const details = document.createElement('details');
       details.className = 'dashboard-bus-details';
       const toggle = document.createElement('summary'); toggle.textContent = '버스 상세 · 도보·알림 설정'; details.append(toggle);
-      // Alarms/timers and the ringing banner live in the dashboard document, shared with the bus.
-      main.querySelector('#clock-panel')?.remove(); main.querySelector('#alarm-banner')?.remove();
+      // The ringing bus-alert banner belongs to the dashboard document.
+      main.querySelector('#alarm-banner')?.remove();
       let afterHero = false;
       for (const child of [...main.children]) {
         if (afterHero && child.id !== 'cards' && child.id !== 'error-card') details.append(child);

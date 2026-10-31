@@ -34,7 +34,7 @@ for version,source in [('before',before),('after',root)]:
      for width in [360,1280]:
       p.set_viewport_size({'width':width,'height':844});p.clock.fast_forward(250);p.screenshot(path=str(out/f'after-waiting-{width}.png'))
      p.set_viewport_size({'width':390,'height':844});p.emulate_media(color_scheme='dark');p.clock.fast_forward(250);p.screenshot(path=str(out/'after-waiting-dark-390.png'))
-     p.emulate_media(color_scheme='light');p.locator('#open-settings').click();p.locator('#window-add').click();p.locator('#clock-create summary').click();p.locator('#timer-create summary').click()
+     p.emulate_media(color_scheme='light');p.locator('#open-settings').click();p.locator('#window-add').click()
      p.evaluate('document.documentElement.style.zoom="2"; window.dispatchEvent(new Event("resize"))');p.clock.fast_forward(250)
      p.evaluate('window.scrollTo(0,0)');p.screenshot(path=str(out/'after-zoom200-390.png'),full_page=True)
      results.append({'version':'after','zoom':200,'width':390,'overflow':p.evaluate('document.documentElement.scrollWidth>innerWidth'),'errors':errors})
