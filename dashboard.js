@@ -14,7 +14,7 @@
   let state = M.normalize(read('wht.state.v2'));
   let summary = null, config = null, range = 30, showPrediction = true, weightLoading = null, lastWeightAttempt = 0;
   let previousWork = null;
-  // Colors follow the OS light/dark preference only; the bus widget inherits them across its shadow boundary.
+  // The dashboard follows the OS theme. Its embedded bus panel intentionally stays light.
 
   // Bus notification state is initialized independently from the bus widget.
   const R = window.AlertRuntime;
@@ -252,10 +252,11 @@
       body.append(main);
       const styles = document.createElement('style');
       styles.textContent = css + `
-        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft);
-          --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent);
+        :host { color-scheme:light; --bg:#f7f8fa; --surface:#ffffff; --surface-2:#f0f1f3;
+          --ink:#13161d; --muted:#5c626b; --line:#e2e4e7; --brand:#1769aa; --on-brand:#ffffff;
           color:var(--ink); }
-        .bus-body { padding:0; background:transparent; color:var(--ink); font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
+        .bus-body { padding:16px; border-radius:16px; background:var(--bg); color:var(--ink);
+          font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
         main { max-width:none; }
         header.route-header { display:block; margin:0 0 12px; }
         header h1 { font-size:19px; } header h1 span { font-size:12px; }
