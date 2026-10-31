@@ -234,9 +234,9 @@ window.BusApp = { mount(root = document, options = {}) {
       ? (view.uncertain ? "이전 정보 기준 · " : "조기 도착 대비 · ")
         + "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분"
       : "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분 · 최신 차량 정보로 다시 판단합니다.");
-    setText($("#freshness"), view.ageSec == null ? "차량 정보 확인 시각 불명"
-      : hhmm(view.observationAtMs) + " 차량 확인 · " + (view.ageSec < 60 ? view.ageSec + "초 전" : Math.floor(view.ageSec / 60) + "분 전") + ""
-        + (off ? " · 수집 시간 외" : " · API 조회 " + (interval > 0 ? Math.round(interval) + "초 간격" : "간격 확인 중")));
+    setText($("#freshness"), view.ageSec == null ? "조회 시각 미확인"
+      : hhmm(view.observationAtMs) + " 확인 · " + (view.ageSec < 60 ? view.ageSec + "초 전" : Math.floor(view.ageSec / 60) + "분 전")
+        + (off ? " · 수집 시간 외" : ""));
     let statusLabel = "최신 정보", statusClass = "fresh";
     if (cache.loadError || !st) { statusLabel = "조회 오류"; statusClass = "error"; }
     else if (off) { statusLabel = holiday ? "휴일" : "수집 시간 외"; statusClass = "stale"; }
