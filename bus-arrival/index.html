@@ -46,7 +46,7 @@
     :focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:4px; }
     .hero :focus-visible { outline-color:#ffffff; }
 
-    /* 히어로: 판정 -> ETA -> 신선도 -> 보조정보 */
+    /* 히어로: API 도착 시각 -> 출발 판단 -> 상태 -> 알림 */
     .hero { background:linear-gradient(135deg,var(--hero-from),var(--hero-to)); color:#fff;
             border-radius:20px; padding:20px; box-shadow:0 12px 30px rgba(13,63,99,.18); }
     .verdict { display:flex; align-items:center; gap:10px; margin:0 0 4px; padding:14px 16px;
@@ -185,11 +185,19 @@
     .detail-link:hover { text-decoration:underline; }
     details summary { cursor:pointer; color:var(--brand); font-weight:650; }
 
-    .hero-times { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:20px; }
-    .hero-time-label { color:var(--hero-sub); font-size:13px; line-height:1.5; }
-    .eta-row { margin:6px 0; }
-    .eta-num { font-size:22px; }
-    .eta-unit { font-size:14px; }
+    .hero-times { border-bottom:1px solid rgba(255,255,255,.3); padding:4px 2px 18px; margin-bottom:18px; }
+    .hero-time-label { color:var(--hero-sub); font-size:14px; line-height:1.5; }
+    .arrival-label { font-size:16px; font-weight:750; color:#fff; }
+    .arrival-primary { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 18px; margin:8px 0 6px; }
+    .arrival-main-time { display:inline-block; font-size:clamp(45px,11vw,74px); line-height:1.05;
+                         letter-spacing:-.045em; font-weight:850; font-variant-numeric:tabular-nums; }
+    .arrival-priority-note { color:var(--hero-sub); font-size:14px; line-height:1.5; margin:6px 0 0; }
+    .arrival-next { margin-top:10px; font-size:14px; font-weight:650; color:#fff; }
+    .hero-times .eta-row { margin:0; gap:4px; }
+    .hero-times .eta-num { font-size:clamp(25px,5.6vw,34px); }
+    .hero-times .eta-unit { font-size:16px; }
+    .hero.is-stale .arrival-main-time { opacity:.75; }
+    .departure-context { background:rgba(255,255,255,.11); border-radius:10px; padding:10px 12px; }
     .safe-time { font-size:30px; font-weight:750; margin-top:6px; }
     .departure-context { color:var(--hero-sub); margin:12px 0; line-height:1.6; font-size:14px; }
     .hero-settings { background:#fff; color:#0d3f63; }
@@ -227,7 +235,7 @@
     .alarm label input[type="checkbox"] { flex:0 0 20px; width:20px; height:20px; }
     .alarm-warn { margin-top:10px; }
     .hero, .panel, .alarm, .card { min-width:0; overflow-wrap:anywhere; word-break:keep-all; }
-    .hero-times { display:block; margin-top:14px; }
+    .hero-times { display:block; }
     .departure-context { font-size:18px; font-weight:700; margin:10px 0; }
     .freshness, .hero-detail, .hero-time-label, .hero-evidence, .decision-note,
     .status-chip, .muted, .card-label, .card-sub, .pill, .alarm details,
@@ -317,31 +325,37 @@
   </div>
 
   <section class="hero" id="hero">
+    <div class="hero-times" aria-label="3100번 도착 예상">
+      <div class="arrival-label">3100번 · 07511 정류장 도착 예상</div>
+      <div class="arrival-primary">
+        <time id="arrival-main-time" class="arrival-main-time">--:--</time>
+        <span id="eta-unavailable" class="safe-time" hidden>정보 없음</span>
+        <span class="eta-row" id="eta-row"><span class="eta-num" id="eta-num">--</span><span class="eta-unit" id="eta-unit">확인 중</span></span>
+      </div>
+      <p class="arrival-priority-note" id="arrival-clock">공공 API에서 버스 도착 예정 시각을 확인합니다.</p>
+      <p class="arrival-next" id="arrival-next" hidden></p>
+    </div>
     <div class="verdict wait" id="verdict"><span class="verdict-glyph" id="verdict-glyph" aria-hidden="true">⏳</span><span id="verdict-text" class="skeleton">출발 판단 중</span></div>
     <p class="departure-context" id="departure-context">도보시간을 반영해 출발 시각을 계산합니다.</p>
-    <div class="readiness" aria-label="알림 준비 상태">
-      <div class="alarm-state">
-        <button id="hero-alarm-toggle" class="pill" type="button">알림 설정 확인 중</button>
-        <button id="hero-alarm-perm" class="pill" type="button">OS 권한 확인 중</button>
-        <button id="hero-alarm-sound" class="pill" type="button">소리 확인 중</button>
-      </div>
-      <p class="hero-next" id="hero-next">다음 알림 확인 중</p>
-      <p class="hero-time-label">이 탭이 열려 있어야 동작하며, 백그라운드에서는 지연될 수 있습니다.</p>
-    </div>
-    <div class="hero-detail" id="hero-detail"><span class="skeleton">차량 정보 확인 중</span></div>
     <div class="freshness" id="freshness">갱신 확인 중</div>
     <div class="status-row" aria-label="데이터 상태"><span class="status-chip" id="status-chip">상태 확인 중</span></div>
+    <div class="hero-detail" id="hero-detail"><span class="skeleton">차량 정보 확인 중</span></div>
     <div class="hero-actions">
       <button id="alarm-skip" type="button" class="hero-settings" hidden>이 차량 제외</button>
       <button id="alarm-undo-skip" type="button" class="hero-settings" hidden>제외 되돌리기</button>
       <button id="open-settings" type="button" class="hero-settings">도보 · 알림 설정</button>
     </div>
-    <div class="hero-times"><div class="hero-time-label">버스 도착 예상</div>
-      <span id="eta-unavailable" class="safe-time" hidden>—</span>
-      <div class="eta-row" id="eta-row"><span class="eta-num" id="eta-num">--</span><span class="eta-unit" id="eta-unit">도착 정보 확인 중</span></div>
-      <p class="hero-time-label" id="arrival-clock"></p>
+    <div class="readiness" aria-label="알림 준비 상태">
+      <p class="hero-time-label">알림 상태 · 출발 판단과 별도</p>
+      <p class="hero-next" id="hero-next">다음 알림 확인 중</p>
+      <div class="alarm-state">
+        <button id="hero-alarm-toggle" class="pill" type="button">알림 설정 확인 중</button>
+        <button id="hero-alarm-perm" class="pill" type="button">OS 권한 확인 중</button>
+        <button id="hero-alarm-sound" class="pill" type="button">소리 확인 중</button>
+      </div>
+      <p class="hero-time-label">탭이 닫혔거나 백그라운드에서는 알림이 지연될 수 있습니다.</p>
     </div>
-    <details class="hero-evidence"><summary>출발 판단 근거</summary>
+    <details class="hero-evidence"><summary>도착 예측·출발 판단 근거</summary>
       <div>조기 도착 대비 기준 <span id="safe-time">—</span> · 실제 도착을 뜻하지 않습니다</div>
       <p id="model-note"></p><p id="safety-detail"></p>
     </details>
