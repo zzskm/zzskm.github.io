@@ -101,7 +101,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
-    def test_mobile_dark_theme_and_single_measurement_chart(self):
+    def test_bus_card_stays_light_inside_dark_dashboard(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(width=360)
         expect(page.locator('#weight-chart svg')).to_be_visible()
@@ -111,11 +111,17 @@ class DashboardBrowserTests(unittest.TestCase):
         if artifact:
             Path(artifact).mkdir(parents=True,exist_ok=True)
             page.screenshot(path=str(Path(artifact)/'dashboard-mobile.png'),full_page=True)
-        # No manual theme switch: the dashboard and bus widget follow the OS color scheme.
+        # The surrounding dashboard may follow the OS, but the bus tile is light-only.
         self.assertEqual(page.locator('#theme').count(),0)
         page.emulate_media(color_scheme='dark')
         bus_ink=page.locator('#hero').evaluate('e=>getComputedStyle(e.getRootNode().host).getPropertyValue("--ink").trim()')
-        self.assertEqual(bus_ink,'#edf2e9')
+        self.assertEqual(bus_ink,'#13161d')
+        bus_bg=page.locator('#bus-panel').evaluate('e=>getComputedStyle(e).backgroundColor')
+        self.assertEqual(bus_bg,'rgb(255, 255, 255)')
+        self.assertEqual(page.locator('#arrival-main-time').inner_text(),'18:20')
+        self.assertEqual(page.locator('#departure-time-main').inner_text(),'출발 18:08')
+        dashboard_ink=page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()")
+        self.assertEqual(dashboard_ink,'#edf2e9')
         page.locator('[data-days="60"]').click()
         expect(page.locator('[data-days="60"]')).to_have_attribute('aria-pressed','true')
         self.assertEqual(errors,[])
