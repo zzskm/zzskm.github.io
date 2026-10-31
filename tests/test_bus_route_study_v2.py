@@ -108,6 +108,21 @@ class RouteStudyV2Tests(unittest.TestCase):
         other = study.summarize(signals, polls, replaced)['candidate_routes'][0]
         self.assertEqual(other['forward_date_test']['time_only_hit_rate'], test['time_only_hit_rate'])
 
+    def test_repository_snapshot_smoke_when_available(self):
+        base = ROOT / 'bus-arrival'
+        paths = [base / 'route_signal_log.csv', base / 'predict_log.csv', base / 'arrival_log.csv']
+        if not all(path.exists() for path in paths):
+            self.skipTest('repository data snapshots not available in this workspace')
+        report = study.summarize(*(study.read_rows(path) for path in paths))
+        self.assertEqual(report['schema_version'], 2)
+        self.assertFalse(report['eligible_for_alert_use'])
+        self.assertTrue(any(route['route_name'] == '6011' for route in report['candidate_routes']))
+        for route in report['candidate_routes']:
+            self.assertEqual(route['vehicle_events'],
+                             route['labelled_events'] + route['censored'])
+            self.assertEqual(route['labelled_events'],
+                             route['matched'] + route['nonmatched'])
+
     def test_rank_two_and_invalid_records_are_excluded(self):
         a, b, c = sample(1)
         a += [signal(at(1, 0), vehicle=444, rank=2),
