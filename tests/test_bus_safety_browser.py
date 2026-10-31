@@ -623,7 +623,16 @@ class SafetyBrowserTests(unittest.TestCase):
                     page.emulate_media(color_scheme=scheme,reduced_motion='reduce')
                     page.evaluate('document.documentElement.style.zoom="2"; window.dispatchEvent(new Event("resize"))')
                     page.clock.fast_forward(200)
-                    self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'),(width,scheme))
+                    overflow=page.evaluate("""() => ({
+                        scrollWidth:document.documentElement.scrollWidth,
+                        innerWidth,
+                        offenders:[...document.querySelectorAll('body *')].filter(e=>{
+                            const r=e.getBoundingClientRect();
+                            return r.width && (r.right>innerWidth+1 || r.left<-1);
+                        }).slice(0,12).map(e=>({tag:e.tagName,id:e.id,cls:e.className?.baseVal||e.className,
+                            bounds:[Math.round(e.getBoundingClientRect().left),Math.round(e.getBoundingClientRect().right)]}))
+                    })""")
+                    self.assertFalse(overflow['scrollWidth']>overflow['innerWidth'],(width,scheme,overflow))
                     self.assertTrue(page.evaluate("""() => [...document.querySelectorAll('button,input')].filter(e=>e.getClientRects().length).every(e=>{
                         const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;
                     })"""))
