@@ -626,6 +626,10 @@ class SafetyBrowserTests(unittest.TestCase):
                     overflow=page.evaluate("""() => ({
                         scrollWidth:document.documentElement.scrollWidth,
                         innerWidth,
+                        widthNodes:[...document.querySelectorAll('html,body,body *')].filter(e=>e.scrollWidth>e.clientWidth+3)
+                            .slice(0,24).map(e=>({tag:e.tagName,id:e.id,cls:String(e.className?.baseVal||e.className||'').slice(0,35),
+                                scrollWidth:e.scrollWidth,clientWidth:e.clientWidth,
+                                x:Math.round(e.getBoundingClientRect().x),w:Math.round(e.getBoundingClientRect().width)})),
                         offenders:[...document.querySelectorAll('body *')].filter(e=>{
                             const r=e.getBoundingClientRect();
                             return r.width && (r.right>innerWidth+1 || r.left<-1);
