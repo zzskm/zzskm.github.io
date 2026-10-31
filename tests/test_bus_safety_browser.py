@@ -538,7 +538,7 @@ class SafetyBrowserTests(unittest.TestCase):
             page.clock.fast_forward(10001)
             expect(page.locator('#refresh')).to_be_enabled()
             expect(page.locator('#refresh-status')).to_contain_text('확인 실패')
-            expect(page.locator('#freshness')).to_contain_text('18:00 차량 확인')
+            expect(page.locator('#freshness')).to_contain_text('18:00 확인')
             self.assertEqual(page.evaluate('JSON.parse(localStorage.getItem("busDashboard.v1.lastGoodStatus")).last_poll'),T.isoformat())
             self.assertEqual(errors,[])
         finally: page.close()
