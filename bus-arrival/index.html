@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="light">
   <title>3100 퇴근 버스</title>
   <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231769aa'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'%3E3%3C/text%3E%3C/svg%3E">
   <style>
     :root {
+      color-scheme:light;
       --bg:#f4f7fa; --surface:#ffffff; --surface-2:#f8fafc;
       --ink:#17212b; --muted:#5a6b7f; --line:#dde5ec;
       --brand:#1769aa; --on-brand:#ffffff;
@@ -17,19 +18,6 @@
       --danger:#b42318; --danger-soft:#fdeceb;
       --hero-from:#0d3f63; --hero-to:#11678a; --hero-sub:#d7e6f0;
       --skeleton:#e9eef3;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg:#0f151b; --surface:#18212a; --surface-2:#1e2833;
-        --ink:#e8eef4; --muted:#9fb0c0; --line:#2b3947;
-        --brand:#6fb6e0; --on-brand:#0b2233;
-        --go:#5ed48f;     --go-soft:#123a25;
-        --wait:#a8c2dc;   --wait-soft:#1c2a38;
-        --warn:#e6b45c;   --warn-soft:#3a2c11;
-        --danger:#ff9b90; --danger-soft:#3b1815;
-        --hero-from:#0a2d47; --hero-to:#0d4d68; --hero-sub:#cfe2ee;
-        --skeleton:#232f3a;
-      }
     }
     * { box-sizing:border-box; }
     [hidden] { display:none !important; }
@@ -296,12 +284,6 @@
     :root { --bg:#f7f8fa; --surface:#fff; --surface-2:#f0f1f3; --ink:#13161d; --muted:#5c626b;
       --line:#e2e4e7; --go:#124b33; --go-soft:#d3f5e0; --wait:#124b33; --wait-soft:#d3f5e0;
       --warn:#332208; --warn-soft:#ffc44b; --danger:#fff; --danger-soft:#d82d29; }
-    @media (prefers-color-scheme:dark) {
-      :root { --bg:#14171d; --surface:#1d2129; --surface-2:#292e38; --ink:#f3f5f8;
-        --muted:#abb2bf; --line:#3c434e; --go:#c6f7d8; --go-soft:#194b35;
-        --wait:#c6f7d8; --wait-soft:#194b35; --warn:#ffdfa2; --warn-soft:#664414;
-        --danger:#fff; --danger-soft:#a72b29; --hero-sub:#abb2bf; }
-    }
     body { padding:24px 20px 60px; }
     main { max-width:680px; }
     header.route-header { margin:0 0 18px; }
@@ -383,20 +365,10 @@
     @media(max-width:300px) { .route-live-row { flex-wrap:wrap; } .arrival-main-time { font-size:clamp(48px,18vw,70px); } }
     @media(prefers-reduced-motion:reduce) { .prediction-details > summary span { transition:none; } }
     .change-alert { padding:12px 14px; background:#fbe5e5; border-radius:14px; color:#852a29; margin:0 0 12px; font-size:14px; font-weight:700; }
-    @media(prefers-color-scheme:dark) { .change-alert { background:#4d2424; color:#ffd0ca; } }
     /* Keep the accessible forecast table semantic while clipping its off-screen painting. */
     .sr-only:has(#chart-table) { position:fixed; left:0; top:0; width:1px; height:1px; overflow:hidden; contain:strict; }
     .sr-only #chart-table { table-layout:fixed; width:1px; max-width:1px; }
     .sr-only #chart-table th, .sr-only #chart-table td { padding:0; overflow-wrap:anywhere; word-break:break-all; }
-    @media(prefers-color-scheme:dark) {
-      .hero .readiness .pill.bad { color:#ffaaa0; }
-    }
-    @media(prefers-color-scheme:dark) {
-      .route-data-state .status-chip { background:#12191f; color:#eef7f2; }
-      .route-data-state .status-chip.fresh { background:#12291d; color:#c6ffe0; }
-      .route-data-state .status-chip.aging { background:#3d2b19; color:#ffe5a6; }
-      .route-data-state .status-chip.stale,.route-data-state .status-chip.error { background:#3a1b1a; color:#ffada6; }
-    }
     /* Zoom does not change CSS media-query width. Keep the refresh label within its narrow mobile slot. */
     @media(max-width:650px) {
       .route-live-row #refresh { font-size:0; flex:0 0 44px; width:44px; min-width:44px; max-width:44px; overflow:hidden; padding:0; }
