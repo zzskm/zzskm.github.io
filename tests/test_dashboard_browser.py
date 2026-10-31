@@ -212,7 +212,11 @@ class DashboardBrowserTests(unittest.TestCase):
         source=json.loads((ROOT/'garmin-weight/data/summary.json').read_text(encoding='utf-8'))
         predicted=source.get('predictions',{}).get('threeMonthWeightKg')
         enabled=source.get('modelDiagnostics',{}).get('trend',{}).get('predictionEnabled') is not False
-        expect(page.locator('#weight-quarter')).to_have_text(f'{predicted:.1f} kg' if enabled and isinstance(predicted,(int,float)) else '예측 보류')
+        # JavaScript Intl.NumberFormat rounds decimal ties half-up, unlike Python's ties-to-even.
+        from decimal import Decimal, ROUND_HALF_UP
+        expected=(f'{Decimal(str(predicted)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)} kg'
+                  if enabled and isinstance(predicted,(int,float)) else '예측 보류')
+        expect(page.locator('#weight-quarter')).to_have_text(expected)
         self.assertEqual(page.locator('.chart-trend').count(),1)
         artifact=os.getenv('DASHBOARD_SCREENSHOT_DIR')
         if artifact:
