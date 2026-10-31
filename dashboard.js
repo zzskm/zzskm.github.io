@@ -170,7 +170,7 @@
       </svg>`;
     host.setAttribute('aria-label', label);
     set('chart-start', chartDate(dates[0])); set('chart-end', chartDate(dates.at(-1)));
-    set('chart-caption', prediction.length ? `과거 ${range}일 · 향후 3개월 예측` : `최근 ${range}일 기록`);
+    set('chart-caption', prediction.length ? `과거 ${range}일 · 향후 4주 예측` : `최근 ${range}일 기록`);
   }
   function renderPrediction() {
     const diag = summary.modelDiagnostics || {}, forecast = summary.predictions || {};
