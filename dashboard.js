@@ -246,61 +246,39 @@
       const css = source.querySelector('style').textContent.replace(/:root/g, ':host').replace(/\bbody\b/g, '.bus-body');
       const body = document.createElement('div');
       body.className = 'bus-body loading';
-      // Keep the original controls and IDs so the shared alarm controller works unchanged.
-      const details = document.createElement('details');
-      details.className = 'dashboard-bus-details';
-      const toggle = document.createElement('summary'); toggle.textContent = '버스 상세 · 도보·알림 설정'; details.append(toggle);
-      // The ringing bus-alert banner belongs to the dashboard document.
+      // The standalone page owns a native expandable diagnostics section and a settings drawer.
+      // Do not reparent either into a second closed details element.
       main.querySelector('#alarm-banner')?.remove();
-      let afterHero = false;
-      for (const child of [...main.children]) {
-        if (afterHero && child.id !== 'cards' && child.id !== 'error-card') details.append(child);
-        if (child.id === 'hero') afterHero = true;
-      }
-      main.append(details); body.append(main);
+      body.append(main);
       const styles = document.createElement('style');
       styles.textContent = css + `
-        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft); --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent); --on-brand:var(--dash-bg); --hero-from:var(--dash-soft); --hero-to:var(--dash-soft); --hero-sub:var(--dash-muted); color:var(--ink); }
-        .hero { color:var(--ink); }
-        /* OS permission and sound are shown once, in the dashboard header. */
-        #hero-alarm-perm, #hero-alarm-sound { display:none; }
-        .bus-body { padding:0; background:none; color:inherit; font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
-        main { max-width:none; } header { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; gap:8px; flex-wrap:wrap; }
-        header h1, header .detail-link { display:none; } header .muted { font-size:11px; } header #refresh-status { flex-basis:100%; margin:0; }
-        header #refresh { font-size:11px; min-height:32px; padding:5px 9px; }
-        .hero { border-radius:12px; padding:18px; box-shadow:none; }
-        .verdict { font-size:21px; padding:11px 12px; border-radius:8px; }
-        .departure-context { font-size:16px; margin:10px 0; }
-        .readiness { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; margin-top:8px; }
-        .readiness .alarm-state, .readiness p { margin:0; }
-        .readiness > .hero-time-label { flex-basis:100%; }
-        .hero-next { font-size:12px; }
-        .freshness, .hero-detail { font-size:12px; margin-top:8px; }
-        .hero button, .hero summary { min-height:44px; }
-        .hero .pill, .hero-settings { background:var(--surface); color:var(--ink); border-color:var(--line); }
-        .hero :focus-visible { outline-color:var(--accent); }
-        .hero-evidence { font-size:12px; } .hero-time-label { font-size:11px; }
-        .hero-evidence { margin-top:8px; }
-        .hero-evidence summary { display:flex; align-items:center; }
-        .hero-evidence summary::before { content:'▸'; margin-right:6px; }
-        .hero-evidence[open] summary::before { content:'▾'; }
-        .hero-evidence summary::-webkit-details-marker { display:none; }
-        .cards { gap:7px; } .card { border-radius:9px; padding:10px; } .card-value { font-size:18px; }
-        .cards { grid-template-columns:repeat(3,minmax(0,1fr)); }
-        .cards .next-card { grid-column:auto; }
-        .card-label, .card-sub { font-size:11px; }
-        .dashboard-bus-details { border-top:1px solid var(--line); margin-top:18px; padding-top:10px; }
-        .dashboard-bus-details > summary { cursor:pointer; padding:8px 0; font-size:12px; color:var(--muted); }
-        .dashboard-bus-details h2 { font-size:15px; } .dashboard-bus-details .panel { padding:12px; }
-        .alarm-banner { top:8px; } input { max-width:100%; } .clock-list { overflow-wrap:anywhere; }
-        @media(max-width:599px) { .card{padding:10px 7px} .card-value{font-size:16px} .hero-settings{font-size:12px} }
-        @media(max-width:380px) { .hero{padding:14px} .verdict{font-size:19px} }
+        :host { --bg:var(--dash-surface); --surface:var(--dash-surface); --surface-2:var(--dash-soft);
+          --ink:var(--dash-ink); --muted:var(--dash-muted); --line:var(--dash-line); --brand:var(--dash-accent);
+          color:var(--ink); }
+        .bus-body { padding:0; background:transparent; color:var(--ink); font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
+        main { max-width:none; }
+        header.route-header { display:block; margin:0 0 12px; }
+        header h1 { font-size:19px; } header h1 span { font-size:12px; }
+        header .detail-link { display:none; }
+        .route-live-row { padding:8px 0; }
+        .route-header #refresh { margin:0; }
+        .hero { background:transparent; }
+        .arrival-main-time { font-size:clamp(58px,11vw,88px); }
+        .decision-heading { font-size:clamp(20px,3.8vw,25px); }
+        .verdict { border-radius:14px; }
+        .freshness,.hero-detail { font-size:11px; }
+        .readiness .pill { font-size:11px; }
+        #alarm:not([hidden]) { width:min(96vw,620px); }
+        @media(max-width:599px) {
+          .arrival-main-time { font-size:clamp(62px,20vw,88px); }
+          .verdict { padding:16px; }
+        }
       `;
       // Preserve document-level h1/main semantics in the containing dashboard.
       const content = document.createElement('div'); content.append(...main.childNodes); body.replaceChildren(content);
       const shadow = $('bus-widget').attachShadow({mode:'open'});
       shadow.append(styles, body);
-      window.BusApp.mount(shadow, {body,baseUrl:'bus-arrival/',manageTitle:false,pauseHiddenPaint:true,revealSettings:() => { details.open = true; }});
+      window.BusApp.mount(shadow, {body,baseUrl:'bus-arrival/',manageTitle:false,pauseHiddenPaint:true,revealSettings:() => {}});
       $('bus-widget').querySelector('p')?.remove();
     } catch (error) {
       $('bus-error').hidden = false;
