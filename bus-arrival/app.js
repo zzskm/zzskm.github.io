@@ -213,7 +213,7 @@ window.BusApp = { mount(root = document, options = {}) {
     setText($("#eta-num"), parts.num);
     setText($("#eta-unit"), available ? (parts.num === "곧" ? "도착 예정" : "분 후") : parts.unit);
     setText($("#arrival-clock"), available
-      ? "공공 API 예측 · 실제 도착 미확인 · 도착 시각은 달라질 수 있습니다."
+      ? "공공 API 예측 · 더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요."
       : "최신 도착 예정 시각을 확인할 수 없습니다. 과거 예측을 현재 시각처럼 표시하지 않습니다.");
     $("#eta-row").hidden = parts.num === "--";
     $("#eta-unavailable").hidden = available;
