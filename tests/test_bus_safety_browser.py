@@ -251,7 +251,7 @@ class SafetyBrowserTests(unittest.TestCase):
     def test_legacy_general_alarm_data_no_longer_fires(self):
         from playwright.sync_api import expect
         def setup(page):
-            page.add_init_script("""() => {
+            page.add_init_script("""(() => {
                 localStorage.setItem('busAlarm.v1.clocks', JSON.stringify([{
                     id:'old-clock',time:'18:00',date:'2026-10-19',
                     days:[],enabled:true,since:1,label:'기존 시각 알람'
@@ -259,7 +259,7 @@ class SafetyBrowserTests(unittest.TestCase):
                 localStorage.setItem('busAlarm.v1.timers', JSON.stringify([{
                     id:'old-timer',endsAtMs:Date.now()-1000,minutes:1,label:'기존 타이머'
                 }]));
-            }""")
+            })()""")
         page,errors=self.open_page(self.ready_status(),setup=setup)
         try:
             expect(page.locator('#clock-panel')).to_have_count(0)
