@@ -519,7 +519,10 @@ function moveCrate(from, delta){
   syncCrateQueue();
   renderCrate();
   const row = $("#crate-list").querySelectorAll(".crate-item")[to];
-  if(row) row.querySelector(delta < 0 ? ".move-up" : ".move-down").focus();
+  if(row){
+    const target = row.querySelector(delta < 0 ? ".move-up" : ".move-down");
+    (target.disabled ? row.querySelector(".crate-play") : target).focus();
+  }
 }
 function renderCrate(){
   $("#crate-head").textContent = "Crate · " + crate.length;
@@ -555,10 +558,15 @@ function renderCrate(){
 $("#clear").onclick = () => { if(crate.length && confirm("크레이트를 비울까요?")){ crate=[]; syncCrateQueue(); renderCrate(); render(); } };
 $("#export").onclick = exportCrate;
 
-function csvEsc(v){ v = String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; }
+function csvEsc(v){
+  v = String(v);
+  // Excel/Sheets에서 외부 파일명·메모가 수식으로 실행되지 않도록 이스케이프.
+  if(/^[\s]*[=+\-@]/.test(v)) v = "'" + v;
+  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+}
 const toCsv = rows => "﻿" + rows.map(r => r.map(csvEsc).join(",")).join("\r\n");   // BOM: Excel 한글
-const crateRows = copyNames => [["파일명","원본경로","복사본","메모"],
-  ...crate.map((c,i) => [c.name, "/"+c.path, copyNames[i], c.memo||""])];
+const crateRows = (copyNames, items = crate) => [["파일명","원본경로","복사본","메모"],
+  ...items.map((c,i) => [c.name, "/"+c.path, copyNames[i], c.memo||""])];
 
 // 같은 파일명 충돌 시 "name (2).ext" 로 번호 부여
 function uniqueName(name, used){
@@ -586,17 +594,18 @@ async function exportToDir(){
   const used = new Set();
   // 기존 파일과 폴더를 모두 예약한다. 이미 있는 파일을 덮어쓰지 않는다.
   for await(const [name] of dir.entries()) used.add(name.normalize("NFC").toLowerCase());
+  const items = crate.slice();   // 비동기 내보내기 도중 목록이 변경되어도 복사본과 색인이 일치
   const csvName = uniqueName("crate.csv", used);
-  const copyNames = crate.map(c => uniqueName(c.name, used));
-  for(let i=0; i<crate.length; i++){
+  const copyNames = items.map(c => uniqueName(c.name, used));
+  for(let i=0; i<items.length; i++){
     const fh = await dir.getFileHandle(copyNames[i], { create:true });
     const ws = await fh.createWritable();
-    try { await ws.write(crate[i].file); } finally { await ws.close(); }
+    try { await ws.write(items[i].file); } finally { await ws.close(); }
   }
   const csvHandle = await dir.getFileHandle(csvName, { create:true });
   const w = await csvHandle.createWritable();
-  try { await w.write(toCsv(crateRows(copyNames))); } finally { await w.close(); }
-  alert(`내보내기 완료: 파일 ${crate.length}개 + ${csvName} (기존 파일 유지)`);
+  try { await w.write(toCsv(crateRows(copyNames, items))); } finally { await w.close(); }
+  alert(`내보내기 완료: 파일 ${items.length}개 + ${csvName} (기존 파일 유지)`);
 }
 
 function saveCsvOnly(){                           // 폴백: 색인 CSV만 다운로드
