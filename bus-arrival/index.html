@@ -385,7 +385,7 @@
     .change-alert { padding:12px 14px; background:#fbe5e5; border-radius:14px; color:#852a29; margin:0 0 12px; font-size:14px; font-weight:700; }
     @media(prefers-color-scheme:dark) { .change-alert { background:#4d2424; color:#ffd0ca; } }
     /* Keep the accessible forecast table semantic while clipping its off-screen painting. */
-    .sr-only:has(#chart-table) { contain:paint; }
+    .sr-only:has(#chart-table) { position:fixed; left:0; top:0; width:1px; height:1px; overflow:hidden; contain:strict; }
     .sr-only #chart-table { table-layout:fixed; width:1px; max-width:1px; }
     .sr-only #chart-table th, .sr-only #chart-table td { padding:0; overflow-wrap:anywhere; word-break:break-all; }
     @media(prefers-color-scheme:dark) {
