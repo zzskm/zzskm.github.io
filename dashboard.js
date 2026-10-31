@@ -252,27 +252,70 @@
       body.append(main);
       const styles = document.createElement('style');
       styles.textContent = css + `
-        :host { color-scheme:light; --bg:#f7f8fa; --surface:#ffffff; --surface-2:#f0f1f3;
-          --ink:#13161d; --muted:#5c626b; --line:#e2e4e7; --brand:#1769aa; --on-brand:#ffffff;
-          color:var(--ink); }
-        .bus-body { padding:16px; border-radius:16px; background:var(--bg); color:var(--ink);
+        /* The embedded bus card uses the standalone arrival-first hierarchy,
+           with a compact footprint and no system-dependent dark palette. */
+        :host {
+          color-scheme:light;
+          --bg:#ffffff; --surface:#ffffff; --surface-2:#f0f1f3;
+          --ink:#13161d; --muted:#5c626b; --line:#e2e4e7;
+          --brand:#1769aa; --on-brand:#ffffff;
+          color:var(--ink);
+        }
+        .bus-body { box-sizing:border-box; padding:0; background:transparent; color:var(--ink);
           font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
-        main { max-width:none; }
-        header.route-header { display:block; margin:0 0 12px; }
-        header h1 { font-size:19px; } header h1 span { font-size:12px; }
-        header .detail-link { display:none; }
-        .route-live-row { padding:8px 0; }
+        .bus-body main { max-width:none; }
+        .route-header { margin:0 0 12px; }
+        .route-heading h1 { font-size:22px; }
+        .route-heading h1 strong { font-size:1.2em; }
+        .route-heading h1 span { font-size:12px; }
+        .route-subtitle { font-size:12px; margin:3px 0 9px; }
+        .route-header .detail-link { display:none; }
+        .route-live-row { padding:6px 0; gap:8px; }
+        .route-data-state { gap:4px 8px; }
+        .route-data-state .status-chip { font-size:12px; }
+        .route-data-state .freshness { font-size:11px; }
         .route-header #refresh { margin:0; }
-        .hero { background:transparent; }
-        .arrival-main-time { font-size:clamp(58px,11vw,88px); }
-        .decision-heading { font-size:clamp(20px,3.8vw,25px); }
-        .verdict { border-radius:14px; }
-        .freshness,.hero-detail { font-size:11px; }
-        .readiness .pill { font-size:11px; }
+        .hero { background:transparent; padding:0; }
+        .hero-times { padding-top:10px; margin-bottom:18px; }
+        .hero .arrival-label { font-size:12px; }
+        .arrival-main-time { font-size:clamp(54px,7vw,78px); }
+        .hero .eta-row { margin-top:10px; }
+        .hero .eta-num { font-size:30px; }
+        .hero .eta-unit,.hero .eta-stops { font-size:12px; }
+        .hero .arrival-priority-note { font-size:11px; }
+        .verdict { border-radius:16px; padding:18px; }
+        .decision-heading { font-size:clamp(20px,2.4vw,25px); }
+        .departure-time-main { font-size:17px; }
+        .verdict #verdict-text { margin-top:8px; font-size:14px; }
+        .verdict .departure-context { font-size:12px; margin-top:12px; padding-top:10px; }
+        .hero .arrival-next { margin-top:14px; padding:11px 0; font-size:13px; gap:8px; }
+        .hero .arrival-next strong { font-size:19px; }
+        .hero .arrival-next span:last-child { font-size:12px; }
+        .hero-detail,.decision-note { font-size:12px; }
+        .hero-actions { margin:6px 0 0; }
+        .hero-settings { font-size:12px; }
+        /* Global dashboard header already exposes OS permission and sound readiness. */
+        #hero-alarm-perm,#hero-alarm-sound,.readiness .hero-time-label { display:none; }
+        .readiness { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:10px 0 0; padding:8px 0; }
+        .readiness .hero-next { font-size:11px; margin:0; }
+        .readiness .alarm-state { margin:0; }
+        .readiness .pill { background:var(--surface-2); color:var(--ink); border-color:var(--line); font-size:11px; }
+        .hero-evidence summary,.prediction-details > summary { font-size:12px; }
         #alarm:not([hidden]) { width:min(96vw,620px); }
         @media(max-width:599px) {
-          .arrival-main-time { font-size:clamp(62px,20vw,88px); }
+          .route-heading h1 { font-size:20px; }
+          .route-heading h1 span { font-size:11px; }
+          .arrival-main-time { font-size:clamp(56px,19vw,78px); }
+          .hero .eta-num { font-size:28px; }
           .verdict { padding:16px; }
+          .decision-heading { font-size:21px; }
+        }
+        @media(max-width:359px) {
+          .route-heading h1 { font-size:18px; }
+          .route-settings span { display:none; }
+          .route-live-row { flex-wrap:wrap; }
+          .arrival-main-time { font-size:clamp(50px,18vw,65px); }
+          .hero .arrival-next { flex-wrap:wrap; }
         }
       `;
       // Preserve document-level h1/main semantics in the containing dashboard.
