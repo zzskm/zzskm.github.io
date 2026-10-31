@@ -291,16 +291,116 @@
       .status-row { gap:6px; }
       .status-chip { font-size:11px; }
     }
+
+    /* v0 redesign: arrival first, departure action second, all diagnostics progressive. */
+    :root { --bg:#f7f8fa; --surface:#fff; --surface-2:#f0f1f3; --ink:#13161d; --muted:#5c626b;
+      --line:#e2e4e7; --go:#124b33; --go-soft:#d3f5e0; --wait:#124b33; --wait-soft:#d3f5e0;
+      --warn:#332208; --warn-soft:#ffc44b; --danger:#fff; --danger-soft:#d82d29; }
+    @media (prefers-color-scheme:dark) {
+      :root { --bg:#14171d; --surface:#1d2129; --surface-2:#292e38; --ink:#f3f5f8;
+        --muted:#abb2bf; --line:#3c434e; --go:#c6f7d8; --go-soft:#194b35;
+        --wait:#c6f7d8; --wait-soft:#194b35; --warn:#ffdfa2; --warn-soft:#664414;
+        --danger:#fff; --danger-soft:#a72b29; --hero-sub:#abb2bf; }
+    }
+    body { padding:24px 20px 60px; }
+    main { max-width:680px; }
+    header.route-header { margin:0 0 18px; }
+    .route-heading-top, .route-live-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .route-heading h1 { font-size:clamp(21px,4.6vw,28px); font-weight:800; line-height:1.3; margin:0; letter-spacing:-.03em; }
+    .route-heading h1 strong { font-size:1.25em; }
+    .route-heading h1 span { font-weight:450; font-size:.62em; color:var(--muted); vertical-align:middle; letter-spacing:0; }
+    .route-subtitle { margin:4px 0 20px; font-size:14px; font-weight:600; color:var(--muted); }
+    .route-settings { padding:9px 12px; flex-shrink:0; }
+    .route-live-row { border-bottom:2px solid var(--line); padding:12px 0; }
+    .route-data-state { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; min-width:0; }
+    .route-data-state .status-chip { background:transparent; padding:0; color:var(--muted); border-radius:0; font-size:13px; }
+    .route-data-state .status-chip.fresh { color:var(--go); }
+    .route-data-state .status-chip.stale,.route-data-state .status-chip.error { color:#d14438; }
+    .route-data-state .freshness { margin:0; color:var(--muted); font-size:12px; }
+    .route-live-row #refresh { white-space:nowrap; padding:8px; min-height:44px; font-size:13px; margin:0; }
+    #refresh-status { font-size:12px; min-height:0; margin:5px 0; }
+    .route-header .detail-link { min-height:0; font-size:12px; margin:0; padding:0; color:var(--muted); }
+    .hero { padding:0; background:none; color:var(--ink); border-radius:0; box-shadow:none; }
+    .hero-times { border:0; margin:0 0 26px; padding:14px 0 0; }
+    .arrival-label { font-size:14px; color:var(--muted); letter-spacing:.015em; }
+    .arrival-primary { margin:12px 0 4px; display:block; }
+    .arrival-main-time { font-size:clamp(70px,19vw,112px); line-height:.98; font-weight:850; color:var(--ink); letter-spacing:-.065em; }
+    .hero.is-stale .arrival-main-time { color:var(--muted); opacity:.75; }
+    .hero .eta-row { margin:14px 0 0; gap:6px; display:flex; align-items:baseline; color:var(--ink); }
+    .hero .eta-num { font-size:clamp(32px,7.5vw,44px); line-height:1; }
+    .hero .eta-unit { font-size:17px; color:var(--muted); }
+    .eta-stops { font-size:14px; color:var(--muted); }
+    .eta-stops:not(:empty)::before { content:"·"; margin-right:8px; }
+    .hero .arrival-priority-note { font-size:12px; color:var(--muted); margin:12px 0 0; }
+    .hero.is-stale .eta-row { opacity:.55; }
+    .verdict { display:block; margin:0; border:0; padding:22px 20px; border-radius:22px; background:var(--wait-soft); color:var(--wait); }
+    .verdict.wait { background:var(--wait-soft); color:var(--wait); }
+    .verdict.go,.verdict.warn { background:var(--warn-soft); color:var(--warn); }
+    .verdict.danger { background:var(--surface-2); color:var(--ink); }
+    .verdict.is-overdue { background:var(--danger-soft); color:var(--danger); }
+    .decision-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:clamp(24px,5.5vw,31px); line-height:1.25; }
+    .decision-heading strong { flex:1; }
+    .decision-heading .verdict-glyph { font-size:20px; }
+    .departure-time-main { font-size:20px; font-weight:800; }
+    .verdict #verdict-text { display:block; font-size:16px; font-weight:600; margin:12px 0 0; }
+    .verdict .departure-context { font-size:13px; margin:16px 0 0; border-top:1px solid currentColor; border-radius:0; padding:14px 0 0; background:none; color:inherit; font-weight:500; opacity:.88; }
+    .hero .arrival-next { display:flex; align-items:center; margin:18px 0 0; padding:16px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--ink); font-size:15px; }
+    .hero .decision-note { color:var(--muted); font-size:13px; }
+    .hero-actions { margin:12px 0 0; }
+    .hero-actions .hero-settings { background:var(--surface-2); color:var(--ink); }
+    .hero .readiness { margin:14px 0 0; padding:12px 0; color:var(--muted); border-bottom:1px solid var(--line); }
+    .hero .readiness .hero-next,.hero .readiness .hero-time-label { font-size:12px; color:var(--muted); }
+    .hero .readiness .alarm-state { margin:6px 0 0; gap:5px; }
+    .hero .readiness .pill { background:var(--surface-2); color:var(--ink); border-color:var(--line); font-size:11px; }
+    .hero .readiness .pill.bad { color:#bb3428; }
+    .hero .readiness .pill.ok { color:var(--go); }
+    .hero-evidence { margin-top:10px; color:var(--muted); }
+    .hero-evidence summary { color:var(--muted); font-size:13px; }
+    .hero-detail { color:var(--muted); }
+    .prediction-details { margin-top:14px; }
+    .prediction-details > summary { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-top:1px solid var(--line); font-size:15px; color:var(--muted); list-style:none; }
+    .prediction-details > summary::-webkit-details-marker { display:none; }
+    .prediction-details[open] > summary span { transform:rotate(180deg); }
+    .prediction-content { padding:4px 0 30px; }
+    .settings-backdrop:not([hidden]) { display:block; position:fixed; inset:0; z-index:98; background:rgba(0,0,0,.42); }
+    #alarm:not([hidden]) { display:block; position:fixed; z-index:99; margin:0; left:50%; bottom:0; transform:translateX(-50%); width:min(100%,680px);
+      max-height:min(90dvh,850px); overflow-y:auto; overscroll-behavior:contain; border-radius:26px 26px 0 0;
+      padding:18px 22px max(30px,env(safe-area-inset-bottom)); background:var(--surface); color:var(--ink); box-shadow:0 -14px 35px rgba(0,0,0,.2); }
+    .settings-drag-handle { width:42px; height:5px; border-radius:5px; background:var(--line); margin:0 auto 18px; }
+    .alarm-head { flex-wrap:wrap; }
+    .alarm-head #alarm-title { font-size:21px; flex:1; }
+    .settings-close { order:3; min-width:44px; }
+    .alarm-head #alarm-toggle { order:2; }
+    .alarm #alarm-settings { margin-top:8px; }
+    .alarm #alarm-settings > summary { color:var(--ink); }
+    @media(max-width:650px) { body{padding:20px 18px 40px;} .route-heading h1 span { display:block; margin-top:4px; }
+      .hero { padding:0; border-radius:0; } .arrival-main-time { font-size:clamp(62px,21vw,92px); }
+      .route-subtitle { margin-bottom:16px; } .hero .verdict { padding:20px 18px; }
+      #alarm:not([hidden]) { max-height:92dvh; padding:18px 20px max(24px,env(safe-area-inset-bottom)); }
+    }
+    @media(max-width:300px) { .route-live-row { flex-wrap:wrap; } .arrival-main-time { font-size:clamp(48px,18vw,70px); } }
+    @media(prefers-reduced-motion:reduce) { .prediction-details > summary span { transition:none; } }
   </style>
 </head>
 <body class="loading">
 <main>
-  <header>
-    <h1>3100 퇴근 버스</h1>
-    <div class="muted">유라코퍼레이션.SK케미칼 · 07511 → 우림아파트 방면 · 직행좌석</div>
-    <a class="detail-link" href="https://map.naver.com/p/entry/bus-route/11001069?c=16.00,0,0,0,dh&bsl=11001069,163603,1" target="_blank" rel="noopener noreferrer">네이버 지도에서 3100번 노선 상세 보기 ↗</a>
-    <button id="refresh" class="ghost" type="button">새로고침</button>
-    <p id="refresh-status" class="muted"></p>
+  <header class="route-header">
+    <div class="route-heading">
+      <div class="route-heading-top">
+        <h1><strong>3100</strong> <span>유라코퍼레이션·SK케미칼</span></h1>
+        <button id="open-settings" class="route-settings ghost" type="button" aria-label="출발 기준과 버스 알림 설정" aria-haspopup="dialog">⚙ <span>설정</span></button>
+      </div>
+      <p class="route-subtitle">07511 · 우림아파트 방면 · 직행좌석</p>
+    </div>
+    <div class="route-live-row">
+      <div class="route-data-state">
+        <span class="status-chip" id="status-chip">상태 확인 중</span>
+        <span class="freshness" id="freshness">갱신 확인 중</span>
+      </div>
+      <button id="refresh" class="ghost" type="button">↻ 새로고침</button>
+    </div>
+    <p id="refresh-status" class="muted" role="status"></p>
+    <a class="detail-link" href="https://map.naver.com/p/entry/bus-route/11001069?c=16.00,0,0,0,dh&bsl=11001069,163603,1" target="_blank" rel="noopener noreferrer">네이버 지도에서 3100번 노선 보기</a>
   </header>
 
   <p id="sr-live" class="sr-only" role="status" aria-live="polite"></p>
@@ -314,44 +414,46 @@
 
   <section class="hero" id="hero">
     <div class="hero-times" aria-label="3100번 도착 예상">
-      <div class="arrival-label">3100번 · 07511 정류장 도착 예상</div>
+      <div class="arrival-label">도착 예정 · 공공 API</div>
       <div class="arrival-primary">
         <time id="arrival-main-time" class="arrival-main-time">--:--</time>
         <span id="eta-unavailable" class="safe-time" hidden>정보 없음</span>
-        <span class="eta-row" id="eta-row"><span class="eta-num" id="eta-num">--</span><span class="eta-unit" id="eta-unit">확인 중</span></span>
       </div>
-      <p class="arrival-priority-note" id="arrival-clock">공공 API에서 버스 도착 예정 시각을 확인합니다.</p>
-      <p class="arrival-next" id="arrival-next" hidden></p>
+      <div class="eta-row" id="eta-row"><strong class="eta-num" id="eta-num">--</strong><span class="eta-unit" id="eta-unit">확인 중</span><span class="eta-stops" id="eta-stops"></span></div>
+      <p class="arrival-priority-note" id="arrival-clock">공공 API 도착 예측을 확인하고 있습니다.</p>
     </div>
-    <div class="verdict wait" id="verdict"><span class="verdict-glyph" id="verdict-glyph" aria-hidden="true">⏳</span><span id="verdict-text" class="skeleton">출발 판단 중</span></div>
-    <p class="departure-context" id="departure-context">도보시간을 반영해 출발 시각을 계산합니다.</p>
-    <div class="freshness" id="freshness">갱신 확인 중</div>
-    <div class="status-row" aria-label="데이터 상태"><span class="status-chip" id="status-chip">상태 확인 중</span></div>
-    <div class="hero-detail" id="hero-detail"><span class="skeleton">차량 정보 확인 중</span></div>
+    <div class="verdict wait" id="verdict">
+      <div class="decision-heading"><span class="verdict-glyph" id="verdict-glyph" aria-hidden="true">◷</span><strong id="verdict-heading">출발 시각 확인 중</strong><span id="departure-time-main" class="departure-time-main"></span></div>
+      <p id="verdict-text" class="skeleton">출발 판단 중</p>
+      <p class="departure-context" id="departure-context">도보시간을 반영해 출발 시각을 계산합니다.</p>
+    </div>
+    <p class="arrival-next" id="arrival-next" hidden></p>
+    <div class="decision-note" id="decision-note" hidden></div>
     <div class="hero-actions">
       <button id="alarm-skip" type="button" class="hero-settings" hidden>이 차량 제외</button>
       <button id="alarm-undo-skip" type="button" class="hero-settings" hidden>제외 되돌리기</button>
-      <button id="open-settings" type="button" class="hero-settings">도보 · 알림 설정</button>
     </div>
-    <div class="readiness" aria-label="알림 준비 상태">
-      <p class="hero-time-label">알림 상태 · 출발 판단과 별도</p>
+    <div class="readiness" aria-label="버스 알림 준비 상태">
       <p class="hero-next" id="hero-next">다음 알림 확인 중</p>
       <div class="alarm-state">
         <button id="hero-alarm-toggle" class="pill" type="button">알림 설정 확인 중</button>
         <button id="hero-alarm-perm" class="pill" type="button">OS 권한 확인 중</button>
         <button id="hero-alarm-sound" class="pill" type="button">소리 확인 중</button>
       </div>
-      <p class="hero-time-label">탭이 닫혔거나 백그라운드에서는 알림이 지연될 수 있습니다.</p>
+      <p class="hero-time-label">알림은 탭이 닫히거나 백그라운드에서 지연될 수 있습니다.</p>
     </div>
-    <details class="hero-evidence"><summary>도착 예측·출발 판단 근거</summary>
+    <details class="hero-evidence"><summary>출발 판단 근거</summary>
       <div>조기 도착 대비 기준 <span id="safe-time">—</span> · 실제 도착을 뜻하지 않습니다</div>
       <p id="model-note"></p><p id="safety-detail"></p>
+      <p class="hero-detail" id="hero-detail"><span class="skeleton">차량 정보 확인 중</span></p>
     </details>
-    <div class="decision-note" id="decision-note" hidden></div>
   </section>
 
   <div class="error-card" id="error-card" role="alert"></div>
 
+  <details class="prediction-details" id="prediction-details">
+    <summary>예측 정보 자세히 <span aria-hidden="true">⌄</span></summary>
+    <div class="prediction-content">
   <section class="panel timeline-panel" aria-labelledby="timeline-title">
     <div class="section-head"><h2 id="timeline-title">이번 버스 타임라인</h2><span class="tag">한국 시각</span></div>
     <p class="muted">● 확인된 사건 · ◇ 계산된 예정 · 시간이 지나도 실제 도착은 미확인</p>
@@ -367,9 +469,45 @@
     <div class="card"><div class="card-label">현재 위치</div><div class="card-value" id="card-stops">--</div><div class="card-sub" id="card-stops-sub">정류장까지 남은 정거장</div></div>
   </section>
 
-  <section class="alarm" id="alarm" aria-labelledby="alarm-title">
+
+
+  <h2>도착 예상은 어떻게 바뀌었나요?</h2>
+  <p id="departure-change" class="change-note" hidden></p>
+  <p id="aux-status" class="muted"></p>
+  <div class="chart-controls" role="group" aria-label="그래프 보기">
+    <button type="button" class="chip" id="chart-arrival" aria-pressed="true">도착 예정 시각</button>
+    <button type="button" class="chip" id="chart-remaining" aria-pressed="false">남은 시간</button>
+  </div>
+  <section class="panel">
+    <div class="chart-legend"><span>● API 예측 기록</span><span>◇ 현재 보정 예상</span><span>△ 현재 조기 대비 기준</span></div>
+    <div id="chart" role="img" aria-label="현재 차량 도착 예측 추이 그래프"></div>
+    <div class="muted" id="chart-note">조회 시점별 API 예측 기록입니다. 실제 도착 관측이 아닙니다.</div>
+    <div class="sr-only"><table id="chart-table"><caption>현재 차량 도착 예측 기록</caption><thead><tr><th>조회 시각</th><th>API 도착 예정</th><th>도착까지(분)</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <h2>최근 운행 기록</h2>
+  <p class="muted">도착 추정 시각과 추적 종료 사유입니다. 실제 도착을 측정한 기록이 아닙니다.</p>
+  <ul class="arrival-list" id="arrivals"><li class="empty">불러오는 중입니다.</li></ul>
+
+  <details class="panel history-panel"><summary>같은 요일 운행 시각 비교</summary>
+    <div id="history-chart" role="img" aria-label="같은 요일 운행 추정 시각"></div>
+    <p id="history-chart-note" class="muted"></p>
+    <details><summary>비교 기록 표</summary><table class="history-table"><caption>운행별 도착 추정 · 실제 도착 미측정</caption><thead><tr><th>날짜</th><th>추정 시각</th><th>차량</th></tr></thead><tbody id="history-table"></tbody></table></details>
+    <div class="alarm-sub">지난 4주 같은 요일 운행 기록 <span class="muted">(알림 시간대 안에 온 버스)</span></div>
+    <ul class="alarm-history" id="alarm-history" aria-live="off"></ul>
+    <div class="alarm-history-note" id="alarm-history-note"></div>
+  </details>
+
+  <h2>수집 상태</h2>
+  <details class="panel"><summary>상세 수집 정보 보기</summary><div id="system" class="muted" style="margin-top:10px">확인 중...</div></details>
+    </div>
+  </details>
+  <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+  <section class="alarm" id="alarm" aria-labelledby="alarm-title" role="dialog" aria-modal="true" aria-label="출발 기준과 알림 설정" tabindex="-1" hidden>
+    <div class="settings-drag-handle" aria-hidden="true"></div>
     <div class="alarm-head">
       <h2 class="alarm-title" id="alarm-title">🔔 도착 알림</h2>
+      <button id="settings-close" class="ghost settings-close" type="button" aria-label="설정 닫기">✕</button>
       <button id="alarm-toggle" class="switch" type="button" role="switch" aria-checked="false" aria-label="도착 알림">꺼짐</button>
     </div>
     <p id="settings-summary" class="muted"></p>
@@ -424,36 +562,6 @@
       <p>알림 시간대는 버스가 도착하는 시각 기준입니다. 시간대 밖에 오는 버스는 건너뛰고, 다음 버스가 시간대 안이면 그 버스를 알립니다.</p>
     </details>
   </section>
-
-  <h2>도착 예상은 어떻게 바뀌었나요?</h2>
-  <p id="departure-change" class="change-note" hidden></p>
-  <p id="aux-status" class="muted"></p>
-  <div class="chart-controls" role="group" aria-label="그래프 보기">
-    <button type="button" class="chip" id="chart-arrival" aria-pressed="true">도착 예정 시각</button>
-    <button type="button" class="chip" id="chart-remaining" aria-pressed="false">남은 시간</button>
-  </div>
-  <section class="panel">
-    <div class="chart-legend"><span>● API 예측 기록</span><span>◇ 현재 보정 예상</span><span>△ 현재 조기 대비 기준</span></div>
-    <div id="chart" role="img" aria-label="현재 차량 도착 예측 추이 그래프"></div>
-    <div class="muted" id="chart-note">조회 시점별 API 예측 기록입니다. 실제 도착 관측이 아닙니다.</div>
-    <div class="sr-only"><table id="chart-table"><caption>현재 차량 도착 예측 기록</caption><thead><tr><th>조회 시각</th><th>API 도착 예정</th><th>도착까지(분)</th></tr></thead><tbody></tbody></table></div>
-  </section>
-
-  <h2>최근 운행 기록</h2>
-  <p class="muted">도착 추정 시각과 추적 종료 사유입니다. 실제 도착을 측정한 기록이 아닙니다.</p>
-  <ul class="arrival-list" id="arrivals"><li class="empty">불러오는 중입니다.</li></ul>
-
-  <details class="panel history-panel"><summary>같은 요일 운행 시각 비교</summary>
-    <div id="history-chart" role="img" aria-label="같은 요일 운행 추정 시각"></div>
-    <p id="history-chart-note" class="muted"></p>
-    <details><summary>비교 기록 표</summary><table class="history-table"><caption>운행별 도착 추정 · 실제 도착 미측정</caption><thead><tr><th>날짜</th><th>추정 시각</th><th>차량</th></tr></thead><tbody id="history-table"></tbody></table></details>
-    <div class="alarm-sub">지난 4주 같은 요일 운행 기록 <span class="muted">(알림 시간대 안에 온 버스)</span></div>
-    <ul class="alarm-history" id="alarm-history" aria-live="off"></ul>
-    <div class="alarm-history-note" id="alarm-history-note"></div>
-  </details>
-
-  <h2>수집 상태</h2>
-  <details class="panel"><summary>상세 수집 정보 보기</summary><div id="system" class="muted" style="margin-top:10px">확인 중...</div></details>
 </main>
 <script src="alarm.js"></script>
 <script src="dashboard.js"></script>
