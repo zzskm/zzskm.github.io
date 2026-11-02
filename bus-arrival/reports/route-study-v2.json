@@ -8,9 +8,9 @@
   "arrival_truth": "target_api_derived_proxy_not_measured_arrival",
   "poll_coverage_max_gap_sec": 180,
   "window_minutes": 20,
-  "observed_station_list_polls": 402,
+  "observed_station_list_polls": 403,
   "prediction_poll_days": 29,
-  "discarded_signal_rows": 9943,
+  "discarded_signal_rows": 9970,
   "candidate_routes": [
     {
       "route_id": 204000044,
@@ -185,16 +185,16 @@
       "route_name": "310",
       "sta_order": 40,
       "observed_days": 3,
-      "vehicle_events": 26,
+      "vehicle_events": 27,
       "labelled_events": 24,
       "matched": 15,
       "nonmatched": 9,
-      "censored": 2,
+      "censored": 3,
       "proxy_hit_rate": 0.625,
       "target_absent_at_first_signal": 15,
-      "simultaneous_eta_pairs": 11,
-      "candidate_eta_before_target_eta": 6,
-      "median_simultaneous_lead_min": 0.57,
+      "simultaneous_eta_pairs": 12,
+      "candidate_eta_before_target_eta": 7,
+      "median_simultaneous_lead_min": 0.87,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -373,6 +373,30 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 241215005,
+      "route_name": "73",
+      "sta_order": 16,
+      "observed_days": 3,
+      "vehicle_events": 21,
+      "labelled_events": 18,
+      "matched": 10,
+      "nonmatched": 8,
+      "censored": 3,
+      "proxy_hit_rate": 0.556,
+      "target_absent_at_first_signal": 13,
+      "simultaneous_eta_pairs": 8,
+      "candidate_eta_before_target_eta": 6,
+      "median_simultaneous_lead_min": 1.67,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000059,
       "route_name": "9507",
       "sta_order": 21,
@@ -445,20 +469,20 @@
       "eligible_for_alert_use": false
     },
     {
-      "route_id": 241215005,
-      "route_name": "73",
-      "sta_order": 16,
+      "route_id": 241223008,
+      "route_name": "602-2B",
+      "sta_order": 12,
       "observed_days": 3,
-      "vehicle_events": 21,
-      "labelled_events": 17,
-      "matched": 9,
+      "vehicle_events": 15,
+      "labelled_events": 14,
+      "matched": 6,
       "nonmatched": 8,
-      "censored": 4,
-      "proxy_hit_rate": 0.529,
-      "target_absent_at_first_signal": 13,
-      "simultaneous_eta_pairs": 8,
-      "candidate_eta_before_target_eta": 6,
-      "median_simultaneous_lead_min": 1.67,
+      "censored": 1,
+      "proxy_hit_rate": 0.429,
+      "target_absent_at_first_signal": 9,
+      "simultaneous_eta_pairs": 6,
+      "candidate_eta_before_target_eta": 4,
+      "median_simultaneous_lead_min": 3.63,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -565,30 +589,6 @@
       "eligible_for_alert_use": false
     },
     {
-      "route_id": 241223008,
-      "route_name": "602-2B",
-      "sta_order": 12,
-      "observed_days": 3,
-      "vehicle_events": 15,
-      "labelled_events": 13,
-      "matched": 5,
-      "nonmatched": 8,
-      "censored": 2,
-      "proxy_hit_rate": 0.385,
-      "target_absent_at_first_signal": 9,
-      "simultaneous_eta_pairs": 6,
-      "candidate_eta_before_target_eta": 4,
-      "median_simultaneous_lead_min": 3.63,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
       "route_id": 241215006,
       "route_name": "73-1",
       "sta_order": 4,
@@ -662,5 +662,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-02T17:03:04.505312+09:00"
+  "generated_at": "2026-11-02T17:04:04.698511+09:00"
 }
