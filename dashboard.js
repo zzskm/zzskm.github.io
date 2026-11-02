@@ -253,17 +253,26 @@
       body.append(main);
       const styles = document.createElement('style');
       styles.textContent = css + `
-        /* The embedded bus card uses the standalone arrival-first hierarchy,
-           with a compact footprint and no system-dependent dark palette. */
+        /* Keep arrival-first behavior, using the containing desk's design tokens. */
         :host {
           color-scheme:light;
-          --bg:#ffffff; --surface:#ffffff; --surface-2:#f0f1f3;
-          --ink:#13161d; --muted:#5c626b; --line:#e2e4e7;
-          --brand:#1769aa; --on-brand:#ffffff;
+          --bg:var(--desk-surface); --surface:var(--desk-surface); --surface-2:var(--desk-soft);
+          --ink:var(--desk-ink); --muted:var(--desk-muted); --line:var(--desk-line);
+          --brand:var(--desk-accent); --on-brand:#ffffff;
+          --wait:var(--desk-accent); --wait-soft:var(--desk-soft);
+          --go:var(--desk-accent); --go-soft:var(--desk-soft);
+          --warn:var(--desk-warm); --warn-soft:var(--desk-warn-soft);
+          --danger:var(--desk-danger); --danger-soft:var(--desk-danger-soft);
           color:var(--ink);
         }
         .bus-body { box-sizing:border-box; padding:0; background:transparent; color:var(--ink);
-          font:14px/1.5 "Malgun Gothic",system-ui,sans-serif; }
+          font:14px/1.6 var(--sans); }
+        button,input { border-radius:var(--radius-control); }
+        button { font-size:12px; font-weight:550; }
+        .route-live-row { border-bottom-width:1px; }
+        .route-data-state .status-chip { background:var(--surface-2); }
+        .route-data-state .status-chip.stale,.route-data-state .status-chip.error,
+        .hero .readiness .pill.bad { color:var(--danger); }
         .bus-body main { max-width:none; }
         .route-header { margin:0 0 12px; }
         .route-heading h1 { font-size:22px; }
@@ -279,12 +288,12 @@
         .hero { background:transparent; padding:0; }
         .hero-times { padding-top:10px; margin-bottom:18px; }
         .hero .arrival-label { font-size:12px; }
-        .arrival-main-time { font-size:clamp(54px,7vw,78px); }
+        .arrival-main-time { font:500 clamp(52px,5.5vw,72px)/1.1 var(--mono); letter-spacing:-.075em; }
         .hero .eta-row { margin-top:10px; }
         .hero .eta-num { font-size:30px; }
         .hero .eta-unit,.hero .eta-stops { font-size:12px; }
         .hero .arrival-priority-note { font-size:11px; }
-        .verdict { border-radius:16px; padding:18px; }
+        .verdict { border-radius:var(--radius-inset); padding:16px; }
         .decision-heading { font-size:clamp(20px,2.4vw,25px); }
         .departure-time-main { font-size:17px; }
         .verdict #verdict-text { margin-top:8px; font-size:14px; }
@@ -306,7 +315,7 @@
         @media(max-width:599px) {
           .route-heading h1 { font-size:20px; }
           .route-heading h1 span { font-size:11px; }
-          .arrival-main-time { font-size:clamp(56px,19vw,78px); }
+          .arrival-main-time { font-size:58px; }
           .hero .eta-num { font-size:28px; }
           .verdict { padding:16px; }
           .decision-heading { font-size:21px; }

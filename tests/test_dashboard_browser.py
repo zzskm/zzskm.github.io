@@ -130,13 +130,13 @@ class DashboardBrowserTests(unittest.TestCase):
         if artifact:
             Path(artifact).mkdir(parents=True,exist_ok=True)
             page.screenshot(path=str(Path(artifact)/'dashboard-mobile.png'),full_page=True)
-        # All three panels and the embedded bus stay light regardless of OS preference.
+        # All four panels and the embedded bus share the light desk palette.
         self.assertEqual(page.locator('#theme').count(),0)
         light_palette=page.evaluate("""() => ({
             scheme:getComputedStyle(document.documentElement).colorScheme,
             ink:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
             background:getComputedStyle(document.body).backgroundColor,
-            panels:['#work-panel','#bus-panel','#weight-panel'].map(sel=>
+            panels:['#work-panel','#bus-panel','#clock-card','#weight-panel'].map(sel=>
                 getComputedStyle(document.querySelector(sel)).backgroundColor)
         })""")
         page.emulate_media(color_scheme='dark')
@@ -144,15 +144,24 @@ class DashboardBrowserTests(unittest.TestCase):
             scheme:getComputedStyle(document.documentElement).colorScheme,
             ink:getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
             background:getComputedStyle(document.body).backgroundColor,
-            panels:['#work-panel','#bus-panel','#weight-panel'].map(sel=>
+            panels:['#work-panel','#bus-panel','#clock-card','#weight-panel'].map(sel=>
                 getComputedStyle(document.querySelector(sel)).backgroundColor)
         })""")
         self.assertEqual(dark_os_palette,light_palette)
         self.assertEqual(light_palette['scheme'],'light')
         self.assertEqual(light_palette['ink'],'#24352e')
         self.assertEqual(light_palette['panels'][1],'rgb(255, 255, 255)')
+        self.assertEqual(len(set(light_palette['panels'])),1)
         bus_ink=page.locator('#hero').evaluate('e=>getComputedStyle(e.getRootNode().host).getPropertyValue("--ink").trim()')
-        self.assertEqual(bus_ink,'#13161d')
+        self.assertEqual(bus_ink,light_palette['ink'])
+        # The shadow widget must use the desk controls and typography, too.
+        for prop in ('fontFamily','color'):
+            self.assertEqual(page.locator('#hero').evaluate('(e,p)=>getComputedStyle(e)[p]',prop),
+                             page.locator('#work-panel').evaluate('(e,p)=>getComputedStyle(e)[p]',prop))
+        self.assertEqual(page.locator('#open-settings').evaluate('e=>getComputedStyle(e).borderRadius'),
+                         page.locator('#work-notify').evaluate('e=>getComputedStyle(e).borderRadius'))
+        headings=page.locator('.panel-heading').evaluate_all('els=>els.map(e=>{const s=getComputedStyle(e);return [s.paddingBottom,s.marginBottom,s.borderBottomColor].join("|")})')
+        self.assertEqual(len(set(headings)),1)
         self.assertEqual(page.locator('#arrival-main-time').inner_text(),'18:20')
         self.assertEqual(page.locator('#departure-time-main').inner_text(),'출발 18:08')
         page.locator('[data-days="60"]').click()
@@ -229,7 +238,7 @@ class DashboardBrowserTests(unittest.TestCase):
         page,errors=self.open_page(width=320)
         expect(page.locator('#weight-chart svg')).to_be_visible()
         page.emulate_media(reduced_motion='reduce')
-        for width in (320,360,390,768,1024,1440):
+        for width in (320,360,390,768,960,1024,1440):
             page.set_viewport_size({'width':width,'height':1000})
             self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'),width)
             self.assertTrue(page.locator('#weight-chart').evaluate('e=>e.querySelector("svg").getBoundingClientRect().bottom <= e.getBoundingClientRect().bottom + 1'),width)
