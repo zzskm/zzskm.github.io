@@ -57,9 +57,9 @@
     const cutoff = Date.parse(lastDate) - (days - 1) * 86400000;
     const trend = dated(summary?.series?.ewma).filter(p => Number.isFinite(p.valueKg) && Date.parse(p.date) >= cutoff && p.date <= lastDate);
     const enabled = summary?.modelDiagnostics?.trend?.predictionEnabled !== false;
-    // Visualize only four weeks (one third of the published 12-week forecast).
+    // Show two weeks so the forecast does not crowd out measured history.
     // The complete three-month forecast remains available to the summary cards.
-    const forecastEnd = Date.parse(lastDate) + 28 * 86400000;
+    const forecastEnd = Date.parse(lastDate) + 14 * 86400000;
     const prediction = enabled && showPrediction ? dated(summary?.series?.prediction).filter(p =>
       Number.isFinite(p.valueKg) && p.date >= (actual.at(-1)?.date || lastDate || '') &&
       Date.parse(p.date) <= forecastEnd) : [];

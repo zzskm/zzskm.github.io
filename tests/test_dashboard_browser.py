@@ -64,13 +64,13 @@ class DashboardBrowserTests(unittest.TestCase):
             'predictions':{'oneMonthWeightKg':84.34,'threeMonthWeightKg':85.07},
             'modelDiagnostics':{'confidence':{'level':'low','reasons':['최근 측정률이 낮음']},'trend':{'predictionEnabled':True}},
             'predictionCI':{'series':[{'date':'2026-11-04','central':84.05,'lower80':83.5,'upper80':84.6},
-                {'date':'2026-11-25','central':84.3,'lower80':83.3,'upper80':85.3},
+                {'date':'2026-11-11','central':84.3,'lower80':83.3,'upper80':85.3},
                 {'date':'2026-11-26','central':84.34,'lower80':83.26,'upper80':85.42},
                 {'date':'2027-01-21','central':85.07,'lower80':83.2,'upper80':86.9}]},
             'series':{'daily':[{'date':'2026-10-01','valueKg':84.8},{'date':'2026-10-14','valueKg':None},{'date':'2026-10-28','valueKg':84.3}],
                 'ewma':[{'date':'2026-10-01','valueKg':84.7},{'date':'2026-10-28','valueKg':83.98}],
                 'prediction':[{'date':'2026-10-29','valueKg':83.98},{'date':'2026-11-04','valueKg':84.05},
-                    {'date':'2026-11-25','valueKg':84.3},{'date':'2026-11-26','valueKg':84.34},
+                    {'date':'2026-11-11','valueKg':84.3},{'date':'2026-11-26','valueKg':84.34},
                     {'date':'2027-01-21','valueKg':85.07}]}}))
         page.route('**/garmin-weight/config.json',lambda r:r.fulfill(json={'targetWeightKg':78}))
         if fail_weight: page.route('**/garmin-weight/data/summary.json',lambda r:r.fulfill(status=503,body='unavailable'))
@@ -101,23 +101,23 @@ class DashboardBrowserTests(unittest.TestCase):
         page.locator('#walk').dispatch_event('change')
         expect(page.locator('#verdict-text')).to_contain_text('3분')
         self.assertEqual(page.evaluate('localStorage.getItem("busWalkMinutes")'),'10')
-        expect(page.locator('#clock-card')).to_have_count(0)
-        expect(page.locator('#clock-view')).to_have_count(0)
+        expect(page.locator('#clock-card')).to_be_visible()
+        expect(page.locator('#clock-view')).to_be_visible()
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
-    def test_weight_chart_forecast_window_is_four_weeks(self):
+    def test_weight_chart_forecast_window_is_two_weeks(self):
         from playwright.sync_api import expect
         page,errors=self.open_page()
-        expect(page.locator('#chart-caption')).to_have_text('과거 30일 · 향후 4주 예측')
+        expect(page.locator('#chart-caption')).to_have_text('과거 30일 · 향후 2주 예측')
         expect(page.locator('#weight-quarter')).to_have_text('85.1 kg')
         # The published three-month summary remains; only the visualized points are trimmed.
-        self.assertIn('2026-11-25',page.locator('#weight-chart').get_attribute('aria-label'))
+        self.assertIn('2026-11-11',page.locator('#weight-chart').get_attribute('aria-label'))
         self.assertNotIn('2026-11-26',page.locator('#weight-chart').get_attribute('aria-label'))
         self.assertNotIn('2027-01-21',page.locator('#weight-chart').get_attribute('aria-label'))
         expect(page.locator('.chart-band')).to_have_count(1)
         page.locator('[data-days="60"]').click()
-        expect(page.locator('#chart-caption')).to_have_text('과거 60일 · 향후 4주 예측')
+        expect(page.locator('#chart-caption')).to_have_text('과거 60일 · 향후 2주 예측')
         self.assertEqual(errors,[])
 
     def test_entire_dashboard_stays_light_under_dark_os(self):
@@ -238,7 +238,7 @@ class DashboardBrowserTests(unittest.TestCase):
         page.set_viewport_size({'width':320,'height':1000})
         page.locator('.section-nav a[href="#weight-panel"]').click()
         expect(page.locator('#weight-panel')).to_be_focused()
-        expect(page.locator('.section-nav a')).to_have_count(3)
+        expect(page.locator('.section-nav a')).to_have_count(4)
         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
         self.assertEqual(errors,[])
 
@@ -291,28 +291,70 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(page.locator('#verdict-text')).to_contain_text('7분')
         self.assertEqual(errors,[])
 
-    def test_no_general_alarm_card_even_if_bus_widget_fails(self):
+    def test_general_alarms_run_without_bus_widget_and_queue_simultaneous_rings(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(fail_bus=True)
         expect(page.locator('#bus-error')).to_be_visible()
-        expect(page.locator('#weight')).to_have_text('84.3')
-        expect(page.locator('#clock-card')).to_have_count(0)
-        expect(page.locator('#clock-view')).to_have_count(0)
+        # A quick timer starts with one click and creates exactly one entry.
+        page.locator('#timer-presets [data-min="5"]').click()
+        expect(page.locator('#timer-list li')).to_have_count(1)
+        expect(page.locator('#timer-list')).to_contain_text('5:00')
+        page.locator('#timer-create summary').click()
+        for label in ('회의','환기'):
+            page.locator('#timer-custom').fill('5'); page.locator('#timer-label').fill(label)
+            page.locator('#timer-form button[type=submit]').click()
+        expect(page.locator('#timer-list li')).to_have_count(3)
+        self.assertEqual(page.locator('#timer-custom').input_value(),'')
+        page.clock.fast_forward(5*60000)
+        expect(page.locator('#alarm-banner')).to_be_visible()
+        expect(page.locator('#alarm-banner-text')).to_contain_text('타이머 ·')
+        expect(page.locator('#alarm-queue-count')).to_have_text('미확인 3개')
+        page.keyboard.press('Escape')
+        expect(page.locator('#alarm-banner-text')).to_contain_text('회의')
+        expect(page.locator('#alarm-queue-count')).to_have_text('미확인 2개')
+        page.locator('#alarm-ack-all').click()
         expect(page.locator('#alarm-banner')).to_be_hidden()
+        expect(page.locator('#timer-list li')).to_have_count(0)
         self.assertEqual(errors,[])
 
-    def test_saved_generic_clock_alarms_cannot_fire_on_dashboard(self):
+    def test_stored_alarms_move_to_their_own_card_and_edits_do_not_refire(self):
         from playwright.sync_api import expect
         now=int(T.timestamp()*1000)
-        clocks=[{'id':'old','time':'18:00','days':[1,2,3,4,5],
-                 'enabled':True,'since':now-86400000,'label':'종료된 기능'}]
-        timers=[{'id':'oldtimer','endsAtMs':now-1000,'minutes':1,'label':'종료된 타이머'}]
-        page,errors=self.open_page(storage={'busAlarm.v1.clocks':clocks,'busAlarm.v1.timers':timers})
+        clocks=[{'id':'cWeek','time':'17:30','label':'평일 정리','days':[1,2,3,4,5],'enabled':True,'since':now-3*86400000,'bus':True},
+                {'id':'cOnce','time':'18:10','label':'한 번','days':[],'date':'2026-10-28','enabled':True,'since':now-60000,'bus':False}]
+        page,errors=self.open_page(storage={'busAlarm.v1.clocks':clocks,'busAlarm.v1.clockFired':{'cWeek|2026-10-28':now-1800000}})
         expect(page.locator('#verdict-text')).to_contain_text('8분')
-        expect(page.locator('#clock-card')).to_have_count(0)
-        expect(page.locator('#alarm-banner')).to_be_hidden()
+        # Sorted by the real next run, not by the time string.
+        expect(page.locator('#clock-next')).to_have_text('18:10 · 한 번')
+        expect(page.locator('#clock-next-detail')).to_contain_text('10분 후')
+        self.assertEqual(page.locator('#clock-list li[data-id]').evaluate_all('l=>l.map(e=>e.dataset.id)'),['cOnce','cWeek'])
+        # Bus panel no longer carries a second copy of the alarm form.
+        self.assertEqual(page.locator('#bus-widget').evaluate("h=>!!h.shadowRoot.querySelector('#clock-panel, #alarm-banner')"),False)
+        # New alarms default to one-shot without bus info and describe what will happen.
+        page.locator('#clock-create summary').click()
+        expect(page.locator('#clock-once')).to_have_attribute('aria-pressed','true')
+        expect(page.locator('#clock-preview')).to_have_text('내일 18:00에 한 번')
+        page.locator('#clock-weekdays').click()
+        expect(page.locator('#clock-preview')).to_have_text('평일 18:00 반복')
+        page.locator('#clock-create summary').click()
+        # Editing an alarm to an already-passed time keeps its id and does not ring now.
+        page.locator('#clock-list li[data-id="cWeek"] [data-edit]').click()
+        expect(page.locator('#clock-time')).to_be_focused()
+        page.locator('#clock-time').fill('17:00')
+        page.locator('#clock-form button[type=submit]').click()
+        expect(page.locator('#clock-list li[data-id="cWeek"] .clock-time')).to_have_text('17:00')
         page.clock.fast_forward(3000)
         expect(page.locator('#alarm-banner')).to_be_hidden()
+        # Delete → undo restores the same alarm once.
+        page.locator('#clock-list li[data-id="cWeek"] [data-del]').click()
+        expect(page.locator('#clock-undo')).to_be_focused()
+        page.locator('#clock-undo').click()
+        expect(page.locator('#clock-list li[data-id]')).to_have_count(2)
+        # The one-shot alarm rings as a clock alarm and then switches itself off.
+        page.clock.fast_forward(10*60000)
+        expect(page.locator('#alarm-banner-text')).to_contain_text('시각 알람 · 한 번')
+        page.locator('#alarm-ack').click()
+        expect(page.locator('#clock-list li[data-id="cOnce"] [data-toggle]')).to_have_attribute('aria-checked','false')
         self.assertEqual(errors,[])
 
 
