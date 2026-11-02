@@ -187,3 +187,10 @@ python scripts/measure-dashboard-memory.py
 ```
 
 기본 결과 파일은 Git에서 제외되는 `_site/dashboard-preview/memory-results.json`이다. `--rounds`, `--settle`, `--samples`, `--output`으로 조건과 출력 경로를 변경할 수 있다. 비교용 정적 서버와 Chrome은 스크립트 종료 시 정리한다.
+
+
+### 2026-11-02 대시보드 일반 알람 복구
+
+버스 페이지에서 일반 알람을 제거할 때 함께 삭제된 대시보드 알람·타이머 카드를 복구했다. `dashboard-alarm.js`, `dashboard-alert-runtime.js`, `dashboard-clock-view.js`와 CSS는 대시보드에서만 로드한다. 기존 `busAlarm.v1.clocks`, `busAlarm.v1.timers`, 발화 원장 키를 유지해 저장된 알람을 읽고 중복 발화를 방지한다. 버스 페이지는 일반 알람을 실행하지 않는다.
+
+체중 차트의 예측선과 80% 신뢰띠 표시 기간은 최근 기록 이후 28일에서 14일로 줄였다. 1개월·3개월 예상 체중 요약과 원본 예측 데이터는 유지한다.

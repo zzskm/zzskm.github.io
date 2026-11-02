@@ -19,6 +19,7 @@
   // Bus notification state is initialized independently from the bus widget.
   const R = window.AlertRuntime;
   R.init(document);
+  window.ClockView.mount($('clock-view'));
   function readinessIssues() {
     const r = R.readiness(), issues = [];
     if (R.state.permissionError) issues.push('OS 알림 권한 요청 실패');
@@ -170,7 +171,7 @@
       </svg>`;
     host.setAttribute('aria-label', label);
     set('chart-start', chartDate(dates[0])); set('chart-end', chartDate(dates.at(-1)));
-    set('chart-caption', prediction.length ? `과거 ${range}일 · 향후 4주 예측` : `최근 ${range}일 기록`);
+    set('chart-caption', prediction.length ? `과거 ${range}일 · 향후 2주 예측` : `최근 ${range}일 기록`);
   }
   function renderPrediction() {
     const diag = summary.modelDiagnostics || {}, forecast = summary.predictions || {};
