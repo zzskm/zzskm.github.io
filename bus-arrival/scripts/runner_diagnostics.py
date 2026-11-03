@@ -46,6 +46,13 @@ def collect():
         })
     except (OSError, ValueError):
         data["api_addresses"] = []
+    try:
+        data["gbis_web_addresses"] = sorted({
+            str(ipaddress.ip_address(item[4][0]))
+            for item in socket.getaddrinfo("www.gbis.go.kr", 443, type=socket.SOCK_STREAM)
+        })
+    except (OSError, ValueError):
+        data["gbis_web_addresses"] = []
     return data
 
 

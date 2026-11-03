@@ -7,6 +7,8 @@ GBIS 버스 도착 로그 수집기 — 유라코퍼레이션.SK케미칼(07511)
 - BUS_PRIMARY_MODE=station-list 선택 시 07511 전체 노선 1회 조회, 3100번만 기존 추적에 반영
 - 나머지 노선은 route_signal_log.csv 로 관측. 3100번 알림 보정에는 아직 사용하지 않음
 - 유라코퍼레이션 + 성남시청전면 동시 조회
+- --gbis-web (BUS_GBIS_WEB=1): GBIS 웹 노선 화면의 3100 전 차량 위치를 route_position_log.csv 에,
+  07511/06004 도달 구간을 route_pass_log.csv 에 기록 (관측 전용, 인증키·호출 한도 미사용)
 - 평일 퇴근 시간대(기본 KST 16:00~22:00)에만 수집
 - 차량 ID 매칭으로 도착 판정 (다른 차량으로 교체 / 후속 차량 없이 사라짐 모두 감지)
 - 실행 간 상태 저장 (tracker_state.json) — 짧은 수집 구간을 이어 붙여도 추적이 끊기지 않음
@@ -37,6 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from safety_model import safety_prediction, timestamp, model_for_day, publication_decision
 from station_signals import fetch_station_list, signal_rows
+from gbis_web import fetch_route_positions, position_rows, detect_passes
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -69,6 +72,9 @@ RESULT_NO_DATA = "4"
 IDLE_INTERVAL_SEC = 120
 # The session publishes saved observations before releasing this runner.
 ROTATE_RUNNER_EXIT_CODE = 75
+# GBIS 웹이 연속으로 실패하면 잠시 쉰다 (조회 지연과 상대 서버 부담을 줄인다)
+GBIS_WEB_BACKOFF_FAILS = 3
+GBIS_WEB_BACKOFF_SEC = 600
 
 HOLIDAYS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "holidays.json")
 
@@ -470,6 +476,51 @@ def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
     state["last_flag"] = flag
 
 
+def poll_gbis_web(state: dict, ts: dt.datetime, route_id: int, target_ids: list,
+                  position_path: str, pass_path: str) -> dict:
+    """GBIS 웹 노선 위치 1회 수집. 결과는 status 용 요약이며 기본 추적·호출 한도와 무관하다."""
+    web = state.setdefault("gbis_web", {})
+    if web.get("date") != ts.strftime("%Y-%m-%d"):
+        web.update(date=ts.strftime("%Y-%m-%d"), calls=0)
+    skip_until = parse_ts(web.get("skip_until"))
+    if skip_until and ts < skip_until:
+        return {"ok": False, "skipped": "backoff", "retry_after": web["skip_until"],
+                "consec_fail": web.get("consec_fail", 0), "calls": web["calls"],
+                "last_success": web.get("last_success")}
+    detail = {}
+    started = time.monotonic()
+    result = fetch_route_positions(route_id, diagnostics=detail)
+    latency = round(time.monotonic() - started, 3)
+    # 도달 구간의 끝은 data.go.kr 조회 시각이 아니라 GBIS 응답을 받은 시각이어야 한다
+    observed = kst_now()
+    web["calls"] = web.get("calls", 0) + 1
+    if result is None:
+        web["consec_fail"] = web.get("consec_fail", 0) + 1
+        if web["consec_fail"] >= GBIS_WEB_BACKOFF_FAILS:
+            web["skip_until"] = (ts + dt.timedelta(seconds=GBIS_WEB_BACKOFF_SEC)).isoformat()
+        return {"ok": False, "error_detail": detail, "consec_fail": web["consec_fail"],
+                "calls": web["calls"], "request_duration_sec": latency,
+                "last_success": web.get("last_success")}
+    ts_iso = observed.isoformat()
+    web.update(consec_fail=0, skip_until=None, last_success=ts_iso)
+    for row in position_rows(ts_iso, route_id, result["vehicles"]):
+        append_csv(position_path, row)
+    targets = {sid: result["orders"].get(sid) for sid in target_ids if sid is not None}
+    events, web["positions"] = detect_passes(web.get("positions") or {}, result["vehicles"], observed, targets,
+                                             route_id=route_id, max_gap_sec=STATE_MAX_AGE_SECONDS)
+    for event in events:
+        append_csv(pass_path, event)
+        logging.info("GBIS 웹 도달: vehId=%s station=%s (%s ~ %s)", event["veh_id"], event["station_id"],
+                     event["lower_ts"], event["upper_ts"])
+    summary = {"ok": True, "vehicles": len(result["vehicles"]), "waiting_vehicles": result["waiting_count"],
+               "passes": len(events), "calls": web["calls"], "request_duration_sec": latency,
+               "last_success": ts_iso}
+    missing = [sid for sid, order in targets.items() if order is None]
+    if missing:
+        summary["targets_not_on_route"] = missing
+    return summary
+
+
 def run_loop(args: argparse.Namespace):
     service_key = get_service_key()
     route_id = args.route_id or TARGET_ROUTE_ID
@@ -490,6 +541,8 @@ def run_loop(args: argparse.Namespace):
     arrival_path = args.output_csv
     segment_path = os.path.join(base_dir, "segment_log.csv")
     signal_path = os.path.join(base_dir, "route_signal_log.csv")
+    position_path = os.path.join(base_dir, "route_position_log.csv")
+    pass_path = os.path.join(base_dir, "route_pass_log.csv")
     status_path = args.status_json
 
     state = load_state(state_path)
@@ -597,6 +650,14 @@ def run_loop(args: argparse.Namespace):
         state["daily_calls"] += primary_calls + (1 if secondary_called else 0)
         state["last_poll"] = ts_iso
         previous_vid = state.get("cur_vid")
+        gbis_web_status = None
+        if args.gbis_web:
+            try:
+                gbis_web_status = poll_gbis_web(state, ts, route_id, [STATION_ID, secondary_station_id],
+                                                position_path, pass_path)
+            except Exception as e:  # 관측 전용 수집이 기본 수집을 멈추게 하지 않는다
+                logging.warning("GBIS 웹 수집 중 오류: %s", type(e).__name__)
+                gbis_web_status = {"ok": False, "error_detail": {"kind": "unexpected_error"}}
 
         if info is None:
             state["consec_fail"] = state.get("consec_fail", 0) + 1
@@ -675,6 +736,8 @@ def run_loop(args: argparse.Namespace):
                 }
 
         status["primary_source"] = primary_source
+        if gbis_web_status is not None:
+            status["gbis_web"] = gbis_web_status
         if station_list_error:
             status["station_list_error_detail"] = station_list_error
         if route_rows is not None:
@@ -763,6 +826,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    default=int(os.getenv("BUS_IDLE_INTERVAL") or IDLE_INTERVAL_SEC),
                    help="버스가 없을 때 조회 간격(초)")
     p.add_argument("--urgent-predict-sec", type=int, default=int(os.getenv("BUS_URGENT_PREDICT_SEC", "900")))
+    p.add_argument("--gbis-web", action=argparse.BooleanOptionalAction,
+                   default=os.getenv("BUS_GBIS_WEB") == "1",
+                   help="GBIS 웹 노선 위치를 함께 수집 (관측 전용, 인증키·일일 호출 한도 미사용)")
     p.add_argument("--exit-on-change", action="store_true",
                    help="추적 차량이 바뀌면(첫 발견/도착/교체) 구간을 끝내 즉시 게시할 수 있게 한다")
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))

@@ -77,6 +77,9 @@ jobs:
           BUS_PRIMARY_MODE: "station-list"
           # 성남시청전면(06004, staOrder 12) — 매 구간 노선 API 로 다시 해석하지 않도록 고정
           BUS_SECONDARY_STATION_ID: "205000029"
+          # GBIS 웹(www.gbis.go.kr) 노선 화면의 3100 전 차량 위치·07511/06004 도달 구간 기록.
+          # 관측 전용: 인증키·일일 호출 한도를 쓰지 않고 알림·안전 모델에도 반영하지 않는다.
+          BUS_GBIS_WEB: "1"
 
 
       - name: Preserve runner network diagnostics
