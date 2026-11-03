@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>12월 일본 여행 견적</title>
+  <meta name="description" content="2026년 12월 도쿄·오사카·후쿠오카 여행을 카드 선택으로 비교하는 1인 평균 견적" />
+  <link rel="stylesheet" href="trip_2026_dec_japan.styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>12월 일본 여행 견적 · 도쿄 / 오사카 / 후쿠오카</h1>
+    <p>인원·일정·시기를 고르고 도시별로 카드를 선택하면 1인 평균 비용을 비교합니다. 가격은 2026-11-03 기준 추정치입니다.</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel panel-left" aria-label="카드 선택">
+      <h2>카드 선택</h2>
+
+      <div class="category is-open" data-section="city">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">도시</span>
+          <span id="summary-city" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="city-options" class="card-grid card-grid-city"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="party">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">인원</span>
+          <span id="summary-party" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="party-controls"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="schedule">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">일정 · 시기</span>
+          <span id="summary-schedule" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <p class="group-label">기간</p>
+          <div id="duration-options" class="card-grid"></div>
+          <p class="group-label">출발 시기</p>
+          <div id="season-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="fx">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">환율</span>
+          <span id="summary-fx" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="fx-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <p class="city-divider">아래 카드는 도시마다 따로 저장됩니다.</p>
+
+      <div class="category is-open" data-section="flight">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">항공 (1인 왕복)</span>
+          <span id="summary-flight" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="flight-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="airport">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">공항 이동</span>
+          <span id="summary-airport" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="airport-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="roomConfig">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">객실 구성</span>
+          <span id="summary-roomConfig" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="roomConfig-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="stayA">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span id="title-stayA" class="category-title">A숙소</span>
+          <span id="summary-stayA" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="stayA-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="stayB">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">B숙소 (마지막 1박)</span>
+          <span id="summary-stayB" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="stayB-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="meal">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">식비</span>
+          <span id="summary-meal" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="meal-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="transport">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">시내 교통</span>
+          <span id="summary-transport" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="transport-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="activities">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span id="title-activities" class="category-title">액티비티</span>
+          <span id="summary-activities" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="activity-controls"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="activityPacks">
+        <button class="category-toggle" type="button" aria-expanded="true">
+          <span class="category-title">액티비티 팩</span>
+          <span id="summary-activityPack" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body">
+          <div id="activityPack-options" class="card-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-right" aria-label="결과">
+      <h2>결과 (1인 평균)</h2>
+      <div class="result-sticky">
+        <p class="result-context" id="result-context">-</p>
+        <p class="big-number" id="per-person-total" aria-live="polite">-</p>
+        <p class="result-total" id="group-total">-</p>
+      </div>
+
+      <div class="result-block">
+        <h3>도시 비교</h3>
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th scope="col">도시</th>
+              <th scope="col">1인 평균</th>
+              <th scope="col">총액</th>
+            </tr>
+          </thead>
+          <tbody id="compare-body"></tbody>
+        </table>
+        <p class="field-note">인원·일정·시기·환율은 공통, 나머지는 각 도시에서 고른 카드 기준입니다. 도시 이름을 누르면 그 도시로 전환합니다.</p>
+      </div>
+
+      <div class="result-block">
+        <h3>Breakdown</h3>
+        <ul id="breakdown-list" class="breakdown-list"></ul>
+      </div>
+
+      <div class="result-block">
+        <h3>Timeline</h3>
+        <ul id="timeline-list" class="timeline-list"></ul>
+        <p id="timeline-warning" class="warn" role="status" hidden></p>
+      </div>
+
+      <div class="result-block">
+        <h3>실시간 가격 확인</h3>
+        <ul id="check-links" class="link-list"></ul>
+      </div>
+
+      <div class="result-block">
+        <h3>메모</h3>
+        <ul id="note-list" class="note-list"></ul>
+      </div>
+
+      <div class="result-actions">
+        <button id="open-evidence" class="evidence-btn" type="button">근거 보기</button>
+        <button id="reset-state" class="evidence-btn ghost" type="button">선택 초기화</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evidence-title">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="evidence-title">근거</h2>
+        <button id="close-evidence" class="close-btn" type="button" aria-label="닫기">닫기</button>
+      </div>
+      <p class="modal-meta">기준일(asOf): <strong id="evidence-asof">-</strong> · 모든 가격은 추정(proxy) 범위이며 예약 전 실시간 가격을 확인하세요.</p>
+      <ul id="evidence-sources" class="source-list"></ul>
+    </div>
+  </div>
+
+  <script src="trip_2026_dec_japan.data.js"></script>
+  <script src="trip_2026_dec_japan.app.js"></script>
+</body>
+</html>
