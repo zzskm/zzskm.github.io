@@ -46,6 +46,16 @@ def collect():
         })
     except (OSError, ValueError):
         data["api_addresses"] = []
+    # 교대 조회 출처(GBIS 웹·카카오·네이버) 주소도 남겨 runner 에서 막힌 출처를 구분한다
+    for key, host in (("gbis_web_addresses", "www.gbis.go.kr"), ("kakao_addresses", "map.kakao.com"),
+                      ("naver_addresses", "map.naver.com")):
+        try:
+            data[key] = sorted({
+                str(ipaddress.ip_address(item[4][0]))
+                for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+            })
+        except (OSError, ValueError):
+            data[key] = []
     return data
 
 

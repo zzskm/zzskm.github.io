@@ -42,12 +42,18 @@ def bucket(row):
     return lead + ':' + distance
 
 
+def calibration_source(row):
+    """Rows logged before the source column existed are official API rows."""
+    return (row.get('source') or 'official') == 'official'
+
+
 def match_trips(predictions, arrivals):
     """Exact vehicle + closed tracking interval + plate; reject ambiguous assignments."""
     audit = Counter({k: 0 for k in ('invalid_timestamp','duplicate_prediction','duplicate_trip',
                                     'invalid_trip_interval','unmatched_trip','plate_mismatch',
                                     'invalid_trip_predictions','excluded_gap_or_reason',
-                                    'sample_count_mismatch','missing_endpoints','quick_reappearance','overlapping_trip')})
+                                    'sample_count_mismatch','missing_endpoints','quick_reappearance','overlapping_trip',
+                                    'alternate_source_rows')})
     audit.update(prediction_rows=len(predictions), arrival_rows=len(arrivals))
     rows, seen = [], set()
     for r in predictions:
@@ -80,7 +86,10 @@ def match_trips(predictions, arrivals):
         if any(a.get('plateNo') and r.get('plateNo') and a['plateNo'] != r['plateNo'] for r in obs):
             audit['plate_mismatch'] += 1
             continue
-        valid = [r for r in obs if r['_p'] is not None and r['_p'] > 0]
+        # Calibrate only official API predictions; alternate sources (kakao/naver/gbis_web) still
+        # bound the trip interval but compute their remaining time differently.
+        valid = [r for r in obs if r['_p'] is not None and r['_p'] > 0 and calibration_source(r)]
+        audit['alternate_source_rows'] += sum(not calibration_source(r) for r in obs)
         if not valid:
             audit['invalid_trip_predictions'] += 1
             continue

@@ -35,6 +35,7 @@ def trim(path, days):
 if __name__ == "__main__":
     base = "bus-arrival"
     removed = sum(trim(os.path.join(base, name), 30) for name in (
-        "predict_log.csv", "arrival_log.csv", "segment_log.csv", "route_signal_log.csv"
+        "predict_log.csv", "arrival_log.csv", "segment_log.csv", "route_signal_log.csv",
+        "route_position_log.csv", "route_pass_log.csv",
     ))
     print(f"trimmed_rows={removed}")
