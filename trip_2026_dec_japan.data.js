@@ -2,6 +2,9 @@
    - No fetch required (works in file://)
    - Japan-side prices in JPY ranges [min, max]; flights in KRW ranges [min, max]
    - Engine converts JPY -> KRW with the selected fx option
+   - Each [min, max] is read as that item's P10-P90 estimate; the engine adds items as
+     independent estimates (variances add), so the total band is narrower than sum(min)-sum(max)
+   - Stay prices are early-December weekday (Sun-Thu night) rates; lodgingCalendar scales each night
    - All prices are planning estimates (proxy) as of AS_OF. Check live prices before booking.
 */
 (() => {
@@ -112,7 +115,6 @@
       subtitle: "12/10(목) 출발 · 가장 저렴",
       startDate: "2026-12-10",
       flightFactor: 1.0,
-      stayFactor: 1.0,
       parkTier: "base",
       notes: ["연말 성수기 전이라 항공·숙박이 가장 저렴한 구간입니다.", "일루미네이션·크리스마스 마켓은 이미 시작된 시기입니다."],
       sourceRef: sourceRef("japantripcost - cheapest months to fly Japan 2026", "https://www.japantripcost.com/blog/ko/cheapest-months-fly-japan-2026", "12/1-15는 비교적 저렴, 15일 이후 연말 가격 급등"),
@@ -120,10 +122,9 @@
     {
       id: "xmas",
       title: "크리스마스 주간",
-      subtitle: "12/23(수) 출발 · 항공 ×1.45, 숙박 ×1.3",
+      subtitle: "12/23(수) 출발 · 항공 ×1.45, 이브 숙박 ×1.7",
       startDate: "2026-12-23",
       flightFactor: 1.45,
-      stayFactor: 1.3,
       parkTier: "peak",
       notes: ["크리스마스 이브·당일은 호텔·테마파크 최고가 구간입니다. 테마파크는 최고가 등급으로 계산합니다.", "인기 레스토랑은 크리스마스 코스만 받는 곳이 많아 예약을 서둘러야 합니다."],
       sourceRef: sourceRef("Assumption (KAYAK 12월 평균 대비 성수기 배율)", "https://www.kayak.co.kr/%ED%95%AD%EA%B3%B5%EA%B6%8C/%EC%84%9C%EC%9A%B8-%EC%9D%B8%EC%B2%9C%EA%B5%AD%EC%A0%9C%EA%B3%B5%ED%95%AD-ICN/%EC%9D%BC%EB%B3%B8-JP0", "성수기 배율은 추정치"),
@@ -131,10 +132,9 @@
     {
       id: "yearend",
       title: "연말·연초",
-      subtitle: "12/28(월) 출발 · 항공 ×1.8, 숙박 ×1.55",
+      subtitle: "12/28(월) 출발 · 항공 ×1.8, 12/31 숙박 ×2.0",
       startDate: "2026-12-28",
       flightFactor: 1.8,
-      stayFactor: 1.55,
       parkTier: "peak",
       notes: [
         "12/31~1/3은 일부 식당·상점·관광지가 휴무하거나 단축 운영합니다.",
@@ -213,10 +213,40 @@
     },
   ];
 
+  // 1박 요금 배율 (체크인 날짜 기준). 숙박 카드 가격 = 12월 초 평일(일-목) 밤 = 1.0
+  const lodgingCalendar = {
+    weekday: [1.0, 1.0, 1.0, 1.0, 1.0, 1.2, 1.35], // 일 월 화 수 목 금 토
+    dates: {
+      "2026-12-23": 1.3, // 수 · 크리스마스 주간
+      "2026-12-24": 1.7, // 목 · 크리스마스 이브
+      "2026-12-25": 1.5, // 금 · 크리스마스
+      "2026-12-26": 1.55, // 토
+      "2026-12-27": 1.25, // 일
+      "2026-12-28": 1.4, // 월 · 연말 연휴 시작
+      "2026-12-29": 1.6,
+      "2026-12-30": 1.75,
+      "2026-12-31": 2.0, // 오미소카
+      "2027-01-01": 1.7,
+      "2027-01-02": 1.6,
+      "2027-01-03": 1.3,
+    },
+    sourceRef: sourceRef(
+      "Assumption (일본 숙박 요일·연말 요금 패턴)",
+      "https://www.japantripcost.com/blog/ko/cheapest-months-fly-japan-2026",
+      "평일 1.0, 금 ×1.2, 토 ×1.35, 12/24 ×1.7, 12/31 ×2.0 등 1박마다 배율 적용. 숙박 카드 가격은 기존 12월 proxy 범위(평일 최저~토요일 최고)의 최고가를 ÷1.35 해 평일가로 환산"
+    ),
+  };
+
   const calculationRules = {
-    contingencyRate: { min: 0.1, max: 0.15 },
+    contingencyRate: 0.1, // 예상 합계의 10%를 고정액으로 (범위를 넓히지 않음)
+    bandZ: 1.2816, // 각 항목 [min, max] = P10-P90 로 보고, 합계도 P10-P90 로 표시
     mealDays: "nightsPlusOne",
     ryokanMealCredit: 0.6, // 1박2식 료칸: 그날 식비의 60%(석식+조식) 차감
+    sourceRef: sourceRef(
+      "계산 방식 - 독립 항목의 불확실성 합산",
+      "https://en.wikipedia.org/wiki/Propagation_of_uncertainty",
+      "항목별 범위를 P10-P90 로 보고 표준편차 = 폭/(2×1.28). 합계 표준편차 = √(Σ항목 분산). 항공·숙박·식비가 동시에 최고가가 될 가능성이 낮다는 가정이라 단순 합산보다 좁음. 확정가를 넣은 항목은 분산 0"
+    ),
   };
 
   // ---------- Cities ----------
@@ -313,7 +343,7 @@
           id: "biz_chain",
           title: "비즈니스호텔 (체인 평균)",
           subtitle: "소테츠프레사·다이와로이넷 등, 좁지만 역세권",
-          perRoomPerNightJPY: range(13000, 22000),
+          perRoomPerNightJPY: range(13000, 16500),
           lodgingTaxJPY: range(0, 100),
           booking: "Ueno, Tokyo",
           sourceRef: sourceRef("Booking.com Tokyo (12월 proxy)", "https://www.booking.com/city/jp/tokyo.html", "트윈 1실 기준, 세금·봉사료 포함가"),
@@ -322,7 +352,7 @@
           id: "gracery_shinjuku",
           title: "호텔 그레이서리 신주쿠",
           subtitle: "고질라 헤드 · 신주쿠 중심, 밤 동선 편함",
-          perRoomPerNightJPY: range(22000, 36000),
+          perRoomPerNightJPY: range(22000, 26500),
           lodgingTaxJPY: range(100, 200),
           booking: "Hotel Gracery Shinjuku",
           sourceRef: sourceRef("Hotel Gracery Shinjuku", "https://gracery.com/shinjuku/", "트윈 1실 12월 proxy"),
@@ -331,7 +361,7 @@
           id: "mitsui_ginza",
           title: "미쓰이 가든 호텔 긴자 프리미어",
           subtitle: "긴자·도쿄역 접근, 고층 야경",
-          perRoomPerNightJPY: range(26000, 42000),
+          perRoomPerNightJPY: range(26000, 31000),
           lodgingTaxJPY: range(100, 200),
           booking: "Mitsui Garden Hotel Ginza Premier",
           sourceRef: sourceRef("Booking.com Tokyo (12월 proxy)", "https://www.booking.com/city/jp/tokyo.html", "트윈 1실 기준"),
@@ -340,7 +370,7 @@
           id: "residence_2br",
           title: "2룸 레지던스 (침실 2개, 4인)",
           subtitle: "침실마다 트윈 · 거실·주방, 단체에 유리",
-          perUnitPerNightJPY: range(34000, 60000),
+          perUnitPerNightJPY: range(34000, 44500),
           unitCapacity: 4,
           lodgingTaxJPY: range(0, 200),
           booking: "Ueno, Tokyo",
@@ -350,7 +380,7 @@
           id: "hilton_bay",
           title: "힐튼 도쿄 베이 (마이하마)",
           subtitle: "디즈니 셔틀 · 객실 넓음",
-          perRoomPerNightJPY: range(28000, 52000),
+          perRoomPerNightJPY: range(28000, 38500),
           lodgingTaxJPY: range(0, 0),
           booking: "Hilton Tokyo Bay",
           sourceRef: sourceRef("Booking.com Urayasu (12월 proxy)", "https://www.booking.com/city/jp/urayasu.html", "트윈 1실 기준, 우라야스시는 숙박세 없음 가정"),
@@ -359,7 +389,7 @@
           id: "prince_park",
           title: "더 프린스 파크타워 도쿄",
           subtitle: "도쿄타워 뷰 · 부모님 만족",
-          perRoomPerNightJPY: range(32000, 58000),
+          perRoomPerNightJPY: range(32000, 43000),
           lodgingTaxJPY: range(200, 200),
           booking: "The Prince Park Tower Tokyo",
           sourceRef: sourceRef("Prince Hotels", "https://www.princehotels.com/parktower/", "트윈 1실 12월 proxy"),
@@ -372,7 +402,7 @@
           title: "하코네 료칸 1박 (1박2식)",
           subtitle: "로망스카+프리패스, 온천·가이세키",
           short: "하코네",
-          perPersonPerNightJPY: range(22000, 40000),
+          perPersonPerNightJPY: range(22000, 29500),
           includesMeals: true,
           transferPerPersonJPY: range(8000, 9500),
           stayTaxJPY: range(150, 150),
@@ -384,7 +414,7 @@
           title: "마이하마 파트너호텔 1박",
           subtitle: "디즈니 다음 날 여유 · 공항버스 직행",
           short: "마이하마",
-          perRoomPerNightJPY: range(22000, 42000),
+          perRoomPerNightJPY: range(22000, 31000),
           includesMeals: false,
           transferPerPersonJPY: range(0, 600),
           stayTaxJPY: range(0, 0),
@@ -577,7 +607,7 @@
           id: "biz_chain",
           title: "비즈니스호텔 (난바/우메다 평균)",
           subtitle: "가성비, 역세권 · 객실 좁음",
-          perRoomPerNightJPY: range(10000, 19000),
+          perRoomPerNightJPY: range(10000, 14000),
           lodgingTaxJPY: range(200, 200),
           booking: "Namba, Osaka",
           sourceRef: sourceRef("Booking.com Osaka (12월 proxy)", "https://www.booking.com/city/jp/osaka.html", "트윈 1실 기준"),
@@ -586,7 +616,7 @@
           id: "cross_osaka",
           title: "크로스 호텔 오사카",
           subtitle: "도톤보리 도보권 · 먹방 동선 최고",
-          perRoomPerNightJPY: range(19000, 34000),
+          perRoomPerNightJPY: range(19000, 25000),
           lodgingTaxJPY: range(200, 400),
           booking: "Cross Hotel Osaka",
           sourceRef: sourceRef("Cross Hotel Osaka", "https://www.crosshotel.com/osaka/", "트윈 1실 12월 proxy"),
@@ -595,7 +625,7 @@
           id: "hankyu_respire",
           title: "호텔 한큐 레스파이어 오사카",
           subtitle: "우메다 직결 · 공항버스/JR 편리",
-          perRoomPerNightJPY: range(18000, 32000),
+          perRoomPerNightJPY: range(18000, 23500),
           lodgingTaxJPY: range(200, 400),
           booking: "Hotel Hankyu Respire Osaka",
           sourceRef: sourceRef("Booking.com Osaka (12월 proxy)", "https://www.booking.com/city/jp/osaka.html", "트윈 1실 기준"),
@@ -604,7 +634,7 @@
           id: "residence_2br",
           title: "2룸 레지던스 (난바, 4인)",
           subtitle: "침실마다 트윈 · 거실·주방, 단체에 유리",
-          perUnitPerNightJPY: range(26000, 48000),
+          perUnitPerNightJPY: range(26000, 35500),
           unitCapacity: 4,
           lodgingTaxJPY: range(200, 200),
           booking: "Namba, Osaka",
@@ -614,7 +644,7 @@
           id: "keihan_univ",
           title: "호텔 케이한 유니버설 타워",
           subtitle: "USJ 오피셜 · 도보 1분",
-          perRoomPerNightJPY: range(20000, 38000),
+          perRoomPerNightJPY: range(20000, 28000),
           lodgingTaxJPY: range(200, 400),
           booking: "Hotel Keihan Universal Tower",
           sourceRef: sourceRef("Booking.com Osaka Bay (12월 proxy)", "https://www.booking.com/city/jp/osaka.html", "트윈 1실 기준"),
@@ -623,7 +653,7 @@
           id: "swissotel",
           title: "스위소텔 난카이 오사카",
           subtitle: "난바역 직결 5성 · 라피트 바로",
-          perRoomPerNightJPY: range(34000, 60000),
+          perRoomPerNightJPY: range(34000, 44500),
           lodgingTaxJPY: range(400, 500),
           booking: "Swissotel Nankai Osaka",
           sourceRef: sourceRef("Swissôtel Nankai Osaka", "https://www.swissotel.com/hotels/osaka/", "트윈 1실 12월 proxy"),
@@ -636,7 +666,7 @@
           title: "아리마 온센 료칸 1박 (1박2식)",
           subtitle: "우메다에서 버스 1시간 · 금천·은천",
           short: "아리마 온센",
-          perPersonPerNightJPY: range(20000, 38000),
+          perPersonPerNightJPY: range(20000, 28000),
           includesMeals: true,
           transferPerPersonJPY: range(2800, 3600),
           stayTaxJPY: range(150, 150),
@@ -648,7 +678,7 @@
           title: "교토 1박 (호텔)",
           subtitle: "교토 아침 관광 · 하루카로 공항 직행",
           short: "교토",
-          perRoomPerNightJPY: range(18000, 34000),
+          perRoomPerNightJPY: range(18000, 25000),
           includesMeals: false,
           transferPerPersonJPY: range(1200, 2400),
           stayTaxJPY: range(400, 1000),
@@ -660,7 +690,7 @@
           title: "USJ 오피셜호텔 1박",
           subtitle: "USJ 전날 숙박 · 개장 직후 입장",
           short: "USJ 호텔",
-          perRoomPerNightJPY: range(20000, 40000),
+          perRoomPerNightJPY: range(20000, 29500),
           includesMeals: false,
           transferPerPersonJPY: range(0, 600),
           stayTaxJPY: range(200, 400),
@@ -878,7 +908,7 @@
           id: "biz_chain",
           title: "비즈니스호텔 (하카타/텐진 평균)",
           subtitle: "가성비 최고 · 객실 좁음",
-          perRoomPerNightJPY: range(8500, 15000),
+          perRoomPerNightJPY: range(8500, 11000),
           lodgingTaxJPY: range(200, 200),
           booking: "Hakata, Fukuoka",
           sourceRef: sourceRef("Booking.com Fukuoka (12월 proxy)", "https://www.booking.com/city/jp/fukuoka.html", "트윈 1실 기준"),
@@ -887,7 +917,7 @@
           id: "blossom",
           title: "JR 큐슈 호텔 블라썸 하카타 센트럴",
           subtitle: "하카타역 도보 1분 · 이동 최소화",
-          perRoomPerNightJPY: range(16000, 28000),
+          perRoomPerNightJPY: range(16000, 20500),
           lodgingTaxJPY: range(200, 200),
           booking: "JR Kyushu Hotel Blossom Hakata Central",
           sourceRef: sourceRef("Booking.com Fukuoka (12월 proxy)", "https://www.booking.com/city/jp/fukuoka.html", "트윈 1실 기준"),
@@ -896,7 +926,7 @@
           id: "residence_2br",
           title: "2룸 레지던스 (하카타, 4인)",
           subtitle: "침실마다 트윈 · 주방·세탁기",
-          perUnitPerNightJPY: range(18000, 34000),
+          perUnitPerNightJPY: range(18000, 25000),
           unitCapacity: 4,
           lodgingTaxJPY: range(200, 200),
           booking: "Hakata, Fukuoka",
@@ -906,7 +936,7 @@
           id: "hilton_seahawk",
           title: "힐튼 후쿠오카 시호크",
           subtitle: "바다뷰 · PayPay돔 옆, 객실 넓음",
-          perRoomPerNightJPY: range(25000, 46000),
+          perRoomPerNightJPY: range(25000, 34000),
           lodgingTaxJPY: range(200, 500),
           booking: "Hilton Fukuoka Sea Hawk",
           sourceRef: sourceRef("Booking.com Fukuoka (12월 proxy)", "https://www.booking.com/city/jp/fukuoka.html", "트윈 1실 기준"),
@@ -915,7 +945,7 @@
           id: "grand_hyatt",
           title: "그랜드 하얏트 후쿠오카",
           subtitle: "캐널시티 직결 · 비 와도 OK",
-          perRoomPerNightJPY: range(30000, 52000),
+          perRoomPerNightJPY: range(30000, 38500),
           lodgingTaxJPY: range(200, 500),
           booking: "Grand Hyatt Fukuoka",
           sourceRef: sourceRef("Booking.com Fukuoka (12월 proxy)", "https://www.booking.com/city/jp/fukuoka.html", "트윈 1실 기준"),
@@ -928,7 +958,7 @@
           title: "유후인 료칸 1박 (1박2식)",
           subtitle: "고속버스 2시간 · 노천탕·긴린코",
           short: "유후인",
-          perPersonPerNightJPY: range(22000, 45000),
+          perPersonPerNightJPY: range(22000, 33500),
           includesMeals: true,
           transferPerPersonJPY: range(6500, 11400),
           stayTaxJPY: range(150, 250),
@@ -940,7 +970,7 @@
           title: "벳푸 온천호텔 1박 (뷔페 2식)",
           subtitle: "대형 온천호텔 · 온천 풀·뷔페",
           short: "벳푸",
-          perPersonPerNightJPY: range(15000, 28000),
+          perPersonPerNightJPY: range(15000, 20500),
           includesMeals: true,
           transferPerPersonJPY: range(6500, 12000),
           stayTaxJPY: range(150, 150),
@@ -1088,13 +1118,14 @@
       asOf: AS_OF,
       region: "Tokyo / Osaka / Fukuoka (December 2026)",
       notes: [
-        "일본 현지 가격은 엔화 min-max 범위, 항공은 원화 범위입니다.",
-        "숙박은 세금·봉사료 포함가 기준이며 숙박세·입탕세는 별도 줄로 계산합니다.",
-        "결과는 '평균 1인'(총액/총인원)입니다.",
+        "일본 현지 가격은 엔화 P10-P90 범위, 항공은 원화 범위입니다.",
+        "숙박은 세금·봉사료 포함 평일가 기준에 날짜별 배율을 곱하며, 숙박세·입탕세는 별도 줄로 계산합니다.",
+        "결과는 '평균 1인'(총액/총인원)의 예상값과 80% 범위입니다.",
       ],
       sharedSources: [SRC.fx, SRC.lodgingTax, SRC.lodgingTax2],
     },
     calculationRules,
+    lodgingCalendar,
     party,
     fxOptions,
     durations,

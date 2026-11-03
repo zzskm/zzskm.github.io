@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <h1>12월 일본 여행 견적 · 도쿄 / 오사카 / 후쿠오카</h1>
-    <p>인원·일정·시기를 고르고 도시별로 카드를 선택하면 1인 평균 비용을 비교합니다. 가격은 2026-11-03 기준 추정치입니다.</p>
+    <p>인원·일정·시기를 고르고 도시별로 카드를 선택하면 1인 평균 비용을 예상값과 80% 범위로 비교합니다. 가격은 2026-11-03 기준 추정치이고, 직접 확인한 항공·숙박 가격을 넣으면 그 항목은 확정값으로 바뀝니다.</p>
   </header>
 
   <main class="layout">
@@ -171,6 +171,7 @@
       <div class="result-sticky">
         <p class="result-context" id="result-context">-</p>
         <p class="big-number" id="per-person-total" aria-live="polite">-</p>
+        <p class="result-band" id="per-person-band">-</p>
         <p class="result-total" id="group-total">-</p>
       </div>
 
@@ -192,6 +193,7 @@
       <div class="result-block">
         <h3>Breakdown</h3>
         <ul id="breakdown-list" class="breakdown-list"></ul>
+        <p class="field-note">큰 숫자는 예상값, 작은 숫자는 항목별 범위(10–90%)입니다. 합계 범위는 항공·숙박·식비가 한꺼번에 최고가가 되지는 않는다고 보고 합산해서, 항목 범위를 그대로 더한 '단순 합산'보다 좁습니다.</p>
       </div>
 
       <div class="result-block">
@@ -201,8 +203,9 @@
       </div>
 
       <div class="result-block">
-        <h3>실시간 가격 확인</h3>
+        <h3>실시간 가격 확인 · 확정가 입력</h3>
         <ul id="check-links" class="link-list"></ul>
+        <p class="field-note">링크에서 확인한 가격을 넣고 Enter를 누르면 그 항목은 추정 범위 대신 확정값으로 계산합니다. 날짜·인원·객실·카드가 바뀌면 적용이 멈추고, 원래 조건으로 돌아오면 다시 적용됩니다. 도시마다 따로 저장됩니다.</p>
       </div>
 
       <div class="result-block">

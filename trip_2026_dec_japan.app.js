@@ -8,6 +8,12 @@
   const STORAGE_KEY = "trip_2026_dec_japan.v2";
   const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
   const { cities, cityOrder, calculationRules } = data;
+  const BAND_Z = Number(calculationRules.bandZ || 1.2816);
+  const QUOTE_FIELDS = [
+    { field: "flight", label: "확정가 · 1인 왕복", placeholder: "예: 320,000" },
+    { field: "stayA", label: "확정가 · 숙박 총액", placeholder: "예: 850,000" },
+    { field: "stayB", label: "확정가 · 숙박 총액", placeholder: "예: 400,000" },
+  ];
 
   const el = {
     city: byId("city-options"),
@@ -28,6 +34,7 @@
     titleActivities: byId("title-activities"),
     resultContext: byId("result-context"),
     perPersonTotal: byId("per-person-total"),
+    perPersonBand: byId("per-person-band"),
     groupTotal: byId("group-total"),
     compareBody: byId("compare-body"),
     breakdown: byId("breakdown-list"),
@@ -84,7 +91,20 @@
       transportId: pickId(city.transports, d.transportId),
       packId: null,
       activities: createActivitiesState(city, d.activities),
+      quotes: {},
     };
+  }
+
+  function sanitizeQuotes(raw) {
+    const result = {};
+    if (!raw || typeof raw !== "object") return result;
+    QUOTE_FIELDS.forEach(({ field }) => {
+      const quote = raw[field];
+      const krw = Number(quote && quote.krw);
+      if (!quote || typeof quote.key !== "string" || !Number.isFinite(krw) || krw <= 0) return;
+      result[field] = { krw: Math.round(krw), key: quote.key, context: typeof quote.context === "string" ? quote.context : "" };
+    });
+    return result;
   }
 
   function createActivitiesState(city, preset) {
@@ -144,6 +164,7 @@
           transportId: pickId(city.transports, savedCity.transportId || fallback.transportId),
           packId: findById(city.packs, savedCity.packId) ? savedCity.packId : null,
           activities,
+          quotes: sanitizeQuotes(savedCity.quotes),
         };
       });
 
@@ -263,6 +284,26 @@
       commit();
     });
 
+    // Quotes commit on change (Enter or leaving the field); the inputs are updated in place, so focus survives.
+    el.checkLinks.addEventListener("change", (event) => {
+      const input = event.target.closest("input[data-quote]");
+      if (!input) return;
+      const field = input.dataset.quote;
+      const s = cityState();
+      s.quotes = s.quotes || {};
+      const krw = parseKRW(input.value);
+      if (!krw) {
+        delete s.quotes[field];
+        input.value = "";
+      } else {
+        const r = compute(state.cityId);
+        if (!r.quoteKeys[field]) return;
+        s.quotes[field] = { krw, key: r.quoteKeys[field], context: r.quoteContext[field] };
+        input.value = formatNumber(krw);
+      }
+      commit();
+    });
+
     el.compareBody.addEventListener("click", (event) => {
       const btn = event.target.closest("button[data-city]");
       if (!btn || !cities[btn.dataset.city]) return;
@@ -368,7 +409,7 @@
           <button type="button" class="card-btn city-card ${active ? "active" : ""}" data-id="${esc(cityId)}" aria-pressed="${active}">
             <span class="title">${esc(city.name)} ${badge}</span>
             <span class="sub">${esc(city.subtitle)} · ${esc(city.flightTime)}</span>
-            <span class="price">${formatRange(r.perPerson)} <small>/ 1인</small></span>
+            <span class="price">약 ${formatManwon(r.perPerson.mean)} <small>${formatBand(r.perPerson.band)} / 1인</small></span>
           </button>
         `;
       })
@@ -455,7 +496,7 @@
       const node = byId(id);
       if (node) node.textContent = text;
     };
-    set("summary-city", `${city.name} · ${formatRange(result.perPerson)}`);
+    set("summary-city", `${city.name} · 약 ${formatManwon(result.perPerson.mean)}`);
     set("summary-party", `${result.people}명`);
     set("summary-schedule", `${currentDuration().title} · ${currentSeason().title}`);
     set("summary-fx", currentFx().title);
@@ -495,32 +536,42 @@
   function renderResult(city, result) {
     const dates = `${formatDate(result.startDate)}–${formatDate(addDays(result.startDate, result.nights))}`;
     el.resultContext.textContent = `${city.name} · ${currentDuration().title} · ${dates}`;
-    el.perPersonTotal.textContent = `${formatRange(result.perPerson)} / 1인`;
-    el.groupTotal.textContent = `총액 ${formatRange(result.total)} · ${result.people}명 · ${currentFx().title}`;
+    const pp = result.perPerson;
+    el.perPersonTotal.textContent = `약 ${formatManwon(pp.mean)} / 1인`;
+    el.perPersonBand.innerHTML = `80% 범위 ${esc(formatBand(pp.band))}<span class="band-extreme"> · 항목 단순 합산 ${esc(formatBand(pp.extreme))}</span>`;
+    el.groupTotal.textContent = `총액 약 ${formatManwon(result.total.mean)} (${formatBand(result.total.band)}) · ${result.people}명 · ${currentFx().title}`;
 
     const b = result.breakdown;
     const rows = [
       ["항공", b.flight, result.flightNote],
-      ["숙박", b.stay, result.roomSummary],
+      ["숙박", b.stay, result.stayNote],
       ["숙박세·입탕세", b.stayTax, "1인 1박 기준, 현장 결제"],
       ["식비", b.meal, `${result.mealDays}일 기준`],
       ["공항 이동", b.airport, titleOf(airportOptionsFor(city, findById(city.flights, cityState().flightId)), cityState().airportId)],
       ["시내 교통", b.transport, titleOf(city.transports, cityState().transportId)],
       ["근교 이동", b.excursion, result.stayB ? `${result.stayB.short || result.stayB.title} 왕복` : ""],
       ["액티비티", b.activities, ""],
-      ["예비비", b.contingency, `${pct(calculationRules.contingencyRate.min)}-${pct(calculationRules.contingencyRate.max)}`],
-    ].filter(([label, range]) => label !== "근교 이동" || range[1] > 0);
+      ["예비비", b.contingency, `예상 합계의 ${pct(calculationRules.contingencyRate)} · 범위에 영향 없음`],
+    ].filter(([label, line]) => label !== "근교 이동" || line.hi > 0);
 
     el.breakdown.innerHTML = rows
-      .map(
-        ([label, range, note]) => `
+      .map(([label, line, note]) => {
+        const detail = lineDetail(line);
+        return `
           <li>
             <span>${esc(label)}${note ? `<small>${esc(note)}</small>` : ""}</span>
-            <strong>${formatRange(range)}</strong>
+            <strong>${formatManwon(line.mean)}${detail ? `<small class="${line.locked ? "is-locked" : ""}">${esc(detail)}</small>` : ""}</strong>
           </li>
-        `
-      )
+        `;
+      })
       .join("");
+  }
+
+  function lineDetail(line) {
+    if (line.locked) return "확정가";
+    const prefix = line.partial ? "일부 확정 · " : "";
+    if (Math.round(line.lo / 10000) === Math.round(line.hi / 10000)) return line.partial ? "일부 확정" : "";
+    return `${prefix}${formatBand([line.lo, line.hi])}`;
   }
 
   function renderCompare(results) {
@@ -543,8 +594,8 @@
               ${cityId === cheapest ? `<span class="badge">최저</span>` : ""}
               <small>${esc(picks)}</small>
             </th>
-            <td><strong>${formatRange(r.perPerson)}</strong></td>
-            <td>${formatRange(r.total)}</td>
+            <td><strong>${formatManwon(r.perPerson.mean)}</strong><small>${formatBand(r.perPerson.band)}</small></td>
+            <td>${formatManwon(r.total.mean)}<small>${formatBand(r.total.band)}</small></td>
           </tr>
         `;
       })
@@ -573,19 +624,32 @@
     }
   }
 
+  // The three slots are built once and then updated in place, so a quote input keeps focus across renders.
+  function ensureCheckLinkSlots() {
+    if (el.checkLinks.dataset.ready) return;
+    el.checkLinks.innerHTML = QUOTE_FIELDS.map(
+      ({ field, label, placeholder }) => `
+        <li data-link="${esc(field)}">
+          <a href="#" target="_blank" rel="noopener noreferrer" data-role="link"></a>
+          <small data-role="sub"></small>
+          <div class="quote-row">
+            <label for="quote-${esc(field)}">${esc(label)}</label>
+            <input id="quote-${esc(field)}" class="quote-input" type="text" inputmode="numeric" autocomplete="off" data-quote="${esc(field)}" placeholder="${esc(placeholder)}" />
+            <span class="quote-unit">원</span>
+          </div>
+          <small class="quote-status" data-role="status"></small>
+        </li>
+      `
+    ).join("");
+    el.checkLinks.dataset.ready = "1";
+  }
+
   function renderCheckLinks(city, s, result) {
+    ensureCheckLinkSlots();
     const flight = findById(city.flights, s.flightId);
     const start = result.startDate;
     const end = addDays(start, result.nights);
-    const links = [];
-
-    const flightQuery = `Flights from ICN to ${flight.airport} on ${start} through ${end}`;
-    links.push({
-      label: `항공권 · ICN→${flight.airport} ${formatDate(start)}–${formatDate(end)}`,
-      sub: "Google Flights",
-      href: `https://www.google.com/travel/flights?hl=ko&curr=KRW&q=${encodeURIComponent(flightQuery)}`,
-    });
-
+    const checkoutA = addDays(start, result.nightsA);
     const stayA = findById(city.staysA, s.stayAId);
     const roomConfig = findById(data.roomConfigs, s.roomConfigId);
     const roomType = (stay) => {
@@ -593,37 +657,68 @@
       if (stay.perPersonPerNightJPY) return `${roomConfig.occupancy}인 1실`;
       return roomConfig.occupancy === 2 ? "트윈(침대 2개)" : roomConfig.title;
     };
-    const checkoutA = addDays(start, result.nightsA);
-    links.push({
-      label: `A숙소 · ${stayA.title} ${formatDate(start)}–${formatDate(checkoutA)}`,
-      sub: `Booking.com · ${roomType(stayA)} ${result.roomsA}${stayA.perUnitPerNightJPY ? "채" : "실"}`,
-      href: bookingUrl(stayA.booking || city.bookingCity, start, checkoutA, result.roomsA),
+    const flightQuery = `Flights from ICN to ${flight.airport} on ${start} through ${end}`;
+
+    const slots = {
+      flight: {
+        label: `항공권 · ICN→${flight.airport} ${formatDate(start)}–${formatDate(end)}`,
+        sub: `Google Flights · ${flight.title}`,
+        href: `https://www.google.com/travel/flights?hl=ko&curr=KRW&q=${encodeURIComponent(flightQuery)}`,
+      },
+      stayA: {
+        label: `A숙소 · ${stayA.title} ${formatDate(start)}–${formatDate(checkoutA)}`,
+        sub: `Booking.com · ${roomType(stayA)} ${result.roomsA}${stayA.perUnitPerNightJPY ? "채" : "실"}`,
+        href: bookingUrl(stayA.booking || city.bookingCity, start, checkoutA, result.roomsA),
+      },
+      stayB: result.stayB
+        ? {
+            label: `B숙소 · ${result.stayB.title} ${formatDate(checkoutA)}–${formatDate(end)}`,
+            sub: `Booking.com · ${roomType(result.stayB)} ${result.roomsB}${result.stayB.perUnitPerNightJPY ? "채" : "실"}`,
+            href: bookingUrl(result.stayB.booking || city.bookingCity, checkoutA, end, result.roomsB),
+          }
+        : null,
+    };
+
+    QUOTE_FIELDS.forEach(({ field }) => {
+      const li = el.checkLinks.querySelector(`[data-link="${field}"]`);
+      const slot = slots[field];
+      li.hidden = !slot;
+      if (!slot) return;
+      const link = li.querySelector('[data-role="link"]');
+      link.href = slot.href;
+      link.textContent = slot.label;
+      li.querySelector('[data-role="sub"]').textContent = slot.sub;
+
+      const quote = (s.quotes || {})[field];
+      const input = li.querySelector("input[data-quote]");
+      if (document.activeElement !== input) input.value = quote ? formatNumber(quote.krw) : "";
+
+      const status = li.querySelector('[data-role="status"]');
+      const { text, tone } = quoteStatusText(field, quote, result);
+      status.textContent = text;
+      status.className = `quote-status ${tone}`;
     });
+  }
 
-    if (result.stayB) {
-      const checkinB = checkoutA;
-      links.push({
-        label: `B숙소 · ${result.stayB.title} ${formatDate(checkinB)}–${formatDate(addDays(checkinB, 1))}`,
-        sub: `Booking.com · ${roomType(result.stayB)} ${result.roomsB}${result.stayB.perUnitPerNightJPY ? "채" : "실"}`,
-        href: bookingUrl(result.stayB.booking || city.bookingCity, checkinB, addDays(checkinB, 1), result.roomsB),
-      });
+  function quoteStatusText(field, quote, result) {
+    const estimate = result.estimates[field];
+    const estimateText = field === "flight" ? `추정 1인 ${formatKRWRange(estimate)}` : `추정 ${formatBand(estimate)}`;
+    const status = result.quoteStatus[field];
+    if (status === "applied") {
+      const applied = field === "flight" ? `${result.people}명 ${formatManwon(quote.krw * result.people)}` : formatManwon(quote.krw);
+      return { text: `적용 중 · ${applied} (${estimateText})`, tone: "is-applied" };
     }
-
-    el.checkLinks.innerHTML = links
-      .map(
-        (link) => `
-          <li>
-            <a href="${esc(link.href)}" target="_blank" rel="noopener noreferrer">${esc(link.label)}</a>
-            <small>${esc(link.sub)}</small>
-          </li>
-        `
-      )
-      .join("");
+    if (status === "stale") {
+      return { text: `조건이 바뀌어 미적용 · 입력 당시 ${quote.context || "다른 조건"} · ${estimateText}`, tone: "is-stale" };
+    }
+    const hint = field === "flight" ? "확인한 1인 왕복가를 넣으면 확정값으로 계산" : "세금 포함 총액(숙박세 제외)을 넣으면 확정값으로 계산";
+    return { text: `${estimateText} · ${hint}`, tone: "" };
   }
 
   function renderNotes(city, s, result) {
     const notes = [...(currentSeason().notes || []), ...(city.notes || [])];
     const roomConfig = findById(data.roomConfigs, s.roomConfigId);
+    notes.push(`숙박은 평일가에 1박마다 날짜 배율을 곱합니다 (이번 일정 ${result.nightFactorText}).`);
     if (result.usesUnits) {
       notes.push("2룸 레지던스는 객실 구성과 무관하게 4인당 1채(침실 2개, 침실마다 트윈)로 계산합니다. 침대 구성을 꼭 확인하세요.");
     }
@@ -648,7 +743,7 @@
 
   function renderEvidence() {
     el.evidenceAsOf.textContent = data.meta.asOf;
-    const groups = [{ title: "공통 (환율·숙박세·시기·객실·식비)", items: collectShared() }];
+    const groups = [{ title: "공통 (계산 방식·환율·숙박세·시기·객실·식비)", items: collectShared() }];
     cityOrder.forEach((cityId) => {
       groups.push({ title: cities[cityId].name, items: collectCitySources(cities[cityId]) });
     });
@@ -679,7 +774,7 @@
 
   function collectShared() {
     const items = [...(data.meta.sharedSources || [])];
-    [...data.seasons, ...data.roomConfigs, ...data.mealLevels].forEach((item) => {
+    [calculationRules, data.lodgingCalendar || {}, ...data.seasons, ...data.roomConfigs, ...data.mealLevels].forEach((item) => {
       if (item.sourceRef) items.push(item.sourceRef);
     });
     return items;
@@ -727,38 +822,77 @@
     const transport = findById(city.transports, s.transportId);
 
     const nightsA = nights - (stayB ? 1 : 0);
-    const jpy = (r) => scale(r, fx);
+    const start = season.startDate;
+    const end = addDays(start, nights);
+    const checkoutA = addDays(start, nightsA);
+    // Every line is an estimate {lo, hi, mean, var} in KRW; [lo, hi] is read as that line's P10-P90.
+    const fromJPY = (r, factor = 1) => estimate(r, fx * factor);
+
+    // Stays: weekday card price × each night's calendar factor
+    const factorsA = nightFactors(start, nightsA);
+    const factorsB = stayB ? nightFactors(checkoutA, 1) : [];
+    const stayAInfo = stayCost(stayA, roomConfig, people, factorsA);
+    const stayBInfo = stayB ? stayCost(stayB, roomConfig, people, factorsB) : emptyStay();
+
+    // Quotes typed from the live links replace the estimate while their conditions still match.
+    const roomsLabel = (info) => `${info.rooms}${info.usesUnits ? "채" : "실"}`;
+    const quoteKeys = {
+      flight: [flight.id, start, end].join("|"),
+      stayA: [stayA.id, start, checkoutA, stayAInfo.kind, stayAInfo.rooms, people].join("|"),
+      stayB: stayB ? [stayB.id, checkoutA, end, stayBInfo.kind, stayBInfo.rooms, people].join("|") : null,
+    };
+    const quoteContext = {
+      flight: `${flight.title} ${formatDate(start)}–${formatDate(end)}`,
+      stayA: `${shortTitle(stayA.title)} ${formatDate(start)}–${formatDate(checkoutA)} · ${people}명 ${roomsLabel(stayAInfo)}`,
+      stayB: stayB ? `${shortTitle(stayB.title)} ${formatDate(checkoutA)}–${formatDate(end)} · ${people}명 ${roomsLabel(stayBInfo)}` : "",
+    };
+    const quotes = s.quotes || {};
+    const quoteStatus = {};
+    Object.keys(quoteKeys).forEach((field) => {
+      const quote = quotes[field];
+      quoteStatus[field] = !quote || !quoteKeys[field] ? "none" : quote.key === quoteKeys[field] ? "applied" : "stale";
+    });
+    const applied = (field) => quoteStatus[field] === "applied";
+
+    const flightPerPerson = scale(flight.priceKRW, season.flightFactor);
+    const estimates = {
+      flight: flightPerPerson,
+      stayA: scale(stayAInfo.cost, fx),
+      stayB: stayB ? scale(stayBInfo.cost, fx) : null,
+    };
 
     // Flight (KRW)
-    const flightCost = scale(flight.priceKRW, people * season.flightFactor);
-
-    // Airport transfer
-    const airportCost = jpy(transferCost(airport, people));
+    const flightLine = applied("flight") ? exact(quotes.flight.krw * people, true) : estimate(flightPerPerson, people);
 
     // Stays
-    const stayAInfo = stayCost(stayA, roomConfig, people, nightsA, season.stayFactor);
-    const stayBInfo = stayB ? stayCost(stayB, roomConfig, people, 1, season.stayFactor) : { cost: [0, 0], rooms: 0, usesUnits: false };
-    const stayCostJPY = add(stayAInfo.cost, stayBInfo.cost);
+    const stayALine = applied("stayA") ? exact(quotes.stayA.krw, true) : estimate(estimates.stayA);
+    const stayBLine = !stayB ? exact(0) : applied("stayB") ? exact(quotes.stayB.krw, true) : estimate(estimates.stayB);
+    const stayLine = sumLines(stayALine, stayBLine);
+    stayLine.locked = stayALine.locked && (!stayB || stayBLine.locked);
+    stayLine.partial = !stayLine.locked && (stayALine.locked || stayBLine.locked);
 
     // Lodging / bathing tax (per person per night)
-    let stayTaxJPY = scale(stayA.lodgingTaxJPY || [0, 0], people * nightsA);
-    if (stayB) stayTaxJPY = add(stayTaxJPY, scale(stayB.stayTaxJPY || [0, 0], people));
+    const stayTaxLine = sumLines(
+      fromJPY(stayA.lodgingTaxJPY || [0, 0], people * nightsA),
+      stayB ? fromJPY(stayB.stayTaxJPY || [0, 0], people) : exact(0)
+    );
 
     // Meals
     const mealDays = days - (stayB && stayB.includesMeals ? Number(calculationRules.ryokanMealCredit || 0) : 0);
-    const mealJPY = scale(meal.perPersonPerDayJPY, people * mealDays * Number(city.mealFactor ?? 1));
+    const mealLine = fromJPY(meal.perPersonPerDayJPY, people * mealDays * Number(city.mealFactor ?? 1));
 
     // City transport (per day on nights count; arrival/departure days are covered by airport transfer)
-    let transportJPY = scale(transport.perPersonPerDayJPY || [0, 0], people * nights);
-    if (transport.perGroupOnceJPY) {
-      transportJPY = add(transportJPY, scale(transport.perGroupOnceJPY, Math.ceil(people / 9)));
-    }
+    const transportLine = sumLines(
+      fromJPY(transport.perPersonPerDayJPY || [0, 0], people * nights),
+      transport.perGroupOnceJPY ? fromJPY(transport.perGroupOnceJPY, Math.ceil(people / 9)) : exact(0)
+    );
 
-    // Excursion to stay B
-    const excursionJPY = stayB ? scale(stayB.transferPerPersonJPY || [0, 0], people) : [0, 0];
+    // Airport transfer, excursion to stay B
+    const airportLine = fromJPY(transferCost(airport, people));
+    const excursionLine = stayB ? fromJPY(stayB.transferPerPersonJPY || [0, 0], people) : exact(0);
 
-    // Activities
-    let activitiesJPY = [0, 0];
+    // Activities: each ticket is its own estimate
+    const activityLines = [];
     const fullDayLabels = [];
     city.activities.forEach((act) => {
       const value = s.activities[act.id];
@@ -769,56 +903,104 @@
       if (act.slot === "full") fullDayLabels.push(qty > 1 ? `${shortTitle(act.title)} ×${qty}` : shortTitle(act.title));
 
       if (act.groupJPY) {
-        activitiesJPY = add(activitiesJPY, scale(act.groupJPY, qty));
+        activityLines.push(fromJPY(act.groupJPY, qty));
         return;
       }
       const price = peak && act.peakAdultJPY ? act.peakAdultJPY : act.adultJPY;
-      activitiesJPY = add(activitiesJPY, scale(price, people * qty));
+      activityLines.push(fromJPY(price, people * qty));
     });
 
     const breakdown = {
-      flight: flightCost,
-      stay: jpy(stayCostJPY),
-      stayTax: jpy(stayTaxJPY),
-      meal: jpy(mealJPY),
-      airport: airportCost,
-      transport: jpy(transportJPY),
-      excursion: jpy(excursionJPY),
-      activities: jpy(activitiesJPY),
+      flight: flightLine,
+      stay: stayLine,
+      stayTax: stayTaxLine,
+      meal: mealLine,
+      airport: airportLine,
+      transport: transportLine,
+      excursion: excursionLine,
+      activities: sumLines(...activityLines),
     };
 
-    const subtotal = add(...Object.values(breakdown));
-    const contingency = [subtotal[0] * calculationRules.contingencyRate.min, subtotal[1] * calculationRules.contingencyRate.max];
-    breakdown.contingency = contingency;
-    const total = add(subtotal, contingency);
-    const perPerson = [Math.floor(total[0] / people), Math.ceil(total[1] / people)];
+    const subtotal = sumLines(...Object.values(breakdown));
+    const contingency = subtotal.mean * Number(calculationRules.contingencyRate || 0);
+    breakdown.contingency = exact(contingency);
 
-    Object.entries(breakdown).forEach(([label, r]) => {
-      if (r[0] > r[1]) console.error(`[range-error] ${cityId}.${label}: min > max`, r);
+    // Total: mean ± z·σ (σ² = sum of line variances), clamped to the all-low / all-high sums.
+    const mean = subtotal.mean + contingency;
+    const sd = Math.sqrt(subtotal.var);
+    const extreme = [subtotal.lo + contingency, subtotal.hi + contingency];
+    const band = [Math.max(extreme[0], mean - BAND_Z * sd), Math.min(extreme[1], mean + BAND_Z * sd)];
+    const total = { mean, band, extreme };
+    const perPerson = { mean: mean / people, band: scale(band, 1 / people), extreme: scale(extreme, 1 / people) };
+
+    Object.entries(breakdown).forEach(([label, line]) => {
+      if (line.lo > line.hi) console.error(`[range-error] ${cityId}.${label}: min > max`, line);
     });
 
     const roomSummary = stayAInfo.usesUnits
       ? `2룸 레지던스 ${stayAInfo.rooms}채 × ${nightsA}박`
       : `${roomConfig.title} · ${stayAInfo.rooms}실 × ${nightsA}박`;
+    const avgFactorA = nightsA ? sum(factorsA) / nightsA : 0;
+    const stayNote = [stayB ? `${roomSummary} + ${stayB.short || "B숙소"} 1박` : roomSummary];
+    if (nightsA) stayNote.push(`평일가 대비 평균 ×${avgFactorA.toFixed(2)}`);
+    const nightFactorText = [...factorsA, ...factorsB].map((factor, i) => `${formatDate(addDays(start, i))} ×${factor.toFixed(2).replace(/0$/, "")}`).join(", ");
 
     return {
       cityId,
       people,
       nights,
       nightsA,
-      startDate: season.startDate,
+      startDate: start,
       stayB,
       roomsA: stayAInfo.rooms,
       roomsB: stayBInfo.rooms,
       usesUnits: stayAInfo.usesUnits || stayBInfo.usesUnits,
       roomSummary: stayB ? `${roomSummary} + ${stayB.short || "B숙소"} 1박` : roomSummary,
+      stayNote: stayNote.join(" · "),
+      nightFactorText,
       mealDays: round1(mealDays),
-      flightNote: `${flight.title} · 1인 ${formatKRWRange(scale(flight.priceKRW, season.flightFactor))}`,
+      flightNote: applied("flight")
+        ? `${flight.title} · 확정가 1인 ${formatManwon(quotes.flight.krw)}`
+        : `${flight.title} · 1인 ${formatKRWRange(flightPerPerson)}`,
       fullDayLabels,
       breakdown,
       total,
       perPerson,
+      quoteKeys,
+      quoteContext,
+      quoteStatus,
+      estimates,
     };
+  }
+
+  // [lo, hi] treated as P10-P90 of a normal estimate: σ = (hi - lo) / (2·z).
+  function estimate(r, factor = 1) {
+    const lo = r[0] * factor;
+    const hi = r[1] * factor;
+    const sd = (hi - lo) / (2 * BAND_Z);
+    return { lo, hi, mean: (lo + hi) / 2, var: sd * sd, locked: false, partial: false };
+  }
+
+  function exact(value, locked = false) {
+    return { lo: value, hi: value, mean: value, var: 0, locked, partial: false };
+  }
+
+  function sumLines(...lines) {
+    return lines.reduce(
+      (acc, line) => ({ lo: acc.lo + line.lo, hi: acc.hi + line.hi, mean: acc.mean + line.mean, var: acc.var + line.var, locked: false, partial: false }),
+      exact(0)
+    );
+  }
+
+  function nightFactors(startIso, count) {
+    const calendar = data.lodgingCalendar || {};
+    return Array.from({ length: Math.max(0, count) }, (_, i) => {
+      const iso = addDays(startIso, i);
+      const special = calendar.dates ? Number(calendar.dates[iso]) : NaN;
+      if (Number.isFinite(special)) return special;
+      const weekday = Number((calendar.weekday || [])[weekdayOf(iso)]);
+      return Number.isFinite(weekday) ? weekday : 1;
+    });
   }
 
   function transferCost(option, people) {
@@ -832,26 +1014,32 @@
     return Math.ceil(people / Math.max(1, Number(roomConfig.occupancy || 2)));
   }
 
-  function stayCost(stay, roomConfig, people, nights, seasonFactor) {
-    if (nights <= 0) return { cost: [0, 0], rooms: 0, usesUnits: false };
+  function emptyStay() {
+    return { cost: [0, 0], rooms: 0, kind: "none", usesUnits: false };
+  }
+
+  // factors: one calendar multiplier per night (weekday card price = 1.0)
+  function stayCost(stay, roomConfig, people, factors) {
+    if (!factors.length) return emptyStay();
+    const nightUnits = sum(factors);
 
     // Ryokan: per-person price, adjusted by how many share a room (solo use costs more).
     if (stay.perPersonPerNightJPY) {
       const rooms = roomCountFor(roomConfig, people);
       const factor = Number(roomConfig.perPersonFactor ?? 1);
-      return { cost: scale(stay.perPersonPerNightJPY, people * nights * factor * seasonFactor), rooms, usesUnits: false };
+      return { cost: scale(stay.perPersonPerNightJPY, people * nightUnits * factor), rooms, kind: roomConfig.id, usesUnits: false };
     }
 
     // Apartment: fixed price per unit, room config does not apply.
     if (stay.perUnitPerNightJPY) {
       const rooms = Math.ceil(people / Number(stay.unitCapacity || 4));
-      return { cost: scale(stay.perUnitPerNightJPY, rooms * nights * seasonFactor), rooms, usesUnits: true };
+      return { cost: scale(stay.perUnitPerNightJPY, rooms * nightUnits), rooms, kind: "unit", usesUnits: true };
     }
 
     // Hotel: card price is a twin room; occupancy changes room count and per-room price.
     const rooms = roomCountFor(roomConfig, people);
     const factor = Number(roomConfig.priceFactor ?? 1);
-    return { cost: scale(stay.perRoomPerNightJPY, rooms * nights * factor * seasonFactor), rooms, usesUnits: false };
+    return { cost: scale(stay.perRoomPerNightJPY, rooms * nightUnits * factor), rooms, kind: roomConfig.id, usesUnits: false };
   }
 
   // ---------- Timeline ----------
@@ -970,17 +1158,16 @@
   function cheapestCityId(results) {
     let best = null;
     cityOrder.forEach((cityId) => {
-      const r = results[cityId];
-      const mid = (r.perPerson[0] + r.perPerson[1]) / 2;
+      const mid = results[cityId].perPerson.mean;
       if (!best || mid < best.mid) best = { cityId, mid };
     });
     return best ? best.cityId : null;
   }
 
   function describeStayPrice(stay) {
-    if (stay.perPersonPerNightJPY) return `1인 ${formatJPYRange(stay.perPersonPerNightJPY)}/박`;
-    if (stay.perUnitPerNightJPY) return `${stay.unitCapacity}인 1채 ${formatJPYRange(stay.perUnitPerNightJPY)}/박`;
-    if (stay.perRoomPerNightJPY) return `트윈 ${formatJPYRange(stay.perRoomPerNightJPY)}/박`;
+    if (stay.perPersonPerNightJPY) return `평일 1인 ${formatJPYRange(stay.perPersonPerNightJPY)}/박`;
+    if (stay.perUnitPerNightJPY) return `평일 ${stay.unitCapacity}인 1채 ${formatJPYRange(stay.perUnitPerNightJPY)}/박`;
+    if (stay.perRoomPerNightJPY) return `평일 트윈 ${formatJPYRange(stay.perRoomPerNightJPY)}/박`;
     return "";
   }
 
@@ -1037,8 +1224,8 @@
     return [r[0] * factor, r[1] * factor];
   }
 
-  function add(...ranges) {
-    return ranges.reduce((acc, r) => [acc[0] + r[0], acc[1] + r[1]], [0, 0]);
+  function sum(values) {
+    return values.reduce((acc, value) => acc + value, 0);
   }
 
   function addDays(isoDate, offset) {
@@ -1047,18 +1234,39 @@
     return date.toISOString().slice(0, 10);
   }
 
-  function formatDate(isoDate) {
+  function weekdayOf(isoDate) {
     const [y, m, d] = isoDate.split("-").map(Number);
-    const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-    return `${m}/${d}(${weekday})`;
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   }
 
-  function formatRange(r) {
-    return `${formatManwon(r[0])} - ${formatManwon(r[1])}`;
+  function formatDate(isoDate) {
+    const [, m, d] = isoDate.split("-").map(Number);
+    return `${m}/${d}(${WEEKDAYS[weekdayOf(isoDate)]})`;
   }
 
   function formatManwon(value) {
     return `${Math.round(value / 10000).toLocaleString("ko-KR")}만원`;
+  }
+
+  // Compact band: "136–158만원" (single value when both ends round the same)
+  function formatBand(r) {
+    const lo = Math.round(r[0] / 10000);
+    const hi = Math.round(r[1] / 10000);
+    if (lo === hi) return `${lo.toLocaleString("ko-KR")}만원`;
+    return `${lo.toLocaleString("ko-KR")}–${hi.toLocaleString("ko-KR")}만원`;
+  }
+
+  function formatNumber(value) {
+    return Math.round(value).toLocaleString("ko-KR");
+  }
+
+  // "320,000", "320000원", "32만", "32.5만" -> KRW integer; anything else -> 0 (clears the quote)
+  function parseKRW(text) {
+    const raw = String(text || "").replace(/[\s,원₩]/g, "");
+    if (!raw) return 0;
+    const man = raw.match(/^(\d+(?:\.\d+)?)만$/);
+    const value = man ? Number(man[1]) * 10000 : /^\d+$/.test(raw) ? Number(raw) : 0;
+    return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
   }
 
   function formatKRWRange(r) {
