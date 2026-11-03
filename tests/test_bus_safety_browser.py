@@ -215,6 +215,42 @@ class SafetyBrowserTests(unittest.TestCase):
                     'corrected_arrival_ts':(T+dt.timedelta(minutes=18)).isoformat(),
                     'method':'trip_lower_quantile','sample_trips':50}}
 
+    def test_reload_follows_publication_schedule(self):
+        requests=[]
+        def status_route(prepared_ago):
+            def handle(route):
+                requests.append(1)
+                route.fulfill(json={**self.ready_status(),'publish_interval_sec':120,
+                                    'publish_prepared_at':(T-dt.timedelta(seconds=prepared_ago)).isoformat()})
+            return handle
+        # 90초 전에 준비된 게시 + 120초 주기 + 배포 여유 25초 → 55초 뒤 확인 (기존 60초보다 먼저)
+        # run_for 는 1초 tick 을 모두 실행한다 (fast_forward 는 타이머를 한 번만 깨운다)
+        page,errors=self.open_page(self.ready_status(),setup=lambda p:p.route('**/status.json?*',status_route(90)))
+        try:
+            page.clock.run_for(50000)
+            self.assertEqual(len(requests),1)
+            page.clock.run_for(7000)
+            self.assertEqual(len(requests),2)
+            # 예정이 지났는데 같은 자료면 20초 뒤 한 번 더 본다
+            page.clock.run_for(15000)
+            self.assertEqual(len(requests),2)
+            page.clock.run_for(7000)
+            self.assertEqual(len(requests),3)
+            self.assertEqual(errors,[])
+        finally:
+            page.close()
+        # 오래된 자료(수집 중지)는 기존 60초 주기를 지킨다
+        requests.clear()
+        page,errors=self.open_page(self.ready_status(),setup=lambda p:p.route('**/status.json?*',status_route(3600)))
+        try:
+            page.clock.run_for(55000)
+            self.assertEqual(len(requests),1)
+            page.clock.run_for(7000)
+            self.assertEqual(len(requests),2)
+            self.assertEqual(errors,[])
+        finally:
+            page.close()
+
     def test_timeline_shows_engine_reservation_and_settings_preview(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(self.ready_status())

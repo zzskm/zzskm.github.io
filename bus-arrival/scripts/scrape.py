@@ -9,6 +9,9 @@ GBIS 버스 도착 로그 수집기 — 유라코퍼레이션.SK케미칼(07511)
 - 유라코퍼레이션 + 성남시청전면 동시 조회
 - --gbis-web (BUS_GBIS_WEB=1): GBIS 웹 노선 화면의 3100 전 차량 위치를 route_position_log.csv 에,
   07511/06004 도달 구간을 route_pass_log.csv 에 기록 (관측 전용, 인증키·호출 한도 미사용)
+- --sources (BUS_SOURCES): 도착 정보 출처 교대 조회. official(공식 API)·gbis_web·kakao·naver 를 섞은 순서로
+  매 조회 하나씩 쓰고, 실패하면 같은 조회 안에서 나머지로 넘어간다 (source_rotation.py, reports/SOURCES.md).
+  predict_log.csv 의 source 열에 출처를 남기며, 안전 모델 보정은 official 행만 쓴다.
 - 평일 퇴근 시간대(기본 KST 16:00~22:00)에만 수집
 - 차량 ID 매칭으로 도착 판정 (다른 차량으로 교체 / 후속 차량 없이 사라짐 모두 감지)
 - 실행 간 상태 저장 (tracker_state.json) — 짧은 수집 구간을 이어 붙여도 추적이 끊기지 않음
@@ -39,7 +42,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from safety_model import safety_prediction, timestamp, model_for_day, publication_decision
 from station_signals import fetch_station_list, signal_rows
-from gbis_web import fetch_route_positions, position_rows, detect_passes
+from gbis_web import fetch_route_positions, position_rows, detect_passes, fetch_station_info
+import kakao_stop
+import naver_stop
+import source_rotation
+import random
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -75,6 +82,10 @@ ROTATE_RUNNER_EXIT_CODE = 75
 # GBIS 웹이 연속으로 실패하면 잠시 쉰다 (조회 지연과 상대 서버 부담을 줄인다)
 GBIS_WEB_BACKOFF_FAILS = 3
 GBIS_WEB_BACKOFF_SEC = 600
+# 교대 조회 출처 선택용 난수 (테스트에서 고정값으로 바꾼다)
+RNG = random.Random()
+# 도착 처리한 차량을 대체 출처가 이 시간 안에 다시 보여주면 같은 운행으로 보고 건너뛴다
+RECENT_CLOSED_SEC = 600
 
 HOLIDAYS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "holidays.json")
 
@@ -414,8 +425,12 @@ def close_track(state: dict, arrival_path: str, ts: dt.datetime, reason: str):
     state.update(TRACK_DEFAULTS)
 
 
-def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
-    """정상 응답 1건을 추적 상태에 반영한다. (실패 응답은 호출 측에서 처리)"""
+def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str, stall_signal: bool = True):
+    """정상 응답 1건을 추적 상태에 반영한다. (실패 응답은 호출 측에서 처리)
+
+    stall_signal=False(공식 API 외 출처)면 1정거장 전 예측 멈춤 감지를 바꾸지 않는다. 멈춤은 공식 예측초가
+    150~200초에 머무는 현상이라, 분 단위(GBIS 웹)나 따로 계산한 값(네이버)이 끼면 감지가 매번 초기화된다.
+    """
     previous_failures = state.get("consec_fail", 0)
     state["consec_fail"] = 0
     state["last_success"] = ts.isoformat()
@@ -459,7 +474,9 @@ def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
 
     near = info.get("location_no") is not None and info["location_no"] <= 1 and predict is not None and 150 <= predict <= 200
     anchor = state.get("near_stall_predict")
-    if near:
+    if not stall_signal:
+        pass
+    elif near:
         if state.get("near_stall_since") is None or anchor is None or abs(predict - anchor) > 15:
             state["near_stall_since"] = ts.isoformat()
             state["near_stall_predict"] = predict
@@ -477,7 +494,7 @@ def observe(state: dict, info: dict, ts: dt.datetime, arrival_path: str):
 
 
 def poll_gbis_web(state: dict, ts: dt.datetime, route_id: int, target_ids: list,
-                  position_path: str, pass_path: str) -> dict:
+                  position_path: str, pass_path: str, min_gap_sec: int = 0) -> dict:
     """GBIS 웹 노선 위치 1회 수집. 결과는 status 용 요약이며 기본 추적·호출 한도와 무관하다."""
     web = state.setdefault("gbis_web", {})
     if web.get("date") != ts.strftime("%Y-%m-%d"):
@@ -487,6 +504,12 @@ def poll_gbis_web(state: dict, ts: dt.datetime, route_id: int, target_ids: list,
         return {"ok": False, "skipped": "backoff", "retry_after": web["skip_until"],
                 "consec_fail": web.get("consec_fail", 0), "calls": web["calls"],
                 "last_success": web.get("last_success")}
+    last_call = parse_ts(web.get("last_call"))
+    if min_gap_sec and last_call and 0 <= (ts - last_call).total_seconds() < min_gap_sec:
+        # 조회 간격이 짧아도 노선 위치는 min_gap_sec 마다 한 번만 읽는다 (상대 서버 부담)
+        return {"ok": web.get("consec_fail", 0) == 0, "skipped": "min_gap", "calls": web["calls"],
+                "consec_fail": web.get("consec_fail", 0), "last_success": web.get("last_success")}
+    web["last_call"] = ts.isoformat()
     detail = {}
     started = time.monotonic()
     result = fetch_route_positions(route_id, diagnostics=detail)
@@ -503,6 +526,11 @@ def poll_gbis_web(state: dict, ts: dt.datetime, route_id: int, target_ids: list,
                 "last_success": web.get("last_success")}
     ts_iso = observed.isoformat()
     web.update(consec_fail=0, skip_until=None, last_success=ts_iso)
+    # 노선 전 차량의 차량번호 → vehId: 카카오·네이버(차량번호만 줌) 응답을 GBIS 차량으로 잇는 데 쓴다
+    plates = state.setdefault("plate_vid", {})
+    for vehicle in result["vehicles"]:
+        if vehicle.get("plate_no") and vehicle.get("veh_id"):
+            plates[vehicle["plate_no"]] = vehicle["veh_id"]
     for row in position_rows(ts_iso, route_id, result["vehicles"]):
         append_csv(position_path, row)
     targets = {sid: result["orders"].get(sid) for sid in target_ids if sid is not None}
@@ -519,6 +547,92 @@ def poll_gbis_web(state: dict, ts: dt.datetime, route_id: int, target_ids: list,
     if missing:
         summary["targets_not_on_route"] = missing
     return summary
+
+
+def poll_official(service_key: str, state: dict, route_id: int, sta_order: int,
+                  args: argparse.Namespace) -> dict:
+    """공식 API(data.go.kr) 1차 정류장 조회. 목록 → (차량 소실 재확인 | 오류 시 항목 폴백) 규칙을 따른다."""
+    api_error_detail, station_list_error = {}, {}
+    route_rows = None
+    calls = 1
+    mode = "item"
+    if args.primary_mode == "station-list":
+        batch = fetch_station_list(service_key, STATION_ID, route_id, sta_order,
+                                   diagnostics=station_list_error)
+        if batch is not None:
+            info = batch["info"]
+            route_rows = batch["routes"]
+            mode = "station_list"
+            # 목록 API가 대상 차량을 갑자기 빠뜨려도 도착 확정하지 않는다.
+            # 기존 추적 차량 소실 직전에만 항목조회로 재확인한다.
+            if (info["veh_id"] is None and state.get("cur_vid") is not None
+                    and state["daily_calls"] + 1 < args.max_daily_calls):
+                calls += 1
+                mode = "station_list_confirmed"
+                info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                                     diagnostics=api_error_detail)
+        elif state["daily_calls"] + 1 < args.max_daily_calls:
+            # 목록이 정상이라면 추가 호출은 없다. 오류 때만 기존 노선 API로 폴백한다.
+            calls += 1
+            mode = "item_fallback"
+            info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                                 diagnostics=api_error_detail)
+        else:
+            mode = "station_list_error"
+            api_error_detail = station_list_error
+            info = None
+    else:
+        info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
+                             diagnostics=api_error_detail)
+    return {"info": info, "route_rows": route_rows, "calls": calls, "mode": mode,
+            "api_error_detail": api_error_detail, "station_list_error": station_list_error}
+
+
+def plate_map(state: dict, predict_path: str) -> dict:
+    """차량번호 → GBIS vehId (tracker_state 에 보관). 지난 기록은 run_loop 시작 때 seed_plates 로 합친다."""
+    plates = state.get("plate_vid")
+    if not isinstance(plates, dict):
+        plates = state["plate_vid"] = {}
+    return plates
+
+
+def seed_plates(state: dict, predict_path: str):
+    """predict_log 의 공식·GBIS 웹 관측을 차량번호 표 밑에 깐다 (이번 세션에서 배운 값이 우선)."""
+    learned = state.get("plate_vid") if isinstance(state.get("plate_vid"), dict) else {}
+    state["plate_vid"] = {**kakao_stop.load_plate_map(predict_path), **learned}
+
+
+def without_recent(info: dict, recent: dict, ts: dt.datetime) -> dict:
+    """대체 출처가 방금 도착 처리한 차량을 아직 보여주면 그 차량을 건너뛴다 (출처마다 갱신이 늦다).
+
+    다음 차량이 있으면 첫 차량으로 올리고, 없으면 버스 없음으로 본다. 공식 API 응답에는 쓰지 않는다
+    (공식의 짧은 재등장은 기존처럼 추적을 다시 열고 모델이 quick_reappearance 로 걸러낸다).
+    """
+    def fresh(vid):
+        closed = parse_ts(recent.get(str(vid))) if vid else None
+        return closed is None or not 0 <= (ts - closed).total_seconds() <= RECENT_CLOSED_SEC
+    if info["veh_id"] is None or fresh(info["veh_id"]):
+        return info
+    shifted = no_bus_info(info.get("flag", ""))
+    if info.get("next_veh_id") and fresh(info["next_veh_id"]):
+        shifted.update(veh_id=info["next_veh_id"], plate_no=info.get("next_plate_no", ""),
+                       predict_min=info.get("next_predict_min"), predict_sec=info.get("next_predict_sec"),
+                       remain_seat=info.get("next_remain_seat"))
+    return shifted
+
+
+def poll_alternate(name: str, state: dict, route_id: int, sta_order: int, predict_path: str,
+                   detail: dict) -> dict | None:
+    """공식 API 외 출처 1회 조회. 공식 항목 조회와 같은 info dict, 실패면 None."""
+    if name == "gbis_web":
+        return fetch_station_info(STATION_ID, route_id, sta_order, diagnostics=detail)
+    if name == "kakao":
+        result = kakao_stop.fetch_info(plate_map(state, predict_path), diagnostics=detail)
+    elif name == "naver":
+        result = naver_stop.fetch_info(plate_map(state, predict_path), diagnostics=detail)
+    else:
+        raise ValueError(name)
+    return result["info"] if result is not None else None
 
 
 def run_loop(args: argparse.Namespace):
@@ -582,6 +696,19 @@ def run_loop(args: argparse.Namespace):
     if next_poll is None and last_poll:
         next_poll = last_poll + dt.timedelta(seconds=args.interval)
 
+    sources = list(args.sources)
+    if (route_id, sta_order) != (TARGET_ROUTE_ID, STA_ORDER):
+        # 카카오·네이버·GBIS 웹 정류장 조회는 07511 × 3100번(staOrder 6) 기준으로 고정돼 있다
+        dropped = [name for name in sources if name != source_rotation.OFFICIAL]
+        if dropped:
+            logging.warning("대상 노선/순번이 기본값이 아니어서 대체 출처를 끕니다: %s", ",".join(dropped))
+        sources = [source_rotation.OFFICIAL]
+    if len(sources) > 1:
+        logging.info("교대 조회 출처: %s", ",".join(sources))
+    if {"kakao", "naver"} & set(sources):
+        seed_plates(state, predict_path)
+
+    segment_started = time.monotonic()
     deadline = time.monotonic() + args.run_seconds if args.run_seconds else None
     polls = 0
     while True:
@@ -605,48 +732,79 @@ def run_loop(args: argparse.Namespace):
             break
 
         request_started = time.monotonic()
+        # 공식 API 결과 (시도하지 않은 조회에서는 비어 있다)
         api_error_detail = {}
         station_list_error = {}
         route_rows = None
-        primary_calls = 1
-        primary_source = "item"
-        if args.primary_mode == "station-list":
-            batch = fetch_station_list(service_key, STATION_ID, route_id, sta_order,
-                                       diagnostics=station_list_error)
-            if batch is not None:
-                info = batch["info"]
-                route_rows = batch["routes"]
-                primary_source = "station_list"
-                # 목록 API가 대상 차량을 갑자기 빠뜨려도 도착 확정하지 않는다.
-                # 기존 추적 차량 소실 직전에만 항목조회로 재확인한다.
-                if (info["veh_id"] is None and state.get("cur_vid") is not None
-                        and state["daily_calls"] + 1 < args.max_daily_calls):
-                    primary_calls += 1
-                    primary_source = "station_list_confirmed"
-                    info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
-                                         diagnostics=api_error_detail)
-            elif state["daily_calls"] + 1 < args.max_daily_calls:
-                # 목록이 정상이라면 추가 호출은 없다. 오류 때만 기존 노선 API로 폴백한다.
-                primary_calls += 1
-                primary_source = "item_fallback"
-                info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
-                                     diagnostics=api_error_detail)
+        primary_calls = 0
+        primary_source = None
+        official_attempted = False
+        info = None
+        data_source = None
+        vanish_candidate = None
+        attempts = []
+        alternate_errors = {}
+        observed_at = ts
+        for name in source_rotation.plan(state, sources, ts, RNG):
+            attempt_started = kst_now()
+            if name == source_rotation.OFFICIAL:
+                official_attempted = True
+                official = poll_official(service_key, state, route_id, sta_order, args)
+                primary_calls += official["calls"]
+                primary_source = official["mode"]
+                route_rows = official["route_rows"]
+                api_error_detail = official["api_error_detail"]
+                station_list_error = official["station_list_error"]
+                result, detail = official["info"], api_error_detail
             else:
-                primary_source = "station_list_error"
-                api_error_detail = station_list_error
-                info = None
-        else:
-            info = fetch_arrival(service_key, STATION_ID, route_id, sta_order,
-                                 diagnostics=api_error_detail)
+                detail = {}
+                try:
+                    result = poll_alternate(name, state, route_id, sta_order, predict_path, detail)
+                except Exception:  # 대체 출처의 예상 밖 오류가 수집 전체를 멈추게 하지 않는다
+                    detail.clear()
+                    detail["kind"] = "unexpected_error"
+                    result = None
+                if result is None:
+                    alternate_errors[name] = dict(detail)
+            source_rotation.record(state, name, ts, result is not None, detail)
+            attempts.append({"source": name, "ok": result is not None,
+                             **({} if result is not None else {"error": dict(detail)})})
+            if result is None:
+                continue
+            if name in ("official", "gbis_web"):
+                kakao_stop.learn_plates(plate_map(state, predict_path), result)
+            if name != source_rotation.OFFICIAL:
+                result = without_recent(result, state.get("recent_closed") or {}, ts)
+            # 추적 중인 차량이 사라졌거나 다른 차량으로 바뀌었다는 대체 출처 응답은 다음 출처로 한 번 더
+            # 확인한다 (공식 목록 API의 항목 재확인과 같은 이유: 출처 하나의 누락·지연으로 도착을 확정하지 않는다)
+            if (vanish_candidate is None and name != source_rotation.OFFICIAL
+                    and state.get("cur_vid") is not None and result["veh_id"] != state.get("cur_vid")):
+                vanish_candidate = (name, result, attempt_started)
+                continue
+            info, data_source, observed_at = result, name, attempt_started
+            break
+        if info is None and vanish_candidate is not None:
+            data_source, info, observed_at = vanish_candidate
+        if data_source is not None and data_source != source_rotation.OFFICIAL:
+            primary_source = data_source
         api_latency_sec = round(time.monotonic() - request_started, 3)
         api_received_ts = kst_iso()
-        # 2차 정류장은 1차에 버스가 있을 때만 조회한다 (버스가 없으면 기록할 것이 없다)
+        # 기록 시각은 자료를 받은 출처의 요청 시작 시각이다. 앞 출처가 시간 초과로 30초 넘게 걸려도
+        # 늦게 받은 값을 조회 시작 시각으로 당겨 찍지 않는다. 다음 조회 예약은 조회 시작 기준이다.
+        poll_started = ts
+        ts = observed_at
+        ts_iso = ts.isoformat()
+        # 2차 정류장은 1차에 버스가 있을 때만, 1차와 같은 출처로 조회한다 (버스가 없으면 기록할 것이 없다).
+        # 카카오·네이버는 2차 정류장 대상이 아니다 (성남시청전면 경로는 GBIS 웹 노선 위치가 기록한다).
         info_secondary = None
         secondary_called = False
-        if (info is not None and info["veh_id"] and secondary_station_id is not None
-                and state["daily_calls"] + primary_calls < args.max_daily_calls):
-            info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
-            secondary_called = True
+        if info is not None and info["veh_id"] and secondary_station_id is not None:
+            if (data_source == source_rotation.OFFICIAL
+                    and state["daily_calls"] + primary_calls < args.max_daily_calls):
+                info_secondary = fetch_arrival(service_key, secondary_station_id, route_id, sta_order_secondary)
+                secondary_called = True
+            elif data_source == "gbis_web":
+                info_secondary = fetch_station_info(secondary_station_id, route_id, sta_order_secondary)
         state["daily_calls"] += primary_calls + (1 if secondary_called else 0)
         state["last_poll"] = ts_iso
         previous_vid = state.get("cur_vid")
@@ -654,7 +812,7 @@ def run_loop(args: argparse.Namespace):
         if args.gbis_web:
             try:
                 gbis_web_status = poll_gbis_web(state, ts, route_id, [STATION_ID, secondary_station_id],
-                                                position_path, pass_path)
+                                                position_path, pass_path, args.gbis_web_min_gap)
             except Exception as e:  # 관측 전용 수집이 기본 수집을 멈추게 하지 않는다
                 logging.warning("GBIS 웹 수집 중 오류: %s", type(e).__name__)
                 gbis_web_status = {"ok": False, "error_detail": {"kind": "unexpected_error"}}
@@ -669,6 +827,8 @@ def run_loop(args: argparse.Namespace):
                 "state_reset": state_reset,
                 "daily_calls": state["daily_calls"],
             }
+            if alternate_errors:
+                status["source_errors"] = alternate_errors
         else:
             vid = info["veh_id"] or None
             predict = info["predict_sec"]
@@ -686,6 +846,7 @@ def run_loop(args: argparse.Namespace):
                 "state_cd": info["state_cd"],
                 "flag": info["flag"],
                 "location_no": info["location_no"],
+                "source": data_source,
             })
 
             # 2차 정류장 보정: 같은 차량이 두 정류장 응답에 나타나는지 기록
@@ -699,7 +860,15 @@ def run_loop(args: argparse.Namespace):
                         "note": "same_veh_at_both",
                     })
 
-            observe(state, info, ts, arrival_path)
+            observe(state, info, ts, arrival_path, stall_signal=data_source == source_rotation.OFFICIAL)
+            if previous_vid is not None and state.get("cur_vid") != previous_vid:
+                recent = {}
+                for vid, when in (state.get("recent_closed") or {}).items():
+                    closed = parse_ts(when)
+                    if closed and 0 <= (ts - closed).total_seconds() <= RECENT_CLOSED_SEC:
+                        recent[vid] = when
+                recent[str(previous_vid)] = ts_iso
+                state["recent_closed"] = recent
 
             if vid is None:
                 status = {
@@ -736,6 +905,13 @@ def run_loop(args: argparse.Namespace):
                 }
 
         status["primary_source"] = primary_source
+        status["data_source"] = data_source
+        if len(sources) > 1:
+            status["source_attempts"] = attempts
+            status["sources"] = source_rotation.summary(state, sources, ts)
+            if info is not None and official_attempted and api_error_detail:
+                # 대체 출처로 이어 받았지만 공식 API 오류는 따로 남긴다
+                status["official_error_detail"] = api_error_detail
         if gbis_web_status is not None:
             status["gbis_web"] = gbis_web_status
         if station_list_error:
@@ -763,7 +939,7 @@ def run_loop(args: argparse.Namespace):
         # 추적 중(차량 있음, 소실 확인 대기, API 실패 직후)이면 촘촘히, 버스가 없으면 성기게 조회한다
         tracking = info is None or state.get("cur_vid") is not None
         interval = args.interval if tracking else args.idle_interval
-        next_poll = ts + dt.timedelta(seconds=interval)
+        next_poll = poll_started + dt.timedelta(seconds=interval)
         state["next_poll_ts"] = next_poll.isoformat()
 
         publication = publication_decision(state.get("last_predict"), state.get("last_location"),
@@ -773,10 +949,11 @@ def run_loop(args: argparse.Namespace):
         if status_path:
             _write_status(status_path, ts_iso, {**status, "collect_window": args.window,
                                                 "poll_interval_sec": interval,
-                                                "api_request_started_at": ts_iso,
+                                                "api_request_started_at": poll_started.isoformat(),
                                                 "api_response_received_at": api_received_ts,
                                                 "api_request_duration_sec": api_latency_sec,
-                                                "publish_interval_sec": 60 if urgent else 300,
+                                                "publish_interval_sec": (args.urgent_publish_seconds if urgent
+                                                                         else args.publish_seconds),
                                                 "urgent_publication": urgent,
                                                 "publication_reason": publication['publication_reason'],
                                                 "runtime_schema_version": 2,
@@ -792,8 +969,11 @@ def run_loop(args: argparse.Namespace):
         polls += 1
         if args.max_polls is not None and polls >= args.max_polls:
             break
-        # 버스가 처음 발견되거나 추적이 끝난 순간에는 바로 게시할 수 있도록 구간을 끝낸다
-        if args.exit_on_change and (state.get("cur_vid") != previous_vid or urgent):
+        # 버스가 처음 발견되거나 추적이 끝난 순간에는 바로 게시할 수 있도록 구간을 끝낸다.
+        # 임박 게시는 urgent_publish_seconds 마다: 다음 조회가 그 시각을 넘기면 이번 조회 직후 게시한다
+        # (조회 간격 60초면 매 조회, 30초면 두 번에 한 번 — Pages 배포 횟수를 늘리지 않는다).
+        urgent_due = urgent and (time.monotonic() - segment_started) + interval >= args.urgent_publish_seconds
+        if args.exit_on_change and (state.get("cur_vid") != previous_vid or urgent_due):
             break
 
 
@@ -820,7 +1000,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--sta-order-secondary", type=int, default=STA_ORDER_SECONDARY)
     p.add_argument("--window", default=os.getenv("BUS_WINDOW") or COLLECT_WINDOW,
                    help="수집 시간대 (KST, HH:MM-HH:MM)")
-    p.add_argument("--interval", type=int, default=60,
+    p.add_argument("--interval", type=int, default=int(os.getenv("BUS_INTERVAL") or 60),
                    help="추적 중(버스가 있을 때) 조회 간격(초)")
     p.add_argument("--idle-interval", type=int,
                    default=int(os.getenv("BUS_IDLE_INTERVAL") or IDLE_INTERVAL_SEC),
@@ -829,6 +1009,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--gbis-web", action=argparse.BooleanOptionalAction,
                    default=os.getenv("BUS_GBIS_WEB") == "1",
                    help="GBIS 웹 노선 위치를 함께 수집 (관측 전용, 인증키·일일 호출 한도 미사용)")
+    p.add_argument("--gbis-web-min-gap", type=int, default=int(os.getenv("BUS_GBIS_WEB_MIN_GAP") or 0),
+                   help="GBIS 웹 노선 위치 최소 조회 간격(초, 0이면 매 조회)")
+    p.add_argument("--sources", type=source_rotation.parse_sources,
+                   default=source_rotation.parse_sources(os.getenv("BUS_SOURCES") or "official"),
+                   help="도착 정보 출처 (쉼표 구분, 교대 조회): official,gbis_web,kakao,naver")
+    p.add_argument("--publish-seconds", type=int, default=int(os.getenv("BUS_PUBLISH_SECONDS") or 300),
+                   help="평상시 게시 주기(초, session.sh 와 같은 값) — status.json 표시용")
+    p.add_argument("--urgent-publish-seconds", type=int,
+                   default=int(os.getenv("BUS_URGENT_PUBLISH_SECONDS") or 60),
+                   help="버스 임박 시 게시 주기(초)")
     p.add_argument("--exit-on-change", action="store_true",
                    help="추적 차량이 바뀌면(첫 발견/도착/교체) 구간을 끝내 즉시 게시할 수 있게 한다")
     p.add_argument("--output-csv", default=os.getenv("BUS_OUTPUT_CSV", "bus-arrival/arrival_log.csv"))
@@ -856,6 +1046,10 @@ def main():
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
+    # httpx 는 INFO 로 요청 URL 전체를 남긴다. data.go.kr URL 의 serviceKey 가 URL 인코딩된 형태로
+    # 공개 Actions 로그에 찍히면 secret 가림 처리를 비켜 갈 수 있으므로 경고 이상만 남긴다.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     os.makedirs(os.path.dirname(args.output_csv) or ".", exist_ok=True)
 
     if args.gate_only:

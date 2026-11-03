@@ -2,7 +2,7 @@
 
 ## 무엇을 더 수집하나
 
-[GBIS 버스 검색 화면](https://www.gbis.go.kr/gbis2014/schBus.action?mapTabCd=1)이 노선을 그릴 때 쓰는 `schBusAPI.action?cmd=searchRouteJson&routeId=204000170` 응답을 매 조회(추적 중 60초, 버스 없음 120초)마다 1회 읽는다. 공공데이터포털 도착 API는 07511에 **가장 가까운 2대**의 예측만 주지만, 이 응답에는 3100번 **운행 차량 전체**의 현재 구간(출발 정류장 → 다음 정류장), 정류장 정차/구간 이동 여부(`busPosition` 1/2), 좌표(EPSG:3857), 잔여 좌석, 혼잡도가 들어 있다.
+[GBIS 버스 검색 화면](https://www.gbis.go.kr/gbis2014/schBus.action?mapTabCd=1)이 노선을 그릴 때 쓰는 `schBusAPI.action?cmd=searchRouteJson&routeId=204000170` 응답을 매 조회마다 1회 읽는다. 조회 간격이 짧으면 `BUS_GBIS_WEB_MIN_GAP`초(운영 55초)에 한 번만 읽는다. 같은 화면의 **정류장** 응답(`searchBusStationJson`)은 별도로 교대 조회 출처 `gbis_web`으로 쓴다([SOURCES.md](SOURCES.md)). 공공데이터포털 도착 API는 07511에 **가장 가까운 2대**의 예측만 주지만, 이 응답에는 3100번 **운행 차량 전체**의 현재 구간(출발 정류장 → 다음 정류장), 정류장 정차/구간 이동 여부(`busPosition` 1/2), 좌표(EPSG:3857), 잔여 좌석, 혼잡도가 들어 있다.
 
 | 파일 | 내용 |
 | --- | --- |

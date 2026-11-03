@@ -197,3 +197,99 @@ def detect_passes(previous, vehicles, ts, targets, *, route_id, max_gap_sec):
         if key not in current and prev_ts and 0 <= (ts - prev_ts).total_seconds() <= max_gap_sec:
             current[key] = prev
     return events, current
+
+
+# ---- 정류장 도착 정보 (교대 조회 출처 "gbis_web") ----
+# 같은 화면이 정류장을 열 때 쓰는 cmd=searchBusStationJson 응답. 공식 API와 같은 GBIS vehId 를 주지만
+# 예측은 분 단위(predictTime1)만 있고 stateCd 가 없다. predict_sec 는 분 × 60 으로 둔다.
+
+
+class StationDataError(ValueError):
+    def __init__(self, kind):
+        super().__init__(kind)
+        self.kind = kind
+
+
+def _station_empty():
+    """scrape.no_bus_info() 와 같은 키."""
+    return {
+        "veh_id": None, "plate_no": "", "predict_min": None, "predict_sec": None,
+        "location_no": None, "remain_seat": None, "state_cd": None, "flag": "",
+        "station_nm": "", "next_veh_id": None, "next_plate_no": "",
+        "next_predict_min": None, "next_predict_sec": None, "next_remain_seat": None,
+    }
+
+
+def parse_station_arrivals(payload, route_id, sta_order):
+    """searchBusStationJson 응답에서 대상 노선·방향을 공식 항목 조회와 같은 형태로 정규화한다."""
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        raise StationDataError("unsuccessful_response")
+    result = payload.get("result")
+    items = result.get("busArrivalInfo") if isinstance(result, dict) else None
+    if not isinstance(items, list):
+        raise StationDataError("invalid_schema")
+    items = [item for item in items if isinstance(item, dict)]
+    candidates = [item for item in items if _int(item.get("routeId")) == route_id]
+    if not candidates:
+        raise StationDataError("route_missing")
+    exact = [item for item in candidates if _int(item.get("staOrder")) == sta_order]
+    if len(exact) != 1:
+        raise StationDataError("direction_mismatch" if not exact else "duplicate_direction")
+    item = exact[0]
+    info = _station_empty()
+    info.update(flag=_text(item.get("flag")))
+    veh_id = _int(item.get("vehId1"))
+    if veh_id is None:
+        # 퇴근 시간대 정류장 전체가 비어 있으면 GBIS 웹 쪽 장애로 본다 (버스 없음과 구분)
+        if not any(_int(other.get("vehId1")) for other in items):
+            raise StationDataError("all_routes_empty")
+        return info
+    minutes = _int(item.get("predictTime1"))
+    if minutes is None or minutes < 0:
+        raise StationDataError("invalid_vehicle")
+    info.update(
+        veh_id=veh_id, plate_no=_text(item.get("plateNo1")),
+        predict_min=minutes, predict_sec=minutes * 60,
+        location_no=_int(item.get("locationNo1")), remain_seat=_int(item.get("remainSeatCnt1")),
+        station_nm=_text(item.get("stationNm1")),
+    )
+    next_id, next_minutes = _int(item.get("vehId2")), _int(item.get("predictTime2"))
+    if next_id and next_minutes is not None and next_minutes >= 0:
+        info.update(next_veh_id=next_id, next_plate_no=_text(item.get("plateNo2")),
+                    next_predict_min=next_minutes, next_predict_sec=next_minutes * 60,
+                    next_remain_seat=_int(item.get("remainSeatCnt2")))
+    return info
+
+
+def fetch_station_info(station_id, route_id, sta_order, *, diagnostics=None):
+    """정류장 도착 정보 1회 조회. 실패(None)와 차량 없음(빈 차량 dict)을 구분한다."""
+    detail = diagnostics if diagnostics is not None else {}
+    detail.clear()
+
+    def failed(kind, **codes):
+        detail.update(kind=kind, **codes)
+        logging.warning("GBIS 웹 정류장 조회 실패 station=%s detail=%s", station_id, json.dumps(detail))
+        return None
+
+    try:
+        response = httpx.post(URL, data={"cmd": "searchBusStationJson", "stationId": str(station_id)},
+                              headers=HEADERS, timeout=TIMEOUT)
+        if not response.is_success:
+            return failed("http_error", http_status=response.status_code)
+        try:
+            payload = response.json()
+        except ValueError:
+            return failed("invalid_response")
+        try:
+            return parse_station_arrivals(payload, route_id, sta_order)
+        except StationDataError as exc:
+            return failed(exc.kind)
+        except (TypeError, AttributeError):
+            return failed("invalid_schema")
+    except httpx.TimeoutException as exc:
+        phase = "connect" if isinstance(exc, httpx.ConnectTimeout) else "read" if isinstance(exc, httpx.ReadTimeout) else "other"
+        return failed("timeout", phase=phase)
+    except httpx.RequestError:
+        return failed("connection_error")
+    except Exception:
+        return failed("unexpected_error")

@@ -69,7 +69,8 @@ window.BusApp = { mount(root = document, options = {}) {
     });
   };
 
-  // 수집: 평일 수집 시간대(status.collect_window, 기본 16:00~22:00)에 조회 · 5분마다 게시 (bus_arrival.yml 세션 기준)
+  // 수집: 평일 수집 시간대(status.collect_window, 기본 16:00~22:00)에 조회 · 평상시 2분, 버스 임박 시 1분마다 게시
+  // (status.publish_interval_sec, bus_arrival.yml 세션 기준). PUBLISH_MINUTES 는 시간대 시작 직후 유예용 상한이다.
   // 버스가 없을 때는 조회 간격이 길어지므로(status.poll_interval_sec) 최신성 임계값도 그만큼 늘린다.
   const PUBLISH_MINUTES = 5;
   const WINDOW_RE = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/;
@@ -455,6 +456,16 @@ window.BusApp = { mount(root = document, options = {}) {
     return (labels[detail.kind] || "조회 실패") + (codes.length ? " (" + codes.join(", ") + ")" : "");
   }
 
+  const SOURCE_LABELS = { official:"공식 API", gbis_web:"GBIS 웹", kakao:"카카오맵", naver:"네이버 지도" };
+  // 교대 조회(status.sources)면 이번 값의 출처와 오늘 출처별 호출 수를 함께 보여준다
+  function sourceLabel(st) {
+    if (!st || !st.data_source) return st && st.error === "api_error" ? "없음 (조회 실패)" : "공식 API";
+    const label = SOURCE_LABELS[st.data_source] || st.data_source;
+    const calls = st.sources ? Object.keys(st.sources).map(name =>
+      (SOURCE_LABELS[name] || name) + " " + ((st.sources[name] && st.sources[name].calls) || 0)).join("/") : "";
+    return label + (calls ? " (오늘 " + calls + "회)" : "");
+  }
+
   function renderSystem() {
     const st = cache.status, sm = cache.summary;
     const conf = CONFIDENCE[st && st.confidence] || CONFIDENCE.unknown;
@@ -468,6 +479,7 @@ window.BusApp = { mount(root = document, options = {}) {
       "API 응답 소요 " + escapeHtml(st && st.api_request_duration_sec != null ? st.api_request_duration_sec + "초" : "미측정"),
       "조회→게시 준비 " + escapeHtml(st && st.poll_to_publish_prepare_sec != null ? st.poll_to_publish_prepare_sec + "초" : "미측정"),
       "게시 목표 " + escapeHtml(st && st.publish_interval_sec ? st.publish_interval_sec + "초 (push·Pages 배포 지연 별도, 미측정)" : "300초 (배포 지연 미측정)"),
+      "데이터 출처 " + escapeHtml(sourceLabel(st)),
       "API 호출 " + escapeHtml((st && st.daily_calls) || 0) + "회",
       "조회 간격 " + escapeHtml(st && st.poll_interval_sec ? st.poll_interval_sec + "초" : "-"),
       "수집 시간대 평일 " + escapeHtml(parseWindow(st && st.collect_window).label),
@@ -1016,9 +1028,25 @@ window.BusApp = { mount(root = document, options = {}) {
   let resizeTimer = null;
   window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { historySig=""; queueRender(true); }, 180); });
 
+  // 다음 확인 시각: 다음 게시가 Pages 에 반영될 즈음(게시 준비 + 게시 주기 + 배포 여유)에 맞춘다.
+  // 늦어도 60초 안에는 다시 확인하고(기존 주기), 예정이 지났는데 아직 같은 자료면 20초 뒤 한 번 더 본다.
+  const DEPLOY_SLACK_MS = 25000, RECHECK_MS = 20000, MAX_LOAD_GAP_MS = 60000;
+  function loadDueAt() {
+    const st = cache.status;
+    const fallback = lastLoadAt + MAX_LOAD_GAP_MS;
+    let prepared = st ? Date.parse(st.publish_prepared_at) : NaN;
+    if (!Number.isFinite(prepared) && st) prepared = Date.parse(st.last_poll);
+    const period = st ? Number(st.publish_interval_sec) * 1000 : NaN;
+    if (!Number.isFinite(prepared) || !(period > 0)) return fallback;
+    const expected = prepared + period + DEPLOY_SLACK_MS;
+    if (expected > lastLoadAt) return Math.min(expected, fallback);
+    // 수집이 멈춘 시간(밤·주말)에는 오래된 자료라 기존 60초 주기를 지킨다
+    const recent = Date.now() - prepared < 2 * period + MAX_LOAD_GAP_MS;
+    return recent ? Math.min(lastLoadAt + RECHECK_MS, fallback) : fallback;
+  }
   function tick() {
     queueRender();
-    if (Date.now() - lastLoadAt >= 60000) load().catch(() => {});
+    if (Date.now() >= loadDueAt()) load().catch(() => {});
   }
   // 탭이 다시 보이거나 네트워크가 돌아오면 바로 갱신한다 (숨겨진 탭의 타이머는 분당 1회로 제한된다)
   const refreshNow = () => { load().catch(() => {}); runAlarm(); tick(); };

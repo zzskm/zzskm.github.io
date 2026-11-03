@@ -68,10 +68,16 @@ jobs:
           SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
           BUS_WINDOW: ${{ inputs.window || '16:00-22:00' }}
           BUS_SESSION_MINUTES: ${{ inputs.session_minutes || '330' }}
-          BUS_PUBLISH_SECONDS: "300"
+          # 평상시 게시 주기. 버스 임박(15분/2정거장 이내)이면 60초마다 게시한다 (BUS_URGENT_PUBLISH_SECONDS).
+          BUS_PUBLISH_SECONDS: "120"
+          # 조회 간격: 추적 중 30초, 버스 없음 60초. 출처를 교대로 쓰므로 출처마다 호출은 1/4 수준이다.
+          BUS_INTERVAL: "30"
+          BUS_IDLE_INTERVAL: "60"
+          # 도착 정보 출처 교대 조회 (섞은 순서로 매 조회 하나, 실패 시 나머지로 대체) — reports/SOURCES.md
+          BUS_SOURCES: "official,gbis_web,kakao,naver"
           # Retire an unreachable runner after 8 failed polls; retain state/call budget.
           BUS_MAX_CONNECT_TIMEOUTS: "8"
-          # <=15 min or <=2 stops: publish after each existing 60s poll; no extra API calls.
+          # <=15 min or <=2 stops: publish every 60s right after a poll; no extra API calls.
           BUS_URGENT_PREDICT_SEC: "900"
           # 기본 정류장 07511은 전체 노선 1회 호출로 대체. 실패 시 3100 항목 API 폴백.
           BUS_PRIMARY_MODE: "station-list"
@@ -80,6 +86,8 @@ jobs:
           # GBIS 웹(www.gbis.go.kr) 노선 화면의 3100 전 차량 위치·07511/06004 도달 구간 기록.
           # 관측 전용: 인증키·일일 호출 한도를 쓰지 않고 알림·안전 모델에도 반영하지 않는다.
           BUS_GBIS_WEB: "1"
+          # 조회 간격이 30초로 줄어도 노선 위치는 55초에 한 번만 읽는다
+          BUS_GBIS_WEB_MIN_GAP: "55"
 
 
       - name: Preserve runner network diagnostics
