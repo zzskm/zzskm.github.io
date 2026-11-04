@@ -59,6 +59,15 @@ jobs:
         timeout-minutes: 1
         run: python bus-arrival/scripts/runner_diagnostics.py --output "$RUNNER_TEMP/bus-arrival-network.json"
 
+      # 로컬에서 되는 출처가 runner(해외 IP)에서 막힐 수 있다. 세션 시작 때 출처마다 1회 실제 조회해
+      # 실행 화면 주석과 artifact 로 남긴다. 실패해도 수집은 그대로 진행한다 (막힌 출처는 교대 조회가 쉬게 한다).
+      - name: Probe arrival sources from this runner
+        continue-on-error: true
+        timeout-minutes: 2
+        run: python bus-arrival/scripts/source_probe.py --output "$RUNNER_TEMP/bus-arrival-sources.json"
+        env:
+          SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
+
       - name: Collect session
         run: |
           git config user.name "github-actions"
@@ -95,7 +104,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bus-arrival-network-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/bus-arrival-network.json
+          path: |
+            ${{ runner.temp }}/bus-arrival-network.json
+            ${{ runner.temp }}/bus-arrival-sources.json
           if-no-files-found: ignore
           retention-days: 14
 

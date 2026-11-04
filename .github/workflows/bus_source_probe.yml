@@ -1,0 +1,69 @@
+name: bus source probe
+
+# 도착 정보 출처(공식 API·GBIS 웹·카카오·네이버)를 GitHub Actions runner 에서 실제로 조회해 본다.
+# 로컬 PC(국내망)에서 되는 출처가 runner(해외 IP)에서는 막힐 수 있어서, 수집 세션 전에 따로 확인한다.
+# 기록은 커밋하지 않는다: 실행 화면 주석·요약과 artifact 로만 남긴다.
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "runner 마다 반복 횟수 (간헐적 실패 확인용)"
+        default: "3"
+  # main 에 합치기 전에 브랜치에서 확인할 수 있도록
+  push:
+    branches: ['bus-probe/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        # runner 마다 IP·지역이 다르므로 세 대에서 확인한다
+        sample: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: python -m pip install --disable-pip-version-check -r bus-arrival/requirements.txt
+
+      - name: Check Brotli runtime
+        run: python scripts/check-brotli-runtime.py
+
+      - name: Record runner network diagnostics
+        continue-on-error: true
+        timeout-minutes: 1
+        run: python bus-arrival/scripts/runner_diagnostics.py --output "$RUNNER_TEMP/bus-arrival-network.json"
+
+      - name: Probe arrival sources
+        timeout-minutes: 4
+        run: >-
+          python bus-arrival/scripts/source_probe.py --strict
+          --rounds "$PROBE_ROUNDS" --gap 20
+          --output "$RUNNER_TEMP/bus-arrival-sources.json"
+        env:
+          SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
+          PROBE_ROUNDS: ${{ inputs.rounds || '3' }}
+
+      - name: Preserve probe results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bus-source-probe-${{ github.run_id }}-${{ matrix.sample }}
+          path: |
+            ${{ runner.temp }}/bus-arrival-network.json
+            ${{ runner.temp }}/bus-arrival-sources.json
+          if-no-files-found: ignore
+          retention-days: 14
