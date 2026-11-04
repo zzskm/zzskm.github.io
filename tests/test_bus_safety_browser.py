@@ -161,6 +161,20 @@ class SafetyBrowserTests(unittest.TestCase):
             self.assertEqual(errors,[])
         finally: page.close()
 
+    def test_arrival_label_names_the_source_of_the_displayed_value(self):
+        from playwright.sync_api import expect
+        for source, label, note in (('official', '공공 API', '공공 API 예측 ·'),
+                                    ('kakao', '카카오맵', '카카오맵 예측 ·'),
+                                    ('gbis_web', 'GBIS 웹', 'GBIS 웹 예측(분 단위) ·'),
+                                    ('naver', '네이버 지도', '네이버 지도 예측 ·')):
+            page,errors=self.open_page({**self.ready_status(), 'data_source':source})
+            try:
+                expect(page.locator('.arrival-label')).to_have_text('도착 예정 · ' + label)
+                expect(page.locator('#arrival-clock')).to_contain_text(note)
+                expect(page.locator('#arrival-main-time')).to_have_text('18:20')
+                self.assertEqual(errors,[])
+            finally: page.close()
+
     def test_stale_and_no_bus_never_show_a_current_arrival_clock(self):
         from playwright.sync_api import expect
         old={**self.ready_status(),'last_poll':(T-dt.timedelta(minutes=4)).isoformat()}

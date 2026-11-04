@@ -218,8 +218,13 @@ window.BusApp = { mount(root = document, options = {}) {
     setText($("#eta-num"), parts.num);
     setText($("#eta-unit"), available ? (parts.num === "곧" ? "도착 예정" : "분 후") : parts.unit);
     setText($("#eta-stops"),available && !view.selectedNext ? (stopsText(stopsAwayOf(st)) || "") : "");
+    // 교대 조회라 큰 도착 시각의 출처가 매 조회 바뀔 수 있다. 공공 API 값처럼 표시하지 않는다.
+    const source = arrivalSourceLabel(st);
+    const arrivalLabel = $(".arrival-label");
+    if (arrivalLabel) setText(arrivalLabel, "도착 예정 · " + source);
     setText($("#arrival-clock"), available
-      ? "공공 API 예측 · 더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요."
+      ? source + " 예측" + (st && st.data_source === "gbis_web" ? "(분 단위)" : "")
+        + " · 더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요."
       : "최신 도착 예정 시각을 확인할 수 없습니다. 과거 예측을 현재 시각처럼 표시하지 않습니다.");
     $("#eta-row").hidden = parts.num === "--";
     $("#eta-unavailable").hidden = available;
@@ -457,6 +462,12 @@ window.BusApp = { mount(root = document, options = {}) {
   }
 
   const SOURCE_LABELS = { official:"공식 API", gbis_web:"GBIS 웹", kakao:"카카오맵", naver:"네이버 지도" };
+  // 큰 도착 시각 위 출처 표시 (data_source 가 없던 이전 기록은 공공 API 값이다)
+  function arrivalSourceLabel(st) {
+    const name = st && st.data_source;
+    if (!name || name === "official") return "공공 API";
+    return SOURCE_LABELS[name] || name;
+  }
   // 교대 조회(status.sources)면 이번 값의 출처와 오늘 출처별 호출 수를 함께 보여준다
   function sourceLabel(st) {
     if (!st || !st.data_source) return st && st.error === "api_error" ? "없음 (조회 실패)" : "공식 API";
