@@ -222,7 +222,7 @@ footer p+p{margin-top:.5rem}
   <p class="lede">3D 프린팅한 프레임, plate, 커버 3조각을 기성 알루미늄 하우징에 넣는 구조다. 모델 구조는 다 들어갔고 실측값만 비어 있다. 이 페이지에서 설계가 어디서 맞지 않을 수 있는지 점검하고, 부품이 나왔을 때 따라 할 조립 순서를 확인한다.</p>
   <div class="chips">
     <span class="pill risk">제작용 아님 · 부품 출력 파일 없음</span>
-    <span class="pill wait">PSD60 실측 0 / 21</span>
+    <span class="pill wait">PSD60 실측 확정 0 / 21 · 1차 기록 9항목</span>
     <span class="pill wait">B 시험 쿠폰 발주 전</span>
     <span class="pill ok">모델 피처 144 · 오류 0</span>
   </div>
@@ -276,7 +276,7 @@ footer p+p{margin-top:.5rem}
       <span class="k">지금 할 일</span>
       <ol>
         <li>B 시험 쿠폰과 보스 탭 STL/STEP 재내보내기 확인, 주문</li>
-        <li>PSD60 실측 A 단계 7항목(<code>measure_psd60.html</code>)</li>
+        <li>PSD60 재실측. 11-04 1차 기록은 대략값이라 배선 높이(M14), 테두리 높이(M05), 코너 R(M03)부터 다시 잰다(<code>measure_psd60.html</code>)</li>
         <li>USB 연장 케이블 커넥터 규격 확인</li>
       </ol>
     </div>
@@ -394,7 +394,7 @@ footer p+p{margin-top:.5rem}
       <div class="stack" style="gap:1rem">
         <div class="prose">
           <h3>SO1 단면, 축척 30 px = 1 mm</h3>
-          <p class="note">SO1 중심(X 6.49)을 지나는 YZ 단면이다. 왼쪽이 하우징 앞벽, 오른쪽이 키보드 안쪽이다. 모델 치수로 그렸고, 나사 길이와 머리 모양은 형식이 정해지지 않아 모양만 나타냈다.</p>
+          <p class="note">SO1 중심(X 6.49)을 지나는 YZ 단면이다. 왼쪽이 하우징 앞벽, 오른쪽이 키보드 안쪽이다. 모델 치수로 그렸고, 나사 길이와 머리 모양은 형식이 정해지지 않아 모양만 나타냈다. 하우징 벽 높이와 바닥 깊이는 Wilmore 대용값(테두리 12.2, 바닥 6.2)이다. 11-04 1차 실측은 테두리 14, 지지대 높이 5.5였다.</p>
         </div>
         <h4 class="keyh">틈</h4>
         <ul class="key">
@@ -483,19 +483,19 @@ footer p+p{margin-top:.5rem}
   <div class="progress"><span id="p-review">검토 0 / 9</span><span class="meter"><i id="m-review"></i></span></div>
   <ul class="issues" data-group="review">
     <li class="issue"><div class="head"><span class="pill risk">위험</span><h3>프레임 ↔ 케이스 원형 구멍 H05·H06</h3></div><label class="tick"><input type="checkbox" id="rv-1"> 검토함</label>
-      <p>277.6 떨어진 두 구멍이 모두 원형이라 프레임 외곽 오차가 최악이면 케이스 나사가 들어가지 않는다. plate와는 무관하다. M08 실측 때 한쪽을 X 장공으로 바꿀지 정한다.</p></li>
+      <p>277.6 떨어진 두 구멍이 모두 원형이라 프레임 외곽 오차가 최악이면 케이스 나사가 들어가지 않는다. plate와는 무관하다. 사용자 요구(11-04)는 케이스 체결을 위치마다 오차 방향에 맞춘 장공(±1 안팎)으로 하고, 기준 구멍 1개와 방향 기준 장공 1개로 위치를 재현하는 것이다. 1차 실측의 H 지지대 위치(M08 6개 성분)는 장공 방향을 정하는 근거로 쓰고, 구멍 중심은 GH60 후보 좌표를 유지한다. 아직 모델에 반영하지 않았다.</p></li>
     <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>커버 보스 흡수량 0.4 &lt; 규격 최악 0.6</h3></div><label class="tick"><input type="checkbox" id="rv-2"> 검토함</label>
       <p>커버는 조각 단위로 싸게 다시 뽑을 수 있어 plate 보호 원칙에는 맞는다. 보스 여유는 B 쿠폰 카운터보어 Ø6.0 / 6.2 / 6.4와 보스 탭(Ø5.8)으로 정한다.</p></li>
     <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>plate 외곽 틈 0.8은 임시값</h3></div><label class="tick"><input type="checkbox" id="rv-3"> 검토함</label>
-      <p>쿠폰 외곽 145.35 × 74.15를 재서 축척 오차율을 구하고, 틈 ≥ 오차율 × 143 + 0.5로 정한다. 예를 들어 +0.2%면 0.79다. 1.1을 넘기면 plate 섬 모서리 모따기가 실패한다.</p></li>
-    <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>스위치 핀 끝 ↔ 프레임 상면 여유 1.7</h3></div><label class="tick"><input type="checkbox" id="rv-4"> 검토함</label>
-      <p>스탠드오프 5 가정에서 핀 끝(Z 4.7)과 프레임 상면(Z 3) 사이가 1.7뿐이다. 배선·다이오드 높이(M14)가 더 크면 스탠드오프를 키운다.</p></li>
+      <p>쿠폰 외곽 145.35 × 74.15를 재서 축척 오차율을 구하고, 틈 ≥ 오차율 × 143 + 0.5로 정한다. 예를 들어 +0.2%면 0.79다. 1.1을 넘기면 plate 섬 모서리 모따기가 실패한다. 사용자 확인(11-04)으로 r2 외곽은 코너 R 외에는 잘 맞으므로, 쿠폰 오차가 작으면 0.8보다 줄인다.</p></li>
+    <li class="issue"><div class="head"><span class="pill risk">위험</span><h3>배선이 plate 밑 8까지 내려온다 (스탠드오프 노출 5)</h3></div><label class="tick"><input type="checkbox" id="rv-4"> 검토함</label>
+      <p>1차 실측(M14)에서 plate 밑면부터 배선 최하단까지가 8이었다. 지금 모델은 스탠드오프 노출이 5라서 배선이 프레임 상면보다 3 아래까지 내려온다. 프레임은 가운데가 열려 있으니 배선이 테두리, 바, 컨트롤러 링과 겹치는 곳만 문제다. 겹치면 스탠드오프를 8 이상으로 키우거나 배선을 프레임 창 안쪽으로 돌린다. 스탠드오프를 키우면 plate와 커버도 같은 만큼 올라간다.</p></li>
     <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>USB 플러그 높이 7 vs 하우징 바닥까지 6.2</h3></div><label class="tick"><input type="checkbox" id="rv-5"> 검토함</label>
       <p>Pro Micro 부품면 아래로 나오는 연장 케이블 플러그(자리표시 25 × 12 × 7)가 Wilmore 기준 바닥 깊이 6.2에 못 들어갈 수 있다. M05·M15·M16에서 확인한다.</p></li>
     <li class="issue"><div class="head"><span class="pill wait">구매 주의</span><h3>스탠드오프 나사는 탄소강</h3></div><label class="tick"><input type="checkbox" id="rv-6"> 검토함</label>
-      <p>커버 자석이 나사머리에 붙어야 하므로 흑색이나 아연도금 탄소강 M3 버튼헤드를 쓴다. 스테인리스 A2는 자석이 붙지 않아 쓸 수 없다.</p></li>
-    <li class="issue"><div class="head"><span class="pill wait">실측 후</span><h3>커버를 들어 올릴 손톱 여유</h3></div><label class="tick"><input type="checkbox" id="rv-7"> 검토함</label>
-      <p>Wilmore 수치로는 베젤 밑면이 하우징 테두리보다 0.8–1.1 높다. M05에서 테두리가 더 높게 나오면 자석 없는 끝의 립을 10 정도 끊고 밑면을 모따기한다.</p></li>
+      <p>커버 자석이 나사머리에 붙어야 하므로 흑색이나 아연도금 탄소강 M3 버튼헤드를 쓴다. 스테인리스 A2는 자석이 붙지 않아 쓸 수 없다. 1차 실측(M13)에서 지금 가진 나사는 스테인리스로 기록됐다.</p></li>
+    <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>커버를 들어 올릴 손톱 여유</h3></div><label class="tick"><input type="checkbox" id="rv-7"> 검토함</label>
+      <p>Wilmore 수치로는 베젤 밑면이 하우징 테두리보다 0.8–1.1 높다. 1차 실측은 테두리 14라서, 지금 높이(베젤 밑면 Z 13)에서는 베젤이 테두리보다 1 낮고 커버 윗면만 1 솟는다. 손톱이 들어가기 어렵다. 한 곳만 잰 대략값이라 M05 재실측 뒤 정한다. 배선 때문에 스탠드오프를 3 키우면 베젤 밑면이 테두리보다 2 높아진다. 그대로 가면 자석 없는 끝의 립을 10 정도 끊고 밑면을 모따기하거나 들어 올릴 홈을 낸다.</p></li>
     <li class="issue"><div class="head"><span class="pill wait">모델 유지</span><h3>실측 반영 때 손으로 다시 잡을 곳</h3></div><label class="tick"><input type="checkbox" id="rv-8"> 검토함</label>
       <p>plate 외곽이 바뀌면 <code>PLATE_ISLAND_CHAMFER</code>의 모서리 선택점 4개를 다시 찍는다. <code>TBD_pcb0_dx/dy</code>가 바뀌면 키 위치 DXF 4종을 다시 만들어 스케치를 바꾼다.</p></li>
     <li class="issue"><div class="head"><span class="pill wait">결정 대기</span><h3>B 쿠폰 STL/STEP 재내보내기</h3></div><label class="tick"><input type="checkbox" id="rv-9"> 검토함</label>
@@ -522,14 +522,14 @@ footer p+p{margin-top:.5rem}
         <thead><tr><th>구매품</th><th>수량</th><th>규격</th><th>정할 것</th></tr></thead>
         <tbody>
           <tr><td>PSD60 Defender 하우징</td><td class="num">1</td><td>GH60 호환 알루미늄</td><td>내부 치수·지지대·USB 개구부(M01–M10, M16)</td></tr>
-          <tr><td>육각 스탠드오프</td><td class="num">6</td><td>M3, 맞변 4.7(r2 참고), 길이 6.5 = 포켓 1.5 + 노출 5(가정)</td><td>형식·맞변·길이(M13), 높이(M05·M14)</td></tr>
-          <tr><td>스탠드오프 나사</td><td class="num">12</td><td>M3 버튼헤드, 탄소강. 위 6, 아래 6</td><td>길이. 스테인리스 불가</td></tr>
+          <tr><td>육각 스탠드오프</td><td class="num">6</td><td>M3 암-암(1차 실측), 맞변 4.7(r2 참고), 길이 6.5 = 포켓 1.5 + 노출 5(가정)</td><td>맞변·길이(M13). 배선 8(M14 1차)이면 노출 8 이상이 필요할 수 있다</td></tr>
+          <tr><td>스탠드오프 나사</td><td class="num">12</td><td>M3 버튼헤드, 탄소강. 위 6, 아래 6</td><td>길이. 스테인리스 불가(지금 가진 나사는 스테인리스)</td></tr>
           <tr><td>M3 와셔</td><td class="num">0–6</td><td>선택</td><td>아래 나사머리가 장공 위에서 불안할 때</td></tr>
-          <tr><td>케이스 나사</td><td class="num">6</td><td>M2 가정, 머리 Ø3.8 정도(카운터보어 Ø4 × 1)</td><td>호칭경·길이·머리(M09)</td></tr>
+          <tr><td>케이스 나사</td><td class="num">6</td><td>M2(1차 실측 호칭경 2), 머리 Ø3.8 정도(카운터보어 Ø4 × 1)</td><td>길이·머리·유효 깊이(M09)</td></tr>
           <tr><td>네오디뮴 자석</td><td class="num">6</td><td>Ø4 × 2</td><td>포켓 여유(B 쿠폰 보스 탭)</td></tr>
           <tr><td>스위치</td><td class="num">46</td><td>Gateron KS-3 Milky Yellow Pro, 5핀, MX 호환</td><td>걸쇠 위치·폭(M19)</td></tr>
           <tr><td>키캡</td><td class="num">46</td><td>1u 43 · 1.25u 1 · 2.25u 1 · 2u 1, 스태빌라이저 없음</td><td>키캡 하단·눌림 높이(M17)</td></tr>
-          <tr><td>Pro Micro</td><td class="num">1</td><td>33 × 18, ATmega32U4</td><td>보드 변형·커넥터 높이(M15)</td></tr>
+          <tr><td>Pro Micro</td><td class="num">1</td><td>33 × 18, ATmega32U4, Micro-B, 높이 4(1차 실측)</td><td>보드 변형·커넥터 위치(M15)</td></tr>
           <tr><td>패널형 USB 연장 케이블</td><td class="num">1</td><td>규격 미확인</td><td>커넥터 종류·크기·길이(M16)</td></tr>
           <tr><td>다이오드 · 배선</td><td class="num">46</td><td>4행 × 12열 매트릭스, 신호선 16</td><td>점유 높이(M14)</td></tr>
         </tbody>
@@ -641,7 +641,7 @@ footer p+p{margin-top:.5rem}
         <li>연장 케이블 플러그를 Pro Micro에 꽂는다.</li>
       </ul>
       <div class="lines">
-        <div><span class="lb">확인</span><span>배선과 다이오드가 plate 밑면에서 5 아래(프레임 상면)까지 내려오지 않는다.</span></div>
+        <div><span class="lb">확인</span><span>프레임 테두리·바·컨트롤러 링과 겹치는 곳에서는 배선과 다이오드가 plate 밑면에서 5 아래(프레임 상면)까지 내려오지 않는다. 1차 실측에서는 8까지 내려왔다(열린 항목 4).</span></div>
         <div><span class="lb fx">안 맞으면</span><span>홈이 빡빡하면 턱을 줄로, 헐거우면 테이프로 심을 댄다.</span></div>
       </div>
     </div></li>
@@ -696,14 +696,14 @@ footer p+p{margin-top:.5rem}
 </section>
 
 <section id="gates">
-  <p class="src">근거 · model/README.md §4 다음 단계로 넘어가는 조건 · measurements.csv</p>
+  <p class="src">근거 · model/README.md §4 다음 단계로 넘어가는 조건 · measurements.csv · measurements/README.md</p>
   <h2>진행 단계와 실측</h2>
   <div class="stack">
     <div class="tbl mid">
       <table>
         <thead><tr><th>단계</th><th>필요한 실측·결과</th><th>만들 것</th><th>상태</th></tr></thead>
         <tbody>
-          <tr><td>A 체결 시험 프레임</td><td class="num">M01 M02 M03 M07 M08 M09 M10 (+M18)</td><td>2.5T 판 지그, 나사 6개가 억지 없이 들어가는지</td><td><span class="pill wait">실측 대기</span></td></tr>
+          <tr><td>A 체결 시험 프레임</td><td class="num">M01 M02 M03 M07 M08 M09 M10 (+M18)</td><td>2.5T 판 지그, 나사 6개가 억지 없이 들어가는지</td><td><span class="pill warn">1차 기록, 재실측 필요</span></td></tr>
           <tr><td>B 스위치 홀·체결 쿠폰</td><td class="num">M11 M19 M18</td><td>홀 13.7–14.3 × 3행, M2·M3, 카운터보어, 육각 포켓, 보스 탭</td><td><span class="pill warn">형상 개정, 내보내기 확인 대기</span></td></tr>
           <tr><td>C 코너 R 샘플</td><td class="num">M03 M06 M18</td><td>커버 코너 R2 / 2.5 / 3 / 3.5</td><td><span class="pill wait">실측 대기</span></td></tr>
           <tr><td>D 하부 프레임</td><td><span class="num">A 결과 + M05 M13 M14 M15 M16</span></td><td>프레임</td><td><span class="pill wait">대기</span></td></tr>
@@ -713,22 +713,23 @@ footer p+p{margin-top:.5rem}
         </tbody>
       </table>
     </div>
+    <p class="note">주황은 2026-11-04 1차 기록이다. 150 mm 캘리퍼로 한두 곳만 잰 대략값이라 확정으로 세지 않는다. H 지지대 값(M05 H01 높이, M08 위치, M10 외경)만 참고 근거로 쓴다.</p>
     <div class="mgrid" aria-label="실측 항목 M01–M21">
-      <div class="m"><span class="id">M01</span><span class="nm">하우징 내측 폭</span><span class="pill wait">미확정</span></div>
-      <div class="m"><span class="id">M02</span><span class="nm">하우징 내측 깊이</span><span class="pill wait">미확정</span></div>
+      <div class="m"><span class="id">M01</span><span class="nm">하우징 내측 폭</span><span class="pill warn">1차 286 · 대략값</span></div>
+      <div class="m"><span class="id">M02</span><span class="nm">하우징 내측 깊이</span><span class="pill warn">1차 96 · 대략값</span></div>
       <div class="m"><span class="id">M03</span><span class="nm">내측 코너 R</span><span class="pill wait">미확정</span></div>
       <div class="m"><span class="id">M04</span><span class="nm">외형·경사</span><span class="pill wait">문서값</span></div>
-      <div class="m"><span class="id">M05</span><span class="nm">내부 높이·테두리</span><span class="pill wait">미확정</span></div>
+      <div class="m"><span class="id">M05</span><span class="nm">내부 높이·테두리</span><span class="pill warn">H01 5.5 · 테두리 14</span></div>
       <div class="m"><span class="id">M06</span><span class="nm">벽 두께·수직도</span><span class="pill wait">미확정</span></div>
       <div class="m"><span class="id">M07</span><span class="nm">벽 → GH60 기준점</span><span class="pill wait">미확정</span></div>
-      <div class="m"><span class="id">M08</span><span class="nm">체결 구멍 6곳 좌표</span><span class="pill wait">추정</span></div>
-      <div class="m"><span class="id">M09</span><span class="nm">케이스 나사 규격</span><span class="pill wait">미확정</span></div>
-      <div class="m"><span class="id">M10</span><span class="nm">지지대 외경·높이</span><span class="pill wait">미확정</span></div>
+      <div class="m"><span class="id">M08</span><span class="nm">체결 구멍 6곳 좌표</span><span class="pill warn">6성분 · 참고</span></div>
+      <div class="m"><span class="id">M09</span><span class="nm">케이스 나사 규격</span><span class="pill warn">호칭경 2</span></div>
+      <div class="m"><span class="id">M10</span><span class="nm">지지대 외경·높이</span><span class="pill warn">H01 외경 5 · 참고</span></div>
       <div class="m"><span class="id">M11</span><span class="nm">아크릴 스위치 홀</span><span class="pill ok">실측 생략 결정</span></div>
       <div class="m"><span class="id">M12</span><span class="nm">키 간격·각도</span><span class="pill wait">미확정</span></div>
-      <div class="m"><span class="id">M13</span><span class="nm">스탠드오프 형식</span><span class="pill wait">미확정</span></div>
-      <div class="m"><span class="id">M14</span><span class="nm">배선 공간</span><span class="pill wait">미확정</span></div>
-      <div class="m"><span class="id">M15</span><span class="nm">컨트롤러 보드</span><span class="pill wait">미확정</span></div>
+      <div class="m"><span class="id">M13</span><span class="nm">스탠드오프 형식</span><span class="pill warn">암-암 · 스테인리스 나사</span></div>
+      <div class="m"><span class="id">M14</span><span class="nm">배선 공간</span><span class="pill warn">배선 8 · 대략값</span></div>
+      <div class="m"><span class="id">M15</span><span class="nm">컨트롤러 보드</span><span class="pill warn">Micro-B · 높이 4</span></div>
       <div class="m"><span class="id">M16</span><span class="nm">USB 개구부·플러그</span><span class="pill wait">미확정</span></div>
       <div class="m"><span class="id">M17</span><span class="nm">키캡·커버 간섭</span><span class="pill wait">미확정</span></div>
       <div class="m"><span class="id">M18</span><span class="nm">출력 보정(쿠폰)</span><span class="pill wait">미확정</span></div>
@@ -744,9 +745,12 @@ footer p+p{margin-top:.5rem}
   <h2>결정 기록</h2>
   <div class="figs" style="align-items:start">
     <ul class="log">
+      <li><span class="d">2026-11-05</span><span><b>split mount 안 폐기.</b> 독립 mount 어댑터 6개, 좌우 병합 mount(v2·v3), plate 좌우 분할 대신 테두리형 프레임과 plate 보호를 유지한다.</span></li>
       <li><span class="d">2026-11-05</span><span><b>plate 보호.</b> 프레임 스탠드오프 X 장공, plate 외곽 틈 0.3 → 0.8, 맞춰 놓고 조이는 조립 순서.</span></li>
       <li><span class="d">2026-11-05</span><span><b>B 쿠폰 개정.</b> 행 C(plate 3층, 같은 출력 방향), 행 D(M2·M3·카운터보어·육각 포켓), 별도 보스 탭.</span></li>
       <li><span class="d">2026-11-05</span><span><b>FDM 확정, JLC3DP.</b> 키보드 제작 쿠폰을 쓰기 위해. SUS304 판금은 검토만 했다.</span></li>
+      <li><span class="d">2026-11-04</span><span><b>1차 실측은 참고로만.</b> 150 mm 캘리퍼 대략값이라 모델 값은 그대로 두고, H 지지대 값(M08 위치, H01 높이 5.5, 외경 5)만 근거로 쓴다.</span></li>
+      <li><span class="d">2026-11-04</span><span><b>마운트가 조립 오차를 흡수해야 한다.</b> r2 외곽은 코너 R 외에는 잘 맞으므로 외곽을 과하게 줄이지 않고 체결부 장공과 조립 순서로 맞춘다.</span></li>
       <li><span class="d">2026-11-04</span><span><b>커버 고정은 자석.</b> 보스가 카운터보어에 꽂혀 위치를 잡고, 자석이 강철 나사머리를 당긴다.</span></li>
       <li><span class="d">2026-11-04</span><span><b>커버·plate는 아크릴 r2 형상.</b> 커버 3조각 창, plate + upper plate를 3층 한 부품으로.</span></li>
       <li><span class="d">2026-11-04</span><span><b>Pro Micro는 중앙 하단, plate 아랫면 브래킷.</b> plate 나사를 풀면 컨트롤러까지 한 덩어리로 빠진다.</span></li>
@@ -755,6 +759,7 @@ footer p+p{margin-top:.5rem}
       <li><span class="d">2026-11-04</span><span><b>스위치 Gateron KS-3 Milky Yellow Pro.</b> 아크릴 홀 실측(M11)은 생략하고 r2 도면 14.0에서 시작.</span></li>
     </ul>
     <ul class="log">
+      <li class="x"><span class="d">버린 안</span><span><b>split mount.</b> 독립 어댑터와 좌우 병합 mount. 2026-11-05 사용자 결정으로 테두리형 프레임을 유지한다.</span></li>
       <li class="x"><span class="d">버린 안</span><span><b>볼트 구멍 주변 교환식 블럭.</b> 자리가 없고 끼움이 하나 늘며 재주문 대기는 같다.</span></li>
       <li class="x"><span class="d">버린 안</span><span><b>벽 있는 커버.</b> 뒤쪽 윗줄 키캡과 내벽 사이가 2.15라 틈 0.3 + 벽 2가 안 들어간다.</span></li>
       <li class="x"><span class="d">버린 안</span><span><b>자석 ↔ 자석.</b> plate 상면에 포켓 자리가 부족하고 위치결정이 따로 필요하다.</span></li>
@@ -768,7 +773,7 @@ footer p+p{margin-top:.5rem}
 </main>
 
 <footer class="wrap">
-  <p>근거 파일: keyboard 저장소 <code>46es/model/README.md</code>, <code>model/samples/README.md</code>, <code>model/measurements.csv</code>, <code>model/parameters.csv</code>, <code>docs/assembly-revision.md</code> (2026-11-05). 렌더는 SolidCraft 모델 <code>46es_draft_sketches.sc</code>에서 찍었다.</p>
+  <p>근거 파일: keyboard 저장소 <code>46es/model/README.md</code>, <code>model/samples/README.md</code>, <code>model/measurements.csv</code>, <code>model/measurements/README.md</code>, <code>model/parameters.csv</code>, <code>docs/assembly-revision.md</code> (2026-11-05, main 병합 후). 렌더는 SolidCraft 모델 <code>46es_draft_sketches.sc</code>에서 찍었다.</p>
   <p>모든 <code>TBD_</code>·<code>CAND_</code> 값은 미확정이며 PSD60 실측 뒤 바뀐다. 체크 표시는 이 브라우저에만 저장된다.</p>
 </footer>
 
