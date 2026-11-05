@@ -226,6 +226,9 @@ footer p+p{margin-top:.5rem}
     <span class="pill wait">B 시험 쿠폰 발주 전</span>
     <span class="pill ok">모델 피처 144 · 오류 0</span>
   </div>
+  <div class="callout" style="margin-top:1.1rem">
+    <p><b>이 페이지의 기준은 원본 계열의 plate 보호 변형이다.</b> 테두리형 프레임 1장 위에 plate 1장을 얹는 구조다(<code>46es_draft_sketches_plate_protect.sc</code>). 현재 설계 계열은 split mount v3(<code>46es_mount_side_pairs_v3.sc</code>)이다. v3는 mount 4개(좌·우 각 1, 중앙 2)를 포함해 출력 부품이 9개이고, v3 기준 조립 순서는 아직 이 페이지에 없다. 맞춤 원칙, 1차 실측, 구매품, 열린 항목은 두 계열에 함께 해당한다.</p>
+  </div>
   <div class="legend" aria-label="렌더 색 구분">
     <span><i style="background:var(--c-frame)"></i>프레임</span>
     <span><i style="background:var(--c-standoff)"></i>스탠드오프</span>
@@ -483,7 +486,7 @@ footer p+p{margin-top:.5rem}
   <div class="progress"><span id="p-review">검토 0 / 9</span><span class="meter"><i id="m-review"></i></span></div>
   <ul class="issues" data-group="review">
     <li class="issue"><div class="head"><span class="pill risk">위험</span><h3>프레임 ↔ 케이스 원형 구멍 H05·H06</h3></div><label class="tick"><input type="checkbox" id="rv-1"> 검토함</label>
-      <p>277.6 떨어진 두 구멍이 모두 원형이라 프레임 외곽 오차가 최악이면 케이스 나사가 들어가지 않는다. plate와는 무관하다. 사용자 요구(11-04)는 케이스 체결을 위치마다 오차 방향에 맞춘 장공(±1 안팎)으로 하고, 기준 구멍 1개와 방향 기준 장공 1개로 위치를 재현하는 것이다. 1차 실측의 H 지지대 위치(M08 6개 성분)는 장공 방향을 정하는 근거로 쓰고, 구멍 중심은 GH60 후보 좌표를 유지한다. 아직 모델에 반영하지 않았다.</p></li>
+      <p>277.6 떨어진 두 구멍이 모두 원형이라 프레임 외곽 오차가 최악이면 케이스 나사가 들어가지 않는다. plate와는 무관하다. 사용자 요구(11-04)는 케이스 체결을 위치마다 오차 방향에 맞춘 장공(±1 안팎)으로 하고, 기준 구멍 1개와 방향 기준 장공 1개로 위치를 재현하는 것이다. 1차 실측의 H 지지대 위치(M08 6개 성분)는 장공 방향을 정하는 근거로 쓰고, 구멍 중심은 GH60 후보 좌표를 유지한다. 원본 계열의 조립 여유 수정 판(split 계열의 바탕)에는 방향별 장공 6개가 들어 있고, 이 페이지의 plate 보호 변형에는 아직 없다.</p></li>
     <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>커버 보스 흡수량 0.4 &lt; 규격 최악 0.6</h3></div><label class="tick"><input type="checkbox" id="rv-2"> 검토함</label>
       <p>커버는 조각 단위로 싸게 다시 뽑을 수 있어 plate 보호 원칙에는 맞는다. 보스 여유는 B 쿠폰 카운터보어 Ø6.0 / 6.2 / 6.4와 보스 탭(Ø5.8)으로 정한다.</p></li>
     <li class="issue"><div class="head"><span class="pill warn">확인</span><h3>plate 외곽 틈 0.8은 임시값</h3></div><label class="tick"><input type="checkbox" id="rv-3"> 검토함</label>
@@ -745,7 +748,7 @@ footer p+p{margin-top:.5rem}
   <h2>결정 기록</h2>
   <div class="figs" style="align-items:start">
     <ul class="log">
-      <li><span class="d">2026-11-05</span><span><b>split mount 안 폐기.</b> 독립 mount 어댑터 6개, 좌우 병합 mount(v2·v3), plate 좌우 분할 대신 테두리형 프레임과 plate 보호를 유지한다.</span></li>
+      <li><span class="d">2026-11-05</span><span><b>현재 설계는 split mount v3.</b> 한때 폐기로 처리했다가 되살렸다(사용자: 폐기는 regression). plate 보호 변형은 원본 계열의 별도 파일로 보존하고, split 계열로 옮길 때의 출발점으로 쓴다.</span></li>
       <li><span class="d">2026-11-05</span><span><b>plate 보호.</b> 프레임 스탠드오프 X 장공, plate 외곽 틈 0.3 → 0.8, 맞춰 놓고 조이는 조립 순서.</span></li>
       <li><span class="d">2026-11-05</span><span><b>B 쿠폰 개정.</b> 행 C(plate 3층, 같은 출력 방향), 행 D(M2·M3·카운터보어·육각 포켓), 별도 보스 탭.</span></li>
       <li><span class="d">2026-11-05</span><span><b>FDM 확정, JLC3DP.</b> 키보드 제작 쿠폰을 쓰기 위해. SUS304 판금은 검토만 했다.</span></li>
@@ -759,7 +762,6 @@ footer p+p{margin-top:.5rem}
       <li><span class="d">2026-11-04</span><span><b>스위치 Gateron KS-3 Milky Yellow Pro.</b> 아크릴 홀 실측(M11)은 생략하고 r2 도면 14.0에서 시작.</span></li>
     </ul>
     <ul class="log">
-      <li class="x"><span class="d">버린 안</span><span><b>split mount.</b> 독립 어댑터와 좌우 병합 mount. 2026-11-05 사용자 결정으로 테두리형 프레임을 유지한다.</span></li>
       <li class="x"><span class="d">버린 안</span><span><b>볼트 구멍 주변 교환식 블럭.</b> 자리가 없고 끼움이 하나 늘며 재주문 대기는 같다.</span></li>
       <li class="x"><span class="d">버린 안</span><span><b>벽 있는 커버.</b> 뒤쪽 윗줄 키캡과 내벽 사이가 2.15라 틈 0.3 + 벽 2가 안 들어간다.</span></li>
       <li class="x"><span class="d">버린 안</span><span><b>자석 ↔ 자석.</b> plate 상면에 포켓 자리가 부족하고 위치결정이 따로 필요하다.</span></li>
@@ -773,7 +775,7 @@ footer p+p{margin-top:.5rem}
 </main>
 
 <footer class="wrap">
-  <p>근거 파일: keyboard 저장소 <code>46es/model/README.md</code>, <code>model/samples/README.md</code>, <code>model/measurements.csv</code>, <code>model/measurements/README.md</code>, <code>model/parameters.csv</code>, <code>docs/assembly-revision.md</code> (2026-11-05, main 병합 후). 렌더는 SolidCraft 모델 <code>46es_draft_sketches.sc</code>에서 찍었다.</p>
+  <p>근거 파일: keyboard 저장소 <code>46es/model/README.md</code>, <code>model/samples/README.md</code>, <code>model/measurements.csv</code>, <code>model/measurements/README.md</code>, <code>model/parameters.csv</code>, <code>docs/assembly-revision.md</code> (2026-11-05, split mount 재적용 후). 렌더는 SolidCraft 모델에서 찍었다. 지금 파일 이름으로는 plate 보호 변형 <code>46es_draft_sketches_plate_protect.sc</code>다.</p>
   <p>모든 <code>TBD_</code>·<code>CAND_</code> 값은 미확정이며 PSD60 실측 뒤 바뀐다. 체크 표시는 이 브라우저에만 저장된다.</p>
 </footer>
 
