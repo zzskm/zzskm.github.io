@@ -45,7 +45,7 @@ export function extractEvents(input,result) {
    :'자녀가 모델에서 독립으로 가정하는 연령에 도달합니다. 실제 독립 여부는 확정할 수 없습니다.');
  }
  if(input.housingMode==='own'&&input.hasMortgage&&input.mortgageBalance>0) {
-  const payoff=rows.find((r,i)=>i>0&&rows[i-1].mortgage>0&&r.mortgage<=0);
+  const payoff=rows.find((r,i)=>r.mortgage<=0&&(i===0?input.mortgageBalance>0:rows[i-1].mortgage>0));
   if(payoff) add(payoff.age,'mortgage','주택대출 상환 완료','모델 기준으로 주택대출 잔액이 0이 되는 해입니다.');
  }
  for(const item of result.downsizeEvents??[]) add(item.age,'housing',item.label,'시뮬레이션의 주거 이전·다운사이징 가정이 반영되었습니다.');
