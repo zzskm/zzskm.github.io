@@ -586,7 +586,7 @@ function App() {
             {/* 소득 */}
             <Section title="소득" defaultOpen summary={`세후 ${fmt만원(householdNet)}/년`}>
               <SalaryInput
-                name="본인 연봉"
+                name="본인 소득"
                 netAnnual={i.selfCurrentSalary}
                 basis={i.selfSalaryBasis ?? "gross"}
                 onChangeNet={setInputField("selfCurrentSalary")}
@@ -594,7 +594,7 @@ function App() {
               />
               {i.spouseEnabled && (
                 <SalaryInput
-                  name="배우자 연봉"
+                  name="배우자 소득"
                   netAnnual={i.spouseCurrentSalary}
                   basis={i.spouseSalaryBasis ?? "gross"}
                   onChangeNet={setInputField("spouseCurrentSalary")}
