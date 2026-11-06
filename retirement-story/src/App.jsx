@@ -194,7 +194,7 @@ export function App() {
    <div className="topbar-inner">
     <a href="./" className="brand" aria-label="은퇴 연대기 시작 화면"><span className="brand-mark">R<span>·</span>S</span><span>RETIREMENT <b>STORY</b></span></a>
     <nav className="mainnav"><span className="nav-active">스토리</span><a href="../retirement-simulator/">정밀 시뮬레이터 <Symbol name="arrow" size={15}/></a></nav>
-    <button type="button" className="privacy" onClick={()=>setHidden(v=>!v)} aria-pressed={hidden}>
+    <button type="button" className="privacy" onClick={()=>{setHidden(v=>!v);setSetupOpen(false);}} aria-pressed={hidden}>
      <Symbol name={hidden?'lock':'unlock'} size={16}/>{hidden?'금액 보기':'금액 숨기기'}
     </button>
    </div>
@@ -223,7 +223,7 @@ export function App() {
       <div><span className="eyebrow">MY CHARACTER</span><strong>{characterName} · {getPersona(personaId)?.title??'나의 인생'}</strong>
        <small>{getPersona(personaId)?.caption??'개인 은퇴 계획'}</small></div>
     </div>
-    <button type="button" onClick={()=>{setSetupOpen(v=>!v);setPlaying(false);}}
+    <button type="button" onClick={()=>{setSetupOpen(v=>!v);setHidden(false);setPlaying(false);}}
       className="edit-character" aria-expanded={setupOpen}>{setupOpen?'설정 닫기':'캐릭터·정보 수정'}</button>
    </section>
    {setupOpen&&<QuickSetup key={active.id} input={active.input} initialPersonaId={personaId}
