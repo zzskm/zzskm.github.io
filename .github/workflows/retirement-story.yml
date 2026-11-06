@@ -1,0 +1,94 @@
+name: Retirement story
+on:
+  pull_request:
+    paths:
+      - 'retirement-story/**'
+      - 'retirement-simulator/src/model/**'
+      - 'retirement-simulator/src/insights/targets.js'
+      - 'retirement-simulator/src/state/**'
+      - '.github/workflows/retirement-story.yml'
+      - '.node-version'
+      - 'scripts/check-node-runtime.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'retirement-story/**'
+      - 'retirement-simulator/src/model/**'
+      - 'retirement-simulator/src/insights/targets.js'
+      - 'retirement-simulator/src/state/**'
+      - '.github/workflows/retirement-story.yml'
+      - '.node-version'
+      - 'scripts/check-node-runtime.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: retirement-story-pages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          check-latest: true
+      - name: Validate runtime
+        run: node scripts/check-node-runtime.mjs
+      - name: Install app dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: retirement-story
+      - name: Unit tests and production build
+        run: npm test && npm run build
+        working-directory: retirement-story
+      - name: Chromium browser tests
+        run: npx playwright install --with-deps chromium && npm run test:e2e
+        working-directory: retirement-story
+      - name: Upload compiled app
+        uses: actions/upload-artifact@v4
+        with:
+          name: retirement-story-build
+          path: retirement-story/dist
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          check-latest: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: retirement-story-build
+          path: retirement-story/dist
+      - name: Publish compiled entry and assets only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source_paths=(retirement-story/app retirement-story/src retirement-story/scripts retirement-story/tests retirement-story/package.json retirement-story/package-lock.json retirement-story/vite.config.js retirement-story/playwright.config.js retirement-simulator/src/model retirement-simulator/src/insights/targets.js retirement-simulator/src/state .github/workflows/retirement-story.yml .node-version scripts/check-node-runtime.mjs)
+          git diff --quiet "$GITHUB_SHA" HEAD -- "${source_paths[@]}" || { echo "Sources advanced; build must be rerun."; exit 1; }
+          node retirement-story/scripts/publish-build.js
+          git add retirement-story/index.html retirement-story/assets
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'build(story): publish compiled Pages assets'
+            for attempt in 1 2 3; do
+              git fetch origin main
+              git diff --quiet "$GITHUB_SHA" origin/main -- "${source_paths[@]}" || { echo "Story sources changed after this run."; exit 1; }
+              git rebase origin/main
+              if git push origin HEAD:main; then break; fi
+              if [ "$attempt" = 3 ]; then exit 1; fi
+            done
+          fi
+          # GitHub Token commits do not automatically trigger Pages.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
