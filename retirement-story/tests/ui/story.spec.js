@@ -69,22 +69,22 @@ test('five persona cards update the draft and not the active story until submitt
  await expect(page.getByLabel('이야기 연령 이동')).toHaveValue(String(KR_DEFAULTS.currentAge));
  await setup.getByRole('button',{name:/주거·가족·은퇴 후 생활비 자세히 설정/}).click();
  await expect(setup.getByLabel('자녀 수')).toHaveValue('3');
- await setup.getByLabel('현재 나이').fill('43');
- await setup.getByLabel('목표 은퇴 나이').fill('52');
+ await setup.getByLabel('현재 나이',{exact:true}).fill('43');
+ await setup.getByLabel('목표 은퇴 나이',{exact:true}).fill('52');
  await setup.getByLabel('내 캐릭터 이름').fill('미래 여행자');
  await setup.getByRole('button',{name:/이 설정으로 스토리 시작/}).click();
  await expect(setup).toHaveCount(0);
  await expect(page.getByLabel('이야기 연령 이동')).toHaveValue('43');
  await expect(page.getByText('미래 여행자 · 세 아이의 설계자')).toBeVisible();
  await page.getByRole('button',{name:'캐릭터·정보 수정'}).click();
- await expect(page.getByRole('region',{name:'내 캐릭터 만들기'}).getByLabel('현재 나이')).toHaveValue('43');
+ await expect(page.getByRole('region',{name:'내 캐릭터 만들기'}).getByLabel('현재 나이',{exact:true})).toHaveValue('43');
 });
 
 test('invalid quick form blocks changes, cancel preserves the active scenario',async({page})=>{
  await page.goto('/');
  const setup=page.getByRole('region',{name:'내 캐릭터 만들기'});
  const current=String(KR_DEFAULTS.currentAge);
- await setup.getByLabel('목표 은퇴 나이').fill(current);
+ await setup.getByLabel('목표 은퇴 나이',{exact:true}).fill(current);
  await setup.getByRole('button',{name:/이 설정으로 스토리 시작/}).click();
  await expect(setup.getByRole('alert')).toContainText('은퇴 나이');
  await expect(page.getByLabel('이야기 연령 이동')).toHaveValue(current);
