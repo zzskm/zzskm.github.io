@@ -181,7 +181,7 @@ test('quick editor uses one monthly net income field and an explicit child cost 
  await expect(page.getByText('자녀비 자동 추가',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'전체',exact:true}).click();
  const salarySection=page.locator('#inputs-panel details').filter({has:page.locator('summary').filter({hasText:/소득/})}).first();
- await salarySection.locator(':scope > summary').click();
+ if(!(await salarySection.evaluate(el=>el.open)))await salarySection.locator(':scope > summary').click();
  await expect(page.getByLabel('본인 소득 연봉',{exact:true})).toBeVisible();
  await expect(page.getByLabel('본인 소득 월급',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'월급 입력'}).first().click();
