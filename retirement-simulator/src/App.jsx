@@ -15,6 +15,7 @@ import { validateInput } from "./model/validation.js";
 import { insightMetric } from "./insights/recommendations.js";
 import { EXPLORE_PRESETS } from "./features/comparison/presets.js";
 import { HouseholdPresetPicker } from "./features/comparison/HouseholdPresetPicker.jsx";
+import { QuickEditor } from "./components/QuickEditor.jsx";
 import { HOUSEHOLD_PRESETS, createHouseholdPresetInput } from "./features/comparison/householdPresets.js";
 import { fmt만원, fmt만원월 } from "./utils/formatting.js";
 import { useDebugMode, useIsMobile } from "./components/hooks.js";
@@ -34,6 +35,7 @@ function App() {
   const [scenarios, setScenarios] = useState(initial.scenarios);
   const [activeId, setActiveId] = useState(initial.activeId);
   const [advancedMode, setAdvancedMode] = useState(() => readFlag(ADV_KEY) === "1");
+  const [editorMode, setEditorMode] = useState(() => readFlag("retirement-sim-editor-mode") === "full" ? "full" : "quick");
   const [showWizard, setShowWizard] = useState(() => initial.isNew);
   const [wizardSeen, setWizardSeen] = useState(() => readFlag(WIZARD_KEY) === "1");
   const [showSeqShock, setShowSeqShock] = useState(false);
@@ -54,6 +56,7 @@ function App() {
 
   useEffect(() => { writeFlag(VERSION_KEY, ASSUMPTIONS.version); }, []);
   useEffect(() => { writeFlag(ADV_KEY, advancedMode ? "1" : "0"); }, [advancedMode]);
+  useEffect(() => { writeFlag("retirement-sim-editor-mode", editorMode); }, [editorMode]);
 
   useEffect(() => {
     if (!toast) return;
@@ -503,15 +506,26 @@ function App() {
                 <div className="text-[11px] uppercase tracking-wider text-slate-500">편집 중</div>
                 <ScenarioNameEditor key={active.id} name={active.name} color={active.color} onRename={(n) => renameScenario(active.id, n)} />
               </div>
-              <div className="flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 shrink-0" role="group" aria-label="입력 모드">
-                <button type="button" aria-pressed={!advancedMode} onClick={() => setAdvancedMode(false)} className={`px-2.5 py-1 rounded-md transition-all ${!advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>기본</button>
-                <button type="button" aria-pressed={advancedMode} onClick={() => setAdvancedMode(true)} className={`px-2.5 py-1 rounded-md transition-all ${advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>고급</button>
+              <div className="flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 shrink-0" role="group" aria-label="입력 범위">
+                <button type="button" aria-pressed={editorMode==="quick"} onClick={()=>setEditorMode("quick")} className={`px-2.5 py-1 rounded-md transition-all ${editorMode==="quick" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>간편</button>
+                <button type="button" aria-pressed={editorMode==="full"} onClick={()=>setEditorMode("full")} className={`px-2.5 py-1 rounded-md transition-all ${editorMode==="full" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>전체</button>
               </div>
             </div>
 
             {/* 2026 median-income household starters, distinct from comparison presets. */}
             <HouseholdPresetPicker onAdd={addHouseholdPreset} onReplace={replaceWithHouseholdPreset}
               canAdd={scenarios.length < SCENARIO_COLORS.length} />
+
+            {editorMode === "quick" ? (
+              <QuickEditor input={i} onChange={setInputField} onPatch={setInputPatch} onDetailed={()=>setEditorMode("full")} />
+            ) : <>
+            <div className="flex items-center justify-between gap-2 mt-3 mb-3 rounded-md bg-slate-50 p-2">
+              <span className="text-[11px] text-slate-600">상세 설정 범위</span>
+              <div className="flex gap-1 text-xs" role="group" aria-label="상세 입력 범위">
+                <button type="button" aria-pressed={!advancedMode} onClick={()=>setAdvancedMode(false)} className={`border rounded px-2 py-1 ${!advancedMode?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>기본</button>
+                <button type="button" aria-pressed={advancedMode} onClick={()=>setAdvancedMode(true)} className={`border rounded px-2 py-1 ${advancedMode?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>고급</button>
+              </div>
+            </div>
 
             {/* 프로필 */}
             <DefaultReference />
@@ -814,6 +828,7 @@ function App() {
               </Section>
               </>
             )}
+            </>}
 
             <button
               onClick={resetActive}
