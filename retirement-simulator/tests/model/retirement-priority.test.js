@@ -22,7 +22,9 @@ test('mortgage priority uses only post-retirement surplus and never changes pre-
  const surplus=calculateScenario({...input,mortgagePriority:'surplus'});
  const before=scheduled.yearlyAssetFlow.find(y=>y.age===49);
  const after=surplus.yearlyAssetFlow.find(y=>y.age===49);
- assert.deepEqual(before,after);
+ const {mortgageExtraMonthly,...comparableAfter}=after;
+ assert.equal(mortgageExtraMonthly,0);
+ assert.deepEqual(before,comparableAfter);
  const retireScheduled=scheduled.yearlyAssetFlow.find(y=>y.age===50);
  const retireSurplus=surplus.yearlyAssetFlow.find(y=>y.age===50);
  assert.ok(retireSurplus.mortgageExtraMonthly>0);
