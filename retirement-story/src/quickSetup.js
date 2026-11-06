@@ -1,5 +1,6 @@
 import {CURRENT_YEAR} from '../../retirement-simulator/src/model/assumptions.js';
 import {normalizeInput} from '../../retirement-simulator/src/state/migration.js';
+import {childCostAt} from '../../retirement-simulator/src/model/cashflow.js';
 
 const round=n=>Math.round(Number(n)*100)/100;
 export function toMonthly(annual) {return round((Number(annual)||0)/12);}
@@ -74,4 +75,13 @@ export function applyDraft(base,d) {
  });
  if(out.retireAge>=out.selfLifeExpectancy)throw new RangeError('은퇴 나이가 계획 수명보다 작아야 합니다. 정밀 시뮬레이터에서 계획 수명을 변경하세요.');
  return out;
+}
+
+export function previewMonthlyOutflows(d,base) {
+ const living=Number(d.workingLivingCost)||0;
+ const children=Math.round(d.childYears.reduce((sum,y)=>sum+childCostAt(CURRENT_YEAR-Number(y))*(base.childCostMultiplier??1),0));
+ const housing=(Number(d.housingMaintenance)||0)
+  +(d.housingMode==='own'&&Number(d.mortgageBalance)>0?(Number(d.monthlyMortgagePayment)||0):0)
+  +(d.housingMode==='monthly_rent'?(Number(d.monthlyRent)||0):0);
+ return {living,children,housing,total:Math.round(living+children+housing)};
 }
