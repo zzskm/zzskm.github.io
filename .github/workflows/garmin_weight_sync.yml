@@ -9,7 +9,7 @@ on:
         default: "3"
   schedule:
     - cron: "0 15 * * *"
-    - cron: "0 23 * * *"
+    - cron: "0 0 * * *"
 
 concurrency:
   group: ${{ github.workflow }}
