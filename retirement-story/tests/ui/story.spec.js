@@ -42,3 +42,54 @@ test('small viewport does not overflow document horizontally',async({page})=>{
  await page.goto('/');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
 });
+
+test('story uses a single light theme without an OS dark-mode variant',async({page})=>{
+ await page.emulateMedia({colorScheme:'dark'});
+ await page.goto('/');
+ const theme=await page.evaluate(()=>({
+  scheme:getComputedStyle(document.documentElement).colorScheme,
+  header:getComputedStyle(document.querySelector('.topbar')).backgroundColor,
+  body:getComputedStyle(document.querySelector('.site')).backgroundColor,
+ }));
+ expect(theme.scheme).toBe('light');
+ expect(theme.header).toMatch(/rgba?\(255, 255, 255/);
+ await expect(page.getByRole('region',{name:'내 캐릭터 만들기'})).toBeVisible();
+});
+
+test('five persona cards update the draft and not the active story until submitted',async({page})=>{
+ await page.goto('/');
+ const setup=page.getByRole('region',{name:'내 캐릭터 만들기'});
+ const cards=setup.locator('.persona-card');
+ await expect(cards).toHaveCount(5);
+ await expect(page.getByLabel('이야기 연령 이동')).toHaveValue(String(KR_DEFAULTS.currentAge));
+ await setup.getByRole('button',{name:/나만의 탐험가/}).click();
+ await expect(setup.getByLabel('배우자 세후 월급')).toHaveCount(0);
+ await setup.getByRole('button',{name:/세 아이의 설계자/}).click();
+ await expect(setup.getByLabel('배우자 세후 월급')).toBeVisible();
+ await expect(page.getByLabel('이야기 연령 이동')).toHaveValue(String(KR_DEFAULTS.currentAge));
+ await setup.getByRole('button',{name:/주거·가족·은퇴 후 생활비 자세히 설정/}).click();
+ await expect(setup.getByLabel('자녀 수')).toHaveValue('3');
+ await setup.getByLabel('현재 나이',{exact:true}).fill('43');
+ await setup.getByLabel('목표 은퇴 나이',{exact:true}).fill('52');
+ await setup.getByLabel('내 캐릭터 이름').fill('미래 여행자');
+ await setup.getByRole('button',{name:/이 설정으로 스토리 시작/}).click();
+ await expect(setup).toHaveCount(0);
+ await expect(page.getByLabel('이야기 연령 이동')).toHaveValue('43');
+ await expect(page.getByText('미래 여행자 · 세 아이의 설계자')).toBeVisible();
+ await page.getByRole('button',{name:'캐릭터·정보 수정'}).click();
+ await expect(page.getByRole('region',{name:'내 캐릭터 만들기'}).getByLabel('현재 나이',{exact:true})).toHaveValue('43');
+});
+
+test('invalid quick form blocks changes, cancel preserves the active scenario',async({page})=>{
+ await page.goto('/');
+ const setup=page.getByRole('region',{name:'내 캐릭터 만들기'});
+ const current=String(KR_DEFAULTS.currentAge);
+ await setup.getByLabel('목표 은퇴 나이',{exact:true}).fill(current);
+ await setup.getByRole('button',{name:/이 설정으로 스토리 시작/}).click();
+ await expect(setup.getByRole('alert')).toContainText('은퇴 나이');
+ await expect(page.getByLabel('이야기 연령 이동')).toHaveValue(current);
+ await setup.getByRole('button',{name:/나만의 탐험가/}).click();
+ await setup.getByRole('button',{name:'취소',exact:true}).click();
+ await expect(page.getByText('나 · 한 아이의 길잡이')).toBeVisible();
+ await expect(page.getByLabel('이야기 연령 이동')).toHaveValue(current);
+});
