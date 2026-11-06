@@ -36,7 +36,7 @@ test('saved local scenario is loaded only when explicitly requested',async({page
  await page.getByRole('button',{name:'저장된 계획 불러오기'}).click();
  await expect(page.locator('#plan-select')).not.toHaveValue('demo');
  await expect(page.locator('#plan-select')).toContainText('개인 계획');
- await expect(page.getByText('63세, 은퇴')).toBeVisible({timeout:15000}).catch(()=>{});
+ await expect(page.getByText('63세, 은퇴')).toBeVisible();
 });
 test('small viewport does not overflow document horizontally',async({page})=>{
  await page.goto('/');
