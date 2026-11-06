@@ -126,6 +126,8 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
   // 주택대출: 금리·원리금은 명목 기준(월 원리금 고정 → 물가가 오르면 실질 부담은 줄어듦). 명목 잔액을 추적하고 실질로 환산해 보고
   let mortgageNom = isOwn() && input.hasMortgage ? input.mortgageBalance : 0;
   let mortgage    = mortgageNom;   // 실질 잔액 (연말 기준)
+  const mortgagePriority = input.mortgagePriority ?? 'surplus';
+  const allowAutoHousingConversion = input.allowAutoHousingConversion === true;
 
   // 주거비 (현재가치 기준 real)
   let curMaintenance = input.housingMaintenance ?? 0;   // 만/월
@@ -313,6 +315,10 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
     }
 
     // 퇴직 시점 금융자산 = 퇴직 해 현금흐름·수익 반영 이전 잔액 (퇴직금 일시금·다운사이징 반영 후)
+    // Analysis-only investment added at retirement, not today; all amounts are real (today's money).
+    if (age === input.retireAge && opts.retirementTopUp > 0) {
+      financialInvestments += opts.retirementTopUp;
+    }
     if (age === input.retireAge) totalAssetsAtRetirement = financialSavings + financialInvestments;
 
     // ── 주거비 집계 ──
@@ -347,7 +353,20 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
     const outflow = livingAnnual + childAnnual + mortgagePaid + healthInsAnnual + medicalAnnual
                   + maintAnnual + rentAnnual + jeonseTopUpAnnual;
     const cashflowExclSaving = income - outflow;
-    const cashflowWithSaving = cashflowExclSaving - extraSavingAnnual;
+    const retired = age >= input.retireAge;
+    const inflationFactor = Math.pow(1 + inflRate, t);
+    // Pay essential costs and the regular mortgage first; only remaining positive cashflow
+    // is directed to principal. Never force investment withdrawals just to repay debt.
+    let mortgagePrepaidReal = 0;
+    let mortgageFromAssetsReal = 0;
+    if (retired && mortgagePriority !== 'scheduled' && isOwn() && mortgageNom > 0) {
+      const fromSurplus = Math.min(Math.max(0, cashflowExclSaving), mortgageNom / inflationFactor);
+      mortgagePrepaidReal += fromSurplus;
+      mortgageNom = Math.max(0, mortgageNom - fromSurplus * inflationFactor);
+      mortgage = mortgageNom / Math.pow(1 + inflRate, t + 1);
+    }
+    const cashflowAfterMortgage = cashflowExclSaving - mortgagePrepaidReal;
+    const cashflowWithSaving = cashflowAfterMortgage - extraSavingAnnual;
 
     // ── 자산 운용 (C5: 인출 전략 분기, 2-bucket) ──
     const rInv = rateFn(age);                          // 투자성 — 스트레스 적용
@@ -388,19 +407,17 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
     // 근로기(퇴직 전)와 버킷 전략: 총 현금흐름(cashflowExclSaving) 전액이 금융자산에 반영된다.
     // 추가저축(월 투자 적립)은 그 잉여 중 투자성 자산으로 보내는 몫일 뿐 자산 총액을 늘리지 않는다 (이중 계산 방지).
     const settleCashflow = (net) => { if (net >= 0) financialSavings += net; else withdrawFromBuckets(-net); };
-    const retired = age >= input.retireAge;
-
     if (!retired || strategy === "bucket" || (strategy !== "4pct" && strategy !== "vpw")) {
       // Bucket: 잉여 → 저축성, 부족 → 저축성 → 투자성 순 인출
       financialInvestments += extraSavingAnnual;
-      settleCashflow(cashflowExclSaving - extraSavingAnnual);
+      settleCashflow(cashflowAfterMortgage - extraSavingAnnual);
 
     } else if (strategy === "4pct") {
       // 4% 룰: 퇴직 후 매년 swrAnnual 인출 — 지출 초과분은 저축성 버킷에 보관
-      const netNeed = Math.max(0, outflow - income);
+      const netNeed = Math.max(0, outflow + mortgagePrepaidReal - income);
       withdrawFromBuckets(netNeed);
       cashOutExcess(swrAnnual, netNeed);
-      financialSavings += Math.max(0, income - outflow);
+      financialSavings += Math.max(0, income - outflow - mortgagePrepaidReal);
 
     } else {
       // VPW: 잔여 기대연수 기반 비율 인출 — 지출 초과분은 저축성 버킷에 보관
@@ -409,17 +426,31 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
         ? rInv / (1 - Math.pow(1 + rInv, -remaining))
         : 1 / remaining;
       const totalFinancial = Math.max(0, financialSavings) + Math.max(0, financialInvestments);
-      const actualNeed = Math.max(0, outflow - income);
+      const actualNeed = Math.max(0, outflow + mortgagePrepaidReal - income);
       withdrawFromBuckets(actualNeed);
       cashOutExcess(Math.min(vpwRate * totalFinancial, totalFinancial), actualNeed);
-      financialSavings += Math.max(0, income - outflow);
+      financialSavings += Math.max(0, income - outflow - mortgagePrepaidReal);
+    }
+
+    // Optional proactive paydown from *liquid savings only*. Keep 24 months of
+    // estimated total outflow in reserve; investment and pension assets remain untouched.
+    if (retired && mortgagePriority === 'buffered' && isOwn() && mortgageNom > 0) {
+      const liquidReserve = Math.max(0, outflow * 2);
+      const available = Math.max(0, financialSavings - liquidReserve);
+      mortgageFromAssetsReal = Math.min(available, mortgageNom / inflationFactor);
+      if (mortgageFromAssetsReal > 0) {
+        financialSavings -= mortgageFromAssetsReal;
+        mortgagePrepaidReal += mortgageFromAssetsReal;
+        mortgageNom = Math.max(0, mortgageNom - mortgageFromAssetsReal * inflationFactor);
+        mortgage = mortgageNom / Math.pow(1 + inflRate, t + 1);
+      }
     }
 
     const financialTotal = financialSavings + financialInvestments;
 
     // ── 자동 주거 다운그레이드 cascade (퇴직 후, 금융자산 임계값 미만) ──
     const THRESHOLD = assumptions.assetRules.housingLiquidationThreshold;
-    if (age >= input.retireAge) {
+    if (age >= input.retireAge && allowAutoHousingConversion) {
       // Step 1: 자가 → 전세
       if (isOwn() && house > 0 && financialTotal < THRESHOLD) {
         const houseAfterMortgage = Math.max(0, house - mortgage);
@@ -477,13 +508,14 @@ function calculateScenario(input, returnRateOverride, assumptions = ASSUMPTIONS,
       bridgeSideMonthly:    Math.round(bridgeSideAnnual   / 12),
       livingMonthly:        Math.round(livingAnnual       / 12),
       childMonthly:         Math.round(childAnnual        / 12),
-      mortgageMonthly:      Math.round(mortgagePaid       / 12),
+      mortgageMonthly:      Math.round((mortgagePaid + mortgagePrepaidReal) / 12),
+      mortgageExtraMonthly: Math.round(mortgagePrepaidReal / 12),
       healthInsMonthly:     Math.round(healthInsAnnual    / 12),
       medicalMonthly:       Math.round(medicalAnnual      / 12),
       maintMonthlyOut:      Math.round(maintAnnual        / 12),
       rentMonthlyOut:       Math.round((rentAnnual + jeonseTopUpAnnual) / 12),
       extraSavingMonthly:   Math.round(extraSavingAnnual / 12),
-      cashflowMonthly:      Math.round(cashflowWithSaving / 12),
+      cashflowMonthly:      Math.round((cashflowWithSaving - mortgageFromAssetsReal) / 12),
     });
   }
 
