@@ -86,6 +86,8 @@ const PRESETS = {
     mortgageBalance: 12000,
     monthlyMortgagePayment: 80,
     mortgageRate: 4.0,               // 명목 % — 주택대출 금리
+    mortgagePriority: "surplus",     // 퇴직 후 잉여현금은 대출원금 상환에 우선 투입 (scheduled/surplus/buffered)
+    allowAutoHousingConversion: false, // 사용자가 명시하지 않은 주거 처분은 실행하지 않음
     // 전세/월세 모드 전용
     deposit: 0,                      // 만원 (보증금)
     monthlyRent: 0,                  // 만/월 (월세)
