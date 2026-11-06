@@ -26,8 +26,9 @@ const fixtures = [
 ];
 for (const [idx,patch] of fixtures.entries()) {
  test(`legacy parity: complete yearly flows, housing, pension, withdrawal and seeded MC ${idx}`,()=>{
-  const input=normalizeInput({...legacy.KR_DEFAULTS,...patch});
-  assert.deepEqual(input,legacy.normalizeInput({...legacy.KR_DEFAULTS,...patch}));
+  const input=normalizeInput({...legacy.KR_DEFAULTS,...patch,mortgagePriority:'scheduled',allowAutoHousingConversion:true});
+  const {mortgagePriority,allowAutoHousingConversion,...legacyShape}=input;
+  assert.deepEqual(legacyShape,legacy.normalizeInput({...legacy.KR_DEFAULTS,...patch}));
   assert.deepEqual(calculateScenario(input),legacy.calculateScenario(input));
   assert.deepEqual(runScenarioBand(input),legacy.runScenarioBand(input));
   assert.deepEqual(runMonteCarlo(input,undefined,{runs:50}),legacy.runMonteCarlo(input,undefined,{runs:50}));
@@ -35,7 +36,7 @@ for (const [idx,patch] of fixtures.entries()) {
  });
 }
 test('historical 2026 default regression golden values stay unchanged',()=>{
- const actual=calculateScenario(normalizeInput(legacy.KR_DEFAULTS));
+ const actual=calculateScenario(normalizeInput({...legacy.KR_DEFAULTS,mortgagePriority:'scheduled',allowAutoHousingConversion:true}));
  const golden=JSON.parse(requireGolden());
  for(const [key,value] of Object.entries(golden)) assert.deepEqual(actual[key],value,key);
 });
@@ -62,8 +63,8 @@ test('manual pension and claim adjustment boundaries',()=>{
 });
 
 
-test('new middle-household preset uses the unchanged calculation model',()=>{
- const input=normalizeInput(KR_DEFAULTS);
+test('explicit scheduled-repayment and auto-home fallback mode preserves legacy results',()=>{
+ const input=normalizeInput({...KR_DEFAULTS,mortgagePriority:'scheduled',allowAutoHousingConversion:true});
  assert.deepEqual(calculateScenario(input),legacy.calculateScenario(input));
  assert.deepEqual(runScenarioBand(input),legacy.runScenarioBand(input));
  assert.deepEqual(runMonteCarlo(input,undefined,{runs:50}),legacy.runMonteCarlo(input,undefined,{runs:50}));

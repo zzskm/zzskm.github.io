@@ -14,6 +14,9 @@ import { STRESS_PRESETS } from "./model/scenarios.js";
 import { validateInput } from "./model/validation.js";
 import { insightMetric } from "./insights/recommendations.js";
 import { EXPLORE_PRESETS } from "./features/comparison/presets.js";
+import { HouseholdPresetPicker } from "./features/comparison/HouseholdPresetPicker.jsx";
+import { QuickEditor } from "./components/QuickEditor.jsx";
+import { HOUSEHOLD_PRESETS, createHouseholdPresetInput } from "./features/comparison/householdPresets.js";
 import { fmt만원, fmt만원월 } from "./utils/formatting.js";
 import { useDebugMode, useIsMobile } from "./components/hooks.js";
 import { FieldContext, Slider, NumberInput, SalaryInput } from "./components/NumericField.jsx";
@@ -32,6 +35,7 @@ function App() {
   const [scenarios, setScenarios] = useState(initial.scenarios);
   const [activeId, setActiveId] = useState(initial.activeId);
   const [advancedMode, setAdvancedMode] = useState(() => readFlag(ADV_KEY) === "1");
+  const [editorMode, setEditorMode] = useState(() => readFlag("retirement-sim-editor-mode") === "full" ? "full" : "quick");
   const [showWizard, setShowWizard] = useState(() => initial.isNew);
   const [wizardSeen, setWizardSeen] = useState(() => readFlag(WIZARD_KEY) === "1");
   const [showSeqShock, setShowSeqShock] = useState(false);
@@ -52,6 +56,7 @@ function App() {
 
   useEffect(() => { writeFlag(VERSION_KEY, ASSUMPTIONS.version); }, []);
   useEffect(() => { writeFlag(ADV_KEY, advancedMode ? "1" : "0"); }, [advancedMode]);
+  useEffect(() => { writeFlag("retirement-sim-editor-mode", editorMode); }, [editorMode]);
 
   useEffect(() => {
     if (!toast) return;
@@ -128,6 +133,26 @@ function App() {
     // 프리셋 시나리오가 모두 사라지면 프리셋 상태 초기화
     if (!next.some(s => s.origin?.startsWith("preset:"))) setActivePresetId(null);
     if (activeId === id) setActiveId(next[0].id);
+  };
+
+  // Household starter scenarios are isolated from exploratory comparison presets.
+  // Avoid mixing the user's existing financial inputs with unrelated sample values.
+  const addHouseholdPreset = (id) => {
+    if (scenarios.length >= SCENARIO_COLORS.length) return;
+    const preset = HOUSEHOLD_PRESETS.find(p=>p.id===id);
+    if (!preset) return;
+    const next = makeScenario(`중위소득 · ${preset.label}`, createHouseholdPresetInput(id), scenarios.length);
+    setScenarios(prev=>[...prev,next]);
+    setActiveId(next.id);
+    setActivePresetId(null);
+  };
+  const replaceWithHouseholdPreset = (id) => {
+    const preset = HOUSEHOLD_PRESETS.find(p=>p.id===id);
+    if (!preset) return;
+    setScenarios(prev=>prev.map(s=>s.id===active.id
+      ? {...s,name:`중위소득 · ${preset.label}`,input:createHouseholdPresetInput(id),origin:undefined}
+      : s));
+    setActivePresetId(null);
   };
 
   const resetActive = () => {
@@ -481,9 +506,24 @@ function App() {
                 <div className="text-[11px] uppercase tracking-wider text-slate-500">편집 중</div>
                 <ScenarioNameEditor key={active.id} name={active.name} color={active.color} onRename={(n) => renameScenario(active.id, n)} />
               </div>
-              <div className="flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 shrink-0" role="group" aria-label="입력 모드">
-                <button type="button" aria-pressed={!advancedMode} onClick={() => setAdvancedMode(false)} className={`px-2.5 py-1 rounded-md transition-all ${!advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>기본</button>
-                <button type="button" aria-pressed={advancedMode} onClick={() => setAdvancedMode(true)} className={`px-2.5 py-1 rounded-md transition-all ${advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>고급</button>
+              <div className="flex gap-1 text-xs bg-slate-100 rounded-lg p-0.5 shrink-0" role="group" aria-label="입력 범위">
+                <button type="button" aria-pressed={editorMode==="quick"} onClick={()=>setEditorMode("quick")} className={`px-2.5 py-1 rounded-md transition-all ${editorMode==="quick" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>간편</button>
+                <button type="button" aria-pressed={editorMode==="full"} onClick={()=>setEditorMode("full")} className={`px-2.5 py-1 rounded-md transition-all ${editorMode==="full" ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>전체</button>
+              </div>
+            </div>
+
+            {/* 2026 median-income household starters, distinct from comparison presets. */}
+            <HouseholdPresetPicker onAdd={addHouseholdPreset} onReplace={replaceWithHouseholdPreset}
+              canAdd={scenarios.length < SCENARIO_COLORS.length} />
+
+            {editorMode === "quick" ? (
+              <QuickEditor input={i} onChange={setInputField} onPatch={setInputPatch} onDetailed={()=>setEditorMode("full")} />
+            ) : <>
+            <div className="flex items-center justify-between gap-2 mt-3 mb-3 rounded-md bg-slate-50 p-2">
+              <span className="text-[11px] text-slate-600">상세 설정 범위</span>
+              <div className="flex gap-1 text-xs" role="group" aria-label="상세 입력 범위">
+                <button type="button" aria-pressed={!advancedMode} onClick={()=>setAdvancedMode(false)} className={`border rounded px-2 py-1 ${!advancedMode?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>기본</button>
+                <button type="button" aria-pressed={advancedMode} onClick={()=>setAdvancedMode(true)} className={`border rounded px-2 py-1 ${advancedMode?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>고급</button>
               </div>
             </div>
 
@@ -546,7 +586,7 @@ function App() {
             {/* 소득 */}
             <Section title="소득" defaultOpen summary={`세후 ${fmt만원(householdNet)}/년`}>
               <SalaryInput
-                name="본인 연봉"
+                name="본인 소득"
                 netAnnual={i.selfCurrentSalary}
                 basis={i.selfSalaryBasis ?? "gross"}
                 onChangeNet={setInputField("selfCurrentSalary")}
@@ -554,7 +594,7 @@ function App() {
               />
               {i.spouseEnabled && (
                 <SalaryInput
-                  name="배우자 연봉"
+                  name="배우자 소득"
                   netAnnual={i.spouseCurrentSalary}
                   basis={i.spouseSalaryBasis ?? "gross"}
                   onChangeNet={setInputField("spouseCurrentSalary")}
@@ -638,7 +678,26 @@ function App() {
                   {advancedMode && (
                     <Slider label="대출 금리" value={i.mortgageRate ?? 4.0} {...UI_RANGES.mortgageRate} fieldKey="mortgageRate" onChange={setInputField("mortgageRate")} format={v => `${v.toFixed(1)}%`} hint="명목 금리로 잔액에 이자 부과" />
                   )}
+                  <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                    <div className="text-xs font-semibold text-slate-700">퇴직 후 대출 상환 우선순위</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1" role="group" aria-label="퇴직 후 대출 상환 우선순위">
+                      {[
+                        ["scheduled", "기존 정기 상환"],
+                        ["surplus", "잉여현금 우선 상환"],
+                        ["buffered", "2년 예비자금 확보 후 추가 상환"],
+                      ].map(([value,label])=>(
+                        <button key={value} type="button" aria-pressed={(i.mortgagePriority ?? "surplus")===value}
+                          onClick={()=>setInputField("mortgagePriority")(value)}
+                          className={`rounded border px-2 py-2 text-xs ${(i.mortgagePriority ?? "surplus")===value?"bg-slate-900 text-white border-slate-900":"bg-white text-slate-700 border-slate-200"}`}>{label}</button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      정기 원리금과 필수 생활비를 먼저 지출합니다. 잉여현금을 대출 원금에 우선 상환하며, 적극 상환 옵션은 24개월 지출액을 현금성 자산에 남기고 남는 예금만 사용합니다. 주식·DC·IRP를 강제 인출하지 않습니다. 중도상환수수료는 별도로 반영되지 않습니다.
+                    </p>
+                  </div>
                 </>}
+                {advancedMode && <Toggle label="자산 부족 시 주택 자동 전환" value={i.allowAutoHousingConversion===true} onChange={setInputField("allowAutoHousingConversion")}
+                  hint="금융자산이 600만원 아래면 자가→전세, 이후 전세→월세로 자동 이동합니다. 실제 이사 계획이 없으면 끄세요." />}
               </>}
               {/* 전세 전용 */}
               {i.housingMode === "jeonse" && (
@@ -769,6 +828,7 @@ function App() {
               </Section>
               </>
             )}
+            </>}
 
             <button
               onClick={resetActive}
@@ -1140,6 +1200,22 @@ function App() {
             <div className="px-4 pb-4">
             <ul className="text-sm text-slate-700 space-y-1.5 leading-relaxed">
               <li>• 브릿지 기간 <b>{activeResult.bridgeYears}년</b> 동안 자산에서 인출 필요: <b className="text-red-600">{fmt만원(activeResult.bridgeShortfall)}</b> <span className="text-xs text-slate-500">(생활비 충당을 위한 금융자산 인출액)</span></li>
+              {targets?.readinessInvestmentTarget && <li>
+                • <b>{i.retireAge}세 시점 준비율 100% 달성에 필요한 투자자산:</b> {targets.readinessInvestmentTarget.additionalAtRetirement === null
+                  ? "탐색 상한(100억원) 내에서 달성 불가"
+                  : targets.readinessInvestmentTarget.additionalAtRetirement === 0
+                    ? `이미 충족 (퇴직 시 예상 금융자산 ${fmt만원(targets.readinessInvestmentTarget.targetAtRetirement)})`
+                    : `퇴직 시 추가 ${fmt만원(targets.readinessInvestmentTarget.additionalAtRetirement)} · 총 금융자산 ${fmt만원(targets.readinessInvestmentTarget.targetAtRetirement)} 필요`}
+                <span className="text-xs text-slate-500"> (고정 수익률·현재가치, 몬테카를로 성공확률 100%를 뜻하지 않음)</span>
+              </li>}
+              {i.hasMortgage && i.housingMode==="own" && <li>
+                • <b>퇴직 후 대출 상환:</b> {{
+                  scheduled:"정기 원리금만 상환",
+                  surplus:"잉여현금 우선 상환",
+                  buffered:"잉여현금 + 24개월 예비자금 초과 예금 상환",
+                }[i.mortgagePriority ?? "surplus"]} · 대출 소멸 예상 {activeResult.yearlyAssetFlow.find(y=>y.age>=i.retireAge&&y.mortgage===0)?.age ?? "계획 기간 내 없음"}세
+              </li>}
+              {i.allowAutoHousingConversion === true && i.housingMode==="own" && <li>• <b className="text-amber-700">자동 주거 전환 활성:</b> 금융자산 부족 시 주택 처분과 전세·월세 이동을 가정합니다. 실제 이사 의사가 없다면 고급 주거 설정에서 해제하세요.</li>}
               {activeResult.depletionAge ? (
                 <li>• <b className="text-red-600">⚠ {activeResult.depletionAge}세 자산소진</b> — 수명({activeResult.simEndAge}세)까지 <b>{activeResult.simEndAge - activeResult.depletionAge}년</b> 부족{i.spouseEnabled ? " (부부 최대 수명 기준)" : ""}</li>
               ) : (
@@ -1213,7 +1289,9 @@ function App() {
               <summary className="cursor-pointer select-none text-slate-600 hover:text-slate-800">용어·계산 방식 자세히</summary>
               <div className="mt-2 space-y-1.5">
                 <p><b className="text-slate-600">성공확률</b>: 몬테카를로 {ASSUMPTIONS.monteCarlo.runs.toLocaleString()}회에서 수명까지 금융자산이 유지된 비율. 수익률 변동성은 고급 {'>'} 시장 가정에서 조정합니다.</p>
-                <p><b className="text-slate-600">준비율</b>: 중간(고정 수익률) 시나리오에서 수명까지 자산이 남으면 100%+(남는 자산 비율에 따라 최대 300%), 중간에 바닥나면 수명 대비 버틴 비율.</p>
+                <p><b className="text-slate-600">준비율</b>: 중간(고정 수익률) 시나리오에서 수명까지 자산이 남으면 100%+(남는 자산 비율에 따라 최대 300%), 중간에 바닥나면 수명 대비 버틴 비율. 100%를 위한 추가 투자액은 퇴직 시 한 번 보유한다고 가정한 금액이며, 현재 시점의 추가 투자금이나 100% 성공확률이 아닙니다.</p>
+                <p><b className="text-slate-600">퇴직 후 대출 상환</b>: 필수 지출과 정기 원리금을 먼저 반영하고 잉여현금을 원금에 추가 상환합니다. 적극 상환은 2년 지출 예비자금 초과 예금만 사용합니다. 연 단위 근사이며 중도상환수수료와 실제 금리변동은 미반영합니다.</p>
+                <p><b className="text-slate-600">주거 전환</b>: 기본적으로 집을 임의로 매도하지 않습니다. 고급 설정을 켜면 금융자산 부족 시 자가→전세→월세 자동 전환을 가정하므로 실제 거주 계획과 다를 수 있습니다.</p>
                 <p><b className="text-slate-600">브릿지</b>: 퇴직 후 국민연금 개시 전까지 근로소득·연금이 모두 없는 기간.</p>
                 <p><b className="text-slate-600">시퀀스 리스크</b>: 퇴직 직후 시장이 나빠지면 같은 평균 수익률이어도 자산이 더 빨리 줄어드는 위험. 경미(-5%p, 3년) / 중간(-10%p, 5년) / 2008(-30%→반등) 중 선택, 차트에서 토글.</p>
                 <p><b className="text-slate-600">인출 전략</b>: 버킷=저축성→투자성 순 인출. 4% 룰=퇴직 자산×4% 고정. VPW=남은 수명 기준 비율 인출.</p>

@@ -63,6 +63,9 @@ function normalizeInput(raw = {}) {
     housingMode:         raw.housingMode          ?? (raw.hasHouse === false ? "monthly_rent" : "own"),
     housingMaintenance:  raw.housingMaintenance   ?? KR_DEFAULTS.housingMaintenance,
     housingInflationScenario: raw.housingInflationScenario ?? KR_DEFAULTS.housingInflationScenario,
+    mortgagePriority:       ["scheduled", "surplus", "buffered"].includes(raw.mortgagePriority)
+      ? raw.mortgagePriority : KR_DEFAULTS.mortgagePriority,
+    allowAutoHousingConversion: raw.allowAutoHousingConversion ?? KR_DEFAULTS.allowAutoHousingConversion,
     deposit:             raw.deposit              ?? KR_DEFAULTS.deposit,
     monthlyRent:         raw.monthlyRent          ?? KR_DEFAULTS.monthlyRent,
     hasMortgage:         raw.hasMortgage          ?? ((raw.mortgageBalance ?? KR_DEFAULTS.mortgageBalance) > 0),
