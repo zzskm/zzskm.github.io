@@ -35,24 +35,24 @@ function Scene({frame,input,personaId,characterName}) {
   <div className="scene-grain"/>
   <svg className="scene-landscape" viewBox="0 0 700 470" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
    <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#253d49"/><stop offset="1" stopColor="#789188"/></linearGradient>
-    <linearGradient id="hill" x1="0" y1="0" x2=".75" y2="1"><stop stopColor="#54716c"/><stop offset="1" stopColor="#1a3940"/></linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c4d9d3"/><stop offset="1" stopColor="#f4e9d4"/></linearGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2=".75" y2="1"><stop stopColor="#a5bca3"/><stop offset="1" stopColor="#73988d"/></linearGradient>
     <radialGradient id="sunGlow"><stop stopColor="#f7d6a0" stopOpacity=".35"/><stop offset="1" stopColor="#f7d6a0" stopOpacity="0"/></radialGradient>
    </defs>
    <rect width="700" height="470" fill="url(#sky)"/>
    <circle cx="476" cy="117" r="124" fill="url(#sunGlow)"/>
    <circle cx="476" cy="117" r="53" fill="#f4d9a8" opacity=".9"/>
-   <path d="M0 272Q130 196 282 273T700 243V470H0Z" fill="#7d9384" opacity=".76"/>
+   <path d="M0 272Q130 196 282 273T700 243V470H0Z" fill="#c8d5b7" opacity=".76"/>
    <path d="M0 329Q172 265 316 330T700 290V470H0Z" fill="url(#hill)"/>
-   <path d="M0 395Q250 348 430 397T700 360V470H0Z" fill="#17313b" opacity=".84"/>
+   <path d="M0 395Q250 348 430 397T700 360V470H0Z" fill="#77988a" opacity=".84"/>
    <g transform="translate(130 215)" fill="#e9dfc8">
      <rect x="35" y="60" width="88" height="115" rx="3" opacity=".88"/>
      <path d="M22 65L79 18l57 47Z" fill="#d5b89a"/>
-     <rect x="64" y="119" width="23" height="56" rx="2" fill="#435d62"/>
+     <rect x="64" y="119" width="23" height="56" rx="2" fill="#749588"/>
      <rect x="48" y="78" width="20" height="23" rx="2" fill="#eabf80"/>
      <rect x="93" y="78" width="19" height="23" rx="2" fill="#eabf80"/>
    </g>
-   <g fill="#16363a" opacity=".8"><path d="M560 338v-115h8v115Z"/><circle cx="565" cy="216" r="46"/><circle cx="535" cy="235" r="30"/><circle cx="590" cy="241" r="32"/></g>
+   <g fill="#577d68" opacity=".8"><path d="M560 338v-115h8v115Z"/><circle cx="565" cy="216" r="46"/><circle cx="535" cy="235" r="30"/><circle cx="590" cy="241" r="32"/></g>
    <g fill="none" stroke="#e9e7d7" strokeWidth="2" opacity=".22"><path d="M0 419Q300 397 700 431"/><path d="M0 438Q300 416 700 451"/></g>
   </svg>
   <div className="scene-gradient"/>
@@ -79,9 +79,9 @@ function AssetTrend({frames,index,hidden}) {
    <div className="trend-heading"><span>금융자산 경로 · 현재가치</span><b>{hidden?'금액 숨김':`${fmt(current.financialAssets)}만 원`}</b></div>
    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`현재 ${current.age}세 금융자산 변화 그래프. 0원 기준선 포함`} preserveAspectRatio="none">
     <line x1={0} x2={w} y1={y0} y2={y0} stroke="#d4a57e" strokeDasharray="4 7" strokeWidth="1" opacity=".6"/>
-    <path d={path} fill="none" stroke="#88bfaf" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d={path} fill="none" stroke="#538d74" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
     <line x1={xCur} x2={xCur} y1={0} y2={h} stroke="#d4dfdb" strokeWidth="1" opacity=".4"/>
-    <circle cx={xCur} cy={y(current.financialAssets)} r="5" fill="#dce9d9" stroke="#476b63" strokeWidth="2"/>
+    <circle cx={xCur} cy={y(current.financialAssets)} r="5" fill="#eaf7ef" stroke="#467d61" strokeWidth="2"/>
    </svg>
    <div className="trend-ticks"><span>{frames[0].age}세</span><span>{current.age}세 · 선택</span><span>{frames.at(-1).age}세</span></div>
  </div>;
