@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {PERSONAS,createPersonaInput,getPersona,inferPersonaId} from '../src/personas.js';
-import {applyDraft,setupDraft,validateDraft,withChildCount,toMonthly,toAnnual} from '../src/quickSetup.js';
+import {applyDraft,setupDraft,validateDraft,withChildCount,toMonthly,toAnnual,previewMonthlyOutflows} from '../src/quickSetup.js';
 import {normalizeInput} from '../../retirement-simulator/src/state/migration.js';
 import {calculateScenario} from '../../retirement-simulator/src/model/cashflow.js';
 
@@ -55,6 +55,17 @@ test('resizing children retains provided birth years and applies placeholder for
  assert.equal(withChildCount([],20).length,5);
 });
 
+test('quick preview separates child costs and housing payments from basic living expenses',()=>{
+ const input=createPersonaInput('two-children');
+ const draft=setupDraft(input);
+ const b=previewMonthlyOutflows(draft,input);
+ assert.equal(b.living,input.workingLivingCost);
+ assert.ok(b.children>0);
+ assert.equal(b.housing,input.housingMaintenance+input.monthlyMortgagePayment);
+ assert.equal(b.total,b.living+b.children+b.housing);
+ const rent=previewMonthlyOutflows({...draft,housingMode:'monthly_rent',monthlyRent:70},input);
+ assert.equal(rent.housing,input.housingMaintenance+70);
+});
 test('invalid retirement age, child years or negative financial balances are blocked',()=>{
  const base=createPersonaInput('one-child');
  const d=setupDraft(base);
