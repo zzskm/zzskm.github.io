@@ -2,9 +2,29 @@ import { calculateScenario } from '../model/cashflow.js';
 import { runScenarioBand } from '../model/scenarios.js';
 import { normalizeInput } from '../state/migration.js';
 const holds=r=>r.depletionAge===null;
+
+// What investment balance must be available AT retirement for the deterministic
+// 100% readiness threshold? Not a 100% Monte Carlo success probability.
+// Bounded bisection in whole 만원, verified with the actual projection.
+export function retirementReadinessInvestmentTarget(input, base = calculateScenario(input)) {
+ if (holds(base)) return {additionalAtRetirement:0,targetAtRetirement:base.totalAssetsAtRetirement,readinessBefore:base.readinessRatio};
+ const meets=amount=>holds(calculateScenario(input,undefined,undefined,{retirementTopUp:amount}));
+ const maxTopUp=1000000; // 100억원 bound, avoid pretending arbitrarily large targets are feasible
+ let hi=1000;
+ while(hi<maxTopUp&&!meets(hi)) hi=Math.min(maxTopUp,hi*2);
+ if(!meets(hi))return {additionalAtRetirement:null,targetAtRetirement:null,readinessBefore:base.readinessRatio};
+ let lo=0;
+ while(hi-lo>1){
+  const mid=Math.floor((lo+hi)/2);
+  if(meets(mid))hi=mid;else lo=mid;
+ }
+ if(!meets(hi))return {additionalAtRetirement:null,targetAtRetirement:null,readinessBefore:base.readinessRatio};
+ return {additionalAtRetirement:hi,targetAtRetirement:Math.round(base.totalAssetsAtRetirement+hi),readinessBefore:base.readinessRatio};
+}
 export function exploreTargets(input) {
  const calculate=patch=>calculateScenario(normalizeInput({...input,...patch}));
  const base=calculate({});
+ const readinessInvestmentTarget=retirementReadinessInvestmentTarget(input,base);
  // Discrete searches deliberately report ranges rather than a guaranteed optimum.
  const ages=Array.from({length:Math.max(0,76-Math.max(input.currentAge+1,25))},(_,n)=>Math.max(input.currentAge+1,25)+n).filter(n=>n<input.selfLifeExpectancy);
  const earliest=ages.find(age=>holds(calculate({retireAge:age})))??null;
@@ -19,7 +39,7 @@ export function exploreTargets(input) {
  const longevity=calculate(longevityPatch);
  const shockPatch={stressTest:'severe',projectionStress:true};
  const shock=runScenarioBand(normalizeInput({...input,...shockPatch})).sequenceShock;
- return {earliest,additionalAssets,monthlySaving,spending,baseEndAge:base.simEndAge,
+ return {earliest,additionalAssets,monthlySaving,spending,baseEndAge:base.simEndAge,readinessInvestmentTarget,
   longevity:{patch:longevityPatch,depletionAge:longevity.depletionAge,endAge:longevity.simEndAge,final:longevity.yearlyAssetFlow.at(-1)?.financialAssets??0},
   shock:{patch:shockPatch,depletionAge:shock.depletionAge,readinessRatio:shock.readinessRatio},
   patches:{retirement:earliest===null?null:{retireAge:earliest},assets:additionalAssets===null?null:{savingsBalance:input.savingsBalance+additionalAssets},saving:monthlySaving===null?null:{workingLivingCost:input.workingLivingCost-monthlySaving},spending:spending===null?null:{retirementLivingCost:spending}},
