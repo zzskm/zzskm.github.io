@@ -14,6 +14,8 @@ import { STRESS_PRESETS } from "./model/scenarios.js";
 import { validateInput } from "./model/validation.js";
 import { insightMetric } from "./insights/recommendations.js";
 import { EXPLORE_PRESETS } from "./features/comparison/presets.js";
+import { HouseholdPresetPicker } from "./features/comparison/HouseholdPresetPicker.jsx";
+import { HOUSEHOLD_PRESETS, createHouseholdPresetInput } from "./features/comparison/householdPresets.js";
 import { fmt만원, fmt만원월 } from "./utils/formatting.js";
 import { useDebugMode, useIsMobile } from "./components/hooks.js";
 import { FieldContext, Slider, NumberInput, SalaryInput } from "./components/NumericField.jsx";
@@ -128,6 +130,26 @@ function App() {
     // 프리셋 시나리오가 모두 사라지면 프리셋 상태 초기화
     if (!next.some(s => s.origin?.startsWith("preset:"))) setActivePresetId(null);
     if (activeId === id) setActiveId(next[0].id);
+  };
+
+  // Household starter scenarios are isolated from exploratory comparison presets.
+  // Avoid mixing the user's existing financial inputs with unrelated sample values.
+  const addHouseholdPreset = (id) => {
+    if (scenarios.length >= SCENARIO_COLORS.length) return;
+    const preset = HOUSEHOLD_PRESETS.find(p=>p.id===id);
+    if (!preset) return;
+    const next = makeScenario(`중위소득 · ${preset.label}`, createHouseholdPresetInput(id), scenarios.length);
+    setScenarios(prev=>[...prev,next]);
+    setActiveId(next.id);
+    setActivePresetId(null);
+  };
+  const replaceWithHouseholdPreset = (id) => {
+    const preset = HOUSEHOLD_PRESETS.find(p=>p.id===id);
+    if (!preset) return;
+    setScenarios(prev=>prev.map(s=>s.id===active.id
+      ? {...s,name:`중위소득 · ${preset.label}`,input:createHouseholdPresetInput(id),origin:undefined}
+      : s));
+    setActivePresetId(null);
   };
 
   const resetActive = () => {
@@ -486,6 +508,10 @@ function App() {
                 <button type="button" aria-pressed={advancedMode} onClick={() => setAdvancedMode(true)} className={`px-2.5 py-1 rounded-md transition-all ${advancedMode ? 'bg-white shadow text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>고급</button>
               </div>
             </div>
+
+            {/* 2026 median-income household starters, distinct from comparison presets. */}
+            <HouseholdPresetPicker onAdd={addHouseholdPreset} onReplace={replaceWithHouseholdPreset}
+              canAdd={scenarios.length < SCENARIO_COLORS.length} />
 
             {/* 프로필 */}
             <DefaultReference />
