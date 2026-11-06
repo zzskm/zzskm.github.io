@@ -11,7 +11,7 @@ test.beforeEach(async({page})=>{
   localStorage.setItem('retirement-sim-assumptions-version',version);
  },{base,version:ASSUMPTIONS.version});
 });
-async function inputPanel(page){const tab=page.getByRole('tab',{name:'입력',exact:true});if(await tab.isVisible())await tab.click();}
+async function inputPanel(page){const tab=page.getByRole('tab',{name:'입력',exact:true});if(await tab.isVisible())await tab.click();const full=page.getByRole('button',{name:'전체',exact:true});if(await full.isVisible())await full.click();}
 async function resultsPanel(page){const tab=page.getByRole('tab',{name:'결과',exact:true});if(await tab.isVisible())await tab.click();}
 async function stored(page){return page.evaluate(()=>JSON.parse(localStorage.getItem('retirement-sim-v5')));}
 test('old URL preserves settings, query and fragment and boots the built app',async({page})=>{
@@ -166,4 +166,44 @@ test('median reference discloses household units, source dates and illustrative 
  await expect(reference).toContainText('23,860만원');
  await expect(reference).toContainText('각 개인·자산 항목의 중위값은 아닙니다');
  await expect(reference.getByRole('link',{name:/보통사람 금융생활 보고서 2024/})).toHaveAttribute('href',/notice_20240417\.pdf/);
+});
+
+test('quick editor uses one monthly net income field and an explicit child cost preview',async({page})=>{
+ await page.goto('/retirement-simulator/');
+ const tab=page.getByRole('tab',{name:'입력',exact:true});if(await tab.isVisible())await tab.click();
+ const quick=page.getByRole('button',{name:'간편',exact:true});await expect(quick).toHaveAttribute('aria-pressed','true');
+ const income=page.getByLabel('본인 세후 월급',{exact:true});
+ await income.fill('600');await income.press('Enter');
+ await expect.poll(async()=>(await stored(page)).scenarios[0].input.selfCurrentSalary).toBe(7200);
+ const working=page.getByLabel('근로기 월 생활비',{exact:true});await working.fill('270');await working.press('Enter');
+ await page.getByRole('button',{name:'근로기 생활비와 같게 설정'}).click();
+ await expect.poll(async()=>(await stored(page)).scenarios[0].input.bridgeLivingCost).toBe(270);
+ await expect(page.getByText('자녀비 자동 추가',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'전체',exact:true}).click();
+ const salarySection=page.locator('#inputs-panel details').filter({has:page.locator('summary').filter({hasText:/소득/})}).first();
+ await salarySection.locator(':scope > summary').click();
+ await expect(page.getByLabel('본인 소득 연봉',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('본인 소득 월급',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'월급 입력'}).first().click();
+ await expect(page.getByLabel('본인 소득 월급',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('본인 소득 연봉',{exact:true})).toHaveCount(0);
+ await page.reload();await inputPanel(page);
+ await expect(page.getByRole('button',{name:'전체',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect.poll(async()=>(await stored(page)).scenarios[0].input.selfCurrentSalary).toBe(7200);
+});
+
+test('wizard household starter is only applied on final confirmation',async({page})=>{
+ await page.goto('/retirement-simulator/');
+ await page.getByRole('button',{name:'🪄 빠른 설정'}).click();
+ const dialog=page.getByRole('dialog');
+ await dialog.getByLabel('가구 예시 프리셋').selectOption('two-children');
+ await expect(dialog.getByLabel('희망 퇴직 나이',{exact:true})).toHaveValue('60');
+ expect((await stored(page)).scenarios[0].input.children).toHaveLength(1);
+ for(let n=0;n<4;n++)await dialog.getByRole('button',{name:'다음',exact:true}).click();
+ await expect(dialog).toContainText('전체 설정을 현재 계획에 적용합니다');
+ await dialog.getByRole('button',{name:'계획에 반영'}).click();
+ await expect.poll(async()=>(await stored(page)).scenarios[0].input.children.length).toBe(2);
+ const after=(await stored(page)).scenarios[0].input;
+ expect(after.selfSalaryBasis).toBe('net');
+ expect(after.mortgagePriority).toBe('surplus');
 });
