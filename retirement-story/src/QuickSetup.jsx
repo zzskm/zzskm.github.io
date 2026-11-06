@@ -2,7 +2,7 @@ import React,{useState} from 'react';
 import {CURRENT_YEAR} from '../../retirement-simulator/src/model/assumptions.js';
 import {PERSONAS,createPersonaInput} from './personas.js';
 import {PersonaAvatar} from './PersonaAvatar.jsx';
-import {setupDraft,applyDraft,validateDraft,withChildCount} from './quickSetup.js';
+import {setupDraft,applyDraft,validateDraft,withChildCount,previewMonthlyOutflows} from './quickSetup.js';
 
 function NumberField({label,value,onChange,min=0,max=1000000,step=1,unit='만원',hint}) {
  return <label className="setup-field">
@@ -23,6 +23,7 @@ export function QuickSetup({input,initialPersonaId,initialName,onApply,onCancel}
  const [expanded,setExpanded]=useState(false);
  const [error,setError]=useState('');
  const [presetTouched,setPresetTouched]=useState(false);
+ const budget=previewMonthlyOutflows(draft,base);
  const update=(key,value)=>{setDraft(prev=>({...prev,[key]:value}));setError('');};
  const choosePersona=id=>{
   const next=createPersonaInput(id);
@@ -69,6 +70,11 @@ export function QuickSetup({input,initialPersonaId,initialName,onApply,onCancel}
        hint="자녀 양육비·관리비·대출 상환은 모델에서 별도로 계산한다."/>
     <NumberField label="예금·현금성 자산" value={draft.savingsBalance} onChange={v=>update('savingsBalance',v)} min={0}/>
     <NumberField label="투자·퇴직연금 자산" value={draft.investmentBalance} onChange={v=>update('investmentBalance',v)} min={0}/>
+   </div>
+   <div className="setup-preview" aria-label="예상 월 기본지출">
+     <div><strong>예상 월 기본지출</strong><b>{budget.total.toLocaleString('ko-KR')}만원</b></div>
+     <p>기본생활비 {budget.living.toLocaleString('ko-KR')} + 자동 양육비 {budget.children.toLocaleString('ko-KR')} + 관리비·대출·월세 {budget.housing.toLocaleString('ko-KR')}만원</p>
+     <small>건강보험료·추가 의료비·세금·적립식 투자액은 이 합계에 포함되지 않는다. 이미 생활비에 포함된 자녀비·주거비는 중복 계산하지 않도록 입력액을 조정해야 한다.</small>
    </div>
    <button type="button" className="details-toggle" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>
     <span>주거·가족·은퇴 후 생활비 자세히 설정</span><span aria-hidden="true">{expanded?'−':'+'}</span>
