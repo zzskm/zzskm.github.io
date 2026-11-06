@@ -68,8 +68,12 @@ export function QuickSetup({input,initialPersonaId,initialName,onApply,onCancel}
     {draft.spouseEnabled&&<NumberField label="배우자 세후 월급" value={draft.spouseMonthly} onChange={v=>update('spouseMonthly',v)} min={0} max={2500}/>}
     <NumberField label="월 기본 생활비" value={draft.workingLivingCost} onChange={v=>update('workingLivingCost',v)} min={0} max={3000}
        hint="자녀 양육비·관리비·대출 상환은 모델에서 별도로 계산한다."/>
+    <NumberField label="은퇴 후 월 생활비" value={draft.bridgeLivingCost}
+       onChange={v=>{setDraft(prev=>({...prev,bridgeLivingCost:v,retirementLivingCost:v}));setError('');}}
+       min={0} max={3000} hint="수정하면 연금 수령 전·후 같은 금액으로 설정한다. 상세 설정에서 분리 가능."/>
     <NumberField label="예금·현금성 자산" value={draft.savingsBalance} onChange={v=>update('savingsBalance',v)} min={0}/>
     <NumberField label="투자·퇴직연금 자산" value={draft.investmentBalance} onChange={v=>update('investmentBalance',v)} min={0}/>
+    {draft.housingMode==='own'&&<NumberField label="주택대출 잔액" value={draft.mortgageBalance} onChange={v=>update('mortgageBalance',v)} min={0}/>}
    </div>
    <div className="setup-preview" aria-label="예상 월 기본지출">
      <div><strong>예상 월 기본지출</strong><b>{budget.total.toLocaleString('ko-KR')}만원</b></div>
@@ -91,7 +95,6 @@ export function QuickSetup({input,initialPersonaId,initialName,onApply,onCancel}
      </label>
      <NumberField label="월 관리비" value={draft.housingMaintenance} onChange={v=>update('housingMaintenance',v)} min={0} max={500}/>
      {draft.housingMode==='own'&&<>
-      <NumberField label="주택대출 잔액" value={draft.mortgageBalance} onChange={v=>update('mortgageBalance',v)} min={0}/>
       {Number(draft.mortgageBalance)>0&&
        <NumberField label="매월 대출 원리금" value={draft.monthlyMortgagePayment} onChange={v=>update('monthlyMortgagePayment',v)} min={0} max={3000}/>}
      </>}
