@@ -2,6 +2,9 @@ import React,{useCallback,useEffect,useMemo,useState} from 'react';
 import {KR_DEFAULTS} from '../../retirement-simulator/src/model/defaults.js';
 import {parseBackup,MAX_BACKUP_BYTES} from '../../retirement-simulator/src/state/backup.js';
 import {computeStory,choiceInput,nextEventAge} from './story.js';
+import {QuickSetup} from './QuickSetup.jsx';
+import {PersonaAvatar} from './PersonaAvatar.jsx';
+import {getPersona,inferPersonaId} from './personas.js';
 
 const fmt=n=>Number(n??0).toLocaleString('ko-KR');
 const fmtMoney=(n,hidden=false)=>hidden?'••••':`${fmt(Math.round(n))}만 원`;
@@ -26,7 +29,7 @@ function Symbol({name,size=18}) {
  };
  return <svg {...common}>{paths[name]??paths.arrow}</svg>;
 }
-function Scene({frame,input}) {
+function Scene({frame,input,personaId,characterName}) {
  const chapter=frame.chapter;
  return <div className={`scene-artwork scene-${chapter} scene-tone-${frame.tone}`}>
   <div className="scene-grain"/>
@@ -57,6 +60,9 @@ function Scene({frame,input}) {
    <span className="scene-overline">CHAPTER {frame.chapter==='준비기'?'I':frame.chapter==='브릿지'?'II':'III'} · {frame.chapter}</span>
    <span className="scene-age"><span>{frame.age}</span>세</span>
    <span className="scene-year">{frame.year}년 · {frame.age-input.currentAge+1}번째 해</span>
+  </div>
+  <div className="scene-character"><PersonaAvatar id={personaId} age={frame.age} size="large"/>
+    <span>{characterName} · {getPersona(personaId)?.short??'나의 이야기'}</span>
   </div>
   <div className="scene-caption">이 풍경은 연출 이미지이며 미래 사건을 예측하지 않습니다.</div>
  </div>;
@@ -116,9 +122,10 @@ function StoryCard({frame,hidden}) {
  </section>;
 }
 export function App() {
- const [imports,setImports]=useState([{id:'demo',name:'예시 · 기본 계획',input:KR_DEFAULTS}]);
+ const [imports,setImports]=useState([{id:'demo',name:'예시 · 기본 계획',input:KR_DEFAULTS,personaId:'one-child',characterName:'나'}]);
  const [activeId,setActiveId]=useState('demo');
  const [choice,setChoice]=useState('base');
+ const [setupOpen,setSetupOpen]=useState(true);
  const [age,setAge]=useState(KR_DEFAULTS.currentAge);
  const [playing,setPlaying]=useState(false);
  const [speed,setSpeed]=useState(1);
@@ -126,6 +133,8 @@ export function App() {
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('예시 계획으로 시작한다. 기존 은퇴 시뮬레이터의 실제 JSON을 가져올 수 있다.');
  const active=imports.find(x=>x.id===activeId)??imports[0];
+ const personaId=active.personaId??inferPersonaId(active.input);
+ const characterName=active.characterName??'나';
  const original=useMemo(()=>computeStory(active.input),[active.input]);
  const story=useMemo(()=>choice==='base'?original:computeStory(choiceInput(active.input,choice)),[active.input,choice,original]);
  const frames=story.frames,first=frames[0].age,last=frames.at(-1).age;
@@ -142,11 +151,12 @@ export function App() {
   return ()=>window.clearInterval(id);
  },[playing,speed,first,last]);
  useEffect(()=>{setAge(x=>Math.max(first,Math.min(last,x)));},[first,last]);
- const selectStory=id=>{const item=imports.find(x=>x.id===id);if(!item)return;setActiveId(id);setChoice('base');setAge(item.input.currentAge);setPlaying(false);setError('');};
+ const selectStory=id=>{const item=imports.find(x=>x.id===id);if(!item)return;setActiveId(id);setChoice('base');setAge(item.input.currentAge);setPlaying(false);setSetupOpen(false);setError('');};
  const loadParsed=parsed=>{
-  const items=parsed.scenarios.map((s,i)=>({...s,id:`import-${i}-${s.id}`}));
+  const items=parsed.scenarios.map((s,i)=>({...s,id:`import-${i}-${s.id}`,
+    personaId:s.personaId??inferPersonaId(s.input),characterName:s.characterName??'나'}));
   const firstMatch=items.find(s=>s.id===`import-0-${parsed.activeId}`)??items.find(s=>s.id.endsWith(`-${parsed.activeId}`))??items[0];
-  setImports(items);setActiveId(firstMatch.id);setChoice('base');setAge(firstMatch.input.currentAge);setPlaying(false);setError('');
+  setImports(items);setActiveId(firstMatch.id);setChoice('base');setAge(firstMatch.input.currentAge);setPlaying(false);setSetupOpen(false);setError('');
   setNotice(`${items.length}개 시나리오를 이 브라우저에만 불러왔다. 서버 전송이나 자동 저장은 하지 않는다.`);
  };
  const loadLocal=()=>{
@@ -163,6 +173,13 @@ export function App() {
    loadParsed(parseBackup(await file.text()));
   }catch(err){setError(err.message??'백업 파일을 읽지 못했습니다.');}
   finally{e.target.value='';}
+ };
+ const applyQuickPlan=(input,nextPersonaId,nextName)=>{
+   setImports(prev=>prev.map(item=>item.id===activeId?
+     {...item,input,personaId:nextPersonaId,characterName:nextName,
+       name:item.id==='demo'?'나의 은퇴 계획':item.name}:item));
+   setChoice('base');setAge(input.currentAge);setPlaying(false);setSetupOpen(false);
+   setError('');setNotice('입력한 값으로 스토리를 다시 계산했다. 설정은 현재 화면에만 적용되며 JSON 원본을 변경하지 않는다.');
  };
  const jumpEvent=forward=>{
   const next=nextEventAge(story.events,clampedAge,forward);
@@ -201,10 +218,20 @@ export function App() {
     </div>
    </section>
    {error?<p className="feedback error" role="alert">{error}</p>:<p className="feedback" role="status">{notice}</p>}
+   <section className="character-strip" aria-label="현재 캐릭터">
+    <div className="character-strip-left"><PersonaAvatar id={personaId} age={frame.age} size="tiny"/>
+      <div><span className="eyebrow">MY CHARACTER</span><strong>{characterName} · {getPersona(personaId)?.title??'나의 인생'}</strong>
+       <small>{getPersona(personaId)?.caption??'개인 은퇴 계획'}</small></div>
+    </div>
+    <button type="button" onClick={()=>{setSetupOpen(v=>!v);setPlaying(false);}}
+      className="edit-character" aria-expanded={setupOpen}>{setupOpen?'설정 닫기':'캐릭터·정보 수정'}</button>
+   </section>
+   {setupOpen&&<QuickSetup key={active.id} input={active.input} initialPersonaId={personaId}
+      initialName={characterName} onApply={applyQuickPlan} onCancel={()=>setSetupOpen(false)}/>}
 
    <div className="story-grid">
     <div className="story-left">
-     <Scene frame={frame} input={story.input}/>
+     <Scene frame={frame} input={story.input} personaId={personaId} characterName={characterName}/>
      <div className="playback-panel">
       <div className="timeline-meta"><span>시간 여행</span><span>{clampedAge}세 / {last}세</span></div>
       <input type="range" min={first} max={last} value={clampedAge} onChange={e=>changeAge(Number(e.target.value))} aria-label="이야기 연령 이동" className="age-slider"/>
