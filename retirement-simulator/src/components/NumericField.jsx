@@ -62,12 +62,28 @@ export function NumberInput({ label, value, onChange, suffix }) {
   return <NumericField label={label} value={value ?? 0} onChange={onChange} unit={suffix} min={0} max={9999} integer slider={false} />;
 }
 export function SalaryInput({ name, netAnnual, basis, onChangeNet, onChangeBasis }) {
+  const [period, setPeriod] = useState('annual');
   const annual = netToBasisAnnual(netAnnual, basis);
+  const isAnnual = period === 'annual';
   return <div className="mb-4">
-    <div className="flex justify-between items-center text-xs mb-2"><b>{name}</b><div role="group" aria-label={`${name} 세전/세후 선택`}>{[['gross','세전'],['net','세후']].map(([v,l])=><button type="button" key={v} aria-pressed={basis===v} onClick={()=>onChangeBasis(v)} className={`px-3 py-2 border rounded ${basis===v?'bg-slate-900 text-white':''}`}>{l}</button>)}</div></div>
-    <NumericField key={`annual-${basis}`} label={`${name} 연봉`} value={Math.round(annual)} onChange={v=>onChangeNet(basisAnnualToNet(v,basis))} max={1000000} unit="만원" slider={false} />
-    <NumericField key={`monthly-${basis}`} label={`${name} 월급`} value={Math.round(annual / 12 * 100) / 100} onChange={v=>onChangeNet(basisAnnualToNet(v*12,basis))} max={100000} unit="만/월" slider={false} />
+    <div className="flex justify-between items-center text-xs mb-2">
+      <b>{name}</b>
+      <div role="group" aria-label={name+' 세전/세후 선택'}>
+        {[['gross','세전'],['net','세후']].map(([v,l])=><button type="button" key={v} aria-pressed={basis===v} onClick={()=>onChangeBasis(v)}
+          className={`px-3 py-2 border rounded ${basis===v?'bg-slate-900 text-white':''}`}>{l}</button>)}
+      </div>
+    </div>
+    <div className="flex gap-1 mb-2 text-xs" role="group" aria-label={name+' 소득 입력 주기'}>
+      <button type="button" aria-pressed={isAnnual} onClick={()=>setPeriod('annual')}
+        className={`border rounded px-3 py-1.5 ${isAnnual?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>연봉 입력</button>
+      <button type="button" aria-pressed={!isAnnual} onClick={()=>setPeriod('monthly')}
+        className={`border rounded px-3 py-1.5 ${!isAnnual?'bg-slate-900 text-white':'bg-white text-slate-600'}`}>월급 입력</button>
+    </div>
+    {isAnnual
+      ? <NumericField key={'annual-'+basis} label={name+' 연봉'} value={Math.round(annual*100)/100}
+          onChange={v=>onChangeNet(basisAnnualToNet(v,basis))} max={1000000} unit="만원" slider={false} />
+      : <NumericField key={'monthly-'+basis} label={name+' 월급'} value={Math.round(annual/12*100)/100}
+          onChange={v=>onChangeNet(basisAnnualToNet(v*12,basis))} max={100000} unit="만/월" slider={false} />}
     <p className="text-[11px] text-slate-500">세후 약 {fmt만원(netAnnual)}/년 · 월 {Math.round(netAnnual/12).toLocaleString()}만원{basis==='gross'?' (4대보험·본인 1인 공제 기준 추정)':''}</p>
   </div>;
 }
-
