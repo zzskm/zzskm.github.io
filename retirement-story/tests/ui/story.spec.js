@@ -52,7 +52,7 @@ test('story uses a single light theme without an OS dark-mode variant',async({pa
   body:getComputedStyle(document.querySelector('.site')).backgroundColor,
  }));
  expect(theme.scheme).toBe('light');
- expect(theme.header).toMatch(/rgb\(255, 255, 255/);
+ expect(theme.header).toMatch(/rgba?\(255, 255, 255/);
  await expect(page.getByRole('region',{name:'내 캐릭터 만들기'})).toBeVisible();
 });
 
