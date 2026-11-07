@@ -7,99 +7,186 @@ try {
   const key = `${document.documentElement.dataset.store}-interactive`;
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch {}
+  if (typeof saved !== 'object' || Array.isArray(saved)) saved = {};
   let index = Math.max(0, data.steps.findIndex(s => s.id === saved.step));
-  let selected = null, viewer = null;
+  let selected = null, viewer = null, focusOnly = false;
   const remember = () => { try { localStorage.setItem(key, JSON.stringify(saved)); } catch {} };
   const parts = new Map(data.parts.map(p => [p.id, p]));
   const picker = $('asm-step');
-  data.steps.forEach((s, i) => picker.add(new Option(`${String(i + 1).padStart(2, '0')} / ${data.steps.length} · ${s.title}`, i)));
+  data.steps.forEach((s, i) => picker.add(new Option(`${String(i + 1).padStart(2, '0')} · ${s.title}`, i)));
   $('asm-tools').innerHTML = data.tools;
+  function show() { viewer?.show({...data.steps[index], focusOnly}, selected, +$('asm-explode').value); }
   function syncDone() {
-    const box = document.getElementById(`as-${data.steps[index].id}`);
-    $('asm-done').checked = box?.checked || false;
-    $('asm-progress').textContent = `완료 ${data.steps.filter(s => document.getElementById(`as-${s.id}`)?.checked).length} / ${data.steps.length}`;
+    $('asm-done').checked = !!document.getElementById(`as-${data.steps[index].id}`)?.checked;
+    const n = data.steps.filter(s => document.getElementById(`as-${s.id}`)?.checked).length;
+    $('asm-progress').textContent = `${n} / ${data.steps.length} 완료`;
+    $('asm-complete-next').textContent = index === data.steps.length-1 ? '조립 확인 완료 ✓' : '완료하고 다음 →';
+    document.querySelectorAll('#asm-phases button').forEach(b => {
+      const current = data.steps[index].phase === b.dataset.phase;
+      b.setAttribute('aria-current', current ? 'step' : 'false');
+    });
+  }
+  function selectPart(id) {
+    selected = selected === id ? null : id;
+    show();
+    const p = parts.get(selected);
+    $('asm-picked').textContent = p ? `${p.label} · ${p.mesh ? (viewer && !$('asm-canvas').hidden ? '선택한 부품' : '3D 보기에서 위치를 확인할 수 있습니다') : '전체 부품 목록에서 규격 확인'}` : '';
+    list(); tray();
+  }
+  function thumb(p) {
+    const span = document.createElement('span'); span.className = 'part-thumb';
+    if (p.illustration) {
+      const img = document.createElement('img');
+      img.src = p.illustration;
+      img.alt = '';
+      span.append(img);
+    } else {
+      span.textContent = p.mesh ? '부품' : '준비물';
+    }
+    return span;
+  }
+  function tray() {
+    const host = $('asm-tray'); host.replaceChildren();
+    for (const [id, qty] of Object.entries(data.steps[index].needs)) {
+      const p = parts.get(id), b = document.createElement('button');
+      b.className = 'tray-part'; b.type = 'button'; b.setAttribute('aria-pressed', String(selected === id));
+      const label = document.createElement('span'); label.innerHTML = p.label;
+      const count = document.createElement('strong'); count.textContent = `× ${qty}`;
+      b.append(thumb(p), label, count); b.onclick = () => selectPart(id); host.append(b);
+    }
   }
   function list() {
     const step = data.steps[index], all = $('asm-scope').value === 'all';
     const query = $('asm-search').value.trim().toLowerCase();
     const container = $('asm-parts'); container.replaceChildren();
     const entries = data.parts.filter(p => (all || p.id in step.needs) && `${p.label} ${p.detail}`.toLowerCase().includes(query));
-    $('asm-parts-note').textContent = all ? '수량은 완성품 전체 기준입니다. 준비 체크는 이 브라우저에 저장됩니다.' : '수량은 이번 작업에서 사용할 양입니다. 앞 단계에서 사용한 부품의 재확인도 포함합니다.';
-    for (const part of entries) {
+    $('asm-parts-note').textContent = all ? '완성품 전체 수량. 준비 체크는 이 브라우저에 저장됩니다.' : '이번 작업의 사용량. 앞 단계 부품의 재확인도 포함합니다.';
+    for (const p of entries) {
       const card = document.createElement('div'); card.className = 'assembly-part';
-      card.classList.toggle('selected', selected === part.id);
-      const button = document.createElement('button'); button.type = 'button'; button.className = 'part-select';
-      button.setAttribute('aria-pressed', String(selected === part.id));
-      const thumb = document.createElement('span'); thumb.className = 'part-thumb'; thumb.dataset.part = part.id;
-      thumb.textContent = part.mesh ? '3D' : '규격';
-      viewer?.thumbnail(part.id, thumb);
+      card.classList.toggle('selected', selected === p.id);
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'part-select';
+      b.setAttribute('aria-pressed', String(selected === p.id));
       const info = document.createElement('span');
-      const category = document.createElement('small'); category.textContent = part.category;
-      const title = document.createElement('strong'); title.innerHTML = part.label;
-      const qty = document.createElement('span'); qty.className = 'part-qty';
-      qty.textContent = `${all ? '전체' : '이번 단계'} ${all ? part.qty : step.needs[part.id]}`;
-      info.append(category, title, qty); button.append(thumb, info);
-      button.onclick = () => {
-        selected = selected === part.id ? null : part.id;
-        viewer?.show(step, selected, +$('asm-explode').value);
-        $('asm-picked').textContent = selected ? `${title.textContent}${!part.mesh ? ' · 3D 형상 없음, 규격과 설명을 확인하세요' : !step.show.includes(part.id) ? ' · 부품 단독 보기' : ' · 선택한 부품'}` : '';
-        list();
-      };
-      const details = document.createElement('p'); details.innerHTML = part.detail;
-      if (part.size) { const dims = document.createElement('small'); dims.textContent = part.size; details.append(document.createElement('br'), dims); }
+      info.innerHTML = `<small>${p.category}</small><strong>${p.label}</strong>`;
+      const qty = document.createElement('span'); qty.textContent = `× ${all ? p.qty : step.needs[p.id]}`;
+      info.append(qty); b.append(thumb(p), info); b.onclick = () => selectPart(p.id);
+      const details = document.createElement('details');
+      const title = document.createElement('summary'); title.textContent = '규격 · 용도';
+      const desc = document.createElement('p'); desc.innerHTML = p.detail;
+      if (p.size) { const dims = document.createElement('p'); dims.textContent = p.size; details.append(dims); }
+      details.append(title,desc);
       const label = document.createElement('label'); label.className = 'tick';
-      const check = document.createElement('input'); check.type = 'checkbox'; check.checked = !!saved[`part:${part.id}`];
-      check.onchange = () => { saved[`part:${part.id}`] = check.checked; remember(); };
-      label.append(check, ' 준비함'); card.append(button, details, label); container.append(card);
+      const check = document.createElement('input'); check.type = 'checkbox'; check.checked = !!saved[`part:${p.id}`];
+      check.onchange = () => { saved[`part:${p.id}`] = check.checked; remember(); };
+      label.append(check, ' 준비함'); card.append(b, details, label); container.append(card);
     }
     if (!entries.length) container.textContent = '해당하는 부품이 없습니다.';
   }
+  const controllerFaces = $('asm-controller-faces');
+  for (const face of data.controllerFaces || []) {
+    const figure = document.createElement('figure');
+    const image = document.createElement('img');
+    image.src = face.path; image.alt = face.detail; image.loading = 'lazy';
+    const caption = document.createElement('figcaption');
+    caption.textContent = face.label;
+    figure.append(image, caption); controllerFaces.append(figure);
+  }
   function update() {
-    const step = data.steps[index]; selected = null;
+    const step = data.steps[index]; selected = null; focusOnly = false;
+    $('asm-focus').setAttribute('aria-pressed','false');
     picker.value = index; $('asm-prev').disabled = index === 0; $('asm-next').disabled = index === data.steps.length - 1;
-    $('asm-phase').textContent = `${String(index + 1).padStart(2, '0')} / ${data.steps.length} · ${step.phase}`;
+    $('asm-number').textContent = String(index+1).padStart(2,'0');
+    $('asm-phase').textContent = step.phase.split(' · ')[0];
     $('asm-title').innerHTML = step.title;
-    $('asm-body').innerHTML = (step.body ? `<p>${step.body}</p>` : '') + (step.items.length ? `<ol>${step.items.map(s => `<li>${s}</li>`).join('')}</ol>` : '') + (step.note ? `<p class="note">${step.note}</p>` : '');
-    $('asm-check').innerHTML = step.check ? `<b>확인</b> ${step.check}` : '';
-    $('asm-fix').innerHTML = step.fix ? `<b>안 맞으면</b> ${step.fix}` : '';
+    $('asm-actions').replaceChildren();
+    for (const action of step.quick || step.items || []) {
+      const li = document.createElement('li'); li.innerHTML = action; $('asm-actions').append(li);
+    }
+    $('asm-body').innerHTML = (step.body ? `<p>${step.body}</p>` : '') + (step.items.length ? `<ol>${step.items.map(s=>`<li>${s}</li>`).join('')}</ol>` : '') + (step.note ? `<p class="note">${step.note}</p>` : '');
+    $('asm-check').innerHTML = step.check ? `<b>✓ 확인</b><span>${step.check}</span>` : '';
+    $('asm-fix').innerHTML = step.fix ? `<b>안 맞으면</b><p>${step.fix}</p>` : '';
+    controllerFaces.hidden = !data.controllerFaces?.length || !['ctrl', 'wire'].includes(step.id);
     $('asm-image').src = step.image;
-    $('asm-detail').href = `#as-${step.id}`;
-    $('asm-picked').textContent = '';
-    $('asm-explode').value = 0;
-    viewer?.show(step, null, 0); viewer?.view(step.view);
-    saved.step = step.id; remember(); syncDone(); list();
+    $('asm-drawing').src = step.illustration || step.image;
+    $('asm-drawing').alt = `${step.title} 조립도`;
+    $('asm-installed').textContent = '장착 후 보기';
+    $('asm-installed').hidden = !step.installedIllustration || !$('asm-canvas').hidden; $('asm-detail').href = `#as-${step.id}`;
+    $('asm-picked').textContent = ''; $('asm-explode').value = 0; $('asm-details').open = false;
+    show(); viewer?.view(step.view); saved.step = step.id; remember(); syncDone(); tray(); list();
   }
-  $('asm-prev').onclick = () => { if (index > 0) { index--; update(); } };
-  $('asm-next').onclick = () => { if (index < data.steps.length - 1) { index++; update(); } };
-  picker.onchange = () => { index = +picker.value; update(); };
-  $('asm-scope').onchange = list; $('asm-search').oninput = list;
-  $('asm-done').onchange = () => {
-    const original = document.getElementById(`as-${data.steps[index].id}`);
-    if (original) { original.checked = $('asm-done').checked; original.dispatchEvent(new Event('change')); }
+  const phases = [...new Set(data.steps.map(s=>s.phase))];
+  phases.forEach((phase,i)=>{
+    const b=document.createElement('button'); b.type='button'; b.dataset.phase=phase;
+    b.textContent=`${i+1}. ${phase.split(' · ')[0]}`;
+    b.onclick=()=>{index=data.steps.findIndex(s=>s.phase===phase);update();}; $('asm-phases').append(b);
+  });
+  $('asm-prev').onclick = () => { if(index>0){index--;update();} };
+  $('asm-next').onclick = () => { if(index<data.steps.length-1){index++;update();} };
+  picker.onchange=()=>{index=+picker.value;update();};
+  $('asm-scope').onchange=list; $('asm-search').oninput=list;
+  function complete(checked){const box=$(`as-${data.steps[index].id}`);if(box){box.checked=checked;box.dispatchEvent(new Event('change',{bubbles:true}));}syncDone();}
+  $('asm-done').onchange=()=>complete($('asm-done').checked);
+  $('asm-complete-next').onclick=()=>{complete(true);if(index<data.steps.length-1){index++;update();}};
+  document.addEventListener('change',syncDone);
+  $('reset')?.addEventListener('click',syncDone);
+  $('asm-focus').onclick=()=>{focusOnly=!focusOnly;$('asm-focus').setAttribute('aria-pressed',String(focusOnly));show();};
+  $('asm-explode').oninput=show;
+  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewer?.view(b.dataset.view==='iso'?data.steps[index].view:b.dataset.view));
+  let comparisonPromise;
+  async function mode(compare) {
+    $('build-panel').hidden=compare;$('compare-panel').hidden=!compare;
+    $('mode-build').setAttribute('aria-pressed',String(!compare));$('mode-compare').setAttribute('aria-pressed',String(compare));
+    if(compare && !comparisonPromise){comparisonPromise=import('./comparison.js').then(m=>m.initComparison(data)).catch(e=>{$('compare-status').textContent='비교 화면을 불러오지 못했습니다. 복원 근거와 STEP 파일을 이용하세요.';console.error(e);});}
+  }
+  $('mode-build').onclick=()=>mode(false);$('mode-compare').onclick=()=>mode(true);
+  document.querySelectorAll('a[href^="#as-"], a[href="#reference-docs"], .bar a').forEach(a=>a.addEventListener('click',()=>{if($('reference-docs'))$('reference-docs').open=true;}));
+  if(location.hash && location.hash!=='#interactive' && $('reference-docs')) $('reference-docs').open=true;
+  $('assembly-ui').hidden=false;update();
+  status.textContent = '그림과 수량을 확인한 뒤 한 단계씩 진행하세요.';
+  $('asm-installed').onclick = () => {
+    const step = data.steps[index];
+    const button = $('asm-installed');
+    const installed = button.textContent === '장착 후 보기';
+    $('asm-drawing').src = installed ? step.installedIllustration : step.illustration;
+    button.textContent = installed ? '장착 방향 보기' : '장착 후 보기';
   };
-  document.addEventListener('change', syncDone);
-  document.getElementById('reset')?.addEventListener('click', syncDone);
-  $('asm-explode').oninput = () => viewer?.show(data.steps[index], selected, +$('asm-explode').value);
-  document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => viewer?.view(b.dataset.view === 'iso' ? data.steps[index].view : b.dataset.view));
-  $('assembly-ui').hidden = false; update();
-  try {
-    status.textContent = '3D 모델을 불러오는 중입니다. 단계 설명과 부품 목록은 먼저 이용할 수 있습니다.';
-    const { createViewer } = await import('./viewer.js');
-    viewer = await createViewer($('asm-canvas'), data, id => {
-      selected = id;
-      viewer.show(data.steps[index], selected, +$('asm-explode').value);
-      $('asm-picked').textContent = parts.get(id)?.label || ''; list();
-    });
-    update();
-    status.textContent = '3D 준비 완료 · 주황: 이번 작업 · 청록: 선택한 부품 · 나머지: 조립 상태';
-  } catch (error) {
-    console.error(error);
-    status.textContent = '3D 화면을 사용할 수 없습니다. 단계별 참고 이미지와 부품 목록으로 진행하세요.';
-    $('asm-fallback').open = true;
-    $('asm-canvas').hidden = true;
-    document.querySelector('.assembly-toolbar').hidden = true;
-  }
-} catch (error) {
-  console.error(error);
-  status.textContent = '단계 데이터를 불러오지 못했습니다. HTTP 서버에서 열어 주세요. 아래 전체 조립 설명은 그대로 사용할 수 있습니다.';
-}
+  let opening3D = false;
+  $('asm-3d').onclick = async () => {
+    if (opening3D) return;
+    const canvas = $('asm-canvas');
+    const drawing = $('asm-drawing');
+    const button = $('asm-3d');
+    if (!canvas.hidden) {
+      canvas.hidden = true; drawing.hidden = false;
+      $('asm-installed').hidden = !data.steps[index].installedIllustration;
+      $('asm-3d-tools').hidden = true; button.textContent = '3D로 보기';
+      return;
+    }
+    opening3D = true;
+    button.disabled = true;
+    try {
+      if (!viewer) {
+        const {createViewer} = await import('./viewer.js');
+        viewer = await createViewer(canvas, data, selectPart, {
+          ghost: true,
+          onLost: () => {
+            canvas.hidden = true; drawing.hidden = false;
+      $('asm-installed').hidden = !data.steps[index].installedIllustration; $('asm-3d-tools').hidden = true;
+            button.textContent = '3D로 보기';
+            status.textContent = '3D 연결이 끊겼습니다. 단계별 조립도를 표시합니다.';
+            viewer?.dispose(); viewer = null;
+          }
+        });
+      }
+      drawing.hidden = true; canvas.hidden = false; $('asm-installed').hidden = true;
+      $('asm-3d-tools').hidden = false; button.textContent = '조립도로 돌아가기';
+      show(); viewer.view(data.steps[index].view);
+      status.textContent = '3D 준비 완료 · 드래그로 회전 · 휠/핀치로 확대';
+    } catch (error) {
+      console.error(error);
+      status.textContent = '3D를 사용할 수 없습니다. 단계별 조립도를 표시합니다.';
+    } finally {
+      opening3D = false; button.disabled = false;
+    }
+  };
+} catch(error){console.error(error);status.textContent='조립 데이터를 불러오지 못했습니다. HTTP 서버에서 열거나 아래 전체 조립 설명을 이용하세요.';if($('reference-docs'))$('reference-docs').open=true;}

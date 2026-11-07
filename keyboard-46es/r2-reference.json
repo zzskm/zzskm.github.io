@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "purpose": "comparison_only_not_for_production",
+  "source_files": {
+    "inspection/data/cadcraft_modelspace_entities.json": "ac0f059d36b07e51ce6473caf1751d83a82eeed2ff257fe7956f2f72faa20409",
+    "inspection/data/geom_loops_panels.json": "48763e9f0bf7022f9f3c7858872873d66919d1eff8cb50831ecfad639fe233d8",
+    "guide/comparison_r2.json": "1c873c0dbb1340f9df0290a5b64d925c6e1d8c9e519b496dfc5439d421ad9ade",
+    "tools/build_r2_reference.py": "012cd8c5ef85f3b783227cac7066b3ed8e84f41b6b9bdc8ae2786e67bffdbcdc",
+    "inspection/scripts/panel_to_dxf.py": "e16dabe7af4fd892af87bac81d9aaa079ec3d4bf460f25e8f1944c9964ac08ef",
+    "cad/46es_r2_keyboard.dwg": "4a9b09d58479c65c1007e08c930c7736ffd1df6277d9e5dd6098c6ce5f88db59"
+  },
+  "alignment": {
+    "xy_offset_mm": [
+      -0.693,
+      -0.667
+    ],
+    "z_offset_mm": 2.8,
+    "seat_z_mm": 11.3,
+    "description": "XY는 기존 v5의 r2→GH60 변환을 사용. Z는 P2 윗면을 v5 스위치 착좌면 11.3 mm에 맞춘 비교 좌표다. 실제 하우징 설치 높이가 아니다."
+  },
+  "assumptions": [
+    "판 윤곽·홀은 r2 DWG의 감사된 2D 엔티티에서 복원했다.",
+    "두께 2 / 5 / 1.5 / 2 / 5 / 2 mm는 도면 라벨의 공칭값이다.",
+    "아래→위 P0→P5는 비교용 가정이다. 도면에 실제 Z와 적층 순서는 없다.",
+    "P0·P1 개구 안에 배치된 소형 육각 부품은 절단 배치이므로 적층 모델에서 제외했다.",
+    "r2의 나사·배선·케이스 설치 위치는 복원하지 않았다. 제작 파일로 사용하지 않는다."
+  ],
+  "repairs": [
+    "P1 열린 윤곽 약 0.0071 mm는 DXF 연결 허용차 0.01 mm로 연결했다. 원본은 수정하지 않았다."
+  ],
+  "nominal_stack_mm": 17.5,
+  "parts": [
+    {
+      "id": "P0",
+      "label": "P0 · 링 프레임",
+      "color": "#829caa",
+      "thickness_mm": 2,
+      "z_mm": 2.8,
+      "solids": 1,
+      "volume_mm3": 6606.3804,
+      "bbox": [
+        [
+          -0.6930000000000005,
+          -0.6670000000000003,
+          2.8
+        ],
+        [
+          285.707,
+          95.133,
+          4.8
+        ]
+      ],
+      "category": "r2 비교용",
+      "reference": true,
+      "qty": 1,
+      "detail": "투명 아크릴 · 2T",
+      "explode_rank": 0,
+      "pieces": [
+        {
+          "mesh": "models/r2-P0.stl",
+          "bodies": [
+            "P0"
+          ]
+        }
+      ],
+      "mesh": "models/r2-P0.stl",
+      "sha256": "87d8d3fd9289b3f8f742c9f7740fe95afe824fdb888b106b187f08d365b6b19e"
+    },
+    {
+      "id": "P1",
+      "label": "P1 · 하부 공간",
+      "color": "#88b7c2",
+      "thickness_mm": 5,
+      "z_mm": 4.8,
+      "solids": 1,
+      "volume_mm3": 46583.9703,
+      "bbox": [
+        [
+          -0.6930000000000001,
+          -0.667,
+          4.8
+        ],
+        [
+          285.707,
+          95.133,
+          9.8
+        ]
+      ],
+      "category": "r2 비교용",
+      "reference": true,
+      "qty": 1,
+      "detail": "투명 아크릴 · 5T",
+      "explode_rank": 1,
+      "pieces": [
+        {
+          "mesh": "models/r2-P1.stl",
+          "bodies": [
+            "P1"
+          ]
+        }
+      ],
+      "mesh": "models/r2-P1.stl",
+      "sha256": "5a062c8a3c1d5b59b42d846ab822ccc755badd88ed321d62ff6bf07d9c1b2a02"
+    },
+    {
+      "id": "P2",
+      "label": "P2 · 스위치 판",
+      "color": "#247b7b",
+      "thickness_mm": 1.5,
+      "z_mm": 9.8,
+      "solids": 1,
+      "volume_mm3": 27276.2584,
+      "bbox": [
+        [
+          -0.6930000000000001,
+          -0.667,
+          9.8
+        ],
+        [
+          285.707,
+          95.133,
+          11.3
+        ]
+      ],
+      "category": "r2 비교용",
+      "reference": true,
+      "qty": 1,
+      "detail": "투명 압출판 · 1.5T / 46개 개구",
+      "explode_rank": 2,
+      "pieces": [
+        {
+          "mesh": "models/r2-P2.stl",
+          "bodies": [
+            "P2"
+          ]
+        }
+      ],
+      "mesh": "models/r2-P2.stl",
+      "sha256": "97091c17f3d2f4e47bee9c8b57d95ccc2fd4d300cc59701cd4bd410d83d1d3cf"
+    },
+    {
+      "id": "P3",
+      "label": "P3 · 스위치 주변",
+      "color": "#58a698",
+      "thickness_mm": 2,
+      "z_mm": 11.3,
+      "solids": 1,
+      "volume_mm3": 29575.5498,
+      "bbox": [
+        [
+          -0.6930000000000001,
+          -0.667,
+          11.3
+        ],
+        [
+          285.707,
+          95.133,
+          13.3
+        ]
+      ],
+      "category": "r2 비교용",
+      "reference": true,
+      "qty": 1,
+      "detail": "투명 아스텔 · 2T / 46개 개구",
+      "explode_rank": 3,
+      "pieces": [
+        {
+          "mesh": "models/r2-P3.stl",
+          "bodies": [
+            "P3"
+          ]
+        }
+      ],
+      "mesh": "models/r2-P3.stl",
+      "sha256": "d016d7983433a39ab3e937b757e6fad6a6659abdbb77b484cc4d5f63be7fa6e1"
+    },
+    {
+      "id": "P4",
+      "label": "P4 · 3분할 커버",
+      "color": "#b49269",
+      "thickness_mm": 5,
+      "z_mm": 13.3,
+      "solids": 3,
+      "volume_mm3": 39574.6156,
+      "bbox": [
+        [
+          -0.6930000000000001,
+          -0.6670000000000016,
+          13.3
+        ],
+        [
+          285.707,
+          95.133,
+          18.3
+        ]
+      ],
+      "category": "r2 비교용",
+      "reference": true,
+      "qty": 3,
+      "detail": "스모그 투명 아크릴 · 5T",
+      "explode_rank": 4,
+      "pieces": [
+        {
+          "mesh": "models/r2-P4.stl",
+          "bodies": [
+            "P4"
+          ]
+        }
+      ],
+      "mesh": "models/r2-P4.stl",
+      "sha256": "b7d9be2372bb371aedb153448c3d3e5a663ae2e2c87325b0c864e1bcaa4c5f3b"
+    },
+    {
+      "id": "P5",
+      "label": "P5 · 3분할 표면",
+      "color": "#d4bb95",
+      "thickness_mm": 2,
+      "z_mm": 18.3,
+      "solids": 3,
+      "volume_mm3": 15975.6825,
+      "bbox": [
+        [
+          -0.6930000000000001,
+          -0.6670000000000016,
+          18.3
+        ],
+        [
+          285.707,
+          95.133,
+          20.3
+        ]
+      ],
+      "category": "r2 비교용",
+      "reference": true,
+      "qty": 3,
+      "detail": "투명 아스텔 · 2T",
+      "explode_rank": 5,
+      "pieces": [
+        {
+          "mesh": "models/r2-P5.stl",
+          "bodies": [
+            "P5"
+          ]
+        }
+      ],
+      "mesh": "models/r2-P5.stl",
+      "sha256": "62eec32c5a0617c265c3ef8116abb4d7ff4e3e98566d6a53262c9c8169fc4bdb"
+    }
+  ],
+  "step_sha256": "7a76e96bdea08077e471c3d8c747779d9931304c5a68db07ee2e58f6defabb00"
+}
