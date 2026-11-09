@@ -32,7 +32,7 @@ export async function initComparison(current) {
     const amount = +$('cmp-explode').value;
     const rids = scope === 'plate' ? ['P2', 'P3'] :
       scope === 'cover' ? ['P4', 'P5'] : r2.parts.map(p => p.id);
-    const prefixes = {all: /^(PLATE_|COVER_|MOUNT_|CTRL_BRACKET|CTRL_GATE)/,
+    const prefixes = {all: /^(PLATE_|COVER_|MOUNT_|CTRL_BRACKET)/,
       plate: /^PLATE_/, cover: /^COVER_/};
     const vids = current.parts.filter(p => prefixes[scope].test(p.id));
     left.show({show: rids, focus: []}, null, amount);

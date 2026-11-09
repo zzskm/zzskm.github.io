@@ -12,7 +12,8 @@ body{background:#f5f4ee}.wrap{max-width:1280px}.mast{padding-top:1.7rem!importan
 #asm-3d-tools,#cmp-3d-tools{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 .compare-grid img{display:block;aspect-ratio:16/7;height:auto;background:#f5f6f3}
 
-#asm-controller-faces{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;padding:0 .8rem .8rem}
-#asm-controller-faces figure{margin:0;border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--surface)}
-#asm-controller-faces img{display:block;width:100%;height:auto}
-#asm-controller-faces figcaption{padding:.4rem .55rem;font-size:.75rem;font-weight:600;color:var(--ink)}
+#asm-diagrams{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:.75rem;padding:1rem 1.5rem 1.3rem;border-top:1px solid var(--rule);background:#fbfbf8}
+#asm-diagrams figure{margin:0;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#fff}
+#asm-diagrams figure.wide{grid-column:1/-1}
+#asm-diagrams img{display:block;width:100%;height:auto}
+#asm-diagrams figcaption{padding:.45rem .65rem;font-size:.78rem;line-height:1.45;color:var(--ink)}

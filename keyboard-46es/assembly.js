@@ -82,14 +82,18 @@ try {
     }
     if (!entries.length) container.textContent = '해당하는 부품이 없습니다.';
   }
-  const controllerFaces = $('asm-controller-faces');
-  for (const face of data.controllerFaces || []) {
-    const figure = document.createElement('figure');
-    const image = document.createElement('img');
-    image.src = face.path; image.alt = face.detail; image.loading = 'lazy';
-    const caption = document.createElement('figcaption');
-    caption.textContent = face.label;
-    figure.append(image, caption); controllerFaces.append(figure);
+  const diagrams = $('asm-diagrams');
+  function showDiagrams(step) {
+    diagrams.replaceChildren();
+    for (const d of step.diagrams || []) {
+      const figure = document.createElement('figure'); if (d.wide) figure.className = 'wide';
+      const link = document.createElement('a'); link.href = d.path; link.target = '_blank'; link.rel = 'noopener';
+      const image = document.createElement('img');
+      Object.assign(image, {src: d.path, alt: d.caption, width: d.width, height: d.height});
+      const caption = document.createElement('figcaption'); caption.textContent = d.caption;
+      link.append(image); figure.append(link, caption); diagrams.append(figure);
+    }
+    diagrams.hidden = !(step.diagrams || []).length;
   }
   function update() {
     const step = data.steps[index]; selected = null; focusOnly = false;
@@ -105,7 +109,7 @@ try {
     $('asm-body').innerHTML = (step.body ? `<p>${step.body}</p>` : '') + (step.items.length ? `<ol>${step.items.map(s=>`<li>${s}</li>`).join('')}</ol>` : '') + (step.note ? `<p class="note">${step.note}</p>` : '');
     $('asm-check').innerHTML = step.check ? `<b>✓ 확인</b><span>${step.check}</span>` : '';
     $('asm-fix').innerHTML = step.fix ? `<b>안 맞으면</b><p>${step.fix}</p>` : '';
-    controllerFaces.hidden = !data.controllerFaces?.length || !['ctrl', 'wire'].includes(step.id);
+    showDiagrams(step);
     $('asm-image').src = step.image;
     $('asm-drawing').src = step.illustration || step.image;
     $('asm-drawing').alt = `${step.title} 조립도`;
@@ -131,7 +135,7 @@ try {
   $('reset')?.addEventListener('click',syncDone);
   $('asm-focus').onclick=()=>{focusOnly=!focusOnly;$('asm-focus').setAttribute('aria-pressed',String(focusOnly));show();};
   $('asm-explode').oninput=show;
-  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewer?.view(b.dataset.view==='iso'?data.steps[index].view:b.dataset.view));
+  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewer?.view(b.dataset.view==='reset'?data.steps[index].view:b.dataset.view));
   let comparisonPromise;
   async function mode(compare) {
     $('build-panel').hidden=compare;$('compare-panel').hidden=!compare;
