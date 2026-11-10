@@ -21,7 +21,8 @@ publish() {
   python "$BASE/scripts/analyze_related_routes.py" || return 1
   python "$BASE/scripts/analyze_route_signals_v2.py" || return 1
   python "$BASE/scripts/prepare_publish.py" || return 1
-  python "$BASE/scripts/verify_runtime.py" --base "$BASE" || return 1
+  # 2: 게시 전 검사 실패 — status 가 잘못 기록된 경우라 같은 파일로 재시도해도 소용없다 (main 이 다시 조회한다)
+  python "$BASE/scripts/verify_runtime.py" --base "$BASE" || return 2
   # 오래된 체크아웃이 최신 로그를 덮어쓴 경우(행 수 감소)에는 커밋하지 않고 세션을 실패시킨다
   if ! python "$BASE/scripts/guard_rows.py" "$BASE"; then
     exit 1
@@ -96,14 +97,22 @@ main() {
     collected=1
     # Keep unpushed commits and rows on this runner; retry before collecting more.
     # Never continue for hours with an unpublishable dataset and lose it at timeout.
-    local failures=0
+    local failures=0 publish_code
     until publish; do
+      publish_code=$?
       failures=$(( failures + 1 ))
       if (( failures >= 3 )); then
         echo "::error::게시 반복 실패 — 보존용 artifact 확인 필요"
         return 1
       fi
-      sleep 15
+      if (( publish_code == 2 )); then
+        # 게시 전 검사가 status 를 막았다: 한 번 더 조회해 status 를 새로 쓴 뒤 재시도한다.
+        # 이전 조회 기록은 커밋/작업 트리에 그대로 남는다 (2026-11-04~09 같은 버그로 세션 전체가 죽지 않게).
+        echo "::warning::게시 전 검사 실패 — 다시 조회한 뒤 재시도합니다 ($failures/3)"
+        python "$BASE/scripts/scrape.py" --max-polls 1 || true
+      else
+        sleep 15
+      fi
     done
     if (( scrape_result == 75 )); then
       echo "::error::연속 API 연결 시간 초과 — 기록 게시 완료, 다음 실행에 수집을 넘깁니다"

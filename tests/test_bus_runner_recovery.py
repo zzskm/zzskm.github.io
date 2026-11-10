@@ -125,7 +125,7 @@ class RunnerRecoveryTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("bash"), "bash is required for session integration tests")
 class RunnerRecoverySessionTests(unittest.TestCase):
-    def session(self, publish_failures=0, scrape_code=75):
+    def session(self, publish_failures=0, scrape_code=75, failure_code=1):
         script = (ROOT / "bus-arrival/scripts/session.sh").read_text(encoding="utf-8").rsplit('main "$@"', 1)[0]
         fake_commands = r'''
 git() { return 0; }
@@ -148,10 +148,11 @@ python() {
 publish() {
   publish_calls=$((publish_calls + 1))
   echo "publish $publish_calls"
-  (( publish_calls > PUBLISH_FAILURES ))
+  (( publish_calls > PUBLISH_FAILURES )) || return FAILURE_CODE
 }
 main
-'''.replace("SCRAPE_CODE", str(scrape_code)).replace("PUBLISH_FAILURES", str(publish_failures))
+'''.replace("SCRAPE_CODE", str(scrape_code)).replace("PUBLISH_FAILURES", str(publish_failures)) \
+            .replace("FAILURE_CODE", str(failure_code))
         result = subprocess.run(["bash"], input=(script + fake_commands).encode("utf-8"), capture_output=True, timeout=15)
         return result.returncode, result.stdout.decode("utf-8"), result.stderr.decode("utf-8")
 
@@ -167,6 +168,26 @@ main
         self.assertEqual(output.count("publish "), 3)
         self.assertIn("보존용 artifact", output)
         self.assertNotIn("기록 게시 완료", output)
+
+    def test_verify_failure_polls_again_before_retrying(self):
+        code, output, err = self.session(publish_failures=1, scrape_code=0, failure_code=2)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(output.count("scrape session=test-session"), 2, "검사 실패 뒤 한 번 더 조회한다")
+        self.assertLess(output.index("publish 1"), output.rindex("scrape session"))
+        self.assertLess(output.rindex("scrape session"), output.index("publish 2"))
+        self.assertIn("게시 전 검사 실패", output)
+
+    def test_repeated_verify_failure_still_ends_session(self):
+        code, output, _ = self.session(publish_failures=3, scrape_code=0, failure_code=2)
+        self.assertEqual(code, 1)
+        self.assertEqual(output.count("publish "), 3)
+        self.assertEqual(output.count("scrape session=test-session"), 3, "재조회는 실패 사이 2번뿐")
+        self.assertIn("보존용 artifact", output)
+
+    def test_git_failure_retries_without_polling(self):
+        code, output, _ = self.session(publish_failures=1, scrape_code=0)
+        self.assertEqual(code, 0)
+        self.assertEqual(output.count("scrape session=test-session"), 1)
 
     def test_normal_segment_continues_without_rotation(self):
         code, output, _ = self.session(scrape_code=0)
