@@ -114,11 +114,11 @@
       "sta_order": 16,
       "observed_days": 9,
       "vehicle_events": 75,
-      "labelled_events": 62,
+      "labelled_events": 63,
       "matched": 31,
-      "nonmatched": 31,
-      "censored": 13,
-      "proxy_hit_rate": 0.5,
+      "nonmatched": 32,
+      "censored": 12,
+      "proxy_hit_rate": 0.492,
       "target_absent_at_first_signal": 51,
       "simultaneous_eta_pairs": 24,
       "candidate_eta_before_target_eta": 17,
@@ -517,6 +517,30 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000131,
+      "route_name": "370",
+      "sta_order": 9,
+      "observed_days": 9,
+      "vehicle_events": 31,
+      "labelled_events": 25,
+      "matched": 15,
+      "nonmatched": 10,
+      "censored": 6,
+      "proxy_hit_rate": 0.6,
+      "target_absent_at_first_signal": 20,
+      "simultaneous_eta_pairs": 11,
+      "candidate_eta_before_target_eta": 10,
+      "median_simultaneous_lead_min": 5.75,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 241223008,
       "route_name": "602-2B",
       "sta_order": 12,
@@ -531,30 +555,6 @@
       "simultaneous_eta_pairs": 20,
       "candidate_eta_before_target_eta": 15,
       "median_simultaneous_lead_min": 4.8,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000131,
-      "route_name": "370",
-      "sta_order": 9,
-      "observed_days": 9,
-      "vehicle_events": 31,
-      "labelled_events": 24,
-      "matched": 15,
-      "nonmatched": 9,
-      "censored": 7,
-      "proxy_hit_rate": 0.625,
-      "target_absent_at_first_signal": 20,
-      "simultaneous_eta_pairs": 11,
-      "candidate_eta_before_target_eta": 10,
-      "median_simultaneous_lead_min": 5.75,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -662,5 +662,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-10T16:34:04.909648+09:00"
+  "generated_at": "2026-11-10T16:35:03.583656+09:00"
 }
