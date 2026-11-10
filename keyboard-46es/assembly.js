@@ -9,7 +9,7 @@ try {
   try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch {}
   if (typeof saved !== 'object' || Array.isArray(saved)) saved = {};
   let index = Math.max(0, data.steps.findIndex(s => s.id === saved.step));
-  let selected = null, viewer = null, focusOnly = false;
+  let selected = null, viewer = null, focusOnly = false, keepView = !!saved.keepView;
   const remember = () => { try { localStorage.setItem(key, JSON.stringify(saved)); } catch {} };
   const parts = new Map(data.parts.map(p => [p.id, p]));
   const picker = $('asm-step');
@@ -26,9 +26,11 @@ try {
       b.setAttribute('aria-current', current ? 'step' : 'false');
     });
   }
-  function selectPart(id) {
+  // fromView: picked by clicking the model, so the camera stays where the user put it.
+  function selectPart(id, fromView = false) {
     selected = selected === id ? null : id;
     show();
+    if (selected && !fromView && viewer && !$('asm-canvas').hidden) viewer.frame(selected);
     const p = parts.get(selected);
     $('asm-picked').textContent = p ? `${p.label} · ${p.mesh ? (viewer && !$('asm-canvas').hidden ? '선택한 부품' : '3D 보기에서 위치를 확인할 수 있습니다') : '전체 부품 목록에서 규격 확인'}` : '';
     list(); tray();
@@ -101,7 +103,7 @@ try {
     picker.value = index; $('asm-prev').disabled = index === 0; $('asm-next').disabled = index === data.steps.length - 1;
     $('asm-number').textContent = String(index+1).padStart(2,'0');
     $('asm-phase').textContent = step.phase.split(' · ')[0];
-    $('asm-title').innerHTML = step.title;
+    $('asm-title').innerHTML = step.title; $('asm-x-title').textContent = `${String(index+1).padStart(2,'0')} · ${step.title.replace(/<[^>]+>/g,'')}`; $('asm-x-prev').disabled = index === 0; $('asm-x-next').disabled = index === data.steps.length - 1;
     $('asm-actions').replaceChildren();
     for (const action of step.quick || step.items || []) {
       const li = document.createElement('li'); li.innerHTML = action; $('asm-actions').append(li);
@@ -116,7 +118,7 @@ try {
     $('asm-installed').textContent = '장착 후 보기';
     $('asm-installed').hidden = !step.installedIllustration || !$('asm-canvas').hidden; $('asm-detail').href = `#as-${step.id}`;
     $('asm-picked').textContent = ''; $('asm-explode').value = 0; $('asm-details').open = false;
-    show(); viewer?.view(step.view); saved.step = step.id; remember(); syncDone(); tray(); list();
+    show(); if (!keepView) viewer?.view(step.view); saved.step = step.id; remember(); syncDone(); tray(); list();
   }
   const phases = [...new Set(data.steps.map(s=>s.phase))];
   phases.forEach((phase,i)=>{
@@ -135,6 +137,28 @@ try {
   $('reset')?.addEventListener('click',syncDone);
   $('asm-focus').onclick=()=>{focusOnly=!focusOnly;$('asm-focus').setAttribute('aria-pressed',String(focusOnly));show();};
   $('asm-explode').oninput=show;
+  $('asm-keep').setAttribute('aria-pressed',String(keepView));
+  $('asm-keep').onclick=()=>{keepView=!keepView;saved.keepView=keepView;remember();$('asm-keep').setAttribute('aria-pressed',String(keepView));};
+  const go = d => { const next = index + d; if (next >= 0 && next < data.steps.length) { index = next; update(); } };
+  $('asm-x-prev').onclick = () => go(-1); $('asm-x-next').onclick = () => go(1);
+  function expand(on) {
+    $('asm-visual').classList.toggle('expanded', on); document.documentElement.classList.toggle('asm-locked', on);
+    $('asm-expand').setAttribute('aria-pressed', String(on)); $('asm-expand').textContent = on ? '작게 보기' : '크게 보기';
+    if (on) $('asm-canvas').focus({preventScroll: true});
+    // The canvas changes shape, so re-frame the step once the new size has been laid out.
+    if (viewer && !$('asm-canvas').hidden) requestAnimationFrame(() => viewer?.view(data.steps[index].view, false));
+  }
+  $('asm-expand').onclick = () => expand(!$('asm-visual').classList.contains('expanded'));
+  $('asm-x-close').onclick = () => expand(false);
+  // ←/→ step through while the build sheet is on screen; Esc leaves the enlarged 3D view.
+  document.addEventListener('keydown', e => {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.('input, select, textarea, [contenteditable]')) return;
+    if (e.key === 'Escape' && $('asm-visual').classList.contains('expanded')) { expand(false); return; }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const r = $('build-panel').getBoundingClientRect();
+    if ($('build-panel').hidden || r.bottom < 0 || r.top > innerHeight) return;
+    e.preventDefault(); go(e.key === 'ArrowLeft' ? -1 : 1);
+  });
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewer?.view(b.dataset.view==='reset'?data.steps[index].view:b.dataset.view));
   let comparisonPromise;
   async function mode(compare) {
@@ -161,9 +185,9 @@ try {
     const drawing = $('asm-drawing');
     const button = $('asm-3d');
     if (!canvas.hidden) {
-      canvas.hidden = true; drawing.hidden = false;
+      expand(false); canvas.hidden = true; drawing.hidden = false;
       $('asm-installed').hidden = !data.steps[index].installedIllustration;
-      $('asm-3d-tools').hidden = true; button.textContent = '3D로 보기';
+      $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live'); button.textContent = '3D로 보기';
       return;
     }
     opening3D = true;
@@ -171,11 +195,11 @@ try {
     try {
       if (!viewer) {
         const {createViewer} = await import('./viewer.js');
-        viewer = await createViewer(canvas, data, selectPart, {
+        viewer = await createViewer(canvas, data, id => selectPart(id, true), {
           ghost: true,
           onLost: () => {
-            canvas.hidden = true; drawing.hidden = false;
-      $('asm-installed').hidden = !data.steps[index].installedIllustration; $('asm-3d-tools').hidden = true;
+            expand(false); canvas.hidden = true; drawing.hidden = false;
+      $('asm-installed').hidden = !data.steps[index].installedIllustration; $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live');
             button.textContent = '3D로 보기';
             status.textContent = '3D 연결이 끊겼습니다. 단계별 조립도를 표시합니다.';
             viewer?.dispose(); viewer = null;
@@ -183,9 +207,9 @@ try {
         });
       }
       drawing.hidden = true; canvas.hidden = false; $('asm-installed').hidden = true;
-      $('asm-3d-tools').hidden = false; button.textContent = '조립도로 돌아가기';
+      $('asm-3d-tools').hidden = false; $('asm-visual').classList.add('live'); button.textContent = '조립도로 돌아가기';
       show(); viewer.view(data.steps[index].view);
-      status.textContent = '3D 준비 완료 · 드래그로 회전 · 휠/핀치로 확대';
+      status.textContent = matchMedia('(pointer: coarse)').matches ? '3D 준비 완료 · 가로로 밀어 회전 · 두 손가락으로 확대·이동 · 두 번 눌러 그 지점 확대 · 크게 보기에서 자유 회전' : '3D 준비 완료 · 드래그 회전 · 휠 확대 · 오른쪽 드래그 이동 · 더블클릭한 곳으로 확대 · ←/→ 단계 이동';
     } catch (error) {
       console.error(error);
       status.textContent = '3D를 사용할 수 없습니다. 단계별 조립도를 표시합니다.';
