@@ -325,6 +325,30 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000182,
+      "route_name": "351",
+      "sta_order": 49,
+      "observed_days": 9,
+      "vehicle_events": 55,
+      "labelled_events": 43,
+      "matched": 21,
+      "nonmatched": 22,
+      "censored": 12,
+      "proxy_hit_rate": 0.488,
+      "target_absent_at_first_signal": 30,
+      "simultaneous_eta_pairs": 25,
+      "candidate_eta_before_target_eta": 18,
+      "median_simultaneous_lead_min": 2.33,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000192,
       "route_name": "311",
       "sta_order": 84,
@@ -339,30 +363,6 @@
       "simultaneous_eta_pairs": 24,
       "candidate_eta_before_target_eta": 13,
       "median_simultaneous_lead_min": 0.68,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000182,
-      "route_name": "351",
-      "sta_order": 49,
-      "observed_days": 9,
-      "vehicle_events": 55,
-      "labelled_events": 42,
-      "matched": 21,
-      "nonmatched": 21,
-      "censored": 13,
-      "proxy_hit_rate": 0.5,
-      "target_absent_at_first_signal": 30,
-      "simultaneous_eta_pairs": 25,
-      "candidate_eta_before_target_eta": 18,
-      "median_simultaneous_lead_min": 2.33,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -662,5 +662,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-10T19:13:48.404188+09:00"
+  "generated_at": "2026-11-10T19:14:47.518272+09:00"
 }
