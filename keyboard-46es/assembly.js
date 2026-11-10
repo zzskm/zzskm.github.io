@@ -233,8 +233,16 @@ try {
     try {
       if (!viewer) {
         const {createViewer} = await import('./viewer.js');
+        // GitHub Pages gzips the GLB, so Content-Length is not its size: count against the size the build wrote.
+        const total = data.model_bytes, size = total ? ` / ${(total / 1e6).toFixed(1)} MB` : '';
+        status.textContent = `3D 모델 불러오는 중${size}`;
         viewer = await createViewer(canvas, data, id => selectPart(id, true), {
           ghost: true,
+          onProgress: total ? loaded => {
+            const percent = Math.min(99, Math.floor(100 * loaded / total));
+            button.textContent = `불러오는 중 ${percent}%`;
+            status.textContent = `3D 모델 불러오는 중 · ${percent}%${size}`;
+          } : null,
           onLost: () => {
             expand(false); canvas.hidden = true; drawing.hidden = false; cut = null; syncCut();
       $('asm-installed').hidden = !data.steps[index].installedIllustration; $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live');
@@ -250,6 +258,7 @@ try {
       status.textContent = matchMedia('(pointer: coarse)').matches ? '3D 준비 완료 · 가로로 밀어 회전 · 두 손가락으로 확대·이동 · 두 번 눌러 그 지점 확대 · 크게 보기에서 자유 회전' : '3D 준비 완료 · 드래그 회전 · 휠 확대 · 오른쪽 드래그 이동 · 더블클릭한 곳으로 확대 · ←/→ 단계 이동';
     } catch (error) {
       console.error(error);
+      if (!viewer) button.textContent = '3D로 보기';
       status.textContent = '3D를 사용할 수 없습니다. 단계별 조립도를 표시합니다.';
     } finally {
       opening3D = false; button.disabled = false;

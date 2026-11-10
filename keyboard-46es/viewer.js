@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { STLLoader } from './vendor/STLLoader.js';
+import { GLTFLoader } from './vendor/GLTFLoader.js';
 
 const FOCUS = '#e79535', PICK = '#168b9b', INK = '#26332f';
 const DIRECTIONS = { top: [0, -.001, 1], bottom: [0, -.001, -1], front: [0, -1, .015], iso: [.25, -.85, .85] };
@@ -9,6 +9,26 @@ const MARK_SIZE = 14;
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // A single ring per instance; a double ring where CAD stacks two of them at one spot (leg magnet pairs).
+// `models/assembly.glb#part-20-03`: one GLB per build (assembly.py, glb.py), loaded once and shared by its pieces.
+// Its positions are uint16 in each mesh's box (KHR_mesh_quantization); unpack them to millimetres and drop the
+// index so computeVertexNormals gives flat CAD faces, exactly as the per-piece STLs used to.
+const glbFiles = new Map();
+async function meshGeometry(ref, onProgress) {
+  const [url, name] = ref.split('#');
+  if (!glbFiles.has(url)) glbFiles.set(url, new GLTFLoader().loadAsync(url, event => onProgress?.(event.loaded))
+    .then(gltf => { gltf.scene.updateMatrixWorld(true); return gltf.scene; })
+    .catch(error => { glbFiles.delete(url); throw error; }));  // a failed download can be retried
+  const node = (await glbFiles.get(url)).getObjectByName(name);
+  if (!node?.isMesh) throw new Error(`mesh ${name} missing in ${url}`);
+  const source = node.geometry, position = source.attributes.position, xyz = new Float32Array(position.count * 3);
+  for (let i = 0; i < position.count; i++) { xyz[3 * i] = position.getX(i); xyz[3 * i + 1] = position.getY(i); xyz[3 * i + 2] = position.getZ(i); }
+  let geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(xyz, 3)); geometry.setIndex(source.index);
+  geometry.applyMatrix4(node.matrixWorld);
+  geometry = geometry.toNonIndexed(); geometry.computeVertexNormals(); geometry.computeBoundingBox();
+  return geometry;
+}
+
 function ringTexture(color, double = false) {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d'), radii = double ? [26, 15] : [24];
@@ -73,15 +93,14 @@ export async function createViewer(host, data, onSelect, options = {}) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = .14; controls.zoomToCursor = true;
   controls.minDistance = 8; controls.maxDistance = 1600;
-  const loader = new STLLoader(), meshes = [];
+  const meshes = [];
   const rings = { focus: ringTexture(FOCUS), pick: ringTexture(PICK), focus2: ringTexture(FOCUS, true), pick2: ringTexture(PICK, true) };
   // One plane for every part; off until section() turns it on. Points on the negative side are cut away.
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), cut = [];
   renderer.localClippingEnabled = true;
   try {
     await Promise.all(data.parts.flatMap(p => (p.pieces || []).map(piece => ({ p, piece }))).map(async ({ p, piece }) => {
-      const geometry = await loader.loadAsync(piece.mesh);
-      geometry.computeVertexNormals(); geometry.computeBoundingBox();
+      const geometry = await meshGeometry(piece.mesh, options.onProgress);
       const material = new THREE.MeshStandardMaterial({ color: piece.color || p.color, roughness: .6, metalness: .08,
         side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clipShadows: true });
       hatchBackFaces(material);
