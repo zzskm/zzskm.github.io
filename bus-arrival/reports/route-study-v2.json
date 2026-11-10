@@ -162,11 +162,11 @@
       "sta_order": 22,
       "observed_days": 9,
       "vehicle_events": 69,
-      "labelled_events": 54,
+      "labelled_events": 55,
       "matched": 26,
-      "nonmatched": 28,
-      "censored": 15,
-      "proxy_hit_rate": 0.481,
+      "nonmatched": 29,
+      "censored": 14,
+      "proxy_hit_rate": 0.473,
       "target_absent_at_first_signal": 35,
       "simultaneous_eta_pairs": 34,
       "candidate_eta_before_target_eta": 19,
@@ -258,11 +258,11 @@
       "sta_order": 24,
       "observed_days": 9,
       "vehicle_events": 53,
-      "labelled_events": 40,
+      "labelled_events": 41,
       "matched": 20,
-      "nonmatched": 20,
-      "censored": 13,
-      "proxy_hit_rate": 0.5,
+      "nonmatched": 21,
+      "censored": 12,
+      "proxy_hit_rate": 0.488,
       "target_absent_at_first_signal": 29,
       "simultaneous_eta_pairs": 24,
       "candidate_eta_before_target_eta": 14,
@@ -291,6 +291,30 @@
       "simultaneous_eta_pairs": 23,
       "candidate_eta_before_target_eta": 17,
       "median_simultaneous_lead_min": 2.47,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
+      "route_id": 204000192,
+      "route_name": "311",
+      "sta_order": 84,
+      "observed_days": 9,
+      "vehicle_events": 50,
+      "labelled_events": 39,
+      "matched": 18,
+      "nonmatched": 21,
+      "censored": 11,
+      "proxy_hit_rate": 0.462,
+      "target_absent_at_first_signal": 27,
+      "simultaneous_eta_pairs": 23,
+      "candidate_eta_before_target_eta": 13,
+      "median_simultaneous_lead_min": 0.77,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -339,30 +363,6 @@
       "simultaneous_eta_pairs": 22,
       "candidate_eta_before_target_eta": 16,
       "median_simultaneous_lead_min": 2.25,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000192,
-      "route_name": "311",
-      "sta_order": 84,
-      "observed_days": 9,
-      "vehicle_events": 50,
-      "labelled_events": 38,
-      "matched": 18,
-      "nonmatched": 20,
-      "censored": 12,
-      "proxy_hit_rate": 0.474,
-      "target_absent_at_first_signal": 27,
-      "simultaneous_eta_pairs": 23,
-      "candidate_eta_before_target_eta": 13,
-      "median_simultaneous_lead_min": 0.77,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -469,6 +469,30 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000076,
+      "route_name": "382",
+      "sta_order": 55,
+      "observed_days": 9,
+      "vehicle_events": 37,
+      "labelled_events": 28,
+      "matched": 7,
+      "nonmatched": 21,
+      "censored": 9,
+      "proxy_hit_rate": 0.25,
+      "target_absent_at_first_signal": 18,
+      "simultaneous_eta_pairs": 19,
+      "candidate_eta_before_target_eta": 6,
+      "median_simultaneous_lead_min": -0.48,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 241223008,
       "route_name": "602-2B",
       "sta_order": 12,
@@ -507,30 +531,6 @@
       "simultaneous_eta_pairs": 16,
       "candidate_eta_before_target_eta": 6,
       "median_simultaneous_lead_min": -0.46,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000076,
-      "route_name": "382",
-      "sta_order": 55,
-      "observed_days": 9,
-      "vehicle_events": 37,
-      "labelled_events": 27,
-      "matched": 7,
-      "nonmatched": 20,
-      "censored": 10,
-      "proxy_hit_rate": 0.259,
-      "target_absent_at_first_signal": 18,
-      "simultaneous_eta_pairs": 19,
-      "candidate_eta_before_target_eta": 6,
-      "median_simultaneous_lead_min": -0.48,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -662,5 +662,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-10T17:11:09.700792+09:00"
+  "generated_at": "2026-11-10T17:12:42.382966+09:00"
 }
