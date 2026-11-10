@@ -23,6 +23,8 @@ concurrency:
 
 permissions:
   contents: write
+  # 수집 실패 알림 이슈 (bus-arrival-failure 라벨)
+  issues: write
 
 jobs:
   scrape:
@@ -69,10 +71,14 @@ jobs:
           SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
 
       - name: Collect session
+        id: collect
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          bash bus-arrival/scripts/session.sh
+          code=0
+          bash bus-arrival/scripts/session.sh || code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
         env:
           SERVICE_KEY: ${{ secrets.BUS_SERVICE_KEY }}
           BUS_WINDOW: ${{ inputs.window || '16:00-22:00' }}
@@ -121,3 +127,37 @@ jobs:
             bus-arrival/status.json
             bus-arrival/summary.json
           retention-days: 14
+
+      # 2026-11-04~09 게시 실패가 6일간 알려지지 않았다. 실패하면 열린 알림 이슈 하나에 모아 남긴다.
+      # 종료 코드 75(연결 시간 초과로 runner 교체)는 다음 트리거가 이어받는 정상 복구라 알리지 않는다.
+      - name: Report failure as issue
+        if: failure() && steps.collect.outputs.exit_code != '75'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EXIT_CODE: ${{ steps.collect.outputs.exit_code }}
+        run: |
+          label=bus-arrival-failure
+          gh label create "$label" --color B60205 --description "bus-arrival 수집 실패 알림" 2>/dev/null || true
+          body="$(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST') 수집 실패 (종료 코드: ${EXIT_CODE:-수집 전 단계}) — $RUN_URL"
+          issue=$(gh issue list --label "$label" --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [[ -n $issue ]]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --label "$label" --title "bus-arrival 수집 실패" \
+              --body "$body"$'\n\n'"다음 실행이 실패 없이 끝나면 자동으로 닫힌다. 그 전에 또 실패하면 여기에 댓글로 쌓인다."
+          fi
+
+      - name: Close failure issue after recovery
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for issue in $(gh issue list --label bus-arrival-failure --state open --json number --jq '.[].number'); do
+            gh issue close "$issue" --comment "다음 실행이 실패 없이 끝나 닫음 (수집 시간대 밖이면 수집 없이 끝났을 수 있음) — $RUN_URL"
+          done
