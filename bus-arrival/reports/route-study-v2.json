@@ -397,6 +397,30 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 241215005,
+      "route_name": "73",
+      "sta_order": 16,
+      "observed_days": 9,
+      "vehicle_events": 50,
+      "labelled_events": 37,
+      "matched": 18,
+      "nonmatched": 19,
+      "censored": 13,
+      "proxy_hit_rate": 0.486,
+      "target_absent_at_first_signal": 26,
+      "simultaneous_eta_pairs": 24,
+      "candidate_eta_before_target_eta": 17,
+      "median_simultaneous_lead_min": 2.7,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 241223004,
       "route_name": "602-1A",
       "sta_order": 30,
@@ -435,30 +459,6 @@
       "simultaneous_eta_pairs": 13,
       "candidate_eta_before_target_eta": 9,
       "median_simultaneous_lead_min": 3.3,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 241215005,
-      "route_name": "73",
-      "sta_order": 16,
-      "observed_days": 9,
-      "vehicle_events": 50,
-      "labelled_events": 36,
-      "matched": 18,
-      "nonmatched": 18,
-      "censored": 14,
-      "proxy_hit_rate": 0.5,
-      "target_absent_at_first_signal": 26,
-      "simultaneous_eta_pairs": 24,
-      "candidate_eta_before_target_eta": 17,
-      "median_simultaneous_lead_min": 2.7,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -662,5 +662,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-10T17:08:05.265330+09:00"
+  "generated_at": "2026-11-10T17:09:04.158609+09:00"
 }
