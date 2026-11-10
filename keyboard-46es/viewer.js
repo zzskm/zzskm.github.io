@@ -91,6 +91,10 @@ export async function createViewer(host, data, onSelect, options = {}) {
   ground.receiveShadow = true; scene.add(ground);
   const camera = new THREE.PerspectiveCamera(35, 1, .5, 5000); camera.up.set(0, 0, 1);
   const controls = new OrbitControls(camera, renderer.domElement);
+  // OrbitControls sets touch-action none on the canvas, which overrides the host's pan-y: give vertical swipes
+  // back to the page (one finger turns the model sideways). A host with touch-action none (expanded view,
+  // comparison) still wins, so there one finger turns freely.
+  renderer.domElement.style.touchAction = 'pan-y';
   controls.enableDamping = true; controls.dampingFactor = .14; controls.zoomToCursor = true;
   controls.minDistance = 8; controls.maxDistance = 1600;
   const meshes = [];

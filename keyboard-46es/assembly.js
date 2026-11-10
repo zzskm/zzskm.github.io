@@ -216,18 +216,33 @@ try {
     button.textContent = installed ? '장착 방향 보기' : '장착 후 보기';
   };
   let opening3D = false;
-  $('asm-3d').onclick = async () => {
+  function close3D() {
+    expand(false); $('asm-canvas').hidden = true; $('asm-drawing').hidden = false;
+    if (cut) { cut = null; viewer.section(null); syncCut(); }
+    $('asm-installed').hidden = !data.steps[index].installedIllustration;
+    $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live'); $('asm-3d').textContent = '3D로 보기';
+  }
+  // The button also records the choice: back to the drawings sticks for this browser, 3D again clears it.
+  $('asm-3d').onclick = () => {
     if (opening3D) return;
+    if ($('asm-canvas').hidden) { delete saved.view; remember(); open3D(); }
+    else { close3D(); saved.view = '2d'; remember(); }
+  };
+  // 3D opens by itself once the build sheet comes on screen, unless this browser chose the drawings or asks to
+  // save data. The drawing stays up while the model loads, and a failure leaves it there.
+  const saveData = navigator.connection?.saveData || matchMedia('(prefers-reduced-data: reduce)').matches;
+  if (saved.view !== '2d' && !saveData && 'IntersectionObserver' in window) {
+    const watch = new IntersectionObserver(entries => {
+      if (!entries.some(e => e.isIntersecting)) return;
+      watch.disconnect();
+      if ($('asm-canvas').hidden && !opening3D) open3D();
+    }, { rootMargin: '200px 0px' });
+    watch.observe($('asm-visual'));
+  }
+  async function open3D() {
     const canvas = $('asm-canvas');
     const drawing = $('asm-drawing');
     const button = $('asm-3d');
-    if (!canvas.hidden) {
-      expand(false); canvas.hidden = true; drawing.hidden = false;
-      if (cut) { cut = null; viewer.section(null); syncCut(); }
-      $('asm-installed').hidden = !data.steps[index].installedIllustration;
-      $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live'); button.textContent = '3D로 보기';
-      return;
-    }
     opening3D = true;
     button.disabled = true;
     try {
@@ -263,5 +278,5 @@ try {
     } finally {
       opening3D = false; button.disabled = false;
     }
-  };
+  }
 } catch(error){console.error(error);status.textContent='조립 데이터를 불러오지 못했습니다. HTTP 서버에서 열거나 아래 전체 조립 설명을 이용하세요.';if($('reference-docs'))$('reference-docs').open=true;}
