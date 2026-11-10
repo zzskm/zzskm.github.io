@@ -30,9 +30,9 @@ jobs:
         # runner 마다 IP·지역이 다르므로 세 대에서 확인한다
         sample: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -59,7 +59,7 @@ jobs:
 
       - name: Preserve probe results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bus-source-probe-${{ github.run_id }}-${{ matrix.sample }}
           path: |

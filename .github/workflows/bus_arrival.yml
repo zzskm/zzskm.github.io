@@ -32,18 +32,18 @@ jobs:
     timeout-minutes: 350
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # 긴 세션 뒤에 대기하던 run 이 run 생성 시점의 오래된 커밋을 받아 최신 로그를 덮어쓰지 않도록,
           # job 시작 시점의 브랜치 최신 커밋을 받는다.
           ref: main
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-bus-${{ hashFiles('bus-arrival/requirements.txt', 'security-constraints.txt') }}
@@ -107,7 +107,7 @@ jobs:
 
       - name: Preserve runner network diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bus-arrival-network-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -118,7 +118,7 @@ jobs:
 
       - name: Preserve collection on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bus-arrival-recovery-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
