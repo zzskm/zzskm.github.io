@@ -8,12 +8,30 @@ const DIRECTIONS = { top: [0, -.001, 1], bottom: [0, -.001, -1], front: [0, -1, 
 const MARK_SIZE = 14;
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function ringTexture(color) {
+// A single ring per instance; a double ring where CAD stacks two of them at one spot (leg magnet pairs).
+function ringTexture(color, double = false) {
   const c = document.createElement('canvas'); c.width = c.height = 64;
-  const g = c.getContext('2d');
-  g.lineWidth = 12; g.strokeStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.arc(32, 32, 24, 0, 7); g.stroke();
-  g.lineWidth = 6; g.strokeStyle = color; g.beginPath(); g.arc(32, 32, 24, 0, 7); g.stroke();
+  const g = c.getContext('2d'), radii = double ? [26, 15] : [24];
+  for (const r of radii) { g.lineWidth = 12; g.strokeStyle = 'rgba(255,255,255,.9)'; g.beginPath(); g.arc(32, 32, r, 0, 7); g.stroke(); }
+  for (const r of radii) { g.lineWidth = double ? 5 : 6; g.strokeStyle = color; g.beginPath(); g.arc(32, 32, r, 0, 7); g.stroke(); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// Section caps: with a clipping plane on, the inside (back faces) of a cut solid shows through the
+// cut, so drawing back faces as a hatch reads as a cut face without capping geometry.
+function hatchBackFaces(material) {
+  const cap = { value: new THREE.Color(INK) }, on = { value: 0 };
+  material.userData.cap = cap; material.userData.capOn = on;
+  material.onBeforeCompile = shader => {
+    shader.uniforms.uCap = cap; shader.uniforms.uCapOn = on;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', 'uniform vec3 uCap;\nuniform float uCapOn;\nvoid main() {')
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+  if (uCapOn > .5 && !gl_FrontFacing) {
+    float h = step(.6, fract((gl_FragCoord.x - gl_FragCoord.y) / 9.));
+    gl_FragColor = vec4(mix(uCap, uCap * .62, h), 1.);
+  }`);
+  };
+  material.customProgramCacheKey = () => 'hatch';
 }
 
 function arrowMesh(from, to) {
@@ -55,25 +73,33 @@ export async function createViewer(host, data, onSelect, options = {}) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = .14; controls.zoomToCursor = true;
   controls.minDistance = 8; controls.maxDistance = 1600;
-  const loader = new STLLoader(), meshes = [], rings = { focus: ringTexture(FOCUS), pick: ringTexture(PICK) };
+  const loader = new STLLoader(), meshes = [];
+  const rings = { focus: ringTexture(FOCUS), pick: ringTexture(PICK), focus2: ringTexture(FOCUS, true), pick2: ringTexture(PICK, true) };
+  // One plane for every part; off until section() turns it on. Points on the negative side are cut away.
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), cut = [];
+  renderer.localClippingEnabled = true;
   try {
     await Promise.all(data.parts.flatMap(p => (p.pieces || []).map(piece => ({ p, piece }))).map(async ({ p, piece }) => {
       const geometry = await loader.loadAsync(piece.mesh);
       geometry.computeVertexNormals(); geometry.computeBoundingBox();
       const material = new THREE.MeshStandardMaterial({ color: piece.color || p.color, roughness: .6, metalness: .08,
-        side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+        side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clipShadows: true });
+      hatchBackFaces(material);
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData = { ...p, baseColor: piece.color || p.color, pieceBodies: piece.bodies, instances: piece.instances || [] };
       const tiny = ([lo, hi]) => Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) <= MARK_SIZE;
       // Only parts made wholly of small instances (screws, nuts, magnets), not a switch's stem or a board's pins.
       const small = p.pieces.every(pc => (pc.instances || []).length && pc.instances.every(tiny)) ? piece.instances : [];
-      if (small.length) {
+      mesh.userData.marks = [];
+      for (const double of [false, true]) {
+        const group = small.filter(b => (b[2] > 1) === double);
+        if (!group.length) continue;
         const points = new THREE.BufferGeometry();
-        points.setAttribute('position', new THREE.Float32BufferAttribute(small.flatMap(([lo, hi]) => [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2]), 3));
-        const marks = new THREE.Points(points, new THREE.PointsMaterial({ map: rings.focus, size: 26, sizeAttenuation: false,
+        points.setAttribute('position', new THREE.Float32BufferAttribute(group.flatMap(([lo, hi]) => [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2]), 3));
+        const marks = new THREE.Points(points, new THREE.PointsMaterial({ map: rings.focus, size: double ? 30 : 26, sizeAttenuation: false,
           transparent: true, depthTest: false, depthWrite: false }));
-        marks.renderOrder = 20; marks.visible = false; marks.raycast = () => {};
-        mesh.userData.marks = marks; mesh.add(marks);
+        marks.renderOrder = 20; marks.visible = false; marks.raycast = () => {}; marks.userData.double = double;
+        mesh.userData.marks.push(marks); mesh.add(marks);
       }
       root.add(mesh); meshes.push(mesh);
     }));
@@ -110,7 +136,7 @@ export async function createViewer(host, data, onSelect, options = {}) {
   function edges(mesh) {
     if (mesh.userData.edges) return;
     const lines = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 32),
-      new THREE.LineBasicMaterial({ color: INK, transparent: true, depthWrite: false }));
+      new THREE.LineBasicMaterial({ color: INK, transparent: true, depthWrite: false, clippingPlanes: cut.length ? cut : null }));
     lines.raycast = () => {}; mesh.userData.edges = lines; mesh.add(lines);
   }
   function boxOf(list) {
@@ -157,13 +183,16 @@ export async function createViewer(host, data, onSelect, options = {}) {
   }
   // Frame the parts being worked on, widened to a share of the whole so the surroundings stay readable.
   function view(kind = 'iso', animate = true) {
+    if (kind === 'section' && sectioned) return fit(sectionBox(), sectionDirection(), animate);
+    if (kind === 'section') kind = 'iso';
     if (options.bounds) return fit(new THREE.Box3(new THREE.Vector3(...options.bounds[0]), new THREE.Vector3(...options.bounds[1])), kind, animate);
     const visible = meshes.filter(m => m.visible), focused = visible.filter(m => m.userData.focus);
     const all = boxOf(visible);
     if (!focused.length || focused.length === visible.length) return fit(all, kind, animate);
     const box = boxOf(focused), size = box.getSize(new THREE.Vector3()), whole = all.getSize(new THREE.Vector3());
     if (Math.max(size.x, size.y) >= Math.max(whole.x, whole.y) * .6) return fit(all, kind, animate);
-    const need = Math.max(whole.x, whole.y) * .5;
+    // A tall (portrait) canvas fits the board's width only, so give it less surrounding context.
+    const need = Math.max(whole.x, whole.y) * (camera.aspect < .8 ? .3 : .5);
     box.expandByVector(new THREE.Vector3(Math.max(0, (need - size.x) / 2), Math.max(0, (need * .6 - size.y) / 2), 0));
     fit(box.intersect(all), kind, animate);
   }
@@ -175,7 +204,40 @@ export async function createViewer(host, data, onSelect, options = {}) {
     box.expandByVector(new THREE.Vector3(pad, pad, 0));
     fit(box, camera.position.clone().sub(controls.target));
   }
+  // Section: cut along x or y at `at`, removing the side the viewer looks from (front for y, left for x),
+  // seen from below when `below` (steps worked on the underside). Placement arrows would cover the cut.
+  let sectioned = null, current = null;
+  function sectionDirection() {
+    const z = sectioned.below ? -.4 : .4;
+    return sectioned.axis === 'x' ? new THREE.Vector3(-1, -.35, z) : new THREE.Vector3(.3, -1, z);
+  }
+  // Frame a slab just behind the cut, about 90 mm wide around the body it goes through.
+  function sectionBox() {
+    const all = boxOf(meshes.filter(m => m.visible)), { axis, at } = sectioned;
+    const c = sectioned.center || all.getCenter(new THREE.Vector3()).toArray();
+    const box = all.clone(), across = axis === 'x' ? 'y' : 'x', i = across === 'x' ? 0 : 1;
+    box.min[across] = Math.max(box.min[across], c[i] - 45); box.max[across] = Math.min(box.max[across], c[i] + 45);
+    box.min[axis] = Math.max(box.min[axis], at); box.max[axis] = Math.min(box.max[axis], at + 14);
+    return box.isEmpty() ? all : box;
+  }
+  function section(spec) {
+    sectioned = spec ? { axis: spec.axis === 'x' ? 'x' : 'y', at: +spec.at, center: spec.center, below: !!spec.below } : null;
+    arrows.visible = !sectioned;
+    cut.length = 0;
+    if (sectioned) {
+      plane.normal.set(sectioned.axis === 'x' ? 1 : 0, sectioned.axis === 'y' ? 1 : 0, 0);
+      plane.constant = -sectioned.at; cut.push(plane);
+    }
+    for (const m of meshes) {
+      m.material.clippingPlanes = cut.length ? cut : null; m.material.needsUpdate = true;
+      if (m.userData.edges) { m.userData.edges.material.clippingPlanes = m.material.clippingPlanes; m.userData.edges.material.needsUpdate = true; }
+    }
+    restyle(); draw();
+  }
+  // Slider range: what is on screen, not the trial coupons laid out beside the board.
+  function sectionRange(axis) { const b = boxOf(meshes.filter(m => m.visible)); return [b.min[axis], b.max[axis]]; }
   function show(step, pick, amount) {
+    current = { step, pick, amount };
     const solo = pick && !step.show.includes(pick) && meshes.some(m => m.userData.id === pick);
     for (const mesh of meshes) {
       const p = mesh.userData;
@@ -186,14 +248,35 @@ export async function createViewer(host, data, onSelect, options = {}) {
       p.focus = pick ? p.id === pick : step.focus.includes(p.id);
       if (step.focusOnly && !p.focus) mesh.visible = false;
     }
-    const visible = meshes.filter(m => m.visible);
+    restyle();
+    for (const mesh of meshes) {
+      const p = mesh.userData;
+      const b = p.bbox, x = (b[0][0] + b[1][0]) / 2, y = (b[0][1] + b[1][1]) / 2;
+      const rank = p.explode_rank ?? (p.id === 'keycaps' ? 5 : p.id.startsWith('COVER') || p.id === 'magnets' ? 4 : p.id === 'switches' ? 3 : p.id.startsWith('PLATE_') ? 2 : p.id === 'housing' ? -1 : 0);
+      mesh.position.set(options.verticalExplode ? 0 : (x - 142) * amount * .4, options.verticalExplode ? 0 : (y - 46) * amount * .5, rank * amount * 20);
+    }
+    const low = boxOf(meshes.filter(m => m.visible));
+    if (!low.isEmpty()) ground.position.z = low.min.z - .4;
+    arrows.clear();
+    if (!amount && !solo && !step.focusOnly) for (const a of step.placement || []) arrows.add(arrowMesh(a.from, a.to));
+    if (solo) view('iso'); else draw();
+  }
+  // Colours, ghosting, edges and rings for the current step. A section shows every part solid: the cut
+  // already opens the housing, and see-through parts would show their own far walls as hatch.
+  function restyle() {
+    if (!current) return;
+    const { step, pick, amount } = current;
     // When everything on screen is the work (first step), keep the real colours instead of one flat highlight.
-    const highlight = visible.some(m => !m.userData.focus);
+    const highlight = meshes.some(m => m.visible && !m.userData.focus);
     for (const mesh of meshes) {
       const p = mesh.userData, focus = p.focus && mesh.visible;
-      const ghost = !p.focus && (p.id === 'housing' || (options.ghost && step.focus.length > 0));
-      mesh.material.color.set(p.preserveColors ? p.baseColor : p.id === pick ? PICK : focus && highlight && p.id !== 'switches' ? FOCUS : p.baseColor);
+      const ghost = !sectioned && !p.focus && (p.id === 'housing' || (options.ghost && step.focus.length > 0));
+      const color = new THREE.Color(p.preserveColors ? p.baseColor : p.id === pick ? PICK : focus && highlight && p.id !== 'switches' ? FOCUS : p.baseColor);
+      if (sectioned && p.id === 'housing') color.lerp(new THREE.Color('#ffffff'), .55);
+      mesh.material.color.copy(color);
       mesh.material.emissive.set(focus && highlight ? '#2b1906' : '#000000');
+      mesh.material.userData.cap.value.copy(color).lerp(new THREE.Color(INK), .45);
+      mesh.material.userData.capOn.value = sectioned ? 1 : 0;
       mesh.material.transparent = ghost;
       mesh.material.opacity = ghost ? (p.id === 'housing' ? .1 : .26) : 1;
       mesh.material.depthWrite = !ghost;
@@ -202,26 +285,19 @@ export async function createViewer(host, data, onSelect, options = {}) {
         edges(mesh);
         p.edges.material.opacity = ghost ? (p.id === 'housing' ? .1 : .2) : focus && highlight ? .6 : .38;
       }
-      if (p.marks) {
-        p.marks.visible = focus && highlight && !amount;
-        p.marks.material.map = p.id === pick ? rings.pick : rings.focus;
+      for (const marks of p.marks) {
+        marks.visible = focus && highlight && !amount && !sectioned;
+        marks.material.map = rings[(p.id === pick ? 'pick' : 'focus') + (marks.userData.double ? '2' : '')];
       }
-      const b = p.bbox, x = (b[0][0] + b[1][0]) / 2, y = (b[0][1] + b[1][1]) / 2;
-      const rank = p.explode_rank ?? (p.id === 'keycaps' ? 5 : p.id.startsWith('COVER') || p.id === 'magnets' ? 4 : p.id === 'switches' ? 3 : p.id.startsWith('PLATE_') ? 2 : p.id === 'housing' ? -1 : 0);
-      mesh.position.set(options.verticalExplode ? 0 : (x - 142) * amount * .4, options.verticalExplode ? 0 : (y - 46) * amount * .5, rank * amount * 20);
     }
-    const low = boxOf(visible);
-    if (!low.isEmpty()) ground.position.z = low.min.z - .4;
-    arrows.clear();
-    if (!amount && !solo && !step.focusOnly) for (const a of step.placement || []) arrows.add(arrowMesh(a.from, a.to));
-    if (solo) view('iso'); else draw();
   }
   const ray = new THREE.Raycaster(), point = new THREE.Vector2();
   function hit(e) {
     const rect = renderer.domElement.getBoundingClientRect();
     point.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
     ray.setFromCamera(point, camera);
-    const hits = ray.intersectObjects(meshes.filter(m => m.visible), false);
+    const hits = ray.intersectObjects(meshes.filter(m => m.visible), false)
+      .filter(h => !sectioned || plane.distanceToPoint(h.point) >= -.01);
     return hits.find(h => !h.object.material.transparent) || hits[0];
   }
   let down;
@@ -246,5 +322,5 @@ export async function createViewer(host, data, onSelect, options = {}) {
     scene.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
     Object.values(rings).forEach(t => t.dispose()); renderer.dispose(); host.replaceChildren();
   }
-  return { show, view, frame, getPose, setPose, onChange, dispose };
+  return { show, view, frame, section, sectionRange, getPose, setPose, onChange, dispose };
 }

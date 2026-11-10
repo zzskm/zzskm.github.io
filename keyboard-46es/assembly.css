@@ -38,3 +38,8 @@ html.asm-locked{overflow:hidden}
   .assembly-toolbar label{flex:0 0 auto}
   .visual-key{gap:.6rem}
 }
+.assembly-visual.live .key-3d[hidden]{display:none}.ring2-dot{box-sizing:border-box;border:2px solid #e79535;background:#fff;box-shadow:inset 0 0 0 1.5px #fff,inset 0 0 0 3px #e79535}.cut-dot{border-radius:2px!important;background:repeating-linear-gradient(135deg,#6f6a5e 0 2px,#a39b8a 2px 4px)}
+#asm-section.suggest:not([aria-pressed="true"])::after{content:"";display:inline-block;width:6px;height:6px;margin-left:5px;border-radius:50%;background:#e79535;vertical-align:middle}
+.section-note{position:absolute;z-index:2;left:1rem;top:2.3rem;width:fit-content;max-width:calc(100% - 2rem);margin:0;padding:.3rem .55rem;pointer-events:none;font-size:.75rem;color:#26332f;background:#fffffff0;border:1px solid var(--rule);border-radius:8px}
+#asm-section-at{width:110px}
+.assembly-visual.expanded .section-note{position:static;margin:.5rem 1rem 0}
