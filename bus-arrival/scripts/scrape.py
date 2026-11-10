@@ -863,10 +863,11 @@ def run_loop(args: argparse.Namespace):
             observe(state, info, ts, arrival_path, stall_signal=data_source == source_rotation.OFFICIAL)
             if previous_vid is not None and state.get("cur_vid") != previous_vid:
                 recent = {}
-                for vid, when in (state.get("recent_closed") or {}).items():
+                # closed_vid: 위의 vid(이번 응답 차량)를 덮어쓰면 버스 없음이 '차량 있음·예측 없음'으로 게시된다
+                for closed_vid, when in (state.get("recent_closed") or {}).items():
                     closed = parse_ts(when)
                     if closed and 0 <= (ts - closed).total_seconds() <= RECENT_CLOSED_SEC:
-                        recent[vid] = when
+                        recent[closed_vid] = when
                 recent[str(previous_vid)] = ts_iso
                 state["recent_closed"] = recent
 
