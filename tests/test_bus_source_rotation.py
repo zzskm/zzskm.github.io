@@ -262,6 +262,25 @@ class RunLoopRotationTests(unittest.TestCase):
         self.assertEqual([a["departure_reason"] for a in arrivals], ["observed_arrival"])
         self.assertIsNone(state["cur_vid"])
 
+    def test_status_after_arrival_is_publishable(self):
+        # 회귀: 도착 처리 직후 recent_closed 순회가 응답 차량 변수를 덮어써 '버스 없음'이
+        # 방금 떠난 차량·예측 없음으로 기록됐고, verify_runtime 이 게시를 막아 세션이 죽었다 (2026-11-04~09)
+        verify = load_module("bus-arrival/scripts/verify_runtime.py", "bus_rotation_verify")
+        for later, expected_vid in ((NO_BUS, None), (bus(22, 900, 8), 22)):
+            with self.subTest(expected_vid=expected_vid), tempfile.TemporaryDirectory() as folder:
+                (Path(folder) / "summary.json").write_text(json.dumps({"runtime_schema_version": 2}), encoding="utf-8")
+                # 5 도착(→recent_closed 에 남음) 직후 11 도착: 두 번째 도착 때 순회할 항목이 있어야 재현된다
+                _, arrivals, _, status, state, _ = run(folder, {"official": [bus(5, 40, 1), bus(11, 40, 1), later]},
+                                                       3, sources="official", interval=30)
+                self.assertEqual([r["vehId"] for r in arrivals], ["5", "11"])
+                self.assertEqual(set(state["recent_closed"]), {"5", "11"})
+                self.assertEqual(status.get("current_veh_id"), expected_vid)
+                self.assertEqual(status.get("error"), None if expected_vid else "no_bus")
+                summary = {"runtime_schema_version": 2, "generated_at": status["last_poll"],
+                           "safety_model": {"version": 2, "model_status": status["model_status"]}}
+                status["publish_prepared_at"] = status["last_poll"]
+                self.assertEqual(verify.validate(summary, status), [])
+
     def test_lagging_sources_do_not_duplicate_an_arrival(self):
         a, b = bus(11, 40, 1), bus(22, 600, 4)
         responses = {"official": [a, bus(22, 590, 4)], "gbis_web": [b], "kakao": [bus(11, 20, 1)],
