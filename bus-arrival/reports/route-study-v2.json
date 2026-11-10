@@ -373,6 +373,30 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 241223004,
+      "route_name": "602-1A",
+      "sta_order": 30,
+      "observed_days": 9,
+      "vehicle_events": 51,
+      "labelled_events": 39,
+      "matched": 20,
+      "nonmatched": 19,
+      "censored": 12,
+      "proxy_hit_rate": 0.513,
+      "target_absent_at_first_signal": 28,
+      "simultaneous_eta_pairs": 23,
+      "candidate_eta_before_target_eta": 10,
+      "median_simultaneous_lead_min": -1.38,
+      "forward_date_test": {
+        "status": "insufficient_days",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000182,
       "route_name": "351",
       "sta_order": 49,
@@ -411,30 +435,6 @@
       "simultaneous_eta_pairs": 25,
       "candidate_eta_before_target_eta": 18,
       "median_simultaneous_lead_min": 2.77,
-      "forward_date_test": {
-        "status": "insufficient_days",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 241223004,
-      "route_name": "602-1A",
-      "sta_order": 30,
-      "observed_days": 9,
-      "vehicle_events": 51,
-      "labelled_events": 38,
-      "matched": 19,
-      "nonmatched": 19,
-      "censored": 13,
-      "proxy_hit_rate": 0.5,
-      "target_absent_at_first_signal": 28,
-      "simultaneous_eta_pairs": 23,
-      "candidate_eta_before_target_eta": 10,
-      "median_simultaneous_lead_min": -1.38,
       "forward_date_test": {
         "status": "insufficient_days",
         "test_events": 0,
@@ -662,5 +662,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-10T17:23:51.440149+09:00"
+  "generated_at": "2026-11-10T17:25:55.429279+09:00"
 }
