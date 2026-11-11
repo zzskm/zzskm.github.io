@@ -1,25 +1,25 @@
 {
   "date": "2026-11-11",
-  "daily_calls": 205,
+  "daily_calls": 207,
   "cur_vid": 204001378,
   "cur_plate": "경기70아7046",
   "first_seen": "2026-11-11T20:32:06+09:00",
-  "last_seen": "2026-11-11T20:38:01+09:00",
-  "min_predict": 163,
+  "last_seen": "2026-11-11T20:39:01+09:00",
+  "min_predict": 107,
   "max_predict": 487,
-  "samples": 13,
-  "last_predict": 163,
+  "samples": 15,
+  "last_predict": 107,
   "last_state_cd": null,
   "consec_fail": 0,
   "last_flag": "",
   "miss_count": 0,
-  "last_poll": "2026-11-11T20:38:01+09:00",
-  "last_success": "2026-11-11T20:38:01+09:00",
+  "last_poll": "2026-11-11T20:39:01+09:00",
+  "last_success": "2026-11-11T20:39:01+09:00",
   "last_location": 1,
   "first_miss_ts": null,
-  "next_poll_ts": "2026-11-11T20:38:31+09:00",
-  "near_stall_since": null,
-  "near_stall_predict": null,
+  "next_poll_ts": "2026-11-11T20:39:31+09:00",
+  "near_stall_since": "2026-11-11T20:38:31+09:00",
+  "near_stall_predict": 162,
   "connection_health": {
     "session_id": "fd28985f8eb749adb3fd248783de64d5",
     "consecutive_timeouts": 0
@@ -27,12 +27,12 @@
   "sources": {
     "official": {
       "date": "2026-11-11",
-      "calls": 125,
-      "ok": 124,
+      "calls": 126,
+      "ok": 125,
       "fail": 1,
       "consec_fail": 0,
       "skip_until": null,
-      "last_success": "2026-11-11T20:36:01+09:00",
+      "last_success": "2026-11-11T20:38:31+09:00",
       "last_error": null
     },
     "naver": {
@@ -60,12 +60,12 @@
     },
     "kakao": {
       "date": "2026-11-11",
-      "calls": 132,
-      "ok": 132,
+      "calls": 133,
+      "ok": 133,
       "fail": 0,
       "consec_fail": 0,
       "skip_until": null,
-      "last_success": "2026-11-11T20:38:01+09:00",
+      "last_success": "2026-11-11T20:39:01+09:00",
       "last_error": null
     }
   },
@@ -84,16 +84,17 @@
   },
   "rotation": {
     "bag": [
-      "gbis_web",
-      "official"
+      "official",
+      "naver",
+      "gbis_web"
     ]
   },
   "gbis_web": {
     "date": "2026-11-11",
-    "calls": 93,
-    "last_call": "2026-11-11T20:29:01+09:00",
-    "consec_fail": 3,
-    "skip_until": "2026-11-11T20:39:01+09:00",
+    "calls": 94,
+    "last_call": "2026-11-11T20:39:01+09:00",
+    "consec_fail": 4,
+    "skip_until": "2026-11-11T20:49:01+09:00",
     "last_success": "2026-11-11T20:25:09+09:00",
     "positions": {
       "204001377": {
