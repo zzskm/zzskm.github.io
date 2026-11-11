@@ -1,23 +1,23 @@
 {
   "date": "2026-11-11",
-  "daily_calls": 102,
+  "daily_calls": 104,
   "cur_vid": 204003592,
   "cur_plate": "경기70아6518",
   "first_seen": "2026-11-11T18:11:01+09:00",
-  "last_seen": "2026-11-11T18:17:01+09:00",
+  "last_seen": "2026-11-11T18:18:01+09:00",
   "min_predict": 859,
   "max_predict": 1377,
-  "samples": 13,
-  "last_predict": 859,
+  "samples": 15,
+  "last_predict": 900,
   "last_state_cd": null,
   "consec_fail": 0,
-  "last_flag": "",
+  "last_flag": "PASS",
   "miss_count": 0,
-  "last_poll": "2026-11-11T18:17:01+09:00",
-  "last_success": "2026-11-11T18:17:01+09:00",
+  "last_poll": "2026-11-11T18:18:01+09:00",
+  "last_success": "2026-11-11T18:18:01+09:00",
   "last_location": 1,
   "first_miss_ts": null,
-  "next_poll_ts": "2026-11-11T18:17:31+09:00",
+  "next_poll_ts": "2026-11-11T18:18:31+09:00",
   "near_stall_since": null,
   "near_stall_predict": null,
   "connection_health": {
@@ -27,12 +27,12 @@
   "sources": {
     "official": {
       "date": "2026-11-11",
-      "calls": 61,
-      "ok": 61,
+      "calls": 62,
+      "ok": 62,
       "fail": 0,
       "consec_fail": 0,
       "skip_until": null,
-      "last_success": "2026-11-11T18:15:01+09:00",
+      "last_success": "2026-11-11T18:17:31+09:00",
       "last_error": null
     },
     "naver": {
@@ -47,16 +47,13 @@
     },
     "gbis_web": {
       "date": "2026-11-11",
-      "calls": 17,
-      "ok": 2,
+      "calls": 18,
+      "ok": 3,
       "fail": 15,
-      "consec_fail": 13,
-      "skip_until": "2026-11-11T18:18:01+09:00",
-      "last_success": "2026-11-11T16:13:01+09:00",
-      "last_error": {
-        "kind": "timeout",
-        "phase": "connect"
-      }
+      "consec_fail": 0,
+      "skip_until": null,
+      "last_success": "2026-11-11T18:18:01+09:00",
+      "last_error": null
     },
     "kakao": {
       "date": "2026-11-11",
@@ -83,43 +80,40 @@
     "204003593": "2026-11-11T17:48:07+09:00"
   },
   "rotation": {
-    "bag": [
-      "gbis_web",
-      "official"
-    ]
+    "bag": []
   },
   "gbis_web": {
     "date": "2026-11-11",
-    "calls": 36,
-    "last_call": "2026-11-11T18:17:01+09:00",
+    "calls": 37,
+    "last_call": "2026-11-11T18:18:01+09:00",
     "consec_fail": 0,
     "skip_until": null,
-    "last_success": "2026-11-11T18:17:07+09:00",
+    "last_success": "2026-11-11T18:18:03+09:00",
     "positions": {
       "204003592": {
         "order": 5,
         "bus_position": "1",
-        "ts": "2026-11-11T18:17:07+09:00"
+        "ts": "2026-11-11T18:18:03+09:00"
       },
       "204003593": {
-        "order": 11,
+        "order": 13,
         "bus_position": "2",
-        "ts": "2026-11-11T18:17:07+09:00"
+        "ts": "2026-11-11T18:18:03+09:00"
       },
       "204001378": {
         "order": 19,
         "bus_position": "2",
-        "ts": "2026-11-11T18:17:07+09:00"
+        "ts": "2026-11-11T18:18:03+09:00"
       },
       "204001377": {
         "order": 28,
         "bus_position": "2",
-        "ts": "2026-11-11T18:17:07+09:00"
+        "ts": "2026-11-11T18:18:03+09:00"
       },
       "204003591": {
-        "order": 35,
-        "bus_position": "2",
-        "ts": "2026-11-11T18:17:07+09:00"
+        "order": 36,
+        "bus_position": "1",
+        "ts": "2026-11-11T18:18:03+09:00"
       }
     }
   }
