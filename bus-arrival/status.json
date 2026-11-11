@@ -1,26 +1,26 @@
 {
-  "last_poll": "2026-11-11T17:52:01+09:00",
-  "last_poll_local": "2026-11-11 17:52:02+09:00",
+  "last_poll": "2026-11-11T17:54:01+09:00",
+  "last_poll_local": "2026-11-11 17:54:02+09:00",
   "error": "no_bus",
   "secondary_station_id": 205000029,
   "secondary_mobile_no": "06004",
-  "daily_calls": 87,
-  "last_success": "2026-11-11T17:52:01+09:00",
-  "primary_source": "naver",
-  "data_source": "naver",
+  "daily_calls": 88,
+  "last_success": "2026-11-11T17:54:01+09:00",
+  "primary_source": "kakao",
+  "data_source": "kakao",
   "source_attempts": [
     {
-      "source": "naver",
+      "source": "kakao",
       "ok": true
     }
   ],
   "sources": {
     "official": {
-      "calls": 51,
-      "ok": 51,
+      "calls": 52,
+      "ok": 52,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-11T17:50:01+09:00"
+      "last_success": "2026-11-11T17:53:01+09:00"
     },
     "gbis_web": {
       "calls": 15,
@@ -35,11 +35,11 @@
       }
     },
     "kakao": {
-      "calls": 57,
-      "ok": 57,
+      "calls": 58,
+      "ok": 58,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-11T17:51:01+09:00"
+      "last_success": "2026-11-11T17:54:01+09:00"
     },
     "naver": {
       "calls": 52,
@@ -51,25 +51,27 @@
   },
   "gbis_web": {
     "ok": false,
-    "skipped": "backoff",
-    "retry_after": "2026-11-11T17:54:01+09:00",
-    "consec_fail": 4,
-    "calls": 30,
+    "error_detail": {
+      "kind": "connection_error"
+    },
+    "consec_fail": 5,
+    "calls": 31,
+    "request_duration_sec": 0.493,
     "last_success": "2026-11-11T17:31:06+09:00"
   },
   "consecutive_connect_timeouts": 0,
   "collect_window": "16:00-22:00",
   "poll_interval_sec": 60,
-  "api_request_started_at": "2026-11-11T17:52:01+09:00",
-  "api_response_received_at": "2026-11-11T17:52:02+09:00",
-  "api_request_duration_sec": 1.091,
+  "api_request_started_at": "2026-11-11T17:54:01+09:00",
+  "api_response_received_at": "2026-11-11T17:54:01+09:00",
+  "api_request_duration_sec": 0.942,
   "publish_interval_sec": 120,
   "urgent_publication": false,
   "publication_reason": "normal",
   "runtime_schema_version": 2,
   "model_status": "ready",
   "model_trained_through": "2026-11-10",
-  "publish_prepared_at": "2026-11-11T08:52:18.118391+00:00",
-  "poll_to_publish_prepare_sec": 17.118,
+  "publish_prepared_at": "2026-11-11T08:54:21.739442+00:00",
+  "poll_to_publish_prepare_sec": 20.739,
   "publication_stage": "prepared_not_deployed"
 }
