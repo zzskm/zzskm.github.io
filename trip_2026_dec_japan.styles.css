@@ -15,10 +15,18 @@
   --badge-text: #991b1b;
   --warn-bg: #fef3c7;
   --warn-text: #92400e;
+  --up-bg: #ffedd5;
+  --up-text: #9a3412;
+  --band: #f3efe6;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Several blocks below set their own display, which would otherwise beat the hidden attribute. */
+[hidden] {
+  display: none !important;
 }
 
 body {
@@ -29,6 +37,9 @@ body {
     radial-gradient(circle at 92% 0%, #dbeafe 0%, transparent 30%),
     var(--bg);
   color: var(--text);
+  /* Korean wraps between words, not inside them. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .topbar {
@@ -67,17 +78,180 @@ body {
   margin: 0 0 12px;
 }
 
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.panel-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.mini-btn {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.mini-btn:hover {
+  border-color: var(--accent);
+  color: var(--active);
+}
+
+.panel-hint {
+  margin-top: 6px;
+}
+
+.step-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px -16px 4px;
+  padding: 8px 16px;
+  background: var(--band);
+  color: #4b5563;
+  font-size: 0.86rem;
+}
+
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--active);
+  color: #fff;
+  font-size: 0.76rem;
+}
+
+/* Result column: the total and the tabs stay put, only the chosen tab scrolls. */
 .panel-right {
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.result-head {
+  flex: none;
+  padding: 14px 16px 4px;
+}
+
+.result-head h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.result-head h2 small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.tabs {
+  flex: none;
+  display: flex;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  margin-bottom: -1px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--active);
+}
+
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--active-text);
+  font-weight: 700;
+}
+
+.tab-badge {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  vertical-align: middle;
+}
+
+.result-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+  padding: 12px 16px 16px;
+}
+
+.tab-panel > .result-block:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.tab-panel > .warn:first-child {
+  margin: 0 0 8px;
 }
 
 .category {
   border-top: 1px dashed var(--line);
   margin-top: 12px;
   padding-top: 12px;
+}
+
+.step-title + .category {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* Marks a section whose pick does not work, so it is seen even while the section is folded. */
+.category.has-warning .category-title::after {
+  content: "주의";
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.7rem;
+  vertical-align: middle;
 }
 
 .category-toggle {
@@ -129,12 +303,13 @@ body {
 }
 
 .city-divider {
-  margin: 16px 0 0;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #f3efe6;
+  margin: 14px 0 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+}
+
+.city-divider::before {
+  content: "↓ ";
 }
 
 .group-label {
@@ -175,6 +350,9 @@ body {
 }
 
 .card-btn:focus-visible,
+.tab:focus-visible,
+.mini-btn:focus-visible,
+.mobile-bar-btn:focus-visible,
 .qty-btn:focus-visible,
 .toggle-btn:focus-visible,
 .category-toggle:focus-visible,
@@ -219,8 +397,43 @@ body {
 }
 
 .city-card .price small {
+  display: block;
   font-weight: 500;
   color: var(--muted);
+}
+
+/* What switching to this card does to the per-person mean. */
+.delta,
+.delta-flash {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.card-btn .delta {
+  margin-top: 6px;
+}
+
+.delta.is-up,
+.delta-flash.is-up {
+  background: var(--up-bg);
+  color: var(--up-text);
+}
+
+.delta.is-down,
+.delta-flash.is-down {
+  background: var(--accent-soft);
+  color: var(--active-text);
+}
+
+.delta-flash {
+  margin-left: 8px;
+  font-size: 0.8rem;
+  vertical-align: middle;
 }
 
 .badge {
@@ -290,15 +503,6 @@ body {
   background: var(--accent-soft);
   color: var(--active-text);
   font-weight: 700;
-}
-
-.result-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  margin: 0 -16px;
-  padding: 0 16px 6px;
-  background: linear-gradient(180deg, var(--panel) 82%, rgba(255, 253, 248, 0));
 }
 
 .result-context {
@@ -518,6 +722,43 @@ body {
   display: block;
 }
 
+.day-items > span {
+  display: block;
+  padding-left: 10px;
+  text-indent: -10px;
+}
+
+.day-items > span::before {
+  content: "· ";
+  color: var(--muted);
+}
+
+.day-night {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.timeline-list li.is-rx {
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.timeline-list li.is-pre {
+  color: var(--muted);
+}
+
+.breakdown-list li.is-total {
+  font-weight: 700;
+  border-bottom: none;
+}
+
 .warn {
   margin: 8px 0 0;
   padding: 8px 10px;
@@ -525,6 +766,15 @@ body {
   background: var(--warn-bg);
   color: var(--warn-text);
   font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.warn-inline {
+  margin: 10px 0 0;
+}
+
+#warn-activities {
+  margin: 0 0 4px;
 }
 
 .link-list li {
@@ -559,6 +809,10 @@ body {
   color: #374151;
 }
 
+.note-list a {
+  color: var(--link);
+}
+
 .note-list li::before {
   content: "·";
   position: absolute;
@@ -587,6 +841,71 @@ body {
 .evidence-btn.ghost {
   border-color: var(--line);
   color: var(--muted);
+}
+
+/* Phone only: the total and a jump between the result and the cards. */
+.mobile-bar {
+  display: none;
+}
+
+.mobile-bar-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-bar-text strong {
+  color: var(--big);
+  font-size: 1.02rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mobile-bar-sub {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mobile-bar-btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--active);
+  border-radius: 12px;
+  background: var(--active);
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 8;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 0.88rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.toast .link-btn {
+  flex: none;
+  min-height: 36px;
+  color: #99f6e4;
 }
 
 .modal {
@@ -664,19 +983,50 @@ body {
 @media (max-width: 980px) {
   .layout {
     grid-template-columns: 1fr;
-    padding: 10px 14px 20px;
+    padding: 10px 14px 88px;
     gap: 12px;
   }
 
   .panel-right {
     order: 1;
     position: static;
+    display: block;
     max-height: none;
     overflow: visible;
   }
 
   .panel-left {
     order: 2;
+  }
+
+  .result-scroll {
+    overflow: visible;
+  }
+
+  /* The page scrolls here, so the tabs follow the reader down a long tab. */
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+
+  .mobile-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 -4px 16px rgba(31, 41, 55, 0.08);
+  }
+
+  .toast {
+    bottom: 76px;
   }
 }
 
@@ -694,7 +1044,7 @@ body {
   }
 
   .layout {
-    padding: 8px 16px 20px;
+    padding: 8px 16px 88px;
   }
 
   .panel {
@@ -702,9 +1052,29 @@ body {
     padding: 12px;
   }
 
-  .result-sticky {
-    margin: 0 -12px;
-    padding: 0 12px 6px;
+  .panel-right {
+    padding: 0;
+  }
+
+  .result-head {
+    padding: 12px 12px 2px;
+  }
+
+  .tabs {
+    padding: 0 12px;
+  }
+
+  .tab {
+    font-size: 0.86rem;
+  }
+
+  .result-scroll {
+    padding: 10px 12px 12px;
+  }
+
+  .step-title {
+    margin: 14px -12px 2px;
+    padding: 8px 12px;
   }
 
   .panel h2 {
@@ -825,6 +1195,30 @@ body {
 @media (max-width: 430px) {
   .card-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* One card per row: the chip sits beside the title instead of adding a line. */
+  .card-btn:not(.city-card) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    align-content: center;
+  }
+
+  .card-btn .title {
+    grid-column: 1;
+  }
+
+  .card-btn .sub {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .card-btn .delta {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    margin-top: 0;
   }
 
   .category-summary {
