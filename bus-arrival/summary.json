@@ -85,22 +85,22 @@
     "missing_endpoints": 0,
     "quick_reappearance": 2,
     "overlapping_trip": 0,
-    "alternate_source_rows": 694,
-    "prediction_rows": 6552,
-    "arrival_rows": 246,
+    "alternate_source_rows": 721,
+    "prediction_rows": 6553,
+    "arrival_rows": 247,
     "short_track_trips": 14,
     "reasons": {
       "estimated_arrival": 78,
-      "observed_arrival": 154,
+      "observed_arrival": 155,
       "vanished": 2,
       "stale": 7,
       "vehicle_changed": 1
     },
-    "matched_trips": 242,
-    "eligible_trips": 231,
+    "matched_trips": 243,
+    "eligible_trips": 232,
     "api_signal_trips": 0,
-    "no_bus_rows": 3091,
-    "unmatched_vehicle_rows": 731,
+    "no_bus_rows": 3092,
+    "unmatched_vehicle_rows": 721,
     "window_days": 42
   },
   "historical_alerts": {
@@ -108,17 +108,17 @@
     "slots": [],
     "source": "historical_not_realtime"
   },
-  "generated_at": "2026-11-13T17:19:02.768987+09:00",
+  "generated_at": "2026-11-13T17:19:33.509098+09:00",
   "latest": {
-    "ts_kst": "2026-11-13T17:19:01+09:00",
-    "vehId": "204003592",
-    "plateNo": "경기70아6518",
-    "predict_sec": "26",
-    "remain_seat": "41",
+    "ts_kst": "2026-11-13T17:19:31+09:00",
+    "vehId": "",
+    "plateNo": "",
+    "predict_sec": "",
+    "remain_seat": "",
     "state_cd": "",
-    "flag": "",
-    "location_no": "1",
-    "source": "naver"
+    "flag": "PASS",
+    "location_no": "",
+    "source": "official"
   },
   "latest_valid": {
     "ts_kst": "2026-11-13T17:19:01+09:00",
@@ -136,14 +136,14 @@
     "min_predict_sec": 6,
     "avg_predict_sec": 499
   },
-  "prediction_samples": 7661,
+  "prediction_samples": 7662,
   "valid_prediction_samples": 3972,
-  "no_bus_samples": 3683,
+  "no_bus_samples": 3684,
   "invalid_samples": 6,
-  "arrival_records": 285,
+  "arrival_records": 286,
   "departure_reasons": {
     "estimated_arrival": 94,
-    "observed_arrival": 177,
+    "observed_arrival": 178,
     "vanished": 4,
     "stale": 9,
     "vehicle_changed": 1
@@ -331,17 +331,6 @@
     }
   },
   "recent_predictions": [
-    {
-      "ts_kst": "2026-11-13T17:04:31+09:00",
-      "vehId": "204003592",
-      "plateNo": "경기70아6518",
-      "predict_sec": "859",
-      "remain_seat": "43",
-      "state_cd": "0",
-      "flag": "PASS",
-      "location_no": "2",
-      "source": "official"
-    },
     {
       "ts_kst": "2026-11-13T17:05:01+09:00",
       "vehId": "204003592",
@@ -660,28 +649,20 @@
       "flag": "",
       "location_no": "1",
       "source": "naver"
+    },
+    {
+      "ts_kst": "2026-11-13T17:19:31+09:00",
+      "vehId": "",
+      "plateNo": "",
+      "predict_sec": "",
+      "remain_seat": "",
+      "state_cd": "",
+      "flag": "PASS",
+      "location_no": "",
+      "source": "official"
     }
   ],
   "recent_arrivals": [
-    {
-      "ts_kst": "2026-11-10T20:23:15+09:00",
-      "vehId": "204003591",
-      "plateNo": "경기70아6517",
-      "first_seen_ts": "2026-11-10T20:11:44+09:00",
-      "last_seen_ts": "2026-11-10T20:22:44+09:00",
-      "min_predict_sec": "26",
-      "max_predict_sec": "600",
-      "samples": "23",
-      "departure_reason": "observed_arrival",
-      "last_predict_sec": "26",
-      "est_arrival_ts": "2026-11-10T20:23:10+09:00",
-      "arrival_evidence": "prediction_and_disappearance",
-      "arrival_lower_ts": "2026-11-10T20:22:44+09:00",
-      "arrival_upper_ts": "2026-11-10T20:23:15+09:00",
-      "first_missing_ts": "2026-11-10T20:23:15+09:00",
-      "last_state_cd": "0",
-      "last_location_no": "1"
-    },
     {
       "ts_kst": "2026-11-10T20:40:44+09:00",
       "vehId": "204001377",
@@ -1230,6 +1211,25 @@
       "arrival_lower_ts": "2026-11-13T16:44:31+09:00",
       "arrival_upper_ts": "2026-11-13T16:45:02+09:00",
       "first_missing_ts": "2026-11-13T16:45:02+09:00",
+      "last_state_cd": "",
+      "last_location_no": "1"
+    },
+    {
+      "ts_kst": "2026-11-13T17:19:31+09:00",
+      "vehId": "204003592",
+      "plateNo": "경기70아6518",
+      "first_seen_ts": "2026-11-13T17:01:01+09:00",
+      "last_seen_ts": "2026-11-13T17:19:01+09:00",
+      "min_predict_sec": "0",
+      "max_predict_sec": "951",
+      "samples": "37",
+      "departure_reason": "observed_arrival",
+      "last_predict_sec": "26",
+      "est_arrival_ts": "2026-11-13T17:19:27+09:00",
+      "arrival_evidence": "prediction_and_disappearance",
+      "arrival_lower_ts": "2026-11-13T17:19:01+09:00",
+      "arrival_upper_ts": "2026-11-13T17:19:31+09:00",
+      "first_missing_ts": "2026-11-13T17:19:31+09:00",
       "last_state_cd": "",
       "last_location_no": "1"
     }
