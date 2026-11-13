@@ -107,6 +107,11 @@
       "https://www.dailypharm.com/Users/News/NewsView.html?ID=326037",
       "국내 공급가 4주분 2.5mg 27.8만원 · 5mg 36.9만원. 2.5mg 판매가 29~35만원. 5mg 판매가 37~45만원은 공급가 기준 추정"
     ),
+    rxPriceKr75: sourceRef(
+      "닥터나우 - 마운자로 용량별 한 달 비용·최저가",
+      "https://doctornow.co.kr/content/magazine/35248cf7505d4411a1fc4d9a8173ada9",
+      "4펜(4주분) 최저가 2.5mg 27.2만원 · 5mg 36만원 · 7.5mg 51만원 · 10mg 51만원 (2026-11-12 검수). 같은 지역 약국끼리도 몇만 원씩 차이. 7.5mg 판매가 51-60만원은 최저가에 약국 간 차이를 더한 추정"
+    ),
     rxStorage: sourceRef(
       "新宿駅前クリニック - マンジャロ 保管方法",
       "https://www.shinjyuku-ekimae-clinic.info/naika/mounjaro.html",
@@ -120,7 +125,7 @@
     ubOnline: sourceRef(
       "UB클리닉 온라인 (UBCLINIC 신주쿠히가시구치)",
       "https://ubclinic-online.netlify.app/",
-      "국적 무관 비대면 진료, 일본 전화번호 불필요, 여권 + 일본 내 배송지. 진찰 다음날 일괄 발송, 희망 수령일 약 5일 전 예약. 배송지: 자택·야마토 영업소·호텔. 영업소 보관 3일, 영업소 약 1/3 주말·공휴일 휴무, 수령 시 여권 + 결제 메일. 약값 VISA·Master만. 쿨배송 간토 ¥1,215 · 간사이 ¥1,335 · 규슈 ¥1,735 (착불). 11/13 현재 결제 문제로 예약 일시 중단(11/14경 재개 목표)"
+      "국적 무관 비대면 진료, 일본 전화번호 불필요, 여권 + 일본 내 배송지. 진찰 다음날 일괄 발송, 희망 수령일 약 5일 전 예약. 배송지: 자택·야마토 영업소·호텔. 영업소 보관 3일, 영업소 약 1/3 주말·공휴일 휴무, 수령 시 여권 + 결제 메일. 약값 VISA·Master만. 4펜(4주분) 약값 2.5mg ¥8,000 · 5mg ¥15,000 · 7.5mg ¥22,000 (세금 포함). 쿨배송 간토 ¥1,215 · 간사이 ¥1,335 · 규슈 ¥1,735 (착불). 11/13 현재 결제 문제로 예약 일시 중단(11/14경 재개 목표)"
     ),
 
     // ---------- China ----------
@@ -268,7 +273,7 @@
     book: YAMATO_BOOK,
     weekendNote: YAMATO_WEEKEND,
     hours: "수령: 영업소 영업시간 (보통 8-21시, 영업소마다 다름)",
-    per4JPY: { d25: range(8000, 8000), d5: range(15000, 15000) },
+    per4JPY: { d25: range(8000, 8000), d5: range(15000, 15000), d75: range(22000, 22000) },
     shipJPY: range(shipJPY, shipJPY),
     action: "야마토 영업소에서 마운자로 수령 (여권 + 결제 메일)",
     payment: "약값은 예약 때 VISA·Mastercard 선결제(해외 카드 OK, JCB·아멕스·체크카드 불가) · 쿨배송비만 수령 때 현금·터치결제·교통IC·QR",
@@ -423,7 +428,7 @@
     // 반입: 기본 6병, 6병을 넘으면 용법상 3개월분(12주)까지
     importBaseUnits: 6,
     importLimitWeeks: 12,
-    koreaPer4KRW: { d25: range(290000, 350000), d5: range(370000, 450000), d10: range(500000, 600000) },
+    koreaPer4KRW: { d25: range(290000, 350000), d5: range(370000, 450000), d75: range(510000, 600000), d10: range(500000, 600000) },
     // 나라와 무관한 안내. 나라별 안내는 countries[].rxNotes
     notes: [
       "11/12부터 해외에서 정상 처방·구매한 마운자로는 본인이 들고 오면 1인 기본 6병, 6병을 넘으면 3개월분(12주분)까지 반입됩니다. 직구·우편·대리구매는 여전히 안 됩니다.",
@@ -433,7 +438,7 @@
       "반입 의약품은 국내 부작용 피해구제 대상이 아닙니다. 용량·수량은 진찰 후 의사가 정하며 원하는 만큼 나온다는 보장이 없습니다.",
       "처음 맞는 사람은 첫 주사 뒤 1-3일 메스꺼움·식욕 저하가 흔합니다. 이색 식사·특식은 처방 전날이나 첫 주사 전에 몰아 두고, 첫 주사는 귀국 후로 미루는 편이 여행엔 편합니다.",
     ],
-    sourceRefs: [SRC.rxImport, SRC.rxImport2, SRC.rxImportScope, SRC.rxSafety, SRC.rxPriceKr, SRC.rxPriceTen, SRC.rxStorage],
+    sourceRefs: [SRC.rxImport, SRC.rxImport2, SRC.rxImportScope, SRC.rxSafety, SRC.rxPriceKr, SRC.rxPriceKr75, SRC.rxPriceTen, SRC.rxStorage],
   };
 
   const party = {
@@ -571,12 +576,11 @@
       routeNote: "클리닉 대면 · 비대면 진료 뒤 영업소 수령",
       weeksPerPen: 1,
       penNote: "1회용 펜 1개 = 1주",
-      doseLabel: { d25: "2.5mg", d5: "5mg" },
+      doseLabel: { d25: "2.5mg", d5: "5mg", d75: "7.5mg" },
       rxPlans: [
-        { id: "p25x4", subtitle: "4주 · 처음 시작하는 용량", weeks: { d25: 4, d5: 0 } },
-        { id: "p25x4_5x8", subtitle: "12주 · 4주 후 증량하는 표준 일정 · 반입 한도", weeks: { d25: 4, d5: 8 } },
-        { id: "p5x4", subtitle: "4주 · 이미 2.5mg를 4주 이상 사용", weeks: { d25: 0, d5: 4 } },
-        { id: "p5x12", subtitle: "12주 · 5mg 유지 중 · 반입 한도", weeks: { d25: 0, d5: 12 } },
+        { id: "p25x4_5x8", subtitle: "12주 · 2.5mg로 시작해 4주 후 5mg · 반입 한도", weeks: { d25: 4, d5: 8 } },
+        { id: "p5x12", subtitle: "12주 · 5mg 유지 · 반입 한도", weeks: { d5: 12 } },
+        { id: "p75x12", subtitle: "12주 · 7.5mg 유지 · 반입 한도", weeks: { d75: 12 } },
       ],
       defaultRxPlanId: "p25x4_5x8",
       importLimitNote: "3개월분",
@@ -587,6 +591,7 @@
       singleNote: "1인 1실은 트윈 요금의 70%로 계산합니다. 비즈니스호텔 싱글룸은 더 싸고, 료칸은 1인 이용 할증(×1.4)이 붙습니다.",
       rxNotes: [
         "일본 펜은 1회용이라 3개월분은 12펜 내외입니다. 체중 감량 목적은 일본에서도 허가 외 자유진료입니다.",
+        "7.5mg 공식가는 UB클리닉(¥22,000) · MIL(¥30,000) · FONTANA(¥40,600, 모두 4펜)만 확인했습니다. 아몬드·모데나의 7.5mg은 추정값이니 예약 때 가격과 재고를 확인하세요.",
       ],
       sourceRefs: [SRC.rxPriceJp],
     },
@@ -601,8 +606,7 @@
       rxPlans: [
         { id: "p10x24", subtitle: "24주 · 1회 10mg 유지 중 · 반입 기본 6병", weeks: { d10: 24 } },
         { id: "p10x12", subtitle: "12주 · 1회 10mg 유지 중", weeks: { d10: 12 } },
-        { id: "p5x24", subtitle: "24주 · 1회 5mg 유지 중 · 반입 기본 6병", weeks: { d5: 24 } },
-        { id: "p25x4_5x8", subtitle: "12주 · 1회 2.5mg로 시작해 4주 후 5mg", weeks: { d25: 4, d5: 8 } },
+        { id: "p10x4", subtitle: "4주 · 1회 10mg · 병원 첫 처방은 보통 1펜", weeks: { d10: 4 } },
       ],
       defaultRxPlanId: "p10x24",
       importLimitNote: "기본 6병 기준",
@@ -663,7 +667,8 @@
           openDays: [0, 1, 2, 4, 5, 6],
           irregular: true,
           hours: "10:00-18:00 · 수요일 휴진 · 완전 예약제",
-          per4JPY: { d25: range(16500, 16500), d5: range(28000, 28000) },
+          per4JPY: { d25: range(16500, 16500), d5: range(28000, 28000), d75: range(38000, 45000) },
+          estimatedDoses: ["d75"],
           shipJPY: range(0, 0),
           action: "아몬드 클리닉 대면 진료 · 당일 구입 (이치가야역 7번 출구 1분)",
           payment: "현금 또는 신용카드 (해외 카드 가능 여부 미기재 → 현금 대비)",
@@ -674,7 +679,7 @@
             "비대면 진료 후 호텔 배송(¥1,000, 3일 전 연락)도 가능",
           ],
           link: { label: "도쿄 외국인 처방 확인 클리닉 비교 (Weblio)", href: "https://care.weblio.jp/mounjaro-tokyo-ko/" },
-          sourceRef: sourceRef("Weblio케어 - 도쿄 외국인 처방 확인 클리닉", "https://care.weblio.jp/mounjaro-tokyo-ko/", "아몬드 클리닉: 2.5mg 4펜 ¥16,500 · 5mg ¥28,000, 10-18시 수요 휴진, 현금 또는 신용카드, 한국어 문진표·통역, 여권 원본, 호텔 배송 ¥1,000. 신주쿠역앞 클리닉은 평일만·일본어 필수, 재팬넷클리닉은 한국어 원장이지만 초진료·영문 처방전 별도"),
+          sourceRef: sourceRef("Weblio케어 - 도쿄 외국인 처방 확인 클리닉", "https://care.weblio.jp/mounjaro-tokyo-ko/", "아몬드 클리닉: 2.5mg 4펜 ¥16,500 · 5mg ¥28,000 (7.5mg 미기재 → 5mg 대비 1.4-1.6배로 추정 ¥38,000-45,000), 10-18시 수요 휴진, 현금 또는 신용카드, 한국어 문진표·통역, 여권 원본, 호텔 배송 ¥1,000. 신주쿠역앞 클리닉은 평일만·일본어 필수, 재팬넷클리닉은 한국어 원장이지만 초진료·영문 처방전 별도"),
         },
         ubOnline(1215, "간토"),
       ],
@@ -1051,7 +1056,7 @@
           openDays: [0, 1, 2, 3, 4, 5, 6],
           irregular: true,
           hours: "10:00-19:00 (부정기 휴무)",
-          per4JPY: { d25: range(14800, 14800), d5: range(22000, 22000) },
+          per4JPY: { d25: range(14800, 14800), d5: range(22000, 22000), d75: range(29300, 30000) },
           shipJPY: range(0, 0),
           depositJPY: 10000,
           action: "MIL CLINIC 수령 · 잔금 결제 (니시신사이바시 1-5-27 7F)",
@@ -1063,7 +1068,7 @@
             "호텔 냉장 배송(사가와, ¥2,200)도 있지만 야마토 영업소 수령은 안내 없음",
           ],
           link: { label: "MIL CLINIC OSAKA - Mounjaro (English)", href: "https://mil-clinic.com/lp/mounjaro-en/" },
-          sourceRef: sourceRef("MIL CLINIC OSAKA - Mounjaro for visitors", "https://mil-clinic.com/lp/mounjaro-en/", "여권 확인으로 외국인 처방. 2펜 1상자 2.5mg ¥7,400 · 5mg ¥11,000 (세금 포함, 6상자 이상 할인). 진찰료 무료(Google Meet). 클리닉 수령은 계약금 ¥10,000 후 잔금 현장 결제. 10-19시 부정기 휴무. 영문 처방증명서 발급"),
+          sourceRef: sourceRef("MIL CLINIC OSAKA - Mounjaro for visitors", "https://mil-clinic.com/lp/mounjaro-en/", "여권 확인으로 외국인 처방. 2펜 1상자 2.5mg ¥7,400 · 5mg ¥11,000 · 7.5mg ¥15,000 (세금 포함). 6상자(12펜) 세트 7.5mg ¥88,000 = 4펜당 약 ¥29,300. 진찰료 무료(Google Meet). 클리닉 수령은 계약금 ¥10,000 후 잔금 현장 결제. 10-19시 부정기 휴무. 영문 처방증명서 발급"),
           sourceRef2: sourceRef("Weblio케어 - 오사카 관광객 처방 클리닉 비교", "https://care.weblio.jp/mounjaro-osaka-ko/", "관광객 진료를 공식 명시한 곳은 MIL(가능)과 민나 시아와세 클리닉(불가)뿐. 나머지는 예약 전 확인 필요"),
         },
         ubOnline(1335, "간사이"),
@@ -1457,7 +1462,7 @@
           mode: "visit",
           openDays: [0, 1, 2, 3, 4, 5, 6],
           hours: "10:00-19:00 (토·일·공휴일 포함)",
-          per4JPY: { d25: range(15800, 15800), d5: range(25400, 25400) },
+          per4JPY: { d25: range(15800, 15800), d5: range(25400, 25400), d75: range(40600, 40600) },
           shipJPY: range(0, 0),
           action: "FONTANA 대면 진료 · 당일 수령 (텐진미나미역 도보 7분)",
           payment: "현금·신용카드·의료론 (공식 초진 안내). 카드는 카드사 환율·해외 수수료 적용",
@@ -1467,7 +1472,7 @@
             "진찰료 0엔 · 보냉백·아이스팩 무료 제공 (공식 안내)",
           ],
           link: { label: "FONTANA CLINIC 한국어 안내 · 예약", href: "https://fontana-clinic.jp/kr/" },
-          sourceRef: sourceRef("FONTANA CLINIC 한국어 페이지", "https://fontana-clinic.jp/kr/", "4펜 1개월분 2.5mg ¥15,800 · 5mg ¥25,400 (세금 포함), 진찰료 0엔, 내원 후 당일 수령(예약·재고에 따라), 한국어 스태프 매일 근무, 카카오톡 fontanaclinic"),
+          sourceRef: sourceRef("FONTANA CLINIC 한국어 페이지", "https://fontana-clinic.jp/kr/", "4펜 1개월분 2.5mg ¥15,800 · 5mg ¥25,400 · 7.5mg ¥40,600 (세금 포함), 진찰료 0엔, 내원 후 당일 수령(예약·재고에 따라), 한국어 스태프 매일 근무, 카카오톡 fontanaclinic"),
           sourceRef2: sourceRef("FONTANA CLINIC - 처음 오시는 분 (결제 수단)", "https://fontana-clinic.jp/first/", "결제: 현금, 각종 신용카드, 의료론"),
         },
         {
@@ -1480,7 +1485,7 @@
           book: YAMATO_BOOK,
           weekendNote: YAMATO_WEEKEND,
           hours: "수령: 영업소 영업시간 (영업소마다 다름)",
-          per4JPY: { d25: range(15800, 15800), d5: range(25400, 25400) },
+          per4JPY: { d25: range(15800, 15800), d5: range(25400, 25400), d75: range(40600, 40600) },
           shipJPY: range(1000, 2000),
           action: "야마토 영업소에서 FONTANA 마운자로 수령 (여권 지참)",
           payment: "비대면은 진료 후 선결제 (수단은 카톡 확인) · 배송비는 별도 (카톡 확인, ¥1,000-2,000 추정)",
@@ -1502,12 +1507,13 @@
           openDays: [0, 1, 2, 3, 4, 5, 6],
           irregular: true,
           hours: "9:30-18:00 (부정기 휴무)",
-          per4JPY: { d25: range(12500, 12500), d5: range(18000, 26000) },
-          estimatedDoses: ["d5"],
+          per4JPY: { d25: range(12500, 12500), d5: range(18000, 26000), d75: range(25000, 40000) },
+          estimatedDoses: ["d5", "d75"],
           shipJPY: range(0, 0),
           action: "모데나 클리닉 대면 진료 · 당일 수령 (다이묘)",
           payment: "결제 수단 공식 미확인 → 현금 요구 대비 필요",
           prep: [
+            "11/13 기준 마운자로 신규 예약 일시 중단 안내(Weblio 비교 글) → 재개됐는지 먼저 확인",
             "한국어 페이지·문진표는 있지만 진찰·전화는 일본어 → 번역 앱 준비",
             "재고에 따라 최대 3개월분까지 당일 수령 (비교 글 기준). 혈액검사 ¥4,950는 선택",
             "여권 확인 후 영문 처방 내용 확인서 무료 발급 (반입 때 챙기기)",
@@ -1515,7 +1521,7 @@
             "공항점(하카타구 공항 앞)도 있어 귀국 전 들르는 대안이 됨",
           ],
           link: { label: "후쿠오카 관광객 처방 클리닉 비교 (Weblio)", href: "https://care.weblio.jp/mounjaro-fukuoka-ko/" },
-          sourceRef: sourceRef("Weblio케어 - 모데나 클리닉 텐진 본원·공항점", "https://care.weblio.jp/mounjaro-fukuoka-ko/", "2.5mg 4펜 ¥12,500, 9:30-18시 부정기 휴무, 한국어 페이지·문진표(진찰 일본어), 재고에 따라 최대 3개월분 당일 수령. 5mg 가격 미기재 → ¥18,000-26,000 추정"),
+          sourceRef: sourceRef("Weblio케어 - 모데나 클리닉 텐진 본원·공항점", "https://care.weblio.jp/mounjaro-fukuoka-ko/", "2.5mg 4펜 ¥12,500, 9:30-18시 부정기 휴무, 한국어 페이지·문진표(진찰 일본어), 재고에 따라 최대 3개월분 당일 수령. 5mg 가격 미기재 → ¥18,000-26,000 추정, 7.5mg 미기재 → ¥25,000-40,000 추정. 11/13 기준 마운자로 신규 예약 일시 중단 안내"),
         },
         ubOnline(1735, "규슈"),
       ],

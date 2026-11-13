@@ -231,6 +231,7 @@
         <p class="big-number"><span id="per-person-total" aria-live="polite">-</span><span id="result-delta" class="delta-flash" hidden></span></p>
         <p class="result-band" id="per-person-band">-</p>
         <p class="result-total" id="group-total">-</p>
+        <p class="result-month" id="per-month" hidden></p>
       </div>
 
       <div class="tabs" id="result-tabs" role="tablist" aria-label="결과 종류">
@@ -255,12 +256,13 @@
                 <tr>
                   <th scope="col">도시</th>
                   <th scope="col">1인 평균</th>
+                  <th scope="col">1개월분당</th>
                   <th scope="col">총액</th>
                 </tr>
               </thead>
               <tbody id="compare-body"></tbody>
             </table>
-            <p class="field-note">인원·일정·시기는 공통, 처방 용량·수량과 환율은 나라별, 나머지는 각 도시에서 고른 카드 기준입니다. 일본과 중국은 고른 약 분량이 다르면 총액 차이가 대부분 약값이니, 도시 아래에 적힌 용량·펜 수를 함께 보세요. 도시 이름을 누르면 그 도시로 전환합니다.</p>
+            <p class="field-note">인원·일정·시기는 공통, 처방 용량·수량과 환율은 나라별, 나머지는 각 도시에서 고른 카드 기준입니다. 약 분량이 다르면(일본 12주, 중국 24주 등) 총액보다 '1개월분당'으로 비교하세요. 여행 총액(동행 포함)을 받아 오는 약의 개월 수(4주 = 1개월분, 처방 인원 합계)로 나눈 값입니다. 도시 이름을 누르면 그 도시로 전환합니다.</p>
           </div>
 
           <div class="result-block">

@@ -53,6 +53,7 @@
     perPersonTotal: byId("per-person-total"),
     perPersonBand: byId("per-person-band"),
     groupTotal: byId("group-total"),
+    perMonth: byId("per-month"),
     compareBody: byId("compare-body"),
     breakdown: byId("breakdown-list"),
     timeline: byId("timeline-list"),
@@ -658,7 +659,10 @@
       el.rxPlan,
       country.rxPlans.map((plan) => ({ ...plan, title: planTitle(plan, country) })),
       state.rxPlan[country.id],
-      null,
+      (item) => {
+        const month = perRxMonth(computeIf({ rxPlan: { ...state.rxPlan, [country.id]: item.id } }));
+        return month ? `${item.subtitle} · 1개월분당 약 ${formatManwon(month.mean)}` : item.subtitle;
+      },
       (item) => meanIf({ rxPlan: { ...state.rxPlan, [country.id]: item.id } }) - base
     );
     renderCards(
@@ -743,6 +747,11 @@
 
   // Per-person mean if some selections were different; nothing is saved or re-rendered.
   function meanIf(sharedPatch, cityPatch) {
+    return computeIf(sharedPatch, cityPatch).perPerson.mean;
+  }
+
+  // The current city's full result if some selections were different; nothing is saved or re-rendered.
+  function computeIf(sharedPatch, cityPatch) {
     const s = cityState();
     const keepShared = {};
     const keepCity = {};
@@ -755,7 +764,7 @@
       s[key] = cityPatch[key];
     });
     try {
-      return compute(state.cityId).perPerson.mean;
+      return compute(state.cityId);
     } finally {
       Object.assign(state, keepShared);
       Object.assign(s, keepCity);
@@ -878,11 +887,13 @@
       const r = results[cityId];
       const active = cityId === state.cityId;
       const badge = cityId === cheapest ? `<span class="badge">최저</span>` : "";
+      const month = perRxMonth(r);
+      const monthText = month ? `<small>처방 1개월분당 약 ${formatManwon(month.mean)}</small>` : "";
       return `
         <button type="button" class="card-btn city-card ${active ? "active" : ""}" data-id="${esc(cityId)}" aria-pressed="${active}">
           <span class="title">${esc(city.name)} ${badge}</span>
           <span class="sub">${esc(city.subtitle)} · ${esc(city.flightTime)}</span>
-          <span class="price">약 ${formatManwon(r.perPerson.mean)} <small>${formatBand(r.perPerson.band)} / 1인</small></span>
+          <span class="price">약 ${formatManwon(r.perPerson.mean)} <small>${formatBand(r.perPerson.band)} / 1인</small>${monthText}</span>
         </button>
       `;
     };
@@ -1029,6 +1040,11 @@
     el.perPersonTotal.textContent = `약 ${formatManwon(pp.mean)} / 1인`;
     el.perPersonBand.innerHTML = `80% 범위 ${esc(formatBand(pp.band))}<span class="band-extreme"> · 항목 단순 합산 ${esc(formatBand(pp.extreme))}</span>`;
     el.groupTotal.textContent = `총액 약 ${formatManwon(result.total.mean)} (${formatBand(result.total.band)}) · ${result.people}명 · ${result.money.fx.title}`;
+    const month = perRxMonth(result);
+    el.perMonth.hidden = !month;
+    if (month) {
+      el.perMonth.innerHTML = `처방 1개월분당 <strong>약 ${esc(formatManwon(month.mean))}</strong> (${esc(formatBand(month.band))})<small>${result.people}명 여행 총액 ÷ ${esc(formatMonths(month.months))} · 그중 약값·진료비 ${esc(formatManwon(month.drug))}</small>`;
+    }
 
     const b = result.breakdown;
     const savingsText = result.rxSavings > 0 ? ` · 국내 처방보다 약 ${formatManwon(result.rxSavings)} 저렴` : "";
@@ -1073,6 +1089,7 @@
         const r = results[cityId];
         const s = state.cities[cityId];
         const active = cityId === state.cityId;
+        const month = perRxMonth(r);
         const picks = [
           r.clinic.short,
           planTitle(r.rxPlan, r.country),
@@ -1090,6 +1107,7 @@
               <small>${esc(picks)}</small>
             </th>
             <td><strong>${formatManwon(r.perPerson.mean)}</strong><small>${formatBand(r.perPerson.band)}</small></td>
+            <td>${month ? `<strong>${formatManwon(month.mean)}</strong><small>${esc(formatMonths(month.months))}</small>` : "-"}</td>
             <td>${formatManwon(r.total.mean)}<small>${formatBand(r.total.band)}</small></td>
           </tr>
         `;
@@ -1651,6 +1669,28 @@
       .filter(([, weeks]) => weeks)
       .map(([dose, weeks]) => `${country.doseLabel[dose]} ${weeks / country.weeksPerPen}펜`)
       .join(" + ");
+  }
+
+  // Months of medicine the trip brings home (4 weeks = 1 month, all patients together).
+  function rxMonths(result) {
+    return (Object.values(result.rxPlan.weeks).reduce((sum, weeks) => sum + weeks, 0) / 4) * result.rxPatients;
+  }
+
+  // Whole-trip cost (everyone travelling) per month of medicine, and the drug alone per month.
+  // This puts plans of different sizes, and Japan (12 weeks) against China (24 weeks), on one scale.
+  function perRxMonth(result) {
+    const months = rxMonths(result);
+    if (!months) return null;
+    return {
+      months,
+      mean: result.total.mean / months,
+      band: scale(result.total.band, 1 / months),
+      drug: result.breakdown.rx.mean / months,
+    };
+  }
+
+  function formatMonths(months) {
+    return `${months.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}개월분`;
   }
 
   // Customs allows 6 containers, or more than 6 when that is still within 3 months of use.
