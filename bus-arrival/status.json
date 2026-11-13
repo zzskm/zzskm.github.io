@@ -1,54 +1,30 @@
 {
-  "last_poll": "2026-11-13T16:19:31+09:00",
-  "last_poll_local": "2026-11-13 16:19:34+09:00",
-  "route_id": 204000170,
+  "last_poll": "2026-11-13T16:20:32+09:00",
+  "last_poll_local": "2026-11-13 16:20:34+09:00",
+  "error": "no_bus",
   "secondary_station_id": 205000029,
   "secondary_mobile_no": "06004",
-  "current_veh_id": 204001379,
-  "current_plate": "경기70아7047",
-  "first_seen_ts": "2026-11-13T16:19:31+09:00",
-  "safety": {
-    "api_arrival_ts": "2026-11-13T16:27:58+09:00",
-    "corrected_arrival_ts": "2026-11-13T16:26:38+09:00",
-    "safe_arrival_ts": "2026-11-13T16:15:16+09:00",
-    "offset_sec": -762,
-    "method": "trip_lower_quantile",
-    "sample_trips": 183,
-    "alpha": 0.05,
-    "stalled_last_stop": false,
-    "confidence": "conditional_estimate",
-    "observation_ts": "2026-11-13T16:19:31+09:00",
-    "model_status": "ready",
-    "fallback_sec": 660
-  },
-  "predict_sec": 507,
-  "location_no": 1,
-  "next_veh_id": null,
-  "next_plate_no": "",
-  "next_predict_sec": null,
-  "remain_seat": 44,
-  "flag": "PASS",
-  "tracking_samples": 1,
-  "min_predict_in_track": 507,
-  "daily_calls": 8,
-  "confidence": "low",
-  "last_success": "2026-11-13T16:19:31+09:00",
-  "state_reset": false,
-  "primary_source": "station_list",
-  "data_source": "official",
+  "daily_calls": 10,
+  "last_success": "2026-11-13T16:20:32+09:00",
+  "primary_source": "kakao",
+  "data_source": "kakao",
   "source_attempts": [
     {
-      "source": "official",
+      "source": "naver",
+      "ok": true
+    },
+    {
+      "source": "kakao",
       "ok": true
     }
   ],
   "sources": {
     "official": {
-      "calls": 5,
-      "ok": 5,
+      "calls": 6,
+      "ok": 6,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-13T16:19:31+09:00"
+      "last_success": "2026-11-13T16:20:01+09:00"
     },
     "gbis_web": {
       "calls": 6,
@@ -58,18 +34,18 @@
       "last_success": "2026-11-13T16:17:31+09:00"
     },
     "kakao": {
+      "calls": 9,
+      "ok": 9,
+      "fail": 0,
+      "consec_fail": 0,
+      "last_success": "2026-11-13T16:20:31+09:00"
+    },
+    "naver": {
       "calls": 8,
       "ok": 8,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-13T16:16:31+09:00"
-    },
-    "naver": {
-      "calls": 7,
-      "ok": 7,
-      "fail": 0,
-      "consec_fail": 0,
-      "last_success": "2026-11-13T16:18:31+09:00"
+      "last_success": "2026-11-13T16:20:31+09:00"
     }
   },
   "gbis_web": {
@@ -77,24 +53,23 @@
     "vehicles": 3,
     "waiting_vehicles": 1,
     "passes": 0,
-    "calls": 20,
-    "request_duration_sec": 0.856,
-    "last_success": "2026-11-13T16:19:34+09:00"
+    "calls": 21,
+    "request_duration_sec": 0.874,
+    "last_success": "2026-11-13T16:20:34+09:00"
   },
-  "station_route_count": 29,
   "consecutive_connect_timeouts": 0,
   "collect_window": "16:00-22:00",
-  "poll_interval_sec": 30,
-  "api_request_started_at": "2026-11-13T16:19:31+09:00",
-  "api_response_received_at": "2026-11-13T16:19:32+09:00",
-  "api_request_duration_sec": 1.24,
-  "publish_interval_sec": 60,
-  "urgent_publication": true,
-  "publication_reason": "near_stop",
+  "poll_interval_sec": 60,
+  "api_request_started_at": "2026-11-13T16:20:31+09:00",
+  "api_response_received_at": "2026-11-13T16:20:33+09:00",
+  "api_request_duration_sec": 1.546,
+  "publish_interval_sec": 120,
+  "urgent_publication": false,
+  "publication_reason": "normal",
   "runtime_schema_version": 2,
   "model_status": "ready",
   "model_trained_through": "2026-11-12",
-  "publish_prepared_at": "2026-11-13T07:19:35.027659+00:00",
-  "poll_to_publish_prepare_sec": 4.028,
+  "publish_prepared_at": "2026-11-13T07:20:35.138073+00:00",
+  "poll_to_publish_prepare_sec": 3.138,
   "publication_stage": "prepared_not_deployed"
 }
