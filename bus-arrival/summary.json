@@ -5,9 +5,8 @@
     "alpha": 0.05,
     "min_trips": 20,
     "fallback_sec": 660,
-    "trained_through": "2026-11-11",
+    "trained_through": "2026-11-12",
     "training_days": [
-      "2026-10-01",
       "2026-10-02",
       "2026-10-06",
       "2026-10-07",
@@ -29,43 +28,44 @@
       "2026-11-02",
       "2026-11-03",
       "2026-11-10",
-      "2026-11-11"
+      "2026-11-11",
+      "2026-11-12"
     ],
     "bins": {
       "global": {
-        "trips": 229,
+        "trips": 228,
         "offset_sec": -762,
-        "mean_offset_sec": -108,
+        "mean_offset_sec": -109,
+        "method": "trip_lower_quantile"
+      },
+      "far:other": {
+        "trips": 164,
+        "offset_sec": -617,
+        "mean_offset_sec": -99,
+        "method": "trip_lower_quantile"
+      },
+      "far:last": {
+        "trips": 88,
+        "offset_sec": -878,
+        "mean_offset_sec": -334,
         "method": "trip_lower_quantile"
       },
       "near:last": {
-        "trips": 216,
+        "trips": 215,
         "offset_sec": -262,
         "mean_offset_sec": -48,
         "method": "trip_lower_quantile"
       },
-      "far:other": {
-        "trips": 163,
-        "offset_sec": -617,
-        "mean_offset_sec": -95,
-        "method": "trip_lower_quantile"
-      },
-      "far:last": {
-        "trips": 91,
-        "offset_sec": -878,
-        "mean_offset_sec": -325,
-        "method": "trip_lower_quantile"
-      },
       "mid:last": {
-        "trips": 182,
-        "offset_sec": -347,
+        "trips": 183,
+        "offset_sec": -337,
         "mean_offset_sec": -80,
         "method": "trip_lower_quantile"
       },
       "mid:other": {
         "trips": 100,
         "offset_sec": -242,
-        "mean_offset_sec": -24,
+        "mean_offset_sec": -26,
         "method": "trip_lower_quantile"
       }
     },
@@ -80,135 +80,64 @@
     "unmatched_trip": 0,
     "plate_mismatch": 0,
     "invalid_trip_predictions": 3,
-    "excluded_gap_or_reason": 11,
+    "excluded_gap_or_reason": 10,
     "sample_count_mismatch": 0,
     "missing_endpoints": 0,
     "quick_reappearance": 1,
     "overlapping_trip": 0,
     "alternate_source_rows": 671,
-    "prediction_rows": 6692,
-    "arrival_rows": 253,
-    "short_track_trips": 13,
+    "prediction_rows": 6438,
+    "arrival_rows": 241,
+    "short_track_trips": 12,
     "reasons": {
-      "observed_arrival": 160,
-      "estimated_arrival": 79,
-      "vanished": 3,
+      "estimated_arrival": 75,
+      "observed_arrival": 153,
+      "vanished": 2,
       "stale": 7,
       "vehicle_changed": 1
     },
-    "matched_trips": 250,
-    "eligible_trips": 239,
+    "matched_trips": 238,
+    "eligible_trips": 228,
     "api_signal_trips": 0,
-    "no_bus_rows": 3153,
-    "unmatched_vehicle_rows": 671,
+    "no_bus_rows": 3047,
+    "unmatched_vehicle_rows": 672,
     "window_days": 42
   },
   "historical_alerts": {
-    "date": "2026-11-12",
-    "slots": [
-      {
-        "id": "2026-11-12:1",
-        "earliest_arrival_ts": "2026-11-12T16:45:02+09:00",
-        "latest_arrival_ts": "2026-11-12T16:51:02+09:00",
-        "sample_days": 4,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:2",
-        "earliest_arrival_ts": "2026-11-12T17:09:01+09:00",
-        "latest_arrival_ts": "2026-11-12T17:18:02+09:00",
-        "sample_days": 4,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:3",
-        "earliest_arrival_ts": "2026-11-12T17:42:01+09:00",
-        "latest_arrival_ts": "2026-11-12T17:47:02+09:00",
-        "sample_days": 4,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:4",
-        "earliest_arrival_ts": "2026-11-12T18:32:02+09:00",
-        "latest_arrival_ts": "2026-11-12T18:39:01+09:00",
-        "sample_days": 4,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:5",
-        "earliest_arrival_ts": "2026-11-12T19:12:01+09:00",
-        "latest_arrival_ts": "2026-11-12T19:14:19+09:00",
-        "sample_days": 5,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:6",
-        "earliest_arrival_ts": "2026-11-12T19:49:02+09:00",
-        "latest_arrival_ts": "2026-11-12T19:54:01+09:00",
-        "sample_days": 5,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:7",
-        "earliest_arrival_ts": "2026-11-12T20:19:19+09:00",
-        "latest_arrival_ts": "2026-11-12T20:25:03+09:00",
-        "sample_days": 5,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:8",
-        "earliest_arrival_ts": "2026-11-12T20:37:03+09:00",
-        "latest_arrival_ts": "2026-11-12T20:49:19+09:00",
-        "sample_days": 5,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:9",
-        "earliest_arrival_ts": "2026-11-12T21:08:01+09:00",
-        "latest_arrival_ts": "2026-11-12T21:13:03+09:00",
-        "sample_days": 5,
-        "margin_sec": 120
-      },
-      {
-        "id": "2026-11-12:10",
-        "earliest_arrival_ts": "2026-11-12T21:34:19+09:00",
-        "latest_arrival_ts": "2026-11-12T21:40:02+09:00",
-        "sample_days": 5,
-        "margin_sec": 120
-      }
-    ],
+    "date": "2026-11-13",
+    "slots": [],
     "source": "historical_not_realtime"
   },
-  "generated_at": "2026-11-12T22:00:22.273693+09:00",
+  "generated_at": "2026-11-13T16:00:04.071428+09:00",
   "latest": {
-    "ts_kst": "2026-11-12T21:59:36+09:00",
-    "vehId": "",
-    "plateNo": "",
-    "predict_sec": "",
-    "remain_seat": "",
-    "state_cd": "",
-    "flag": "PASS",
-    "location_no": "",
-    "source": "official"
-  },
-  "latest_valid": {
-    "ts_kst": "2026-11-12T21:36:36+09:00",
-    "vehId": "204001379",
-    "plateNo": "경기70아7047",
-    "predict_sec": "60",
+    "ts_kst": "2026-11-13T16:00:01+09:00",
+    "vehId": "204001378",
+    "plateNo": "경기70아7046",
+    "predict_sec": "26",
     "remain_seat": "44",
     "state_cd": "",
-    "flag": "PASS",
+    "flag": "",
     "location_no": "1",
-    "source": "gbis_web"
+    "source": "naver"
+  },
+  "latest_valid": {
+    "ts_kst": "2026-11-13T16:00:01+09:00",
+    "vehId": "204001378",
+    "plateNo": "경기70아7046",
+    "predict_sec": "26",
+    "remain_seat": "44",
+    "state_cd": "",
+    "flag": "",
+    "location_no": "1",
+    "source": "naver"
   },
   "today": {
-    "samples": 258,
-    "min_predict_sec": 12,
-    "avg_predict_sec": 433
+    "samples": 1,
+    "min_predict_sec": 26,
+    "avg_predict_sec": 26
   },
-  "prediction_samples": 7546,
-  "valid_prediction_samples": 3902,
+  "prediction_samples": 7547,
+  "valid_prediction_samples": 3903,
   "no_bus_samples": 3639,
   "invalid_samples": 5,
   "arrival_records": 280,
@@ -394,20 +323,14 @@
       "samples": 258,
       "min_predict_sec": 12,
       "avg_predict_sec": 433
+    },
+    "2026-11-13": {
+      "samples": 1,
+      "min_predict_sec": 26,
+      "avg_predict_sec": 26
     }
   },
   "recent_predictions": [
-    {
-      "ts_kst": "2026-11-12T21:34:06+09:00",
-      "vehId": "204001379",
-      "plateNo": "경기70아7047",
-      "predict_sec": "253",
-      "remain_seat": "44",
-      "state_cd": "",
-      "flag": "",
-      "location_no": "1",
-      "source": "naver"
-    },
     {
       "ts_kst": "2026-11-12T21:34:36+09:00",
       "vehId": "204001379",
@@ -726,6 +649,17 @@
       "flag": "PASS",
       "location_no": "",
       "source": "official"
+    },
+    {
+      "ts_kst": "2026-11-13T16:00:01+09:00",
+      "vehId": "204001378",
+      "plateNo": "경기70아7046",
+      "predict_sec": "26",
+      "remain_seat": "44",
+      "state_cd": "",
+      "flag": "",
+      "location_no": "1",
+      "source": "naver"
     }
   ],
   "recent_arrivals": [
