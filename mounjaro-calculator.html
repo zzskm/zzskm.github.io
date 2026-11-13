@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>마운자로 퀵펜 계산기</title>
+<meta name="description" content="마운자로(Mounjaro) 퀵펜 투여량, 클릭 수, 1펜 사용기간, 총 투여량을 쉽게 계산하는 웹 도구" />
+<style>
+  :root {
+    --bg: #f3f7f4;
+    --surface: #ffffff;
+    --surface-2: #edf4f0;
+    --surface-3: #f7faf8;
+    --line: #d7e2db;
+    --line-strong: #bfd3c8;
+    --text: #142a22;
+    --muted: #587066;
+    --primary: #1f7a5a;
+    --primary-dark: #165c44;
+    --primary-soft: #dff1e8;
+    --accent: #f3b63a;
+    --warn-bg: #fff7e8;
+    --warn-line: #efd39a;
+    --warn-text: #7a4b00;
+    --danger-bg: #fff1ef;
+    --danger-line: #efc1ba;
+    --danger-text: #8a251b;
+    --shadow: 0 10px 28px rgba(20, 60, 45, 0.08);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+    color: var(--text);
+    background: linear-gradient(180deg, #eaf4ef 0%, var(--bg) 220px);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 56px; }
+  header { margin-bottom: 18px; }
+  h1 { margin: 0 0 6px; font-size: clamp(1.55rem, 2.4vw, 2.15rem); letter-spacing: -0.02em; }
+  .subtitle { margin: 0; color: var(--muted); max-width: 70ch; }
+  .layout { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; align-items: start; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 1.05rem; }
+  .steps { display: flex; flex-direction: column; gap: 14px; }
+  .step {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    background: var(--surface-3);
+  }
+  .step-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+  .step-num {
+    flex: 0 0 28px; height: 28px; border-radius: 999px;
+    display: inline-grid; place-items: center;
+    background: var(--primary); color: #fff; font-weight: 700; font-size: 0.9rem;
+  }
+  .step-title { font-weight: 700; margin: 0; }
+  .step-desc { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; }
+  .fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 0.9rem; font-weight: 600; }
+  .hint { font-size: 0.8rem; color: var(--muted); font-weight: 400; }
+  input[type="number"], select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; font: inherit; background: #fff; color: var(--text);
+  }
+  input[type="number"]:focus, select:focus { outline: 2px solid #bfe3d4; border-color: var(--primary); }
+  input[type="range"] { width: 100%; accent-color: var(--primary); }
+
+  .pen-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+  .choice {
+    border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px;
+    cursor: pointer; text-align: left; font: inherit; color: var(--text);
+    transition: border-color .15s, background .15s, transform .05s;
+  }
+  .choice:hover { border-color: var(--line-strong); }
+  .choice.active { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+  .choice .name { font-weight: 700; font-size: 0.95rem; }
+  .choice .sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+  .info-box {
+    margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+    background: #fff; border: 1px solid var(--line); color: var(--muted); font-size: 0.88rem;
+  }
+  .info-box strong { color: var(--text); }
+  details.more { margin-top: 8px; }
+  details.more summary { cursor: pointer; color: var(--primary-dark); font-size: 0.88rem; font-weight: 600; }
+  details.more .content { margin-top: 8px; color: var(--muted); font-size: 0.86rem; }
+
+  .seg { display: inline-flex; background: #e7eeea; border-radius: 10px; padding: 4px; gap: 4px; }
+  .seg button {
+    border: 0; background: transparent; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+    font: inherit; font-size: 0.88rem; color: var(--muted); font-weight: 600;
+  }
+  .seg button.active { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .mode-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .range-row { display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: center; }
+  .readonly {
+    padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-strong);
+    background: #fff; font-size: 0.92rem; color: var(--text);
+  }
+  .readonly .k { color: var(--muted); font-size: 0.8rem; margin-bottom: 2px; }
+  .readonly .v { font-weight: 700; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pill {
+    border: 1px solid var(--line); background: #fff; color: var(--text);
+    padding: 7px 11px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 0.88rem;
+  }
+  .pill:hover:not(:disabled) { border-color: var(--line-strong); }
+  .pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .pill:disabled { opacity: 0.45; cursor: not-allowed; background: #f1f4f2; }
+  .interval-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+  .interval-grid .choice { text-align: center; padding: 9px 8px; }
+  .interval-grid .name { font-size: 0.9rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+  .stat { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .stat .k { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+  .stat .v { font-size: 1.22rem; font-weight: 700; line-height: 1.2; }
+  .stat .s { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
+  .stat.highlight { background: var(--primary-soft); border-color: #bfe3d4; }
+  .stat.wide { grid-column: 1 / -1; }
+  .feedback {
+    margin-top: 12px; padding: 12px; border-radius: 12px;
+    background: #f8fbf9; border: 1px solid var(--line); font-size: 0.9rem;
+  }
+  .feedback ul { margin: 6px 0 0 18px; padding: 0; }
+  .feedback li { margin: 3px 0; }
+  .msg { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 0.88rem; border: 1px solid; }
+  .msg.warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-text); }
+  .msg.danger { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger-text); }
+  .disclaimer {
+    margin-top: 14px; padding: 13px 14px; border-radius: 12px;
+    background: #fff4f2; border: 1px solid #f2cbc5; color: #7a271a; font-size: 0.88rem;
+  }
+  .section-card { margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.82rem; }
+  tr:last-child td { border-bottom: 0; }
+  .table-wrap { overflow-x: auto; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-dark); font-size: 0.78rem; font-weight: 600; vertical-align: middle; }
+  footer { margin-top: 14px; color: var(--muted); font-size: 0.84rem; }
+  footer a { color: var(--primary-dark); }
+  .hidden { display: none !important; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) {
+    .fields, .stats { grid-template-columns: 1fr; }
+    .pen-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .interval-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .range-row { grid-template-columns: 1fr; }
+    .card { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>마운자로(Mounjaro) 퀵펜 계산기</h1>
+    <p class="subtitle">펜 종류를 먼저 고르고, 실제 투여량·투여 간격·보유 펜 수를 순서대로 입력하면 1펜 사용기간과 필요 펜 수를 계산합니다. (중국(CHN) 다회용 퀵펜 기준)</p>
+  </header>
+
+  <div class="layout">
+    <section class="card" aria-label="입력 설정">
+      <h2>입력 설정</h2>
+      <div class="steps">
+        <div class="step" id="step1">
+          <div class="step-head">
+            <div class="step-num">1</div>
+            <div>
+              <p class="step-title">펜 종류(농도) 선택</p>
+              <p class="step-desc">가장 먼저 선택하세요. 펜마다 1회 투여 시 최대 용량과 클릭당 함량이 달라집니다.</p>
+            </div>
+          </div>
+          <div class="pen-grid" id="penGrid" role="group" aria-label="펜 종류 선택"></div>
+          <div class="info-box" id="penInfo"></div>
+          <details class="more">
+            <summary>기준 정보 자세히 보기</summary>
+            <div class="content">
+              중국(CHN) 마운자로 다회용 퀵펜(多剂量预装笔) 기준: 1펜 = 2.4 mL, 4회 고정 주간 용량(1회 0.6 mL). 본 계산기는 1회 0.6 mL = 60클릭 환산을 사용합니다(총 240클릭/펜). 펜 종류는 2.4 mL:10 mg(1회 2.5 mg), 2.4 mL:20 mg(1회 5 mg), 2.4 mL:30 mg(1회 7.5 mg), 2.4 mL:40 mg(1회 10 mg) 4종이며, 같은 클릭 수라도 펜 종류에 따라 mg이 달라집니다. 본 계산기는 단순 산술 환산 도구입니다.
+            </div>
+          </details>
+        </div>
+
+        <div class="step" id="step2">
+          <div class="step-head">
+            <div class="step-num">2</div>
+            <div>
+              <p class="step-title">실제 1회 투여량 설정</p>
+              <p class="step-desc">mg 또는 클릭 수 중 한 방식으로 입력하면 다른 값은 자동 계산됩니다.</p>
+            </div>
+          </div>
+          <div class="mode-row">
+            <div class="seg" role="tablist" aria-label="입력 방식">
+              <button type="button" id="modeMgBtn" class="active" role="tab" aria-selected="true">mg으로 입력</button>
+              <button type="button" id="modeClickBtn" role="tab" aria-selected="false">클릭으로 입력</button>
+            </div>
+            <span class="hint" id="modeHint">선택한 펜 범위 내에서 설정</span>
+          </div>
+
+          <div id="mgModePanel">
+            <div class="field">
+              <label for="doseMg">실제 투여량 (mg)</label>
+              <div class="range-row">
+                <input id="doseRange" type="range" min="0.25" max="5" step="0.25" value="2.5" />
+                <input id="doseMg" type="number" min="0.01" step="0.01" value="2.5" />
+              </div>
+            </div>
+            <div class="readonly" style="margin-top:10px;">
+              <div class="k">자동 계산</div>
+              <div class="v" id="mgToClicks">-</div>
+            </div>
+            <div class="hint" style="margin-top:8px;">빠른 선택 (선택한 펜에서 가능한 용량만 활성화)</div>
+            <div class="pill-row" id="presetRow"></div>
+          </div>
+
+          <div id="clickModePanel" class="hidden">
+            <div class="field">
+              <label for="clicks">클릭 수</label>
+              <div class="range-row">
+                <input id="clickRange" type="range" min="1" max="60" step="1" value="30" />
+                <input id="clicks" type="number" min="1" step="1" value="30" />
+              </div>
+              <div class="hint">60클릭 = 0.6 mL (정량 1회). 1펜 총 240클릭까지 계산에 반영됩니다.</div>
+            </div>
+            <div class="readonly" style="margin-top:10px;">
+              <div class="k">자동 계산</div>
+              <div class="v" id="clicksToMg">-</div>
+            </div>
+          </div>
+          <div id="doseWarning" class="msg warn hidden"></div>
+        </div>
+
+        <div class="step" id="step3">
+          <div class="step-head">
+            <div class="step-num">3</div>
+            <div>
+              <p class="step-title">투여 간격</p>
+              <p class="step-desc">1펜 사용기간은 이 간격을 기준으로 계산됩니다.</p>
+            </div>
+          </div>
+          <div class="interval-grid" id="intervalGrid"></div>
+          <div class="field hidden" id="customIntervalField" style="margin-top:10px;">
+            <label for="intervalDays">직접 입력 간격 (일)</label>
+            <input id="intervalDays" type="number" min="0.5" step="0.5" value="7" />
+          </div>
+        </div>
+
+        <div class="step" id="step4">
+          <div class="step-head">
+            <div class="step-num">4</div>
+            <div>
+              <p class="step-title">보유 펜 수 / 계획 기간</p>
+              <p class="step-desc">현재 보유량과 목표 기간에 필요한 펜 수를 확인합니다.</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">
+              <label for="penCount">보유 또는 구매 펜 수</label>
+              <input id="penCount" type="number" min="1" step="1" value="1" />
+            </div>
+            <div class="field">
+              <label for="planWeeks">총 계획 기간 (주)</label>
+              <input id="planWeeks" type="number" min="1" step="1" value="4" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-label="계산 결과">
+      <h2>계산 결과 <span id="strengthBadge" class="badge">5 mg 펜</span></h2>
+      <div class="stats">
+        <div class="stat highlight">
+          <div class="k">실제 1회 투여량</div>
+          <div class="v" id="outDoseMg">-</div>
+          <div class="s" id="outDoseMl">-</div>
+        </div>
+        <div class="stat highlight">
+          <div class="k">1회 클릭 수</div>
+          <div class="v" id="outClicks">-</div>
+          <div class="s" id="outMlOnly">-</div>
+        </div>
+        <div class="stat">
+          <div class="k">클릭당 함량</div>
+          <div class="v" id="outMgPerClick">-</div>
+          <div class="s">0.01 mL / 클릭</div>
+        </div>
+        <div class="stat">
+          <div class="k">1펜 총 용량</div>
+          <div class="v" id="outPenTotalMg">-</div>
+          <div class="s">2.4 mL (240클릭) 기준</div>
+        </div>
+        <div class="stat">
+          <div class="k">1펜당 투여 가능 횟수</div>
+          <div class="v" id="outDosesPerPen">-</div>
+          <div class="s" id="outRemainder">-</div>
+        </div>
+        <div class="stat">
+          <div class="k">1펜 사용기간</div>
+          <div class="v" id="outDaysPerPen">-</div>
+          <div class="s" id="outWeeksPerPen">-</div>
+        </div>
+        <div class="stat">
+          <div class="k">보유 펜 총 사용기간</div>
+          <div class="v" id="outTotalDays">-</div>
+          <div class="s" id="outTotalDoses">-</div>
+        </div>
+        <div class="stat">
+          <div class="k">계획 기간 필요량</div>
+          <div class="v" id="outPensNeeded">-</div>
+          <div class="s" id="outPlanTotalMg">-</div>
+        </div>
+        <div class="stat wide">
+          <div class="k">실시간 요약</div>
+          <div class="feedback" id="feedbackBox"></div>
+        </div>
+      </div>
+      <div id="globalWarnings"></div>
+      <div class="disclaimer">
+        <strong>안내:</strong> 이 계산기는 중국(CHN) 마운자로 다회용 퀵펜 표시 기준(1펜 2.4 mL, 4회 고정 용량 0.6 mL, 계산 편의를 위한 1회 60클릭 환산)의 산술 계산 도구입니다. 의료·투여 지침이 아니며, 실제 처방 용량·투여 방법·펜 사용법은 반드시 처방자·약사 및 공식 제품 설명서를 따르세요. 펜에서 약물을 추출해 사용하는 방법, 소량 분할 투여, 남은 약액 사용은 제품 설명서 및 의료진 지침과 다를 수 있습니다.
+      </div>
+    </section>
+  </div>
+
+  <section class="card section-card">
+    <h2>선택한 펜 기준 빠른 환산표</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>클릭 수</th><th>mL</th><th>실제 함량 (mg)</th><th>비고</th></tr></thead>
+        <tbody id="quickTable"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card section-card">
+    <h2>펜 종류별 참고 정보</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>펜 종류</th><th>클릭당 함량</th><th>60클릭(정량 1회)</th><th>1펜 총량(240클릭)</th></tr></thead>
+        <tbody id="strengthTable"></tbody>
+      </table>
+    </div>
+    <footer>
+      참고: 중국 출시 정보 및 제품 정보 기준(穆峰达/마운자로 다회용 퀵펜: 2.4 mL:10/20/30/40 mg, 각 4회×0.6 mL 고정 용량). 실제 사용은 처방 및 공식 설명서를 우선하세요.
+    </footer>
+  </section>
+</div>
+
+<script>
+(() => {
+  const ML_PER_CLICK = 0.01;
+  const CLICKS_PER_DOSE = 60;
+  const DOSES_PER_PEN = 4;
+  const CLICKS_PER_PEN = CLICKS_PER_DOSE * DOSES_PER_PEN;
+  // 중국(CHN) 마운자로 다회용 퀵펜 기준: 2.4 mL 펜, 4회 고정 용량(0.6 mL)
+  // 2.4mL:10mg(4×2.5mg), 2.4mL:20mg(4×5mg), 2.4mL:30mg(4×7.5mg), 2.4mL:40mg(4×10mg)
+  const PENS = [
+    { strength: 2.5, total: 10, label: '2.4 mL : 10 mg', doseLabel: '1회 2.5 mg' },
+    { strength: 5, total: 20, label: '2.4 mL : 20 mg', doseLabel: '1회 5 mg' },
+    { strength: 7.5, total: 30, label: '2.4 mL : 30 mg', doseLabel: '1회 7.5 mg' },
+    { strength: 10, total: 40, label: '2.4 mL : 40 mg', doseLabel: '1회 10 mg' }
+  ];
+  const PRESETS = [1.25, 2.5, 3.75, 5, 7.5, 10];
+  const INTERVALS = [
+    { label: '7일마다', sub: '주 1회', value: 7 },
+    { label: '3.5일마다', sub: '주 2회', value: 3.5 },
+    { label: '5일마다', sub: '직접 간격', value: 5 },
+    { label: '10일마다', sub: '직접 간격', value: 10 },
+    { label: '14일마다', sub: '2주 1회', value: 14 },
+    { label: '직접 입력', sub: '일 단위', value: 'custom' }
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    strength: 5,
+    mode: 'mg', // 'mg' | 'click'
+    doseMg: 2.5,
+    clicks: 30,
+    interval: 7,
+    customInterval: 7,
+    penCount: 1,
+    planWeeks: 4
+  };
+
+  function round(v, d = 2) { const p = 10 ** d; return Math.round((v + Number.EPSILON) * p) / p; }
+  function fmt(v, d = 2) {
+    if (!isFinite(v)) return '-';
+    const n = round(v, d);
+    const s = n.toFixed(d);
+    return s.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+  }
+  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+  function currentPen() { return PENS.find(p => p.strength === state.strength) || PENS[1]; }
+  function mgPerClick() { return state.strength / CLICKS_PER_DOSE; }
+  function penTotalMg() { return currentPen().total; }
+
+  function renderPenGrid() {
+    $('penGrid').innerHTML = PENS.map(p => `
+      <button type="button" class="choice ${p.strength === state.strength ? 'active' : ''}" data-strength="${p.strength}">
+        <div class="name">${p.label}</div>
+        <div class="sub">${p.doseLabel} / 0.6 mL · 60클릭</div>
+      </button>`).join('');
+    $('penGrid').querySelectorAll('[data-strength]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.strength = parseFloat(btn.dataset.strength);
+        if (state.mode === 'mg') state.doseMg = Math.min(state.doseMg, state.strength);
+        syncDerivedFromMode();
+        renderAll();
+      });
+    });
+  }
+
+  function renderIntervalGrid() {
+    $('intervalGrid').innerHTML = INTERVALS.map(it => {
+      const active = (it.value === 'custom' && state.interval === 'custom') || (it.value !== 'custom' && state.interval === it.value);
+      return `<button type="button" class="choice ${active ? 'active' : ''}" data-interval="${it.value}">
+        <div class="name">${it.label}</div><div class="sub">${it.sub}</div></button>`;
+    }).join('');
+    $('intervalGrid').querySelectorAll('[data-interval]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.dataset.interval;
+        state.interval = v === 'custom' ? 'custom' : parseFloat(v);
+        renderAll();
+      });
+    });
+  }
+
+  function renderPresets() {
+    $('presetRow').innerHTML = PRESETS.map(mg => {
+      const enabled = mg <= state.strength + 1e-9;
+      const active = Math.abs(state.doseMg - mg) < 0.001;
+      const label = `${fmt(mg,2)} mg`;
+      return `<button type="button" class="pill ${active ? 'active' : ''}" data-mg="${mg}" ${enabled ? '' : 'disabled'} title="${enabled ? '' : '선택한 펜 1회 최대 용량 초과'}">${label}</button>`;
+    }).join('');
+    $('presetRow').querySelectorAll('[data-mg]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.mode = 'mg';
+        state.doseMg = parseFloat(btn.dataset.mg);
+        syncDerivedFromMode();
+        renderAll();
+      });
+    });
+  }
+
+  function syncDerivedFromMode() {
+    const perClick = mgPerClick();
+    if (state.mode === 'mg') {
+      state.doseMg = clamp(state.doseMg, 0.01, state.strength);
+      state.clicks = clamp(Math.round(state.doseMg / perClick), 1, CLICKS_PER_PEN);
+      state.doseMg = Math.min(state.doseMg, state.strength);
+    } else {
+      state.clicks = clamp(Math.round(state.clicks), 1, CLICKS_PER_PEN);
+      state.doseMg = Math.min(state.clicks * perClick, state.strength);
+    }
+  }
+
+  function getIntervalDays() { return state.interval === 'custom' ? Math.max(0.5, state.customInterval || 7) : state.interval; }
+
+  function renderAll() {
+    syncDerivedFromMode();
+    const perClick = mgPerClick();
+    const pen = currentPen();
+    const intervalDays = getIntervalDays();
+    const clicks = state.clicks;
+    const doseMg = clicks * perClick; // clicks-based for consistency
+    const doseMl = clicks * ML_PER_CLICK;
+    const totalMg = penTotalMg();
+    const dosesPerPen = doseMg > 0 ? totalMg / doseMg : 0;
+    const fullDoses = Math.floor(dosesPerPen + 1e-9);
+    const remainderMg = Math.max(0, totalMg - fullDoses * doseMg);
+    const remainderClicks = perClick > 0 ? remainderMg / perClick : 0;
+    const daysPerPen = dosesPerPen * intervalDays;
+    const totalDoses = dosesPerPen * state.penCount;
+    const totalDays = totalDoses * intervalDays;
+    const injectionsInPlan = (state.planWeeks * 7) / intervalDays;
+    const planTotalMg = injectionsInPlan * doseMg;
+    const pensNeeded = totalMg > 0 ? planTotalMg / totalMg : 0;
+
+    // Step 1
+    renderPenGrid();
+    $('penInfo').innerHTML = `<strong>선택한 펜:</strong> ${pen.label} (총 ${fmt(totalMg,1)} mg/2.4 mL) · 1회 고정 용량 ${fmt(pen.strength,1)} mg/0.6 mL(60클릭), 총 4회분 · 클릭당 함량 ${fmt(perClick,4)} mg`;
+    $('strengthBadge').textContent = `${pen.label}`;
+
+    // Step 2 mode/panels
+    $('modeMgBtn').classList.toggle('active', state.mode === 'mg');
+    $('modeClickBtn').classList.toggle('active', state.mode === 'click');
+    $('modeMgBtn').setAttribute('aria-selected', state.mode === 'mg');
+    $('modeClickBtn').setAttribute('aria-selected', state.mode === 'click');
+    $('mgModePanel').classList.toggle('hidden', state.mode !== 'mg');
+    $('clickModePanel').classList.toggle('hidden', state.mode !== 'click');
+
+    $('doseRange').max = String(state.strength);
+    $('doseRange').value = String(clamp(state.mode === 'mg' ? state.doseMg : doseMg, parseFloat($('doseRange').min), state.strength));
+    $('doseMg').max = String(state.strength);
+    $('doseMg').value = fmt(state.mode === 'mg' ? state.doseMg : doseMg, 3);
+    $('clickRange').max = '60';
+    $('clickRange').value = String(clamp(clicks, 1, 60));
+    $('clicks').value = String(clicks);
+
+    $('mgToClicks').textContent = `= ${clicks}클릭 (${fmt(doseMl,2)} mL, 약 ${fmt(doseMg,3)} mg)`;
+    $('clicksToMg').textContent = `= 약 ${fmt(doseMg,3)} mg (${fmt(doseMl,2)} mL)`;
+    renderPresets();
+
+    // dose warnings in step 2
+    const doseWarnings = [];
+    if (state.mode === 'click' && clicks > CLICKS_PER_DOSE) doseWarnings.push('60클릭(1회 0.6 mL)을 초과했습니다. 계산은 1펜 총 240클릭 범위에서만 수행됩니다.');
+    if (doseMg > state.strength + 1e-9) doseWarnings.push('실제 투여량이 선택한 펜의 1회 최대 용량을 초과합니다.');
+    if (state.strength >= 7.5 && doseMg <= 2.5) doseWarnings.push('선택한 펜 총량/농도에 비해 실제 투여량이 작아 잔여 계산이 복잡해질 수 있습니다. 처방에 맞는 펜인지 확인하세요.');
+    const doseWarnEl = $('doseWarning');
+    doseWarnEl.classList.toggle('hidden', doseWarnings.length === 0);
+    doseWarnEl.textContent = doseWarnings.join(' ');
+
+    // Step 3
+    renderIntervalGrid();
+    $('customIntervalField').classList.toggle('hidden', state.interval !== 'custom');
+    $('intervalDays').value = String(state.customInterval);
+
+    // Step 4
+    $('penCount').value = String(state.penCount);
+    $('planWeeks').value = String(state.planWeeks);
+
+    // Results
+    $('outDoseMg').textContent = `${fmt(doseMg,3)} mg`;
+    $('outDoseMl').textContent = `${fmt(doseMl,2)} mL`;
+    $('outClicks').textContent = `${clicks} 클릭`;
+    $('outMlOnly').textContent = `${fmt(doseMl,2)} mL`;
+    $('outMgPerClick').textContent = `${fmt(perClick,4)} mg`;
+    $('outPenTotalMg').textContent = `${fmt(totalMg,2)} mg`;
+    $('outDosesPerPen').textContent = `${fmt(dosesPerPen,2)} 회`;
+    if (remainderMg < 1e-6) {
+      $('outRemainder').textContent = `완전 투여 ${fullDoses}회로 나누어 떨어집니다`;
+    } else {
+      $('outRemainder').textContent = `완전 투여 ${fullDoses}회 후 약 ${fmt(remainderMg,3)} mg (${fmt(remainderClicks,1)}클릭) 잔여`;
+    }
+    $('outDaysPerPen').textContent = `${fmt(daysPerPen,1)}일`;
+    $('outWeeksPerPen').textContent = `약 ${fmt(daysPerPen / 7,2)}주 (${intervalDays}일 간격)`;
+    $('outTotalDays').textContent = `${fmt(totalDays,1)}일`;
+    $('outTotalDoses').textContent = `${state.penCount}펜 기준 약 ${fmt(totalDoses,2)}회`;
+    $('outPensNeeded').textContent = `${Math.max(0, Math.ceil(pensNeeded - 1e-9))}펜`;
+    $('outPlanTotalMg').textContent = `${state.planWeeks}주 · 약 ${fmt(injectionsInPlan,2)}회 · 총 ${fmt(planTotalMg,2)} mg`;
+
+    const exactDoses = Math.abs(dosesPerPen - Math.round(dosesPerPen)) < 1e-6;
+    const feedback = [];
+    feedback.push(`이 설정이면 1펜(${pen.label}, 총 ${fmt(totalMg,1)} mg)으로 <strong>${exactDoses ? `정확히 ${Math.round(dosesPerPen)}회` : `약 ${fmt(dosesPerPen,2)}회`}</strong> 투여할 수 있습니다.`);
+    feedback.push(`투여 간격 ${fmt(intervalDays,1)}일 기준 1펜 사용기간은 <strong>약 ${fmt(daysPerPen,1)}일</strong>입니다.`);
+    feedback.push(`보유 ${state.penCount}펜으로는 <strong>약 ${fmt(totalDays,1)}일(${fmt(totalDoses,2)}회)</strong> 사용할 수 있습니다.`);
+    if (pensNeeded > state.penCount + 1e-9) {
+      feedback.push(`계획 ${state.planWeeks}주에는 약 <strong>${Math.ceil(pensNeeded - 1e-9)}펜</strong>이 필요해 현재보다 <strong>${fmt(Math.ceil(pensNeeded - 1e-9) - state.penCount,0)}펜</strong> 더 필요합니다.`);
+    } else {
+      feedback.push(`계획 ${state.planWeeks}주에는 약 <strong>${Math.ceil(pensNeeded - 1e-9)}펜</strong>이 필요하며, 현재 보유량으로 계획 가능합니다.`);
+    }
+    $('feedbackBox').innerHTML = `<ul>${feedback.map(f => `<li>${f}</li>`).join('')}</ul>`;
+
+    const global = [];
+    if (intervalDays < 7) global.push({ type: 'warn', text: '투여 간격이 7일보다 짧습니다. 실제 투여 일정은 처방 지침을 따르세요.' });
+    if (dosesPerPen < 1) global.push({ type: 'danger', text: '1회 투여량이 1펜 총량을 초과하여 1펜으로 완전 1회 투여가 어렵습니다. 입력값을 확인하세요.' });
+    global.push({ type: 'warn', text: '계산 결과는 산술 근사치입니다. 실제 잔량, 기구 특성, 펜 사용법에 따라 달라질 수 있으며, 중국 제품은 고정 용량 투여용으로 설계되어 있습니다.' });
+    $('globalWarnings').innerHTML = global.map(g => `<div class="msg ${g.type}">${g.text}</div>`).join('');
+
+    renderTables();
+  }
+
+  function renderTables() {
+    const perClick = mgPerClick();
+    const marks = [5,10,15,20,30,40,50,60];
+    $('quickTable').innerHTML = marks.map(c => {
+      const mg = c * perClick;
+      const ml = c * ML_PER_CLICK;
+      const note = c === 60 ? '1회 0.6 mL 기준' : '';
+      return `<tr><td>${c} 클릭</td><td>${fmt(ml,2)} mL</td><td>${fmt(mg,3)} mg</td><td>${note}</td></tr>`;
+    }).join('');
+    $('strengthTable').innerHTML = PENS.map(p => {
+      const pc = p.strength / CLICKS_PER_DOSE;
+      return `<tr><td>${p.label} (${p.doseLabel}×4)</td><td>${fmt(pc,4)} mg</td><td>${fmt(p.strength,2)} mg</td><td>${fmt(p.total,1)} mg / 2.4 mL</td></tr>`;
+    }).join('');
+  }
+
+  // events
+  $('modeMgBtn').addEventListener('click', () => { state.mode = 'mg'; renderAll(); });
+  $('modeClickBtn').addEventListener('click', () => { state.mode = 'click'; renderAll(); });
+  $('doseRange').addEventListener('input', (e) => { state.mode = 'mg'; state.doseMg = parseFloat(e.target.value); renderAll(); });
+  $('doseMg').addEventListener('input', (e) => { state.mode = 'mg'; state.doseMg = parseFloat(e.target.value || '0'); renderAll(); });
+  $('clickRange').addEventListener('input', (e) => { state.mode = 'click'; state.clicks = parseInt(e.target.value, 10); renderAll(); });
+  $('clicks').addEventListener('input', (e) => { state.mode = 'click'; state.clicks = parseInt(e.target.value || '1', 10); renderAll(); });
+  $('intervalDays').addEventListener('input', (e) => { state.customInterval = parseFloat(e.target.value || '7'); renderAll(); });
+  $('penCount').addEventListener('input', (e) => { state.penCount = Math.max(1, parseInt(e.target.value || '1', 10)); renderAll(); });
+  $('planWeeks').addEventListener('input', (e) => { state.planWeeks = Math.max(1, parseFloat(e.target.value || '1')); renderAll(); });
+
+  // init
+  state.strength = 5; state.mode = 'mg'; state.doseMg = 2.5; state.interval = 7; state.customInterval = 7; state.penCount = 1; state.planWeeks = 4;
+  syncDerivedFromMode();
+  renderAll();
+})();
+</script>
+</body>
+</html>
