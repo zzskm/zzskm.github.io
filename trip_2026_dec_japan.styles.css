@@ -484,6 +484,12 @@ body {
   gap: 6px;
 }
 
+/* A long label wraps its own text instead of squeezing two or three buttons onto separate lines. */
+.activity-label ~ .qty-group {
+  flex-shrink: 0;
+  max-width: 60%;
+}
+
 .qty-btn,
 .toggle-btn {
   border: 1px solid var(--line);
@@ -1129,8 +1135,10 @@ body {
     margin-top: 12px;
   }
 
-  .qty-group {
+  .qty-group,
+  .activity-label ~ .qty-group {
     width: 100%;
+    max-width: none;
     flex-wrap: nowrap;
   }
 

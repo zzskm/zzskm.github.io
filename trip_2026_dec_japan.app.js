@@ -9,8 +9,7 @@
   const UI_KEY = "trip_2026_dec_japan.ui.v1";
   const TABS = ["plan", "cost", "rx", "book"];
   const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-  const DOSE_LABEL = { d25: "2.5mg", d5: "5mg" };
-  const { cities, cityOrder, calculationRules, rx } = data;
+  const { cities, cityOrder, calculationRules, rx, countries, currencies } = data;
   const BAND_Z = Number(calculationRules.bandZ || 1.2816);
   const QUOTE_FIELDS = [
     { field: "flight", label: "확정가 · 1인 왕복", placeholder: "예: 320,000" },
@@ -44,8 +43,12 @@
     titleStayPre: byId("title-stayPre"),
     titleClinic: byId("title-clinic"),
     titleActivities: byId("title-activities"),
+    titleFx: byId("title-fx"),
+    labelRxPlan: byId("label-rxPlan"),
     rxPrep: byId("rx-prep"),
     cash: byId("cash-list"),
+    cashTitle: byId("cash-title"),
+    cashNote: byId("cash-note"),
     resultContext: byId("result-context"),
     perPersonTotal: byId("per-person-total"),
     perPersonBand: byId("per-person-band"),
@@ -115,8 +118,8 @@
       departureId: data.departures[0].id,
       durationId: "n3",
       seasonId: "w1211",
-      fxId: data.fxOptions[0].id,
-      rxPlanId: "p25x4_5x8",
+      fx: pickFx({}),
+      rxPlan: pickRxPlans({}),
       rxDayId: "rx_d2",
       rxPatients: rx.patients.defaultValue,
       cities: perCity,
@@ -143,6 +146,24 @@
       activities: createActivitiesState(city, d.activities),
       quotes: {},
     };
+  }
+
+  // The plan (doses and weeks) is picked per country, because the two countries sell different pens.
+  function pickRxPlans(saved) {
+    const result = {};
+    Object.values(countries).forEach((country) => {
+      result[country.id] = pickId(country.rxPlans, saved[country.id] || country.defaultRxPlanId);
+    });
+    return result;
+  }
+
+  // One rate per currency, shared by that country's cities.
+  function pickFx(saved) {
+    const result = {};
+    Object.values(currencies).forEach((currency) => {
+      result[currency.code] = pickId(currency.fxOptions, saved[currency.code]);
+    });
+    return result;
   }
 
   function sanitizeQuotes(raw) {
@@ -190,8 +211,10 @@
         departureId: pickId(data.departures, saved.departureId || base.departureId),
         durationId: pickId(data.durations, saved.durationId || base.durationId),
         seasonId: pickId(data.seasons, saved.seasonId || base.seasonId),
-        fxId: pickId(data.fxOptions, saved.fxId),
-        rxPlanId: pickId(rx.plans, saved.rxPlanId || base.rxPlanId),
+        // Selections saved before China was added hold a single yen rate in fxId.
+        fx: pickFx(saved.fx || { JPY: saved.fxId }),
+        // Selections saved before China was added hold one plan in rxPlanId; it was a Japanese plan.
+        rxPlan: pickRxPlans(saved.rxPlan || { jp: saved.rxPlanId }),
         rxDayId: pickId(rx.days, saved.rxDayId || base.rxDayId),
         cities: {},
       };
@@ -319,7 +342,7 @@
       state.durationId = id;
     });
     onCardClick(el.rxPlan, (id) => {
-      state.rxPlanId = id;
+      state.rxPlan[cities[state.cityId].country] = id;
     });
     onCardClick(el.rxDay, (id) => {
       state.rxDayId = id;
@@ -340,7 +363,7 @@
       state.seasonId = id;
     });
     onCardClick(el.fx, (id) => {
-      state.fxId = id;
+      state.fx[moneyFor(cities[state.cityId]).code] = id;
     });
     onCardClick(el.flight, (id) => {
       const city = cities[state.cityId];
@@ -611,6 +634,8 @@
   // ---------- Render ----------
   function render(showChange = false) {
     const city = cities[state.cityId];
+    const country = countryOf(city);
+    const money = moneyFor(city);
     const s = cityState();
     const flight = findById(city.flights, s.flightId);
     const results = {};
@@ -627,9 +652,15 @@
     renderParty();
     renderCards(el.departure, data.departures, state.departureId, null, ifShared("departureId"));
     renderCards(el.duration, data.durations, state.durationId, null, ifShared("durationId"));
-    renderCards(el.season, data.seasons, state.seasonId, null, ifShared("seasonId"));
-    renderCards(el.fx, data.fxOptions, state.fxId, null, ifShared("fxId"));
-    renderCards(el.rxPlan, rx.plans, state.rxPlanId, null, ifShared("rxPlanId"));
+    renderCards(el.season, data.seasons.map((item) => forCountry(item, country)), state.seasonId, null, ifShared("seasonId"));
+    renderCards(el.fx, money.currency.fxOptions, money.fx.id, null, (item) => meanIf({ fx: { ...state.fx, [money.code]: item.id } }) - base);
+    renderCards(
+      el.rxPlan,
+      country.rxPlans.map((plan) => ({ ...plan, title: planTitle(plan, country) })),
+      state.rxPlan[country.id],
+      null,
+      (item) => meanIf({ rxPlan: { ...state.rxPlan, [country.id]: item.id } }) - base
+    );
     renderCards(
       el.rxDay,
       rx.days,
@@ -637,41 +668,49 @@
       (item) => `${formatDate(addDays(result.startDate, item.dayIndex))} · ${item.subtitle}`,
       ifShared("rxDayId")
     );
-    renderRxPatients();
+    renderRxPatients(country);
     renderCards(
       el.clinic,
       city.clinics,
       s.clinicId,
-      (item) => `${item.subtitle} · 이 플랜 1인 ${formatJPYRange(rxDrugJPY(item, currentRxPlan()))}`,
+      (item) => `${item.subtitle} · 이 플랜 1인 ${money.format(rxDrugCost(item, rxPlanFor(country), money))}`,
       ifCity("clinicId")
     );
     renderCards(el.flight, city.flights, s.flightId, (item) => `${item.subtitle} · ${formatKRWRange(item.priceKRW)}`, ifCity("flightId"));
     renderCards(el.airport, airportOptionsFor(city, flight), s.airportId, null, ifCity("airportId"));
-    renderCards(el.stayPre, city.staysPre, s.stayPreId, (item) => `${item.subtitle} · ${describeStayPrice(item)}`, ifCity("stayPreId"));
+    renderCards(el.stayPre, city.staysPre, s.stayPreId, (item) => `${item.subtitle} · ${describeStayPrice(item, money)}`, ifCity("stayPreId"));
     renderCards(
       el.roomConfig,
-      data.roomConfigs,
+      data.roomConfigs.map((item) => forCountry(item, country)),
       s.roomConfigId,
       (item) => `${item.subtitle} · ${state.travelers}명 → ${roomCountFor(item, state.travelers)}실`,
       ifCity("roomConfigId")
     );
-    renderCards(el.stayA, city.staysA, s.stayAId, (item) => `${item.subtitle} · ${describeStayPrice(item)}`, ifCity("stayAId"));
+    renderCards(el.stayA, city.staysA, s.stayAId, (item) => `${item.subtitle} · ${describeStayPrice(item, money)}`, ifCity("stayAId"));
     renderCards(
       el.stayB,
       city.staysB,
       s.stayBId,
-      (item) => (item.id === "none" ? item.subtitle : `${item.subtitle} · ${describeStayPrice(item)}`),
+      (item) => (item.id === "none" ? item.subtitle : `${item.subtitle} · ${describeStayPrice(item, money)}`),
       ifCity("stayBId")
     );
-    renderCards(el.meal, data.mealLevels, s.mealId, (item) => `${item.subtitle} · 1인 ${formatJPYRange(item.perPersonPerDayJPY)}/일`, ifCity("mealId"));
+    renderCards(
+      el.meal,
+      data.mealLevels.map((item) => forCountry(item, country)),
+      s.mealId,
+      (item) => `${item.subtitle} · 1인 ${money.format(money.of(item, "perPersonPerDay"))}/일`,
+      ifCity("mealId")
+    );
     renderCards(el.transport, city.transports, s.transportId, null, ifCity("transportId"));
-    renderActivityControls(city, s);
+    renderActivityControls(city, s, money);
     renderCards(el.activityPacks, city.packs, s.packId, null, (pack) => meanIf(null, { activities: packActivities(city, s.activities, pack) }) - base);
 
     if (el.titleStayA) el.titleStayA.textContent = `처방 후 숙소 · 2인 1실 (${result.nightsA}박)`;
     if (el.titleStayPre) el.titleStayPre.textContent = `처방 전 숙소 · 초저가 (${result.preNights}박)`;
     if (el.titleClinic) el.titleClinic.textContent = `처방 클리닉 · 수령 방식 · ${city.name}`;
     if (el.titleActivities) el.titleActivities.textContent = `관광 · 이색 식사 · ${city.name}`;
+    if (el.titleFx) el.titleFx.textContent = `환율 · ${money.currency.name}`;
+    if (el.labelRxPlan) el.labelRxPlan.textContent = `용량 · 수량 · ${country.name} 도시 공통 (${country.penNote})`;
     el.cityDivider.textContent = `여기부터는 도시마다 따로 저장됩니다 · 지금 ${city.name}`;
 
     const plan = buildTimeline(city, s, result);
@@ -764,7 +803,7 @@
     el.tabPlanBadge.textContent = conflicts ? `주의 ${conflicts}` : "";
   }
 
-  function renderRxPatients() {
+  function renderRxPatients(country) {
     const buttons = [];
     for (let qty = rx.patients.min; qty <= state.travelers; qty += 1) {
       const active = qty === state.rxPatients;
@@ -774,7 +813,7 @@
     }
     el.rxPatients.innerHTML = `
       <div class="activity-row">
-        <span class="activity-label">처방받는 인원<small>1인 최대 ${rx.importLimitPens}펜(3개월분)까지 국내 반입</small></span>
+        <span class="activity-label">처방받는 인원<small>1인 최대 ${importLimitPens(country)}펜(${esc(country.importLimitNote)})까지 국내 반입</small></span>
         <div class="qty-group" role="group" aria-label="처방받는 인원">${buttons.join("")}</div>
       </div>
     `;
@@ -782,70 +821,77 @@
 
   function renderRxPrep(city, s, result) {
     const clinic = result.clinic;
-    const plan = result.rxPlan;
+    const country = countryOf(city);
     const rxDate = addDays(result.startDate, result.preNights);
-    const items = [];
-    if (clinic.mode === "online") {
-      items.push(`<strong>${esc(formatDate(addDays(rxDate, -5)))}쯤</strong> 비대면 진료 예약 → ${esc(formatDate(rxDate))} ${esc(WEEKDAYS[weekdayOf(rxDate)])}요일에 문 여는 야마토 영업소를 배송지로 지정`);
-    } else {
-      items.push(`<strong>${esc(formatDate(rxDate))}</strong> ${esc(clinic.hours)} 중 오전 진료 예약 · ${esc(plan.title)} 재고 확인`);
-    }
+    const booking = bookingStep(clinic, rxDate, planTitle(result.rxPlan, country));
+    const items = [`<strong>${esc(booking.when)}</strong> ${esc(booking.text)}`];
     (clinic.prep || []).forEach((line) => items.push(esc(line)));
     if (clinic.link) {
       items.push(`<a href="${esc(clinic.link.href)}" target="_blank" rel="noopener noreferrer">${esc(clinic.link.label)}</a>`);
     }
     items.push(`결제: ${esc(clinic.payment)}`);
-    items.push("여권 지참 (진료·영업소 수령 모두 본인 확인)");
-    items.push(`귀국: 1인 ${rx.importLimitPens}펜 이하 · 영수증·처방 내역·원래 상자 · 펜은 기내 휴대. 출국 전 관세청(125)에 최신 기준 확인`);
+    items.push("여권 지참 (진료·수령 모두 본인 확인)");
+    items.push(`귀국: 1인 ${importLimitPens(country)}펜 이하 · 영수증·처방 내역·원래 상자 · 펜은 기내 휴대. 출국 전 관세청(125)에 최신 기준 확인`);
     el.rxPrep.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
     renderCash(result);
   }
 
   function renderCash(result) {
     const c = result.cash;
-    const fx = currentFx().krwPer100Jpy / 100;
-    const yen = (r) => (Math.round(r[0]) === Math.round(r[1]) ? `¥${formatNumber(r[0])}` : `¥${formatNumber(r[0])}–${formatNumber(r[1])}`);
+    const money = result.money;
+    const currency = money.currency;
+    const amount = (r) => money.format(r, "–");
     const clinic = result.clinic;
+    const deposit = money.of(clinic, "deposit");
     const rxNote =
       clinic.cashPart === "ship"
         ? "약값은 카드 선결제, 배송비만 수령 때 현장 결제"
-        : clinic.depositJPY
-          ? `계약금 ¥${formatNumber(clinic.depositJPY)}/인 선결제 뒤 잔금 전액 (현장 결제 수단 미기재)`
-          : "해외 카드 거절·현금 요구 대비 약값 전액";
+        : deposit
+          ? `계약금 ${money.format([deposit, deposit])}/인 선결제 뒤 잔금 전액 (현장 결제 수단 미기재)`
+          : currency.cashRxNote;
     const rows = [
       ["마운자로 (현금 대비)", c.rx, rxNote],
       ["숙박세·입탕세", c.tax, "프런트 현장 결제가 많음"],
-      ["현금 위주 식사", c.activities, "야타이·시장 식당·노점 (선택한 항목만)"],
-      ["잔돈·충전·코인락커", c.buffer, "1인 ¥3,000-5,000 · 교통카드 충전, 락커, 자판기"],
+      ["현금 위주 식사", c.activities, "시장 식당·노점 (선택한 항목만)"],
+      [currency.cashBufferLabel, c.buffer, `1인 ${money.format(currency.cashBuffer)} · ${currency.cashBufferNote}`],
     ].filter(([, r]) => r[1] > 0);
-    const recommended = roundUp(c.total[1], 1000);
+    const recommended = roundUp(c.total[1], currency.cashStep);
+    el.cashTitle.textContent = `준비할 ${currency.name} 현금`;
+    el.cashNote.textContent = currency.cashNote;
     el.cash.innerHTML = rows
       .map(
         ([label, r, note]) => `
           <li>
             <span>${esc(label)}<small>${esc(note)}</small></span>
-            <strong>${esc(yen(r))}</strong>
+            <strong>${esc(amount(r))}</strong>
           </li>
         `
       )
       .join("") +
-      `<li class="is-total"><span>준비 권장 (최대치 올림)<small>약 ${esc(formatManwon(recommended * fx))} · ${esc(currentFx().title)}</small></span><strong>¥${esc(formatNumber(recommended))}</strong></li>`;
+      `<li class="is-total"><span>준비 권장 (최대치 올림)<small>약 ${esc(formatManwon(recommended * money.rate))} · ${esc(money.fx.title)}</small></span><strong>${esc(money.format([recommended, recommended]))}</strong></li>`;
   }
 
   function renderCityCards(results) {
     const cheapest = cheapestCityId(results);
-    el.city.innerHTML = cityOrder
-      .map((cityId) => {
-        const city = cities[cityId];
-        const r = results[cityId];
-        const active = cityId === state.cityId;
-        const badge = cityId === cheapest ? `<span class="badge">최저</span>` : "";
+    const card = (cityId) => {
+      const city = cities[cityId];
+      const r = results[cityId];
+      const active = cityId === state.cityId;
+      const badge = cityId === cheapest ? `<span class="badge">최저</span>` : "";
+      return `
+        <button type="button" class="card-btn city-card ${active ? "active" : ""}" data-id="${esc(cityId)}" aria-pressed="${active}">
+          <span class="title">${esc(city.name)} ${badge}</span>
+          <span class="sub">${esc(city.subtitle)} · ${esc(city.flightTime)}</span>
+          <span class="price">약 ${formatManwon(r.perPerson.mean)} <small>${formatBand(r.perPerson.band)} / 1인</small></span>
+        </button>
+      `;
+    };
+    el.city.innerHTML = Object.values(countries)
+      .map((country) => {
+        const ids = cityOrder.filter((cityId) => cities[cityId].country === country.id);
         return `
-          <button type="button" class="card-btn city-card ${active ? "active" : ""}" data-id="${esc(cityId)}" aria-pressed="${active}">
-            <span class="title">${esc(city.name)} ${badge}</span>
-            <span class="sub">${esc(city.subtitle)} · ${esc(city.flightTime)}</span>
-            <span class="price">약 ${formatManwon(r.perPerson.mean)} <small>${formatBand(r.perPerson.band)} / 1인</small></span>
-          </button>
+          <p class="group-label">${esc(country.name)} · ${esc(country.routeNote)}</p>
+          <div class="card-grid card-grid-city">${ids.map(card).join("")}</div>
         `;
       })
       .join("");
@@ -894,11 +940,11 @@
       .join("");
   }
 
-  function renderActivityControls(city, s) {
+  function renderActivityControls(city, s, money) {
     const season = currentSeason();
     el.activityControls.innerHTML = city.activities
       .map((act) => {
-        const priceText = describeActivityPrice(act, season);
+        const priceText = describeActivityPrice(act, season, money);
         const label = `<span class="activity-label">${esc(act.title)}<small>${esc(priceText)}</small></span>`;
 
         if (act.kind === "toggle") {
@@ -938,8 +984,8 @@
     set("summary-city", `${city.name} · 약 ${formatManwon(result.perPerson.mean)}`);
     set("summary-party", `${result.people}명`);
     set("summary-schedule", `${currentDeparture().title} · ${currentDuration().title} · ${currentSeason().title}`);
-    set("summary-fx", currentFx().title);
-    set("summary-rx", `${result.rxPlan.title} · ${result.rxPatients}명 · Day${result.preNights + 1}`);
+    set("summary-fx", result.money.fx.title);
+    set("summary-rx", `${planTitle(result.rxPlan, result.country)} · ${result.rxPatients}명 · Day${result.preNights + 1}`);
     set("summary-clinic", result.clinic.short);
     set("summary-stayPre", result.preNights ? titleOf(city.staysPre, s.stayPreId) : "없음 (도착일 처방)");
     set("summary-flight", titleOf(city.flights, s.flightId));
@@ -982,12 +1028,12 @@
     const pp = result.perPerson;
     el.perPersonTotal.textContent = `약 ${formatManwon(pp.mean)} / 1인`;
     el.perPersonBand.innerHTML = `80% 범위 ${esc(formatBand(pp.band))}<span class="band-extreme"> · 항목 단순 합산 ${esc(formatBand(pp.extreme))}</span>`;
-    el.groupTotal.textContent = `총액 약 ${formatManwon(result.total.mean)} (${formatBand(result.total.band)}) · ${result.people}명 · ${currentFx().title}`;
+    el.groupTotal.textContent = `총액 약 ${formatManwon(result.total.mean)} (${formatBand(result.total.band)}) · ${result.people}명 · ${result.money.fx.title}`;
 
     const b = result.breakdown;
     const savingsText = result.rxSavings > 0 ? ` · 국내 처방보다 약 ${formatManwon(result.rxSavings)} 저렴` : "";
     const rows = [
-      ["마운자로 처방", b.rx, `${result.clinic.short} · ${result.rxPlan.title} × ${result.rxPatients}명${savingsText}`],
+      ["마운자로 처방", b.rx, `${result.clinic.short} · ${planTitle(result.rxPlan, result.country)} × ${result.rxPatients}명${savingsText}`],
       ["항공", b.flight, result.flightNote],
       ["숙박", b.stay, result.stayNote],
       ["숙박세·입탕세", b.stayTax, "1인 1박 기준, 현장 결제"],
@@ -997,7 +1043,7 @@
       ["근교 이동", b.excursion, result.stayB ? `${result.stayB.short || result.stayB.title} 왕복` : ""],
       ["액티비티", b.activities, ""],
       ["예비비", b.contingency, `예상 합계의 ${pct(calculationRules.contingencyRate)} · 범위에 영향 없음`],
-    ].filter(([label, line]) => label !== "근교 이동" || line.hi > 0);
+    ].filter(([label, line]) => (label !== "근교 이동" && label !== "숙박세·입탕세") || line.hi > 0);
 
     el.breakdown.innerHTML = rows
       .map(([label, line, note]) => {
@@ -1029,6 +1075,7 @@
         const active = cityId === state.cityId;
         const picks = [
           r.clinic.short,
+          planTitle(r.rxPlan, r.country),
           titleOf(city.flights, s.flightId).split(" · ")[0],
           `${r.preNights ? `${r.stayPre.short} → ` : ""}${shortTitle(titleOf(city.staysA, s.stayAId))}`,
           r.fullDayLabels.length ? r.fullDayLabels.join(" + ") : "",
@@ -1102,36 +1149,39 @@
     const stayA = findById(city.staysA, s.stayAId);
     const stayPre = result.stayPre;
     const roomConfig = findById(data.roomConfigs, s.roomConfigId);
+    const money = result.money;
     const roomType = (stay) => {
-      if (stay.perUnitPerNightJPY) return "2룸(침실 2개)";
-      if (stay.perPersonPerNightJPY) return `${roomConfig.occupancy}인 1실`;
+      if (money.of(stay, "perUnitPerNight")) return "2룸(침실 2개)";
+      if (money.of(stay, "perPersonPerNight")) return `${roomConfig.occupancy}인 1실`;
       return roomConfig.occupancy === 2 ? "트윈(침대 2개)" : roomConfig.title;
     };
+    const unitWord = (stay) => (money.of(stay, "perUnitPerNight") ? "채" : "실");
     const departureTime = currentDeparture().arrival === "night" ? "저녁 출발" : "오전 출발";
-    const flightQuery = `Flights from ICN to ${flight.airport} on ${start} through ${end}`;
+    const origin = flight.from || "ICN";
+    const flightQuery = `Flights from ${origin} to ${flight.airport} on ${start} through ${end}`;
 
     const slots = {
       flight: {
-        label: `항공권 · ICN→${flight.airport} ${formatDate(start)}–${formatDate(end)}`,
+        label: `항공권 · ${origin}→${flight.airport} ${formatDate(start)}–${formatDate(end)}`,
         sub: `Google Flights · ${flight.title} · 첫날 ${departureTime} 편으로 고르기`,
         href: `https://www.google.com/travel/flights?hl=ko&curr=KRW&q=${encodeURIComponent(flightQuery)}`,
       },
       stayPre: result.preNights
         ? {
             label: `처방 전 · ${stayPre.title} ${formatDate(start)}–${formatDate(checkoutPre)}`,
-            sub: `Booking.com · ${stayPre.perBedPerNightJPY ? `${result.people}침대 (남녀 구역 확인)` : `개인실 ${result.roomsPre}실`}`,
+            sub: `Booking.com · ${money.of(stayPre, "perBedPerNight") ? `${result.people}침대 (남녀 구역 확인)` : `개인실 ${result.roomsPre}실`}`,
             href: bookingUrl(stayPre.booking || city.bookingCity, start, checkoutPre, result.roomsPre),
           }
         : null,
       stayA: {
         label: `처방 후 · ${stayA.title} ${formatDate(checkoutPre)}–${formatDate(checkoutA)}`,
-        sub: `Booking.com · ${roomType(stayA)} ${result.roomsA}${stayA.perUnitPerNightJPY ? "채" : "실"} · 객실 냉장고 확인`,
+        sub: `Booking.com · ${roomType(stayA)} ${result.roomsA}${unitWord(stayA)} · 객실 냉장고 확인`,
         href: bookingUrl(stayA.booking || city.bookingCity, checkoutPre, checkoutA, result.roomsA),
       },
       stayB: result.stayB
         ? {
             label: `B숙소 · ${result.stayB.title} ${formatDate(checkoutA)}–${formatDate(end)}`,
-            sub: `Booking.com · ${roomType(result.stayB)} ${result.roomsB}${result.stayB.perUnitPerNightJPY ? "채" : "실"}`,
+            sub: `Booking.com · ${roomType(result.stayB)} ${result.roomsB}${unitWord(result.stayB)}`,
             href: bookingUrl(result.stayB.booking || city.bookingCity, checkoutA, end, result.roomsB),
           }
         : null,
@@ -1174,7 +1224,8 @@
   }
 
   function renderNotes(city, s, result) {
-    const notes = [...(rx.notes || []), ...(currentSeason().notes || []), ...(city.notes || [])];
+    const country = result.country;
+    const notes = [...(rx.notes || []), ...(country.rxNotes || []), ...(forCountry(currentSeason(), country).notes || []), ...(city.notes || [])];
     Object.entries(city.dateNotes || {}).forEach(([iso, text]) => {
       if (iso >= result.startDate && iso <= addDays(result.startDate, result.nights)) notes.push(text);
     });
@@ -1184,11 +1235,11 @@
       notes.push("2룸 레지던스는 객실 구성과 무관하게 4인당 1채(침실 2개, 침실마다 트윈)로 계산합니다. 침대 구성을 꼭 확인하세요.");
     }
     if (roomConfig.occupancy === 2 && !result.usesUnits) {
-      notes.push("2인 1실은 트윈(침대 2개)으로 계산합니다. 객실 유형이 '트윈(ツイン)'인지 확인하세요. 더블·세미더블은 침대가 1개입니다.");
+      notes.push(country.twinNote);
       notes.push("트윈이 없거나 마감이면 2룸(1인 1실 2개)으로 잡으세요. 비용은 '1인 1실' 카드로 비교할 수 있습니다.");
     }
     if (roomConfig.occupancy === 1) {
-      notes.push("1인 1실은 트윈 요금의 70%로 계산합니다. 비즈니스호텔 싱글룸은 더 싸고, 료칸은 1인 이용 할증(×1.4)이 붙습니다.");
+      notes.push(country.singleNote);
     } else if (state.travelers % roomConfig.occupancy !== 0) {
       notes.push(`${state.travelers}명은 ${roomConfig.title}로 나누어 떨어지지 않아 1실은 ${state.travelers % roomConfig.occupancy}명이 같은 요금으로 씁니다.`);
     }
@@ -1235,8 +1286,18 @@
 
   function collectShared() {
     const items = [...(rx.sourceRefs || []), ...(data.meta.sharedSources || [])];
-    [calculationRules, data.lodgingCalendar || {}, ...data.departures, ...data.seasons, ...data.roomConfigs, ...data.mealLevels].forEach((item) => {
+    const shared = [calculationRules, ...data.departures, ...data.seasons, ...data.roomConfigs, ...data.mealLevels];
+    Object.values(currencies).forEach((currency) => shared.push(...currency.fxOptions));
+    Object.values(countries).forEach((country) => {
+      items.push(...(country.sourceRefs || []));
+      shared.push(country.lodgingCalendar);
+    });
+    shared.forEach((item) => {
       if (item.sourceRef) items.push(item.sourceRef);
+      // Per-country overrides of a shared card bring their own source.
+      Object.keys(countries).forEach((countryId) => {
+        if (item[countryId] && item[countryId].sourceRef) items.push(item[countryId].sourceRef);
+      });
     });
     return items;
   }
@@ -1265,18 +1326,20 @@
   // ---------- Compute ----------
   function compute(cityId) {
     const city = cities[cityId];
+    const country = countryOf(city);
+    const money = moneyFor(city);
     const s = state.cities[cityId];
     const people = state.travelers;
     const nights = currentDuration().nights;
     const days = nights + 1;
-    const season = currentSeason();
+    const season = forCountry(currentSeason(), country);
     const departure = currentDeparture();
-    const fx = currentFx().krwPer100Jpy / 100;
+    const fx = money.rate;
     const peak = season.parkTier === "peak";
 
     const flight = findById(city.flights, s.flightId);
     const airport = findById(airportOptionsFor(city, flight), s.airportId) || airportOptionsFor(city, flight)[0];
-    const roomConfig = findById(data.roomConfigs, s.roomConfigId);
+    const roomConfig = forCountry(findById(data.roomConfigs, s.roomConfigId), country);
     const stayPre = findById(city.staysPre, s.stayPreId) || city.staysPre[0];
     const stayA = findById(city.staysA, s.stayAId);
     const stayBRaw = findById(city.staysB, s.stayBId);
@@ -1284,7 +1347,7 @@
     const meal = findById(data.mealLevels, s.mealId);
     const transport = findById(city.transports, s.transportId);
     const clinic = findById(city.clinics, s.clinicId) || city.clinics[0];
-    const rxPlan = currentRxPlan();
+    const rxPlan = rxPlanFor(country);
     const rxPatients = clamp(state.rxPatients, rx.patients.min, people);
 
     // Prescription day splits the nights: before = budget beds, from that night on = 2-person rooms.
@@ -1316,15 +1379,17 @@
     const checkoutPre = addDays(start, preNights);
     const checkoutA = addDays(checkoutPre, nightsA);
     // Every line is an estimate {lo, hi, mean, var} in KRW; [lo, hi] is read as that line's P10-P90.
-    const fromJPY = (r, factor = 1) => estimate(r, fx * factor);
+    const fromLocal = (r, factor = 1) => estimate(r, fx * factor);
+    const local = (item, key) => money.of(item, key) || [0, 0];
 
     // Stays: weekday card price × each night's calendar factor
-    const factorsPre = nightFactors(start, preNights);
-    const factorsA = nightFactors(checkoutPre, nightsA);
-    const factorsB = stayB ? nightFactors(checkoutA, 1) : [];
-    const stayPreInfo = preStayCost(stayPre, people, factorsPre);
-    const stayAInfo = stayCost(stayA, roomConfig, people, factorsA);
-    const stayBInfo = stayB ? stayCost(stayB, roomConfig, people, factorsB) : emptyStay();
+    const calendar = country.lodgingCalendar;
+    const factorsPre = nightFactors(calendar, start, preNights);
+    const factorsA = nightFactors(calendar, checkoutPre, nightsA);
+    const factorsB = stayB ? nightFactors(calendar, checkoutA, 1) : [];
+    const stayPreInfo = preStayCost(stayPre, people, factorsPre, money);
+    const stayAInfo = stayCost(stayA, roomConfig, people, factorsA, money);
+    const stayBInfo = stayB ? stayCost(stayB, roomConfig, people, factorsB, money) : emptyStay();
 
     // Quotes typed from the live links replace the estimate while their conditions still match.
     const roomsLabel = (info) => `${info.rooms}${info.usesUnits ? "채" : info.kind === "bed" ? "침대" : "실"}`;
@@ -1369,40 +1434,41 @@
     stayLine.partial = !stayLine.locked && stayParts.some((line) => line.locked);
 
     // Lodging / bathing tax (per person per night)
-    const taxJPY = sumRanges(
-      scale(stayPre.lodgingTaxJPY || [0, 0], people * preNights),
-      scale(stayA.lodgingTaxJPY || [0, 0], people * nightsA),
-      stayB ? scale(stayB.stayTaxJPY || [0, 0], people) : [0, 0]
+    const taxLocal = sumRanges(
+      scale(local(stayPre, "lodgingTax"), people * preNights),
+      scale(local(stayA, "lodgingTax"), people * nightsA),
+      stayB ? scale(local(stayB, "stayTax"), people) : [0, 0]
     );
-    const stayTaxLine = fromJPY(taxJPY);
+    const stayTaxLine = fromLocal(taxLocal);
 
-    // Mounjaro: drug by pens + per-patient fees and cold shipping
-    const rxPerPatientJPY = sumRanges(rxDrugJPY(clinic, rxPlan), clinic.feeJPY || [0, 0], clinic.shipJPY || [0, 0]);
-    const rxJPY = scale(rxPerPatientJPY, rxPatients);
-    const rxLine = fromJPY(rxJPY);
+    // Mounjaro: drug by weeks + per-patient fees and cold shipping
+    const rxPerPatient = sumRanges(rxDrugCost(clinic, rxPlan, money), local(clinic, "fee"), local(clinic, "ship"));
+    const rxLocal = scale(rxPerPatient, rxPatients);
+    const rxLine = fromLocal(rxLocal);
     const koreaKRW = sumRanges(
-      ...Object.entries(rxPlan.pens).map(([dose, pens]) => scale((rx.koreaPer4KRW || {})[dose] || [0, 0], (pens / 4) * rxPatients))
+      ...Object.entries(rxPlan.weeks).map(([dose, weeks]) => scale((rx.koreaPer4KRW || {})[dose] || [0, 0], (weeks / 4) * rxPatients))
     );
     const rxSavings = (koreaKRW[0] + koreaKRW[1]) / 2 - rxLine.mean;
 
     // Meals
     const mealDays = days - (stayB && stayB.includesMeals ? Number(calculationRules.ryokanMealCredit || 0) : 0);
-    const mealLine = fromJPY(meal.perPersonPerDayJPY, people * mealDays * Number(city.mealFactor ?? 1));
+    const mealLine = fromLocal(local(meal, "perPersonPerDay"), people * mealDays * Number(city.mealFactor ?? 1));
 
     // City transport (per day on nights count; arrival/departure days are covered by airport transfer)
+    const groupOnce = money.of(transport, "perGroupOnce");
     const transportLine = sumLines(
-      fromJPY(transport.perPersonPerDayJPY || [0, 0], people * nights),
-      transport.perGroupOnceJPY ? fromJPY(transport.perGroupOnceJPY, Math.ceil(people / 9)) : exact(0)
+      fromLocal(local(transport, "perPersonPerDay"), people * nights),
+      groupOnce ? fromLocal(groupOnce, Math.ceil(people / 9)) : exact(0)
     );
 
     // Airport transfer, excursion to stay B
-    const airportLine = fromJPY(transferCost(airport, people));
-    const excursionLine = stayB ? fromJPY(stayB.transferPerPersonJPY || [0, 0], people) : exact(0);
+    const airportLine = fromLocal(transferCost(airport, people, money));
+    const excursionLine = stayB ? fromLocal(local(stayB, "transferPerPerson"), people) : exact(0);
 
     // Activities: each ticket is its own estimate
     const activityLines = [];
     const fullDayLabels = [];
-    let cashActivitiesJPY = [0, 0];
+    let cashActivities = [0, 0];
     city.activities.forEach((act) => {
       const value = s.activities[act.id];
       let qty = act.kind === "toggle" ? (value ? 1 : 0) : Number(value || 0);
@@ -1411,24 +1477,27 @@
 
       if (act.slot === "full") fullDayLabels.push(qty > 1 ? `${shortTitle(act.title)} ×${qty}` : shortTitle(act.title));
 
-      if (act.groupJPY) {
-        activityLines.push(fromJPY(act.groupJPY, qty));
+      const groupPrice = money.of(act, "group");
+      if (groupPrice) {
+        activityLines.push(fromLocal(groupPrice, qty));
         return;
       }
-      const price = peak && act.peakAdultJPY ? act.peakAdultJPY : act.adultJPY;
-      activityLines.push(fromJPY(price, people * qty));
-      if (act.cash) cashActivitiesJPY = sumRanges(cashActivitiesJPY, scale(price, people * qty));
+      const price = activityPrice(act, peak, money);
+      activityLines.push(fromLocal(price, people * qty));
+      if (act.cash) cashActivities = sumRanges(cashActivities, scale(price, people * qty));
     });
 
-    // Yen cash to carry: places that may refuse foreign cards or take cash only
-    const deposit = Number(clinic.depositJPY || 0) * rxPatients;
-    const cashRxJPY =
-      clinic.cashPart === "ship" ? scale(clinic.shipJPY || [0, 0], rxPatients) : [Math.max(0, rxJPY[0] - deposit), Math.max(0, rxJPY[1] - deposit)];
+    // Local cash to carry: places that may refuse foreign cards or take cash only
+    const deposit = Number(money.of(clinic, "deposit") || 0) * rxPatients;
+    const cashRx =
+      clinic.cashPart === "none" ? [0, 0]
+      : clinic.cashPart === "ship" ? scale(local(clinic, "ship"), rxPatients)
+      : [Math.max(0, rxLocal[0] - deposit), Math.max(0, rxLocal[1] - deposit)];
     const cash = {
-      rx: cashRxJPY,
-      tax: taxJPY,
-      activities: cashActivitiesJPY,
-      buffer: scale(range2(3000, 5000), people),
+      rx: cashRx,
+      tax: taxLocal,
+      activities: cashActivities,
+      buffer: scale(money.currency.cashBuffer, people),
     };
     cash.total = sumRanges(cash.rx, cash.tax, cash.activities, cash.buffer);
 
@@ -1471,6 +1540,8 @@
 
     return {
       cityId,
+      country,
+      money,
       people,
       nights,
       preNights,
@@ -1529,8 +1600,7 @@
     );
   }
 
-  function nightFactors(startIso, count) {
-    const calendar = data.lodgingCalendar || {};
+  function nightFactors(calendar, startIso, count) {
     return Array.from({ length: Math.max(0, count) }, (_, i) => {
       const iso = addDays(startIso, i);
       const special = calendar.dates ? Number(calendar.dates[iso]) : NaN;
@@ -1540,11 +1610,12 @@
     });
   }
 
-  function transferCost(option, people) {
-    if (option.perVehicleRoundtripJPY) {
-      return scale(option.perVehicleRoundtripJPY, Math.ceil(people / Number(option.vehicleCapacity || 4)));
+  function transferCost(option, people, money) {
+    const perVehicle = money.of(option, "perVehicleRoundtrip");
+    if (perVehicle) {
+      return scale(perVehicle, Math.ceil(people / Number(option.vehicleCapacity || 4)));
     }
-    return scale(option.perPersonRoundtripJPY || [0, 0], people);
+    return scale(money.of(option, "perPersonRoundtrip") || [0, 0], people);
   }
 
   function roomCountFor(roomConfig, people) {
@@ -1556,21 +1627,46 @@
   }
 
   // Budget beds before the prescription: capsule/dorm are priced per bed, a guesthouse private room per room.
-  function preStayCost(stay, people, factors) {
+  function preStayCost(stay, people, factors, money) {
     if (!stay || !factors.length) return emptyStay();
     const nightUnits = sum(factors);
-    if (stay.perBedPerNightJPY) {
-      return { cost: scale(stay.perBedPerNightJPY, people * nightUnits), rooms: people, kind: "bed", usesUnits: false };
+    const perBed = money.of(stay, "perBedPerNight");
+    if (perBed) {
+      return { cost: scale(perBed, people * nightUnits), rooms: people, kind: "bed", usesUnits: false };
     }
     const rooms = Math.ceil(people / Math.max(1, Number(stay.roomCapacity || 2)));
-    return { cost: scale(stay.perRoomPerNightJPY, rooms * nightUnits), rooms, kind: "room", usesUnits: false };
+    return { cost: scale(money.of(stay, "perRoomPerNight"), rooms * nightUnits), rooms, kind: "room", usesUnits: false };
   }
 
-  // One patient's drug price for a plan: each dose's 4-pen price scaled by its pen count.
-  function rxDrugJPY(clinic, plan) {
-    return sumRanges(
-      ...Object.entries(plan.pens).map(([dose, pens]) => (pens ? scale(clinic.per4JPY[dose] || [0, 0], pens / 4) : [0, 0]))
-    );
+  // One patient's drug price for a plan, in local currency: each dose's 4-week price scaled by its weeks.
+  function rxDrugCost(clinic, plan, money) {
+    const per4 = money.of(clinic, "per4") || {};
+    return sumRanges(...Object.entries(plan.weeks).map(([dose, weeks]) => (weeks ? scale(per4[dose] || [0, 0], weeks / 4) : [0, 0])));
+  }
+
+  // Japan sells single-dose pens (1 pen = 1 week, named by the dose); China sells a 4-dose pen
+  // (1 pen = 4 weeks, named by its total content: the "40mg" pen gives 10mg a week).
+  function planTitle(plan, country) {
+    return Object.entries(plan.weeks)
+      .filter(([, weeks]) => weeks)
+      .map(([dose, weeks]) => `${country.doseLabel[dose]} ${weeks / country.weeksPerPen}펜`)
+      .join(" + ");
+  }
+
+  // Customs allows 6 containers, or more than 6 when that is still within 3 months of use.
+  function importLimitPens(country) {
+    return Math.max(rx.importBaseUnits, rx.importLimitWeeks / country.weeksPerPen);
+  }
+
+  // When to arrange the prescription. A clinic can describe its own step (book); otherwise it is a morning visit that day.
+  function bookingStep(clinic, rxDate, planText) {
+    if (clinic.book) {
+      return {
+        when: `${formatDate(addDays(rxDate, -clinic.book.daysBefore))}쯤`,
+        text: clinic.book.text.replaceAll("{rx}", formatDate(rxDate)),
+      };
+    }
+    return { when: formatDate(rxDate), text: `${clinic.hours} 중 오전 진료 예약 · ${planText} 재고 확인` };
   }
 
   // Weekdays (Mon-Fri) spent away from work; a departure after work does not cost its first day.
@@ -1586,27 +1682,29 @@
   }
 
   // factors: one calendar multiplier per night (weekday card price = 1.0)
-  function stayCost(stay, roomConfig, people, factors) {
+  function stayCost(stay, roomConfig, people, factors, money) {
     if (!factors.length) return emptyStay();
     const nightUnits = sum(factors);
 
     // Ryokan: per-person price, adjusted by how many share a room (solo use costs more).
-    if (stay.perPersonPerNightJPY) {
+    const perPerson = money.of(stay, "perPersonPerNight");
+    if (perPerson) {
       const rooms = roomCountFor(roomConfig, people);
       const factor = Number(roomConfig.perPersonFactor ?? 1);
-      return { cost: scale(stay.perPersonPerNightJPY, people * nightUnits * factor), rooms, kind: roomConfig.id, usesUnits: false };
+      return { cost: scale(perPerson, people * nightUnits * factor), rooms, kind: roomConfig.id, usesUnits: false };
     }
 
     // Apartment: fixed price per unit, room config does not apply.
-    if (stay.perUnitPerNightJPY) {
+    const perUnit = money.of(stay, "perUnitPerNight");
+    if (perUnit) {
       const rooms = Math.ceil(people / Number(stay.unitCapacity || 4));
-      return { cost: scale(stay.perUnitPerNightJPY, rooms * nightUnits), rooms, kind: "unit", usesUnits: true };
+      return { cost: scale(perUnit, rooms * nightUnits), rooms, kind: "unit", usesUnits: true };
     }
 
     // Hotel: card price is a twin room; occupancy changes room count and per-room price.
     const rooms = roomCountFor(roomConfig, people);
     const factor = Number(roomConfig.priceFactor ?? 1);
-    return { cost: scale(stay.perRoomPerNightJPY, rooms * nightUnits * factor), rooms, kind: roomConfig.id, usesUnits: false };
+    return { cost: scale(money.of(stay, "perRoomPerNight"), rooms * nightUnits * factor), rooms, kind: roomConfig.id, usesUnits: false };
   }
 
   // ---------- Timeline ----------
@@ -1619,6 +1717,8 @@
     const airport = findById(airportOptionsFor(city, flight), s.airportId);
     const airportLabel = airport ? airport.short || airport.title : "공항 이동";
     const clinic = result.clinic;
+    const country = result.country;
+    const planText = planTitle(result.rxPlan, country);
     const rxIdx = result.preNights;
     const preShort = result.stayPre.short;
     const postShort = shortTitle(result.stayA.title);
@@ -1684,21 +1784,35 @@
       warnings.push({
         scopes: ["rx", "clinic"],
         conflict: true,
-        text: `${clinic.short}는 ${WEEKDAYS[rxWd]}요일 휴무라 ${formatDate(rxDate)} 처방이 안 됩니다. 처방일이나 클리닉을 바꾸세요.`,
+        text: `${withTopic(clinic.short)} ${WEEKDAYS[rxWd]}요일 휴무라 ${formatDate(rxDate)} 처방이 안 됩니다. 처방일이나 클리닉을 바꾸세요.`,
       });
     }
     if (clinic.irregular) {
       warnings.push({
         scopes: ["clinic"],
         conflict: false,
-        text: `${clinic.short}는 부정기 휴무가 있습니다. ${formatDate(rxDate)} 진료 가능 여부를 예약 때 확인하세요.`,
+        text: `${withTopic(clinic.short)} 부정기 휴무가 있습니다. ${formatDate(rxDate)} 진료 가능 여부를 예약 때 확인하세요.`,
       });
     }
-    if (clinic.mode === "online" && (rxWd === 0 || rxWd === 6)) {
+    if (clinic.weekendNote && (rxWd === 0 || rxWd === 6)) {
+      warnings.push({ scopes: ["clinic"], conflict: false, text: `${formatDate(rxDate)}은 주말이라 ${clinic.weekendNote}` });
+    }
+    if (clinic.eve && rxIdx === 0) {
       warnings.push({
-        scopes: ["clinic"],
+        scopes: ["rx", "clinic"],
+        conflict: true,
+        text: `${withTopic(clinic.short)} 전날 주문해야 해서 도착일(Day1) 수령이 안 됩니다. 처방일을 Day2 이후로 바꾸세요.`,
+      });
+    }
+    if (clinic.eveLateNote && rxIdx === 1 && !morningArrival) {
+      warnings.push({ scopes: ["rx", "clinic"], conflict: false, text: clinic.eveLateNote });
+    }
+    const planWeeks = sum(Object.values(result.rxPlan.weeks));
+    if (clinic.usualMaxWeeks && planWeeks > clinic.usualMaxWeeks) {
+      warnings.push({
+        scopes: ["rx", "clinic"],
         conflict: false,
-        text: `${formatDate(rxDate)}은 주말이라 야마토 영업소 약 1/3이 쉽니다. 그날 문 여는 영업소를 배송지로 지정하세요.`,
+        text: `${withTopic(clinic.short)} 한 번에 보통 ${clinic.usualMaxWeeks}주분까지 나옵니다. ${planText}(${planWeeks}주분)은 다 안 나올 수 있으니 미리 문의하세요.`,
       });
     }
 
@@ -1765,10 +1879,12 @@
       const candidates = days.filter((day) => day.eveningOk).sort((a, b) => a.evenings.length - b.evenings.length);
       place(item, candidates, (day) => day.evenings.push(`저녁 ${item.label}`));
     });
+    // A delivery route is ordered the evening before it arrives.
+    if (clinic.eve && rxIdx > 0) days[rxIdx - 1].evenings.push(clinic.eve);
 
     const rxSteps = (arrivedToday) => {
       const steps = [];
-      if (!arrivedToday && rxIdx > 0) steps.push(`${preShort} 체크아웃 → 짐은 코인락커나 새 숙소에 맡기기`);
+      if (!arrivedToday && rxIdx > 0) steps.push(`${preShort} 체크아웃 → ${country.luggageRxDay}`);
       steps.push(`처방 · ${clinic.action}`);
       steps.push(`${postShort} 체크인 · 펜은 객실 냉장고에`);
       return steps;
@@ -1788,7 +1904,7 @@
       } else if (day.kind === "departure") {
         const checkout = `${result.stayB ? result.stayB.short || "B숙소" : postShort} 체크아웃`;
         if (day.lunch) {
-          items.push(`${checkout} · 짐은 코인락커에`, day.lunch);
+          items.push(`${checkout} · ${country.luggageLastDay}`, day.lunch);
           day.lunch = null;
           items.push(`${airportLabel} → 귀국 (펜은 기내 휴대)`);
         } else {
@@ -1809,12 +1925,15 @@
     });
 
     const preTrip = [];
-    if (clinic.mode === "online") {
-      preTrip.push(`${formatDate(addDays(rxDate, -5))}쯤 비대면 진료 예약 · 배송지는 ${formatDate(rxDate)}에 문 여는 야마토 영업소`);
+    if (clinic.book) {
+      const booking = bookingStep(clinic, rxDate, planText);
+      preTrip.push(`${booking.when} ${booking.text}`);
     } else {
-      preTrip.push(`${clinic.short} ${formatDate(rxDate)} 오전 진료 예약 · ${result.rxPlan.title} 재고 확인`);
+      preTrip.push(`${clinic.short} ${formatDate(rxDate)} 오전 진료 예약 · ${planText} 재고 확인`);
     }
-    preTrip.push(`엔화 현금 약 ¥${formatNumber(roundUp(result.cash.total[1], 1000))} 준비 ('처방 준비' 탭에 내역)`);
+    const money = result.money;
+    const cashToCarry = roundUp(result.cash.total[1], money.currency.cashStep);
+    preTrip.push(`${money.currency.name} 현금 약 ${money.format([cashToCarry, cashToCarry])} 준비 ('처방 준비' 탭에 내역)`);
 
     return { days, overflow, warnings, preTrip };
   }
@@ -1835,8 +1954,8 @@
     return findById(data.departures, state.departureId) || data.departures[0];
   }
 
-  function currentRxPlan() {
-    return findById(rx.plans, state.rxPlanId) || rx.plans[0];
+  function rxPlanFor(country) {
+    return findById(country.rxPlans, state.rxPlan[country.id]) || country.rxPlans[0];
   }
 
   function currentRxDay() {
@@ -1847,8 +1966,31 @@
     return findById(data.seasons, state.seasonId) || data.seasons[0];
   }
 
-  function currentFx() {
-    return findById(data.fxOptions, state.fxId) || data.fxOptions[0];
+  function countryOf(city) {
+    return countries[city.country];
+  }
+
+  // A city's local prices are stored under its currency code (perRoomPerNightJPY in Japan,
+  // perRoomPerNightCNY in China); `of` reads them, `format` prints them, `rate` turns them into KRW.
+  function moneyFor(city) {
+    const currency = currencies[countryOf(city).currency];
+    const fx = findById(currency.fxOptions, state.fx[currency.code]) || currency.fxOptions[0];
+    return {
+      code: currency.code,
+      currency,
+      fx,
+      rate: fx.krwPerUnit,
+      of: (item, key) => (item ? item[key + currency.code] : undefined),
+      format: (r, dash = "-") => {
+        const [lo, hi] = r.map((value) => Math.round(value).toLocaleString("ko-KR"));
+        return `${currency.prefix}${lo === hi ? lo : `${lo}${dash}${hi}`}${currency.suffix}`;
+      },
+    };
+  }
+
+  // Shared cards (rooms, meals, weeks) can carry another wording or number for one country under its id.
+  function forCountry(item, country) {
+    return item && item[country.id] ? { ...item, ...item[country.id] } : item;
   }
 
   function cheapestCityId(results) {
@@ -1860,24 +2002,33 @@
     return best ? best.cityId : null;
   }
 
-  function describeStayPrice(stay) {
-    if (stay.perBedPerNightJPY) return `평일 1인 1침대 ${formatJPYRange(stay.perBedPerNightJPY)}/박`;
-    if (stay.perRoomPerNightJPY && stay.roomCapacity) return `평일 ${stay.roomCapacity}인 1실 ${formatJPYRange(stay.perRoomPerNightJPY)}/박`;
-    if (stay.perPersonPerNightJPY) return `평일 1인 ${formatJPYRange(stay.perPersonPerNightJPY)}/박`;
-    if (stay.perUnitPerNightJPY) return `평일 ${stay.unitCapacity}인 1채 ${formatJPYRange(stay.perUnitPerNightJPY)}/박`;
-    if (stay.perRoomPerNightJPY) return `평일 트윈 ${formatJPYRange(stay.perRoomPerNightJPY)}/박`;
+  function describeStayPrice(stay, money) {
+    const perBed = money.of(stay, "perBedPerNight");
+    const perRoom = money.of(stay, "perRoomPerNight");
+    const perPerson = money.of(stay, "perPersonPerNight");
+    const perUnit = money.of(stay, "perUnitPerNight");
+    if (perBed) return `평일 1인 1침대 ${money.format(perBed)}/박`;
+    if (perRoom && stay.roomCapacity) return `평일 ${stay.roomCapacity}인 1실 ${money.format(perRoom)}/박`;
+    if (perPerson) return `평일 1인 ${money.format(perPerson)}/박`;
+    if (perUnit) return `평일 ${stay.unitCapacity}인 1채 ${money.format(perUnit)}/박`;
+    if (perRoom) return `평일 트윈 ${money.format(perRoom)}/박`;
     return "";
   }
 
-  function describeActivityPrice(act, season) {
-    if (act.groupJPY) return "무료";
+  // Per-person ticket price; parks have a dearer tier on peak dates.
+  function activityPrice(act, peak, money) {
+    return (peak && money.of(act, "peakAdult")) || money.of(act, "adult") || [0, 0];
+  }
+
+  function describeActivityPrice(act, season, money) {
+    if (money.of(act, "group")) return "무료";
     const peak = season.parkTier === "peak";
-    const price = peak && act.peakAdultJPY ? act.peakAdultJPY : act.adultJPY;
-    const parts = [act.adultJPY && act.adultJPY[1] === 0 ? "무료" : `1인 ${formatJPYRange(price)}`];
+    const price = activityPrice(act, peak, money);
+    const parts = [price[1] === 0 ? "무료" : `1인 ${money.format(price)}`];
     if (act.tag) parts.unshift(act.tag);
     if (act.note) parts.push(act.note);
     if (act.cash) parts.push("현금 위주");
-    if (peak && act.peakAdultJPY) parts.push("성수기 등급");
+    if (peak && money.of(act, "peakAdult")) parts.push("성수기 등급");
     return parts.join(" · ");
   }
 
@@ -1893,6 +2044,13 @@
       selected_currency: "KRW",
     });
     return `https://www.booking.com/searchresults.ko.html?${params.toString()}`;
+  }
+
+  // Topic particle after a name: "병원은", "택배는", "MIL(신사이바시)는". Looks at the last Hangul syllable.
+  function withTopic(name) {
+    const last = String(name).match(/[가-힣](?=[^가-힣]*$)/);
+    const hasFinalConsonant = last ? (last[0].charCodeAt(0) - 0xac00) % 28 !== 0 : false;
+    return `${name}${hasFinalConsonant ? "은" : "는"}`;
   }
 
   function shortTitle(title) {
@@ -1922,10 +2080,6 @@
 
   function scale(r, factor) {
     return [r[0] * factor, r[1] * factor];
-  }
-
-  function range2(min, max) {
-    return [min, max];
   }
 
   function roundUp(value, step) {
@@ -1994,11 +2148,6 @@
 
   function formatKRWRange(r) {
     return `${Math.round(r[0] / 10000).toLocaleString("ko-KR")}-${Math.round(r[1] / 10000).toLocaleString("ko-KR")}만원`;
-  }
-
-  function formatJPYRange(r) {
-    if (r[0] === r[1]) return `¥${r[0].toLocaleString("ko-KR")}`;
-    return `¥${r[0].toLocaleString("ko-KR")}-${r[1].toLocaleString("ko-KR")}`;
   }
 
   function pct(value) {
