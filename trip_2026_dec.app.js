@@ -43,6 +43,8 @@
     titleStayPre: byId("title-stayPre"),
     titleClinic: byId("title-clinic"),
     titleActivities: byId("title-activities"),
+    titleFlight: byId("title-flight"),
+    titleAirport: byId("title-airport"),
     titleFx: byId("title-fx"),
     labelRxPlan: byId("label-rxPlan"),
     rxPrep: byId("rx-prep"),
@@ -239,6 +241,13 @@
       };
       next.rxPatients = clamp(saved.rxPatients ?? base.rxPatients, rx.patients.min, next.travelers);
 
+      // A city only reachable at one time of day (Tsushima: morning ferry from Busan) carries its own
+      // preferred departure; keep it in force on load as well as on a city click.
+      if (cities[next.cityId] && cities[next.cityId].departureId
+          && findById(data.departures, cities[next.cityId].departureId)) {
+        next.departureId = cities[next.cityId].departureId;
+      }
+
       cityOrder.forEach((cityId) => {
         const city = cities[cityId];
         const savedCity = (saved.cities && saved.cities[cityId]) || {};
@@ -352,7 +361,14 @@
     );
 
     onCardClick(el.city, (id) => {
-      if (cities[id]) state.cityId = id;
+      if (cities[id]) {
+        state.cityId = id;
+        // Some cities are only reachable at a certain time (Tsushima: morning ferry from Busan),
+        // so they carry a preferred departure that is applied when the city is picked.
+        if (cities[id].departureId && findById(data.departures, cities[id].departureId)) {
+          state.departureId = cities[id].departureId;
+        }
+      }
     });
     onCardClick(el.departure, (id) => {
       state.departureId = id;
@@ -731,6 +747,8 @@
     if (el.titleStayPre) el.titleStayPre.textContent = `처방 전 숙소 · 초저가 (${result.preNights}박)`;
     if (el.titleClinic) el.titleClinic.textContent = `처방 클리닉 · 수령 방식 · ${city.name}`;
     if (el.titleActivities) el.titleActivities.textContent = `관광 · 이색 식사 · ${city.name}`;
+    if (el.titleFlight) el.titleFlight.textContent = city.flightTitle || "항공 (1인 왕복)";
+    if (el.titleAirport) el.titleAirport.textContent = city.airportTitle || "공항 이동";
     if (el.titleFx) el.titleFx.textContent = `환율 · ${money.currency.name}`;
     if (el.labelRxPlan) el.labelRxPlan.textContent = `용량 · 수량 · ${country.name} 도시 공통 (${country.penNote})`;
     el.cityDivider.textContent = `여기부터는 도시마다 따로 저장됩니다 · 지금 ${city.name}`;
@@ -1069,11 +1087,11 @@
     const savingsText = result.rxSavings > 0 ? ` · 국내 처방보다 약 ${formatManwon(result.rxSavings)} 저렴` : "";
     const rows = [
       ["마운자로 처방", b.rx, `${result.clinic.short} · ${planTitle(result.rxPlan, result.country)} × ${result.rxPatients}명${savingsText}`],
-      ["항공", b.flight, result.flightNote],
+      [city.flightRow || "항공", b.flight, result.flightNote],
       ["숙박", b.stay, result.stayNote],
       [taxLabel(result.country), b.stayTax, "1인 1박 기준, 현장 결제"],
       ["식비", b.meal, `${result.mealDays}일 기준`],
-      ["공항 이동", b.airport, titleOf(airportOptionsFor(city, findById(city.flights, cityState().flightId)), cityState().airportId)],
+      [city.airportRow || "공항 이동", b.airport, titleOf(airportOptionsFor(city, findById(city.flights, cityState().flightId)), cityState().airportId)],
       ["시내 교통", b.transport, titleOf(city.transports, cityState().transportId)],
       ["근교 이동", b.excursion, result.stayB ? `${result.stayB.short || result.stayB.title} 왕복` : ""],
       ["액티비티", b.activities, ""],
@@ -1196,13 +1214,20 @@
     const departureTime = currentDeparture().arrival === "night" ? "저녁 출발" : "오전 출발";
     const origin = flight.from || "ICN";
     const flightQuery = `Flights from ${origin} to ${flight.airport} on ${start} through ${end}`;
+    const flightSlot = flight.link
+      ? {
+          label: flight.link.label || `${flight.title} ${formatDate(start)}–${formatDate(end)}`,
+          sub: flight.link.sub || `${flight.title} · ${departureTime} 편으로 고르기`,
+          href: flight.link.href,
+        }
+      : {
+          label: `항공권 · ${origin}→${flight.airport} ${formatDate(start)}–${formatDate(end)}`,
+          sub: `Google Flights · ${flight.title} · 첫날 ${departureTime} 편으로 고르기`,
+          href: `https://www.google.com/travel/flights?hl=ko&curr=KRW&q=${encodeURIComponent(flightQuery)}`,
+        };
 
     const slots = {
-      flight: {
-        label: `항공권 · ${origin}→${flight.airport} ${formatDate(start)}–${formatDate(end)}`,
-        sub: `Google Flights · ${flight.title} · 첫날 ${departureTime} 편으로 고르기`,
-        href: `https://www.google.com/travel/flights?hl=ko&curr=KRW&q=${encodeURIComponent(flightQuery)}`,
-      },
+      flight: flightSlot,
       stayPre: result.preNights
         ? {
             label: `처방 전 · ${stayPre.title} ${formatDate(start)}–${formatDate(checkoutPre)}`,
