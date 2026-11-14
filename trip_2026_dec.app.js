@@ -1,12 +1,12 @@
 (() => {
-  const data = window.JAPAN_TRIP_DATA;
+  const data = window.TRIP_DATA;
   if (!data) {
-    console.error("JAPAN_TRIP_DATA not found. Load data.js first.");
+    console.error("TRIP_DATA not found. Load data.js first.");
     return;
   }
 
-  const STORAGE_KEY = "trip_2026_dec_japan.v3";
-  const UI_KEY = "trip_2026_dec_japan.ui.v1";
+  const STORAGE_KEY = "trip_2026_dec_" + data.meta.appId + ".v3";
+  const UI_KEY = "trip_2026_dec_" + data.meta.appId + ".ui.v1";
   const TABS = ["plan", "cost", "rx", "book"];
   const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
   const { cities, cityOrder, calculationRules, rx, countries, currencies } = data;
@@ -158,6 +158,24 @@
     return result;
   }
 
+  function legacyFx(fxId) {
+    const saved = {};
+    if (!fxId) return saved;
+    Object.values(currencies).forEach((currency) => {
+      if (findById(currency.fxOptions, fxId)) saved[currency.code] = fxId;
+    });
+    return saved;
+  }
+
+  function legacyRxPlan(planId) {
+    const saved = {};
+    if (!planId) return saved;
+    Object.values(countries).forEach((country) => {
+      if (findById(country.rxPlans, planId)) saved[country.id] = planId;
+    });
+    return saved;
+  }
+
   // One rate per currency, shared by that country's cities.
   function pickFx(saved) {
     const result = {};
@@ -212,10 +230,10 @@
         departureId: pickId(data.departures, saved.departureId || base.departureId),
         durationId: pickId(data.durations, saved.durationId || base.durationId),
         seasonId: pickId(data.seasons, saved.seasonId || base.seasonId),
-        // Selections saved before China was added hold a single yen rate in fxId.
-        fx: pickFx(saved.fx || { JPY: saved.fxId }),
-        // Selections saved before China was added hold one plan in rxPlanId; it was a Japanese plan.
-        rxPlan: pickRxPlans(saved.rxPlan || { jp: saved.rxPlanId }),
+        // An earlier single-country page saved one rate in fxId and one plan in rxPlanId, without
+        // saying which currency or country they belong to. Adopt them where the id actually exists.
+        fx: pickFx(saved.fx || legacyFx(saved.fxId)),
+        rxPlan: pickRxPlans(saved.rxPlan || legacyRxPlan(saved.rxPlanId)),
         rxDayId: pickId(rx.days, saved.rxDayId || base.rxDayId),
         cities: {},
       };
@@ -653,7 +671,7 @@
     renderParty();
     renderCards(el.departure, data.departures, state.departureId, null, ifShared("departureId"));
     renderCards(el.duration, data.durations, state.durationId, null, ifShared("durationId"));
-    renderCards(el.season, data.seasons.map((item) => forCountry(item, country)), state.seasonId, null, ifShared("seasonId"));
+    renderCards(el.season, data.seasons, state.seasonId, null, ifShared("seasonId"));
     renderCards(el.fx, money.currency.fxOptions, money.fx.id, null, (item) => meanIf({ fx: { ...state.fx, [money.code]: item.id } }) - base);
     renderCards(
       el.rxPlan,
@@ -685,7 +703,7 @@
     renderCards(el.stayPre, city.staysPre, s.stayPreId, (item) => `${item.subtitle} · ${describeStayPrice(item, money)}`, ifCity("stayPreId"));
     renderCards(
       el.roomConfig,
-      data.roomConfigs.map((item) => forCountry(item, country)),
+      data.roomConfigs,
       s.roomConfigId,
       (item) => `${item.subtitle} · ${state.travelers}명 → ${roomCountFor(item, state.travelers)}실`,
       ifCity("roomConfigId")
@@ -700,7 +718,7 @@
     );
     renderCards(
       el.meal,
-      data.mealLevels.map((item) => forCountry(item, country)),
+      data.mealLevels,
       s.mealId,
       (item) => `${item.subtitle} · 1인 ${money.format(money.of(item, "perPersonPerDay"))}/일`,
       ifCity("mealId")
@@ -847,6 +865,7 @@
 
   function renderCash(result) {
     const c = result.cash;
+    const country = result.country;
     const money = result.money;
     const currency = money.currency;
     const amount = (r) => money.format(r, "–");
@@ -860,7 +879,7 @@
           : currency.cashRxNote;
     const rows = [
       ["마운자로 (현금 대비)", c.rx, rxNote],
-      ["숙박세·입탕세", c.tax, "프런트 현장 결제가 많음"],
+      [taxLabel(country), c.tax, "프런트 현장 결제가 많음"],
       ["현금 위주 식사", c.activities, "시장 식당·노점 (선택한 항목만)"],
       [currency.cashBufferLabel, c.buffer, `1인 ${money.format(currency.cashBuffer)} · ${currency.cashBufferNote}`],
     ].filter(([, r]) => r[1] > 0);
@@ -1052,14 +1071,14 @@
       ["마운자로 처방", b.rx, `${result.clinic.short} · ${planTitle(result.rxPlan, result.country)} × ${result.rxPatients}명${savingsText}`],
       ["항공", b.flight, result.flightNote],
       ["숙박", b.stay, result.stayNote],
-      ["숙박세·입탕세", b.stayTax, "1인 1박 기준, 현장 결제"],
+      [taxLabel(result.country), b.stayTax, "1인 1박 기준, 현장 결제"],
       ["식비", b.meal, `${result.mealDays}일 기준`],
       ["공항 이동", b.airport, titleOf(airportOptionsFor(city, findById(city.flights, cityState().flightId)), cityState().airportId)],
       ["시내 교통", b.transport, titleOf(city.transports, cityState().transportId)],
       ["근교 이동", b.excursion, result.stayB ? `${result.stayB.short || result.stayB.title} 왕복` : ""],
       ["액티비티", b.activities, ""],
       ["예비비", b.contingency, `예상 합계의 ${pct(calculationRules.contingencyRate)} · 범위에 영향 없음`],
-    ].filter(([label, line]) => (label !== "근교 이동" && label !== "숙박세·입탕세") || line.hi > 0);
+    ].filter(([label, line]) => (label !== "근교 이동" && label !== taxLabel(result.country)) || line.hi > 0);
 
     el.breakdown.innerHTML = rows
       .map(([label, line, note]) => {
@@ -1243,7 +1262,7 @@
 
   function renderNotes(city, s, result) {
     const country = result.country;
-    const notes = [...(rx.notes || []), ...(country.rxNotes || []), ...(forCountry(currentSeason(), country).notes || []), ...(city.notes || [])];
+    const notes = [...(rx.notes || []), ...(country.rxNotes || []), ...(currentSeason().notes || []), ...(city.notes || [])];
     Object.entries(city.dateNotes || {}).forEach(([iso, text]) => {
       if (iso >= result.startDate && iso <= addDays(result.startDate, result.nights)) notes.push(text);
     });
@@ -1273,7 +1292,8 @@
 
   function renderEvidence() {
     el.evidenceAsOf.textContent = data.meta.asOf;
-    const groups = [{ title: "공통 (마운자로 반입·가격·보관, 계산 방식·환율·숙박세·시기·객실·식비)", items: collectShared() }];
+    const sharedTitle = data.meta.sharedGroupTitle || "공통 (마운자로 반입·가격·보관, 계산 방식·환율·숙박세·시기·객실·식비)";
+    const groups = [{ title: sharedTitle, items: collectShared() }];
     cityOrder.forEach((cityId) => {
       groups.push({ title: cities[cityId].name, items: collectCitySources(cities[cityId]) });
     });
@@ -1350,14 +1370,14 @@
     const people = state.travelers;
     const nights = currentDuration().nights;
     const days = nights + 1;
-    const season = forCountry(currentSeason(), country);
+    const season = currentSeason();
     const departure = currentDeparture();
     const fx = money.rate;
     const peak = season.parkTier === "peak";
 
     const flight = findById(city.flights, s.flightId);
     const airport = findById(airportOptionsFor(city, flight), s.airportId) || airportOptionsFor(city, flight)[0];
-    const roomConfig = forCountry(findById(data.roomConfigs, s.roomConfigId), country);
+    const roomConfig = findById(data.roomConfigs, s.roomConfigId);
     const stayPre = findById(city.staysPre, s.stayPreId) || city.staysPre[0];
     const stayA = findById(city.staysA, s.stayAId);
     const stayBRaw = findById(city.staysB, s.stayBId);
@@ -2010,6 +2030,10 @@
     return countries[city.country];
   }
 
+  function taxLabel(country) {
+    return country && country.id === "jp" ? "숙박세·입탕세" : "숙박세";
+  }
+
   // A city's local prices are stored under its currency code (perRoomPerNightJPY in Japan,
   // perRoomPerNightCNY in China); `of` reads them, `format` prints them, `rate` turns them into KRW.
   function moneyFor(city) {
@@ -2026,11 +2050,6 @@
         return `${currency.prefix}${lo === hi ? lo : `${lo}${dash}${hi}`}${currency.suffix}`;
       },
     };
-  }
-
-  // Shared cards (rooms, meals, weeks) can carry another wording or number for one country under its id.
-  function forCountry(item, country) {
-    return item && item[country.id] ? { ...item, ...item[country.id] } : item;
   }
 
   function cheapestCityId(results) {
