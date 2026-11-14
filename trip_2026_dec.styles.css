@@ -88,6 +88,26 @@ body {
   text-decoration: underline;
 }
 
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: -56px;
+  z-index: 200;
+  padding: 10px 16px;
+  border-radius: 0 0 10px 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus-visible {
+  top: 0;
+  outline: 3px solid var(--text);
+  outline-offset: 2px;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 1.15fr 1fr;

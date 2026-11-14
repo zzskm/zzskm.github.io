@@ -6,16 +6,21 @@
   <meta name="color-scheme" content="light" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <title>12월 중국 처방 여행</title>
-  <meta name="description" content="마운자로 처방을 넣은 2026년 12월 칭다오·톈진·상하이 금요일 밤 포함 여행 일정과 1인 평균 견적" />
+  <meta name="description" content="마운자로 처방을 넣은 2026년 12월 칭다오·톈진·상하이·다롄·웨이하이·옌타이 금요일 밤 포함 여행 일정과 1인 평균 견적" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="12월 중국 처방 여행" />
+  <meta property="og:description" content="칭다오·톈진·상하이·다롄·웨이하이·옌타이 6개 도시 비교, 1인 평균 견적" />
+  <link rel="preload" as="script" href="trip_2026_dec_china.data.js" />
   <link rel="stylesheet" href="trip_2026_dec.styles.css" />
 </head>
 <body>
+  <a class="skip-link" href="#result-panel">결과로 건너뛰기</a>
   <header class="topbar">
-    <h1>12월 중국 처방 여행 · 칭다오 / 톈진 / 상하이</h1>
-    <p>금요일 밤을 끼고 떠나 마운자로를 처방받는 일정과 예상 비용입니다. 중국 세 도시를 같은 조건으로 비교합니다. 처방 전에는 캡슐·도미토리·게하, 처방받은 날부터는 2인 1실에 묵고, 시장·관청 식당 같은 이색 식사와 가벼운 관광을 넣었습니다. 카드를 바꾸면 일정과 금액이 바로 바뀝니다. 가격은 2026-11-13 기준 추정치입니다.</p>
+    <h1>12월 중국 처방 여행 · 칭다오 / 톈진 / 상하이 / 다롄 / 웨이하이 / 옌타이</h1>
+    <p>금요일 밤을 끼고 떠나 마운자로를 처방받는 일정과 예상 비용입니다. 중국 6개 도시를 같은 조건으로 비교합니다. 처방 전에는 캡슐·도미토리·게하, 처방받은 날부터는 2인 1실에 묵고, 시장·관청 식당 같은 이색 식사와 가벼운 관광을 넣었습니다. 카드를 바꾸면 일정과 금액이 바로 바뀝니다. 가격은 <span id="head-asof">2026-11-13</span> 기준 추정치입니다.</p>
     <nav class="page-switch" aria-label="다른 나라 일정">
       <span class="page-switch-label">다른 일정</span>
-      <a href="trip_2026_dec_japan.html">일본 · 후쿠오카 / 오사카 / 도쿄</a>
+      <a href="trip_2026_dec_japan.html">일본 · 후쿠오카 / 오사카 / 도쿄 / 쓰시마</a>
     </nav>
   </header>
 
@@ -33,34 +38,34 @@
       <h3 class="step-title"><span class="step-num" aria-hidden="true">1</span>언제 · 어디로</h3>
 
       <div class="category is-open" data-section="city">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-city">
           <span class="category-title">도시</span>
           <span id="summary-city" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-city">
           <div id="city-options"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="party">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-party">
           <span class="category-title">인원</span>
           <span id="summary-party" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-party">
           <div id="party-controls"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="schedule">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-schedule">
           <span class="category-title">일정 · 시기</span>
           <span id="summary-schedule" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-schedule">
           <p class="group-label">출발 방식 (금요일 밤 포함)</p>
           <div id="departure-options" class="card-grid"></div>
           <p class="group-label">기간</p>
@@ -71,12 +76,12 @@
       </div>
 
       <div class="category is-open" data-section="fx">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-fx">
           <span id="title-fx" class="category-title">환율</span>
           <span id="summary-fx" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-fx">
           <div id="fx-options" class="card-grid"></div>
         </div>
       </div>
@@ -84,12 +89,12 @@
       <h3 class="step-title"><span class="step-num" aria-hidden="true">2</span>마운자로 처방</h3>
 
       <div class="category is-open" data-section="rx">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-rx">
           <span class="category-title">용량 · 처방일 · 인원</span>
           <span id="summary-rx" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-rx">
           <p id="label-rxPlan" class="group-label">용량 · 수량</p>
           <div id="rxPlan-options" class="card-grid"></div>
           <p class="group-label">처방일 (이날 밤부터 2인 1실)</p>
@@ -102,12 +107,12 @@
       <p id="city-divider" class="city-divider">여기부터는 도시마다 따로 저장됩니다.</p>
 
       <div class="category is-open" data-section="clinic">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-clinic">
           <span id="title-clinic" class="category-title">처방 클리닉 · 수령 방식</span>
           <span id="summary-clinic" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-clinic">
           <div id="clinic-options" class="card-grid"></div>
           <p id="warn-clinic" class="warn warn-inline" role="status" hidden></p>
         </div>
@@ -116,67 +121,67 @@
       <h3 class="step-title"><span class="step-num" aria-hidden="true">3</span>이동 · 숙소</h3>
 
       <div class="category is-open" data-section="flight">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-flight">
           <span id="title-flight" class="category-title">항공 (1인 왕복)</span>
           <span id="summary-flight" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-flight">
           <div id="flight-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="airport">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-airport">
           <span id="title-airport" class="category-title">공항 이동</span>
           <span id="summary-airport" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-airport">
           <div id="airport-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="stayPre">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayPre">
           <span id="title-stayPre" class="category-title">처방 전 숙소 · 초저가</span>
           <span id="summary-stayPre" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-stayPre">
           <div id="stayPre-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="roomConfig">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-roomConfig">
           <span class="category-title">처방 후 객실 구성</span>
           <span id="summary-roomConfig" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-roomConfig">
           <div id="roomConfig-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="stayA">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayA">
           <span id="title-stayA" class="category-title">처방 후 숙소 · 2인 1실</span>
           <span id="summary-stayA" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-stayA">
           <div id="stayA-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="stayB">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayB">
           <span class="category-title">B숙소 (마지막 1박, 선택)</span>
           <span id="summary-stayB" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-stayB">
           <div id="stayB-options" class="card-grid"></div>
           <p id="warn-stayB" class="warn warn-inline" role="status" hidden></p>
         </div>
@@ -185,52 +190,52 @@
       <h3 class="step-title"><span class="step-num" aria-hidden="true">4</span>식사 · 관광</h3>
 
       <div class="category is-open" data-section="meal">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-meal">
           <span class="category-title">식비</span>
           <span id="summary-meal" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-meal">
           <div id="meal-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="transport">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-transport">
           <span class="category-title">시내 교통</span>
           <span id="summary-transport" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-transport">
           <div id="transport-options" class="card-grid"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="activities">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activities">
           <span id="title-activities" class="category-title">액티비티</span>
           <span id="summary-activities" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-activities">
           <p id="warn-activities" class="warn warn-inline" role="status" hidden></p>
           <div id="activity-controls"></div>
         </div>
       </div>
 
       <div class="category is-open" data-section="activityPacks">
-        <button class="category-toggle" type="button" aria-expanded="true">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activityPacks">
           <span class="category-title">액티비티 팩 (한 번에 고르기)</span>
           <span id="summary-activityPack" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
-        <div class="category-body">
+        <div class="category-body" id="cat-activityPacks">
           <div id="activityPack-options" class="card-grid"></div>
         </div>
       </div>
     </section>
 
-    <section class="panel panel-right" id="result-panel" aria-label="결과">
+    <section class="panel panel-right" id="result-panel" aria-label="결과" tabindex="-1">
       <div class="result-head">
         <h2>결과 <small>1인 평균</small></h2>
         <p class="result-context" id="result-context">-</p>

@@ -67,6 +67,7 @@
     resetState: byId("reset-state"),
     evidenceModal: byId("evidence-modal"),
     evidenceAsOf: byId("evidence-asof"),
+    headAsOf: byId("head-asof"),
     evidenceSources: byId("evidence-sources"),
     categories: Array.from(document.querySelectorAll(".category[data-section]")),
     cardsPanel: byId("cards-panel"),
@@ -1317,6 +1318,7 @@
 
   function renderEvidence() {
     el.evidenceAsOf.textContent = data.meta.asOf;
+    if (el.headAsOf) el.headAsOf.textContent = data.meta.asOf;
     const sharedTitle = data.meta.sharedGroupTitle || "공통 (마운자로 반입·가격·보관, 계산 방식·환율·숙박세·시기·객실·식비)";
     const groups = [{ title: sharedTitle, items: collectShared() }];
     cityOrder.forEach((cityId) => {
