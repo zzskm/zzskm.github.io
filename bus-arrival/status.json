@@ -1,6 +1,6 @@
 {
-  "last_poll": "2026-11-16T16:38:31+09:00",
-  "last_poll_local": "2026-11-16 16:38:32+09:00",
+  "last_poll": "2026-11-16T16:39:31+09:00",
+  "last_poll_local": "2026-11-16 16:39:38+09:00",
   "route_id": 204000170,
   "secondary_station_id": 205000029,
   "secondary_mobile_no": "06004",
@@ -8,54 +8,58 @@
   "current_plate": "경기70아6517",
   "first_seen_ts": "2026-11-16T16:31:31+09:00",
   "safety": {
-    "api_arrival_ts": "2026-11-16T16:47:48+09:00",
-    "corrected_arrival_ts": "2026-11-16T16:46:23+09:00",
-    "safe_arrival_ts": "2026-11-16T16:35:02+09:00",
+    "api_arrival_ts": "2026-11-16T16:48:47+09:00",
+    "corrected_arrival_ts": "2026-11-16T16:47:22+09:00",
+    "safe_arrival_ts": "2026-11-16T16:36:01+09:00",
     "offset_sec": -766,
     "method": "trip_lower_quantile",
     "sample_trips": 183,
     "alpha": 0.05,
     "stalled_last_stop": false,
     "confidence": "conditional_estimate",
-    "observation_ts": "2026-11-16T16:38:31+09:00",
+    "observation_ts": "2026-11-16T16:39:31+09:00",
     "model_status": "ready",
     "fallback_sec": 660
   },
-  "predict_sec": 557,
+  "predict_sec": 556,
   "location_no": 1,
   "next_veh_id": null,
   "next_plate_no": "",
   "next_predict_sec": null,
-  "remain_seat": 44,
-  "flag": "",
-  "tracking_samples": 15,
+  "remain_seat": 43,
+  "flag": "PASS",
+  "tracking_samples": 17,
   "min_predict_in_track": 513,
-  "daily_calls": 22,
+  "daily_calls": 24,
   "confidence": "low",
-  "last_success": "2026-11-16T16:38:31+09:00",
+  "last_success": "2026-11-16T16:39:31+09:00",
   "state_reset": false,
-  "primary_source": "naver",
-  "data_source": "naver",
+  "primary_source": "station_list",
+  "data_source": "official",
   "source_attempts": [
     {
-      "source": "naver",
+      "source": "official",
       "ok": true
     }
   ],
   "sources": {
     "official": {
-      "calls": 14,
-      "ok": 14,
+      "calls": 15,
+      "ok": 15,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-16T16:36:01+09:00"
+      "last_success": "2026-11-16T16:39:31+09:00"
     },
     "gbis_web": {
-      "calls": 10,
+      "calls": 11,
       "ok": 9,
-      "fail": 1,
-      "consec_fail": 0,
-      "last_success": "2026-11-16T16:37:01+09:00"
+      "fail": 2,
+      "consec_fail": 1,
+      "last_success": "2026-11-16T16:37:01+09:00",
+      "last_error": {
+        "kind": "timeout",
+        "phase": "connect"
+      }
     },
     "kakao": {
       "calls": 15,
@@ -65,35 +69,38 @@
       "last_success": "2026-11-16T16:38:01+09:00"
     },
     "naver": {
-      "calls": 14,
-      "ok": 14,
+      "calls": 15,
+      "ok": 15,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-16T16:38:31+09:00"
+      "last_success": "2026-11-16T16:39:01+09:00"
     }
   },
   "gbis_web": {
-    "ok": true,
-    "vehicles": 4,
-    "waiting_vehicles": 1,
-    "passes": 0,
-    "calls": 39,
-    "request_duration_sec": 0.511,
+    "ok": false,
+    "error_detail": {
+      "kind": "timeout",
+      "phase": "connect"
+    },
+    "consec_fail": 1,
+    "calls": 40,
+    "request_duration_sec": 5.01,
     "last_success": "2026-11-16T16:38:32+09:00"
   },
+  "station_route_count": 29,
   "consecutive_connect_timeouts": 0,
   "collect_window": "16:00-22:00",
   "poll_interval_sec": 30,
-  "api_request_started_at": "2026-11-16T16:38:31+09:00",
-  "api_response_received_at": "2026-11-16T16:38:32+09:00",
-  "api_request_duration_sec": 1.083,
+  "api_request_started_at": "2026-11-16T16:39:31+09:00",
+  "api_response_received_at": "2026-11-16T16:39:32+09:00",
+  "api_request_duration_sec": 1.089,
   "publish_interval_sec": 60,
   "urgent_publication": true,
   "publication_reason": "near_stop",
   "runtime_schema_version": 2,
   "model_status": "ready",
   "model_trained_through": "2026-11-13",
-  "publish_prepared_at": "2026-11-16T07:38:33.815868+00:00",
-  "poll_to_publish_prepare_sec": 2.816,
+  "publish_prepared_at": "2026-11-16T07:39:39.167905+00:00",
+  "poll_to_publish_prepare_sec": 8.168,
   "publication_stage": "prepared_not_deployed"
 }
