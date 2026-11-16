@@ -207,6 +207,16 @@ class SafetyBrowserTests(unittest.TestCase):
             expect(page.locator('#departure-time-main')).to_have_text('')
             self.assertEqual(errors,[])
         finally: page.close()
+        summary={'recent_predictions':[],'recent_arrivals':[],'today':{},'historical_alerts':{'date':'2026-10-19','slots':[
+            {'id':'2026-10-19:1','earliest_arrival_ts':'2026-10-19T18:17:00+09:00','latest_arrival_ts':'2026-10-19T18:21:00+09:00',
+             'sample_days':4,'margin_sec':120}]}}
+        for status, prep in ((no_bus, '준비 18:11'), ({**no_bus, 'error':'api_error'}, '')):
+            page,errors=self.open_page(status,summary=summary,history=head+rows)
+            try:
+                expect(page.locator('#departure-time-main')).to_have_text(prep)
+                if prep: expect(page.locator('#departure-context')).to_contain_text('가장 이른 운행 18:17')
+                self.assertEqual(errors,[])
+            finally: page.close()
         page,errors=self.open_page(self.ready_status(),history=head+rows)
         try:
             expect(page.locator('#arrival-main-time')).to_have_text('18:20')

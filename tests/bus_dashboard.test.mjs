@@ -279,3 +279,17 @@ test('historical next arrival picks the next same-weekday slot seen on two or mo
  // 비교할 날이 하루뿐이면 그 날 기록을 그대로 쓴다.
  assert.equal(BD.historicalNext([p('2026-10-12','18:20')],NOW).atMs,NOW+20*M);
 });
+
+test('historical prep time matches the historical prealert fire time and skips passed or weak slots',()=>{
+ const slot=(id,e,l,days=4)=>({id:'2026-10-19:'+id,earliest_arrival_ts:'2026-10-19T'+e+':00+09:00',latest_arrival_ts:'2026-10-19T'+l+':00+09:00',sample_days:days,margin_sec:120});
+ const history={date:'2026-10-19',slots:[slot(1,'17:40','17:45'),slot(2,'18:10','18:14',3),slot(3,'18:29','18:34')]};
+ const prep=BD.historicalPrep(history,NOW,5,60);
+ assert.equal(prep.earliestAtMs,Date.parse('2026-10-19T18:29:00+09:00'));
+ assert.equal(prep.prepAtMs,prep.earliestAtMs-6*M);assert.equal(prep.sampleDays,4);
+ const cfg={enabled:true,leads:[1],windows:[],armedAtMs:0};
+ const fires=t=>BA.evaluateHistorical({cfg,snap:{why:'no_bus'},nowMs:t,history,enabled:true,ledger:{},busLedger:{},walkMinutes:5,marginSec:60})
+  .actions.filter(a=>a.type==='historical'&&a.slotId==='2026-10-19:3').length;
+ assert.equal(fires(prep.prepAtMs-1000),0);assert.equal(fires(prep.prepAtMs),1);
+ assert.equal(BD.historicalPrep({...history,date:'2026-10-18'},NOW,5,60),null);
+ assert.equal(BD.historicalPrep(history,Date.parse('2026-10-19T18:35:00+09:00'),5,60),null);
+});

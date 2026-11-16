@@ -222,6 +222,24 @@
     return null;
   }
 
+  // 실시간 차량이 없을 때의 '준비 시각': 서버 historical_alerts 슬롯의 가장 이른 사례에서 도보·추가 여유를 뺀다.
+  // 슬롯 조건과 계산은 BusAlarm.evaluateHistorical(과거 운행 기반 사전 준비 알림)과 같게 맞춘다.
+  function historicalPrep(history, nowMs, walkMinutes, marginSec) {
+    if (!valid(nowMs) || !history || !Array.isArray(history.slots)) return null;
+    const date = new Date(nowMs + 9 * 60 * MIN).toISOString().slice(0, 10);
+    if (history.date !== date) return null;
+    const walk = Math.min(60, Math.max(0, Number(walkMinutes) || 0));
+    const margin = Math.min(600, Math.max(0, valid(marginSec) ? marginSec : 60));
+    const slot = history.slots
+      .filter(s => s && s.sample_days >= 4 && String(s.id).indexOf(date + ':') === 0
+        && valid(stamp(s.earliest_arrival_ts)) && valid(stamp(s.latest_arrival_ts)) && stamp(s.latest_arrival_ts) >= nowMs)
+      .sort((a, b) => stamp(a.earliest_arrival_ts) - stamp(b.earliest_arrival_ts))[0];
+    if (!slot) return null;
+    const earliestAtMs = stamp(slot.earliest_arrival_ts);
+    return { prepAtMs:earliestAtMs - walk * MIN - margin * 1000, earliestAtMs, latestAtMs:stamp(slot.latest_arrival_ts),
+      sampleDays:slot.sample_days };
+  }
+
   function splitGaps(points, intervalSec) {
     const maxGap = Math.max(180000, (Number(intervalSec) || 60) * 2500);
     const groups = [];
@@ -231,5 +249,5 @@
     });
     return groups;
   }
-  return { currentSeries, targetSeries, buildView, decisionPresentation, buildReadiness, relativeTime, splitGaps, historyPoints, historicalNext };
+  return { currentSeries, targetSeries, buildView, decisionPresentation, buildReadiness, relativeTime, splitGaps, historyPoints, historicalNext, historicalPrep };
 });

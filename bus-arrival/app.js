@@ -203,7 +203,10 @@ window.BusApp = { mount(root = document, options = {}) {
     const presentation=BD.decisionPresentation(view);
     $("#verdict").classList.toggle("is-overdue",presentation.urgency==="late");
     setText($("#verdict-heading"),presentation.heading);
-    setText($("#departure-time-main"),presentation.showDeparture && Number.isFinite(view.departureAtMs) ? "출발 " + hhmm(view.departureAtMs) : "");
+    // 실시간 차량이 없다고 확인될 때만(조회 오류·오래된 정보 제외) 과거 운행 기준 준비 시각을 보여 준다. 출발 지시가 아니다.
+    const prep = view.state === "no_bus" ? BD.historicalPrep(cache.summary && cache.summary.historical_alerts, now, walkMinutes(), marginSeconds()) : null;
+    setText($("#departure-time-main"),presentation.showDeparture && Number.isFinite(view.departureAtMs) ? "출발 " + hhmm(view.departureAtMs)
+      : prep ? "준비 " + hhmm(prep.prepAtMs) : "");
     setText($("#verdict-glyph"), {go:"▶",wait:"◷",warn:"⚠",danger:"!"}[view.tone]);
     if (!Number.isFinite(view.departureAtMs)) { previousDeparture=null; departureChange=null; }
     // Arrival is shown from the API. Model correction is reserved for the labelled details.
@@ -231,7 +234,7 @@ window.BusApp = { mount(root = document, options = {}) {
         + " · 더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요."
       : hist ? "실시간 도착 정보 없음 · 지난 같은 요일 " + hist.totalDays + "일 중 " + hist.days + "일 "
         + (hist.earliestAtMs === hist.latestAtMs ? hhmm(hist.earliestAtMs) : hhmm(hist.earliestAtMs) + "~" + hhmm(hist.latestAtMs))
-        + " 도착 추정 기록 기준입니다. 실제 배차와 다를 수 있습니다."
+        + " 도착 추정 기록 기준입니다. 더 일찍 올 수 있고 실제 배차와 다를 수 있습니다."
       : "최신 도착 예정 시각을 확인할 수 없습니다. 과거 예측을 현재 시각처럼 표시하지 않습니다.");
     $("#eta-row").hidden = parts.num === "--";
     $("#eta-unavailable").hidden = available || Boolean(hist);
@@ -247,6 +250,9 @@ window.BusApp = { mount(root = document, options = {}) {
     setText($("#departure-context"), Number.isFinite(view.departureAtMs)
       ? (view.uncertain ? "이전 정보 기준 · " : "조기 도착 대비 · ")
         + "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분"
+      : prep ? "기록 기준 준비 · 같은 요일 " + prep.sampleDays + "일 중 가장 이른 운행 " + hhmm(prep.earliestAtMs)
+        + "에서 도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분을 뺐습니다"
+        + (prep.prepAtMs < now ? " · 준비 시각이 지났습니다" : "") + " · 차량은 미확인이며 실시간 차량이 잡히면 다시 판단합니다."
       : "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분 · 최신 차량 정보로 다시 판단합니다.");
     setText($("#freshness"), view.ageSec == null ? "조회 시각 미확인"
       : hhmm(view.observationAtMs) + " 확인 · " + (view.ageSec < 60 ? view.ageSec + "초 전" : Math.floor(view.ageSec / 60) + "분 전")
