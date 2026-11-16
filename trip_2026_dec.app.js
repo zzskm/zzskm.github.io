@@ -56,8 +56,10 @@
     perPersonBand: byId("per-person-band"),
     groupTotal: byId("group-total"),
     perMonth: byId("per-month"),
+    rxCondition: byId("rx-condition"),
     compareBody: byId("compare-body"),
     breakdown: byId("breakdown-list"),
+    breakdownUnit: byId("breakdown-unit"),
     timeline: byId("timeline-list"),
     timelineWarning: byId("timeline-warning"),
     checkLinks: byId("check-links"),
@@ -712,7 +714,15 @@
       el.clinic,
       city.clinics,
       s.clinicId,
-      (item) => `${item.subtitle} · 이 플랜 1인 ${money.format(rxDrugCost(item, rxPlanFor(country), money))}`,
+      (item) => {
+        // Price what this clinic actually hands out, and the per-month figure, since a clinic
+        // that gives 4 weeks makes the trip cheaper in total but far dearer per month.
+        const plan = capPlanToClinic(rxPlanFor(country), item);
+        const month = perRxMonth(computeIf(null, { clinicId: item.id }));
+        const capped = plan.cappedFrom ? ` · ${planTitle(plan, country)}만` : "";
+        const perMonth = month ? ` · 1개월분당 약 ${formatManwon(month.mean)}` : "";
+        return `${item.subtitle} · 1인 약값 ${money.format(rxDrugCost(item, plan, money))}${capped}${perMonth}`;
+      },
       ifCity("clinicId")
     );
     renderCards(el.flight, city.flights, s.flightId, (item) => `${item.subtitle} · ${formatKRWRange(item.priceKRW)}`, ifCity("flightId"));
@@ -1034,7 +1044,8 @@
     set("summary-party", `${result.people}명`);
     set("summary-schedule", `${currentDeparture().title} · ${currentDuration().title} · ${currentSeason().title}`);
     set("summary-fx", result.money.fx.title);
-    set("summary-rx", `${planTitle(result.rxPlan, result.country)} · ${result.rxPatients}명 · Day${result.preNights + 1}`);
+    const capNote = result.rxPlan.cappedFrom ? " (병원 한도)" : "";
+    set("summary-rx", `${planTitle(result.rxPlan, result.country)}${capNote} · ${result.rxPatients}명 · Day${result.preNights + 1}`);
     set("summary-clinic", result.clinic.short);
     set("summary-stayPre", result.preNights ? titleOf(city.staysPre, s.stayPreId) : "없음 (도착일 처방)");
     set("summary-flight", titleOf(city.flights, s.flightId));
@@ -1076,18 +1087,24 @@
     el.resultContext.textContent = `${city.name} · ${currentDuration().title} · ${dates} · 연차 ${result.leaveDays}일`;
     const pp = result.perPerson;
     el.perPersonTotal.textContent = `약 ${formatManwon(pp.mean)} / 1인`;
-    el.perPersonBand.innerHTML = `80% 범위 ${esc(formatBand(pp.band))}<span class="band-extreme"> · 항목 단순 합산 ${esc(formatBand(pp.extreme))}</span>`;
+    el.perPersonBand.textContent = `80% 범위 ${formatBand(pp.band)}`;
     el.groupTotal.textContent = `총액 약 ${formatManwon(result.total.mean)} (${formatBand(result.total.band)}) · ${result.people}명 · ${result.money.fx.title}`;
     const month = perRxMonth(result);
     el.perMonth.hidden = !month;
     if (month) {
       el.perMonth.innerHTML = `처방 1개월분당 <strong>약 ${esc(formatManwon(month.mean))}</strong> (${esc(formatBand(month.band))})<small>${result.people}명 여행 총액 ÷ ${esc(formatMonths(month.months))} · 그중 약값·진료비 ${esc(formatManwon(month.drug))}</small>`;
     }
+    // A route open only to some patients (e.g. online sale limited to diabetes) says so next to the price.
+    if (el.rxCondition) {
+      el.rxCondition.hidden = !result.clinic.eligibility;
+      el.rxCondition.textContent = result.clinic.eligibility ? `${result.clinic.short}: ${result.clinic.eligibility}` : "";
+    }
+    if (el.breakdownUnit) el.breakdownUnit.textContent = result.people > 1 ? `${result.people}명 합계` : "";
 
     const b = result.breakdown;
     const savingsText = result.rxSavings > 0 ? ` · 국내 처방보다 약 ${formatManwon(result.rxSavings)} 저렴` : "";
     const rows = [
-      ["마운자로 처방", b.rx, `${result.clinic.short} · ${planTitle(result.rxPlan, result.country)} × ${result.rxPatients}명${savingsText}`],
+      ["마운자로 처방", b.rx, `${result.clinic.short} · ${planTitle(result.rxPlan, result.country)}${result.rxPlan.cappedFrom ? "(병원 한도)" : ""} × ${result.rxPatients}명${savingsText}`],
       [city.flightRow || "항공", b.flight, result.flightNote],
       ["숙박", b.stay, result.stayNote],
       [taxLabel(result.country), b.stayTax, "1인 1박 기준, 현장 결제"],
@@ -1288,10 +1305,12 @@
 
   function renderNotes(city, s, result) {
     const country = result.country;
-    const notes = [...(rx.notes || []), ...(country.rxNotes || []), ...(currentSeason().notes || []), ...(city.notes || [])];
+    const cityNotes = [...(currentSeason().notes || []), ...(city.notes || [])];
     Object.entries(city.dateNotes || {}).forEach(([iso, text]) => {
-      if (iso >= result.startDate && iso <= addDays(result.startDate, result.nights)) notes.push(text);
+      if (iso >= result.startDate && iso <= addDays(result.startDate, result.nights)) cityNotes.push(text);
     });
+    // Everything pushed below is about rooms and flights.
+    const notes = [];
     const roomConfig = findById(data.roomConfigs, s.roomConfigId);
     notes.push(`숙박은 평일가에 1박마다 날짜 배율을 곱합니다 (이번 일정 ${result.nightFactorText}).`);
     if (result.usesUnits) {
@@ -1313,7 +1332,21 @@
     if (flight.id.startsWith("lcc")) {
       notes.push("LCC 특가는 위탁 수하물이 빠진 운임이 많습니다. 15kg 포함 여부를 확인하세요.");
     }
-    el.notes.innerHTML = notes.map((note) => `<li>${esc(note)}</li>`).join("");
+    // Grouped so the long list reads by topic: carrying the drug home, the country, the city, the bookings.
+    const groups = [
+      ["반입 · 보관 · 복용", rx.notes || []],
+      [`${country.name} 처방 · 결제`, country.rxNotes || []],
+      [city.name, cityNotes],
+      ["숙박 · 항공", notes],
+    ].filter(([, list]) => list.length);
+    el.notes.innerHTML = groups
+      .map(
+        ([title, list]) =>
+          `<li class="note-group"><p class="note-group-title">${esc(title)}</p><ul class="note-list">${list
+            .map((note) => `<li>${esc(note)}</li>`)
+            .join("")}</ul></li>`
+      )
+      .join("");
   }
 
   function renderEvidence() {
@@ -1412,7 +1445,7 @@
     const meal = findById(data.mealLevels, s.mealId);
     const transport = findById(city.transports, s.transportId);
     const clinic = findById(city.clinics, s.clinicId) || city.clinics[0];
-    const rxPlan = rxPlanFor(country);
+    const rxPlan = capPlanToClinic(rxPlanFor(country), clinic);
     const rxPatients = clamp(state.rxPatients, rx.patients.min, people);
 
     // Prescription day splits the nights: before = budget beds, from that night on = 2-person rooms.
@@ -1709,6 +1742,22 @@
     return sumRanges(...Object.entries(plan.weeks).map(([dose, weeks]) => (weeks ? scale(per4[dose] || [0, 0], weeks / 4) : [0, 0])));
   }
 
+  // A clinic that hands out only N weeks per visit (usualMaxWeeks) is priced at N weeks, filling
+  // the plan's doses in order, so the quote and the per-month figure match what the clinic gives.
+  function capPlanToClinic(plan, clinic) {
+    const max = Number(clinic.usualMaxWeeks || 0);
+    const total = sum(Object.values(plan.weeks));
+    if (!max || total <= max) return plan;
+    let left = max;
+    const weeks = {};
+    Object.entries(plan.weeks).forEach(([dose, w]) => {
+      const take = Math.min(w, left);
+      if (take > 0) weeks[dose] = take;
+      left -= take;
+    });
+    return { ...plan, weeks, cappedFrom: total };
+  }
+
   // Japan sells single-dose pens (1 pen = 1 week, named by the dose); China sells a 4-dose pen
   // (1 pen = 4 weeks, named by its total content: the "40mg" pen gives 10mg a week).
   function planTitle(plan, country) {
@@ -1874,7 +1923,7 @@
         text: `${withTopic(clinic.short)} ${WEEKDAYS[rxWd]}요일 휴무라 ${formatDate(rxDate)} 처방이 안 됩니다. 처방일이나 클리닉을 바꾸세요.`,
       });
     }
-    if (clinic.irregular) {
+    if (clinic.irregular && clinic.openDays.includes(rxWd)) {
       warnings.push({
         scopes: ["clinic"],
         conflict: false,
@@ -1894,12 +1943,12 @@
     if (clinic.eveLateNote && rxIdx === 1 && !morningArrival) {
       warnings.push({ scopes: ["rx", "clinic"], conflict: false, text: clinic.eveLateNote });
     }
-    const planWeeks = sum(Object.values(result.rxPlan.weeks));
-    if (clinic.usualMaxWeeks && planWeeks > clinic.usualMaxWeeks) {
+    // The clinic cannot fill the picked plan: priced at what it gives, and flagged as not matching the plan.
+    if (result.rxPlan.cappedFrom) {
       warnings.push({
         scopes: ["rx", "clinic"],
-        conflict: false,
-        text: `${withTopic(clinic.short)} 한 번에 보통 ${clinic.usualMaxWeeks}주분까지 나옵니다. ${planText}(${planWeeks}주분)은 다 안 나올 수 있으니 미리 문의하세요.`,
+        conflict: true,
+        text: `${withTopic(clinic.short)} 한 번에 보통 ${clinic.usualMaxWeeks}주분까지만 처방해 고른 수량(${result.rxPlan.cappedFrom}주분)을 받기 어렵습니다. 금액은 ${planText}(${clinic.usualMaxWeeks}주분) 기준입니다. 3펜 이상은 온라인 카드를 고르세요.`,
       });
     }
 
@@ -1962,9 +2011,14 @@
         day.lunch = item.label;
       });
     });
+    // One dinner a night: a dinner item skips days that already have one while another day is free.
     activityQueue("evening").forEach((item) => {
-      const candidates = days.filter((day) => day.eveningOk).sort((a, b) => a.evenings.length - b.evenings.length);
-      place(item, candidates, (day) => day.evenings.push(`저녁 ${item.label}`));
+      const open = days.filter((day) => day.eveningOk).sort((a, b) => a.evenings.length - b.evenings.length);
+      const noDinnerYet = item.act.dinner ? open.filter((day) => !day.dinner && allowed(item.act, day)) : open;
+      place(item, noDinnerYet.length ? noDinnerYet : open, (day) => {
+        day.evenings.push(`저녁 ${item.label}`);
+        if (item.act.dinner) day.dinner = true;
+      });
     });
     // A delivery route is ordered the evening before it arrives.
     if (clinic.eve && rxIdx > 0) days[rxIdx - 1].evenings.push(clinic.eve);

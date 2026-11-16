@@ -618,6 +618,24 @@ body {
   font-size: 0.78rem;
 }
 
+/* Who the picked prescription route is open to (e.g. online sale only with a diabetes diagnosis). */
+.result-cond {
+  margin: -2px 0 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.result-block h3 small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 .result-block {
   border-top: 1px dashed var(--line);
   padding-top: 10px;
@@ -902,6 +920,27 @@ body {
   position: absolute;
   left: 4px;
   font-weight: 700;
+}
+
+/* Memo tab: notes grouped by topic (a group is a list item holding its own list). */
+.note-list li.note-group {
+  padding: 0;
+  margin-top: 10px;
+}
+
+.note-list li.note-group:first-child {
+  margin-top: 0;
+}
+
+.note-list li.note-group::before {
+  content: none;
+}
+
+.note-group-title {
+  margin: 0 0 2px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
 }
 
 .result-actions {
@@ -1236,9 +1275,6 @@ body {
     font-size: 1.34rem;
   }
 
-  .result-band .band-extreme {
-    display: none;
-  }
 
   .breakdown-list li,
   .timeline-list li {

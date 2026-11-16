@@ -33,7 +33,7 @@
           <button id="reset-state" class="mini-btn" type="button">초기화</button>
         </div>
       </div>
-      <p class="field-note panel-hint">카드에 붙은 <span class="delta is-up">+금액</span> <span class="delta is-down">−금액</span> 은 지금 선택에서 그 카드로 바꾸면 1인 평균이 얼마나 달라지는지입니다.</p>
+      <p class="field-note panel-hint">카드의 <span class="delta is-up">+금액</span> <span class="delta is-down">−금액</span>은 그 카드로 바꿨을 때 1인 평균이 달라지는 금액입니다.</p>
 
       <h3 class="step-title"><span class="step-num" aria-hidden="true">1</span>언제 · 어디로</h3>
 
@@ -243,6 +243,7 @@
         <p class="result-band" id="per-person-band">-</p>
         <p class="result-total" id="group-total">-</p>
         <p class="result-month" id="per-month" hidden></p>
+        <p class="result-cond" id="rx-condition" hidden></p>
       </div>
 
       <div class="tabs" id="result-tabs" role="tablist" aria-label="결과 종류">
@@ -256,7 +257,7 @@
         <div class="tab-panel" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
           <p id="timeline-warning" class="warn" role="status" hidden></p>
           <ul id="timeline-list" class="timeline-list"></ul>
-          <p class="field-note">날짜 옆 표시는 그날 밤 묵는 곳이고, 색칠된 날이 처방받는 날입니다.</p>
+          <p class="field-note">날짜 옆은 그날 밤 숙소, 색칠된 날은 처방일입니다.</p>
         </div>
 
         <div class="tab-panel" id="panel-cost" role="tabpanel" aria-labelledby="tab-cost" hidden>
@@ -277,9 +278,9 @@
           </div>
 
           <div class="result-block">
-            <h3>항목별 비용</h3>
+            <h3>항목별 비용 <small id="breakdown-unit"></small></h3>
             <ul id="breakdown-list" class="breakdown-list"></ul>
-            <p class="field-note">큰 숫자는 예상값, 작은 숫자는 항목별 범위(10–90%)입니다. 합계 범위는 항공·숙박·식비가 한꺼번에 최고가가 되지는 않는다고 보고 합산해서, 항목 범위를 그대로 더한 '단순 합산'보다 좁습니다.</p>
+            <p class="field-note">큰 숫자는 예상값, 작은 숫자는 80% 범위입니다. 모든 항목이 한꺼번에 최고가가 되지는 않으므로 합계 범위는 항목 범위를 그냥 더한 것보다 좁습니다.</p>
           </div>
         </div>
 
@@ -300,7 +301,7 @@
           <div class="result-block">
             <h3>실시간 가격 확인 · 확정가 입력</h3>
             <ul id="check-links" class="link-list"></ul>
-            <p class="field-note">링크에서 확인한 가격을 넣으면 그 항목은 추정 범위 대신 확정값으로 계산합니다. 날짜·인원·객실·카드가 바뀌면 적용이 멈추고, 원래 조건으로 돌아오면 다시 적용됩니다. 도시마다 따로 저장됩니다.</p>
+            <p class="field-note">링크에서 확인한 가격을 넣으면 추정 대신 그 값으로 계산합니다. 날짜·인원·객실·카드를 바꾸면 잠시 빠지고, 원래 조건으로 돌아오면 다시 들어갑니다. 도시마다 따로 저장됩니다.</p>
           </div>
 
           <div class="result-block">
@@ -335,7 +336,7 @@
         <h2 id="evidence-title">근거</h2>
         <button id="close-evidence" class="close-btn" type="button" aria-label="닫기">닫기</button>
       </div>
-      <p class="modal-meta">기준일(asOf): <strong id="evidence-asof">-</strong> · 모든 가격은 추정(proxy) 범위이며 예약 전 실시간 가격을 확인하세요.</p>
+      <p class="modal-meta">기준일 <strong id="evidence-asof">-</strong> · 모든 가격은 추정 범위입니다. 예약 전에 실시간 가격을 확인하세요.</p>
       <ul id="evidence-sources" class="source-list"></ul>
     </div>
   </div>
