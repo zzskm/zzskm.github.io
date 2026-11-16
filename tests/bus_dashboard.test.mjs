@@ -262,3 +262,20 @@ test('v0 departure presentation preserves the conservative engine state',()=>{
  }
  assert.ok(due.state); // The display mapping never changes the engine output.
 });
+
+test('historical next arrival picks the next same-weekday slot seen on two or more days',()=>{
+ const p=(date,hm)=>{const [h,m]=hm.split(':').map(Number);return {date,minute:h*60+m,atMs:Date.parse(date+'T'+hm+':00+09:00'),vehId:1};};
+ const pts=[p('2026-10-05','17:41'),p('2026-10-12','17:45'),p('2026-09-28','17:45'),
+  p('2026-10-05','18:05'),                                   // 하루만 관측: 건너뜀
+  p('2026-10-05','18:31'),p('2026-10-12','18:34'),p('2026-09-28','18:33')];
+ const next=BD.historicalNext(pts,NOW);
+ assert.equal(next.atMs,Date.parse('2026-10-19T18:33:00+09:00'));
+ assert.equal(next.earliestAtMs,Date.parse('2026-10-19T18:31:00+09:00'));
+ assert.equal(next.latestAtMs,Date.parse('2026-10-19T18:34:00+09:00'));
+ assert.equal(next.days,3);assert.equal(next.totalDays,3);
+ assert.equal(BD.historicalNext(pts,NOW,Date.parse('2026-10-19T18:40:00+09:00')),null);
+ assert.equal(BD.historicalNext(pts,Date.parse('2026-10-19T17:00:00+09:00')).atMs,Date.parse('2026-10-19T17:45:00+09:00'));
+ assert.equal(BD.historicalNext([],NOW),null);
+ // 비교할 날이 하루뿐이면 그 날 기록을 그대로 쓴다.
+ assert.equal(BD.historicalNext([p('2026-10-12','18:20')],NOW).atMs,NOW+20*M);
+});

@@ -195,6 +195,33 @@
     return points.sort((a,b) => a.atMs-b.atMs);
   }
 
+  // 같은 요일 기록(historyPoints)을 운행 묶음으로 나눠 fromMs 이후 첫 운행의 오늘 시각을 추정한다.
+  // 실시간 정보가 없을 때의 안내용 값이며 출발 판단·알림에는 쓰지 않는다.
+  const SLOT_GAP_MIN = 10;
+  function historicalNext(points, nowMs, afterMs) {
+    if (!valid(nowMs) || !Array.isArray(points) || !points.length) return null;
+    const fromMs = valid(afterMs) ? Math.max(nowMs, afterMs) : nowMs;
+    const dayStart = nowMs - ((nowMs + 9 * 60 * MIN) % (24 * 60 * MIN));
+    const totalDays = new Set(points.map(p => p.date)).size;
+    const sorted = points.filter(p => valid(p.minute)).sort((a, b) => a.minute - b.minute);
+    const slots = [];
+    sorted.forEach(p => {
+      const cur = slots[slots.length - 1];
+      if (!cur || p.minute - cur.minutes[cur.minutes.length - 1] > SLOT_GAP_MIN) slots.push({ minutes:[p.minute], dates:new Set([p.date]) });
+      else { cur.minutes.push(p.minute); cur.dates.add(p.date); }
+    });
+    for (const s of slots) {
+      // 하루만 보인 운행은 우연일 수 있어, 비교할 날이 2일 이상이면 2일 이상 관측된 운행만 쓴다.
+      if (totalDays >= 2 && s.dates.size < 2) continue;
+      const median = s.minutes[Math.floor((s.minutes.length - 1) / 2)];   // 짝수 개면 이른 쪽
+      const atMs = dayStart + median * MIN;
+      if (atMs < fromMs) continue;
+      return { atMs, earliestAtMs:dayStart + s.minutes[0] * MIN, latestAtMs:dayStart + s.minutes[s.minutes.length - 1] * MIN,
+        days:s.dates.size, totalDays };
+    }
+    return null;
+  }
+
   function splitGaps(points, intervalSec) {
     const maxGap = Math.max(180000, (Number(intervalSec) || 60) * 2500);
     const groups = [];
@@ -204,5 +231,5 @@
     });
     return groups;
   }
-  return { currentSeries, targetSeries, buildView, decisionPresentation, buildReadiness, relativeTime, splitGaps, historyPoints };
+  return { currentSeries, targetSeries, buildView, decisionPresentation, buildReadiness, relativeTime, splitGaps, historyPoints, historicalNext };
 });

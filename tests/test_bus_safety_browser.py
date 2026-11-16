@@ -189,6 +189,33 @@ class SafetyBrowserTests(unittest.TestCase):
                 self.assertEqual(errors,[])
             finally: page.close()
 
+    def test_missing_live_eta_falls_back_to_same_weekday_history(self):
+        from playwright.sync_api import expect
+        head='ts_kst,vehId,first_seen_ts,departure_reason,est_arrival_ts\n'
+        rows=''.join(f'{d}T{hm}:30+09:00,{v},{d}T17:30:00+09:00,estimated_arrival,{d}T{hm}:00+09:00\n'
+                     for d in ('2026-10-12','2026-10-05') for v,hm in ((11,'18:19' if d=='2026-10-12' else '18:21'),
+                                                                      (12,'18:49' if d=='2026-10-12' else '18:52')))
+        no_bus={'last_poll':T.isoformat(),'current_veh_id':0,'error':'no_bus','collect_window':'16:00-22:00'}
+        page,errors=self.open_page(no_bus,history=head+rows)
+        try:
+            expect(page.locator('#arrival-main-time')).to_have_text('18:19')
+            expect(page.locator('#eta-num')).to_have_text('19')
+            expect(page.locator('#eta-unit')).to_contain_text('기록 기준')
+            expect(page.locator('.arrival-label')).to_contain_text('같은 요일 기록')
+            expect(page.locator('#arrival-clock')).to_contain_text('2일 중 2일 18:19~18:21')
+            expect(page.locator('#verdict-heading')).to_have_text('현재 확인된 버스가 없어요')
+            expect(page.locator('#departure-time-main')).to_have_text('')
+            self.assertEqual(errors,[])
+        finally: page.close()
+        page,errors=self.open_page(self.ready_status(),history=head+rows)
+        try:
+            expect(page.locator('#arrival-main-time')).to_have_text('18:20')
+            expect(page.locator('#arrival-next')).to_be_visible()
+            expect(page.locator('#arrival-next-label')).to_have_text('다음 운행(기록 기준)')
+            expect(page.locator('#arrival-next-time')).to_have_text('18:49')
+            self.assertEqual(errors,[])
+        finally: page.close()
+
     def test_old_data_keeps_uncertainty_and_suppresses_live_alarm(self):
         page,errors=self.open_page({'last_poll':(T-dt.timedelta(minutes=4)).isoformat(),
                                    'current_veh_id':11,'predict_sec':900,'collect_window':'16:00-22:00'})

@@ -281,9 +281,12 @@ def test_bus_ui_timeline_and_browser_events_do_not_claim_delivery():
 def test_bus_hero_arrival_first_uses_raw_api_time_not_safety_departure():
     assert 'id="arrival-main-time"' in HTML
     assert 'id="arrival-next"' in HTML
-    assert 'view.apiAtMs - now' in HTML
     assert 'hhmm(view.apiAtMs)' in HTML
-    assert 'available ? hhmm(view.apiAtMs) : "--:--"' in HTML
+    # 실시간 API 시각이 우선이고, 없을 때만 같은 요일 기록으로 다음 운행을 안내한다 (안전 기준 시각은 쓰지 않음).
+    assert 'const shownAtMs = available ? view.apiAtMs : hist ? hist.atMs : NaN;' in HTML
+    assert 'etaParts(Math.max(0, (shownAtMs - now) / 1000))' in HTML
+    assert 'Number.isFinite(shownAtMs) ? hhmm(shownAtMs) : "--:--"' in HTML
+    assert 'view.safeAtMs - now' not in HTML
     assert 'view.correctedAtMs - now' not in HTML
     assert '더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요.' in HTML
     assert 'id="arrival-next-time"' in HTML

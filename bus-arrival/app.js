@@ -211,23 +211,30 @@ window.BusApp = { mount(root = document, options = {}) {
     const available = Number.isFinite(view.correctedAtMs) && Number.isFinite(view.apiAtMs);
     const graphIdentity=[view.targetVehId,view.selectedNext,view.state === "skipped",available].join("|");
     if (chartFresh !== available || chartIdentity !== graphIdentity) { chartFresh=available; chartIdentity=graphIdentity; chartDirty=true; }
-    const parts = available ? etaParts(Math.max(0, (view.apiAtMs - now) / 1000)) : {num:"--",unit:"도착 예상 확인 불가"};
-    setText($("#arrival-main-time"), available ? hhmm(view.apiAtMs) : "--:--");
-    if (available) $("#arrival-main-time").setAttribute("datetime", new Date(view.apiAtMs).toISOString());
+    // 실시간 예측이 없으면 같은 요일 기록으로 다음 운행 시각을 안내한다 (표시 전용 · 출발 판단/알림과 무관).
+    const hist = !available && !off && view.state !== "skipped" ? BD.historicalNext(weekdayPoints(now), now) : null;
+    const shownAtMs = available ? view.apiAtMs : hist ? hist.atMs : NaN;
+    const parts = Number.isFinite(shownAtMs) ? etaParts(Math.max(0, (shownAtMs - now) / 1000)) : {num:"--",unit:"도착 예상 확인 불가"};
+    setText($("#arrival-main-time"), Number.isFinite(shownAtMs) ? hhmm(shownAtMs) : "--:--");
+    if (Number.isFinite(shownAtMs)) $("#arrival-main-time").setAttribute("datetime", new Date(shownAtMs).toISOString());
     else $("#arrival-main-time").removeAttribute("datetime");
     setText($("#eta-num"), parts.num);
-    setText($("#eta-unit"), available ? (parts.num === "곧" ? "도착 예정" : "분 후") : parts.unit);
+    setText($("#eta-unit"), available ? (parts.num === "곧" ? "도착 예정" : "분 후")
+      : hist ? (parts.num === "곧" ? "도착 예상 · 기록 기준" : "분 후 · 기록 기준") : parts.unit);
     setText($("#eta-stops"),available && !view.selectedNext ? (stopsText(stopsAwayOf(st)) || "") : "");
     // 교대 조회라 큰 도착 시각의 출처가 매 조회 바뀔 수 있다. 공공 API 값처럼 표시하지 않는다.
     const source = arrivalSourceLabel(st);
     const arrivalLabel = $(".arrival-label");
-    if (arrivalLabel) setText(arrivalLabel, "도착 예정 · " + source);
+    if (arrivalLabel) setText(arrivalLabel, hist ? "다음 운행 예상 · 같은 요일 기록" : "도착 예정 · " + source);
     setText($("#arrival-clock"), available
       ? source + " 예측" + (st && st.data_source === "gbis_web" ? "(분 단위)" : "")
         + " · 더 일찍 올 수 있으므로 아래 출발 권장을 확인하세요."
+      : hist ? "실시간 도착 정보 없음 · 지난 같은 요일 " + hist.totalDays + "일 중 " + hist.days + "일 "
+        + (hist.earliestAtMs === hist.latestAtMs ? hhmm(hist.earliestAtMs) : hhmm(hist.earliestAtMs) + "~" + hhmm(hist.latestAtMs))
+        + " 도착 추정 기록 기준입니다. 실제 배차와 다를 수 있습니다."
       : "최신 도착 예정 시각을 확인할 수 없습니다. 과거 예측을 현재 시각처럼 표시하지 않습니다.");
     $("#eta-row").hidden = parts.num === "--";
-    $("#eta-unavailable").hidden = available;
+    $("#eta-unavailable").hidden = available || Boolean(hist);
     const modelMethod = view.safetyMethod || decisionSnap && decisionSnap.safetyMethod;
     const modelSamples = view.sampleTrips ?? 0;
     setText($("#model-note"), available ? (modelMethod === "trip_lower_quantile"
@@ -236,6 +243,7 @@ window.BusApp = { mount(root = document, options = {}) {
     setText($("#safe-time"), Number.isFinite(view.safeAtMs) ? hhmm(view.safeAtMs) : "—");
     $("#hero").classList.toggle("is-stale", !available);
     $("#hero").classList.toggle("is-passed", false);
+    $("#hero").classList.toggle("is-historical", Boolean(hist));
     setText($("#departure-context"), Number.isFinite(view.departureAtMs)
       ? (view.uncertain ? "이전 정보 기준 · " : "조기 도착 대비 · ")
         + "도보 " + walkMinutes() + "분 + 추가 여유 " + marginSeconds() / 60 + "분"
@@ -281,10 +289,17 @@ window.BusApp = { mount(root = document, options = {}) {
     if (announce !== lastAnnounced) { lastAnnounced=announce; announceStatus(view.title + " · " + statusLabel); }
     const nextSec = decisionSnap && decisionSnap.usable && decisionSnap.next ? (decisionSnap.next.arrivalAtMs-now)/1000 : null;
     const showNextArrival = available && !view.selectedNext && nextSec != null && nextSec > 0;
-    $("#arrival-next").hidden = !showNextArrival;
+    // API 에 후속 차량이 없으면 현재 차량 이후(묶음 간격 10분 뒤부터) 같은 요일 기록의 다음 운행을 보여 준다.
+    const nextHist = available && !view.selectedNext && !showNextArrival
+      ? BD.historicalNext(weekdayPoints(now), now, view.apiAtMs + 10 * 60000) : null;
+    $("#arrival-next").hidden = !showNextArrival && !nextHist;
+    setText($("#arrival-next-label"), nextHist ? "다음 운행(기록 기준)" : "다음 버스");
     if (showNextArrival) {
       setText($("#arrival-next-time"), hhmm(decisionSnap.next.arrivalAtMs));
       setText($("#arrival-next-remaining"), etaPlain(etaParts(nextSec)));
+    } else if (nextHist) {
+      setText($("#arrival-next-time"), hhmm(nextHist.atMs));
+      setText($("#arrival-next-remaining"), "약 " + etaPlain(etaParts((nextHist.atMs - now) / 1000)) + " · " + nextHist.days + "/" + nextHist.totalDays + "일 관측");
     }
     setText($("#card-next"), nextSec != null && nextSec > 0 ? etaPlain(etaParts(nextSec)) : "미확인");
     setText($("#card-next-sub"), "API 예측 · 후속 차량");
@@ -322,6 +337,15 @@ window.BusApp = { mount(root = document, options = {}) {
     const title = bell + (etaShort ? etaShort + " · " : "") + BASE_TITLE;
     if (options.manageTitle !== false && document.title !== title) document.title = title;
     setFavicon(view.state === "waiting" ? String(Math.ceil((view.departureAtMs-now)/60000)) : ["due","overdue"].includes(view.state) ? "!" : "");
+  }
+
+  // 같은 요일 기록 점은 기록이나 날짜가 바뀔 때만 다시 계산한다 (paint 는 1초마다 불린다).
+  let weekdayMemo = { rows:undefined, date:"", points:[] };
+  function weekdayPoints(now) {
+    const date = kstClock(now).date;
+    if (weekdayMemo.rows !== cache.history || weekdayMemo.date !== date)
+      weekdayMemo = { rows:cache.history, date, points:cache.history ? BD.historyPoints(cache.history, now) : [] };
+    return weekdayMemo.points;
   }
 
   function renderTimeline(view, now) {
