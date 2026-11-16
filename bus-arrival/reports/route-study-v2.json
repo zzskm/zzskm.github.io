@@ -351,6 +351,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000192,
+      "route_name": "311",
+      "sta_order": 84,
+      "observed_days": 13,
+      "vehicle_events": 94,
+      "labelled_events": 81,
+      "matched": 42,
+      "nonmatched": 39,
+      "censored": 13,
+      "proxy_hit_rate": 0.519,
+      "target_absent_at_first_signal": 47,
+      "simultaneous_eta_pairs": 47,
+      "candidate_eta_before_target_eta": 26,
+      "median_simultaneous_lead_min": 0.77,
+      "forward_date_test": {
+        "status": "insufficient_labelled_test_events",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null,
+        "train_days": 7,
+        "test_days": 6
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 241255002,
       "route_name": "66",
       "sta_order": 10,
@@ -365,32 +391,6 @@
       "simultaneous_eta_pairs": 37,
       "candidate_eta_before_target_eta": 30,
       "median_simultaneous_lead_min": 4.53,
-      "forward_date_test": {
-        "status": "insufficient_labelled_test_events",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null,
-        "train_days": 7,
-        "test_days": 6
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000192,
-      "route_name": "311",
-      "sta_order": 84,
-      "observed_days": 13,
-      "vehicle_events": 94,
-      "labelled_events": 80,
-      "matched": 42,
-      "nonmatched": 38,
-      "censored": 14,
-      "proxy_hit_rate": 0.525,
-      "target_absent_at_first_signal": 47,
-      "simultaneous_eta_pairs": 47,
-      "candidate_eta_before_target_eta": 26,
-      "median_simultaneous_lead_min": 0.77,
       "forward_date_test": {
         "status": "insufficient_labelled_test_events",
         "test_events": 0,
@@ -507,6 +507,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000056,
+      "route_name": "4500",
+      "sta_order": 83,
+      "observed_days": 12,
+      "vehicle_events": 64,
+      "labelled_events": 60,
+      "matched": 36,
+      "nonmatched": 24,
+      "censored": 4,
+      "proxy_hit_rate": 0.6,
+      "target_absent_at_first_signal": 32,
+      "simultaneous_eta_pairs": 32,
+      "candidate_eta_before_target_eta": 15,
+      "median_simultaneous_lead_min": -0.19,
+      "forward_date_test": {
+        "status": "insufficient_labelled_test_events",
+        "test_events": 0,
+        "candidate_hit_rate": null,
+        "time_only_hit_rate": null,
+        "difference_pp": null,
+        "train_days": 7,
+        "test_days": 5
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000076,
       "route_name": "382",
       "sta_order": 55,
@@ -529,32 +555,6 @@
         "difference_pp": null,
         "train_days": 7,
         "test_days": 6
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000056,
-      "route_name": "4500",
-      "sta_order": 83,
-      "observed_days": 12,
-      "vehicle_events": 64,
-      "labelled_events": 59,
-      "matched": 36,
-      "nonmatched": 23,
-      "censored": 5,
-      "proxy_hit_rate": 0.61,
-      "target_absent_at_first_signal": 32,
-      "simultaneous_eta_pairs": 32,
-      "candidate_eta_before_target_eta": 15,
-      "median_simultaneous_lead_min": -0.19,
-      "forward_date_test": {
-        "status": "insufficient_labelled_test_events",
-        "test_events": 0,
-        "candidate_hit_rate": null,
-        "time_only_hit_rate": null,
-        "difference_pp": null,
-        "train_days": 7,
-        "test_days": 5
       },
       "eligible_for_alert_use": false
     },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-16T19:20:08.168212+09:00"
+  "generated_at": "2026-11-16T19:21:09.151318+09:00"
 }
