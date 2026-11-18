@@ -9,7 +9,7 @@ try {
   try { saved = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch {}
   if (typeof saved !== 'object' || Array.isArray(saved)) saved = {};
   let index = Math.max(0, data.steps.findIndex(s => s.id === saved.step));
-  let selected = null, viewer = null, focusOnly = false, keepView = !!saved.keepView, cut = null;
+  let selected = null, viewer = null, focusOnly = false, keepView = !!saved.keepView, cut = null, knoll = false, dims = false;
   const remember = () => { try { localStorage.setItem(key, JSON.stringify(saved)); } catch {} };
   const parts = new Map(data.parts.map(p => [p.id, p]));
   const picker = $('asm-step');
@@ -100,7 +100,38 @@ try {
   // Section view: the step's own cut (from a CAD body, see assembly.py section()) or one through the
   // middle of the parts being worked on. The viewer removes the side the camera looks from.
   const live = () => viewer && !$('asm-canvas').hidden;
-  const stepView = () => cut ? 'section' : data.steps[index].view;
+  const stepView = () => knoll ? 'knoll' : cut ? 'section' : data.steps[index].view;
+  // Fastener spots of this step: a tap on a ring ticks it, and the ticks stay in this browser per step.
+  function syncMarks() {
+    const step = data.steps[index], all = live() ? viewer.spots() : [];
+    const done = (saved.marks?.[step.id] || []).filter(k => all.includes(k));
+    if (live()) viewer.setChecked(done);
+    const chip = $('asm-marks');
+    chip.hidden = !all.length || knoll;
+    chip.textContent = `체결 위치 확인 ${done.length} / ${all.length}`;
+    chip.classList.toggle('complete', !!all.length && done.length === all.length);
+    $('asm-key-done').hidden = !all.length;
+  }
+  function toggleMark(key) {
+    const step = data.steps[index], list = new Set(saved.marks?.[step.id] || []);
+    if (!list.delete(key)) list.add(key);
+    saved.marks = {...saved.marks, [step.id]: [...list]}; remember(); syncMarks();
+  }
+  function syncTools() {
+    const step = data.steps[index];
+    $('asm-knoll').setAttribute('aria-pressed', String(knoll));
+    $('asm-dims').setAttribute('aria-pressed', String(dims));
+    $('asm-key-dims').hidden = !dims;
+    $('asm-explode').disabled = $('asm-section').disabled = $('asm-play').disabled = knoll;
+    $('asm-play').classList.toggle('suggest', !!step.illustrationLift);
+    $('asm-play').title = step.illustrationLift ? '이번 작업 부품이 내려와 자리 잡는 동작을 다시 봅니다' : '이번 작업 부품과 체결 위치를 다시 짚어 줍니다';
+  }
+  function setKnoll(on) {
+    knoll = on;
+    if (on) { if (cut) setCut(null, false); $('asm-explode').value = 0; }
+    viewer?.knoll(on); syncTools(); syncMarks();
+    if (live()) viewer.view(stepView());
+  }
   function defaultCut(axis) {
     const step = data.steps[index];
     if (step.section && (!axis || axis === step.section.axis)) return {...step.section};
@@ -152,7 +183,8 @@ try {
     $('asm-installed').textContent = '장착 후 보기';
     $('asm-installed').hidden = !step.installedIllustration || !$('asm-canvas').hidden; $('asm-detail').href = `#as-${step.id}`;
     $('asm-picked').textContent = ''; $('asm-explode').value = 0; $('asm-details').open = false;
-    show(); if (cut) setCut(defaultCut(), false); syncCut(); if (!keepView) viewer?.view(stepView()); saved.step = step.id; remember(); syncDone(); tray(); list();
+    show(); if (cut) setCut(defaultCut(), false); syncCut(); syncTools(); syncMarks(); if (!keepView || knoll) viewer?.view(stepView()); saved.step = step.id; remember(); syncDone(); tray(); list();
+    if (live() && !cut) viewer.play();
   }
   const phases = [...new Set(data.steps.map(s=>s.phase))];
   phases.forEach((phase,i)=>{
@@ -194,6 +226,16 @@ try {
     e.preventDefault(); go(e.key === 'ArrowLeft' ? -1 : 1);
   });
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>viewer?.view(b.dataset.view==='reset'?stepView():b.dataset.view));
+  $('asm-play').onclick = () => {
+    if (!live() || knoll) return;
+    if (cut) setCut(null, false);
+    selected = null; $('asm-explode').value = 0; $('asm-picked').textContent = ''; show(); list(); tray();
+    if (!keepView) viewer.view(stepView());
+    if (!viewer.play()) status.textContent = matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? '동작 줄이기 설정이 켜져 있어 움직임 없이 최종 위치만 표시합니다.' : '이 단계는 보이는 부품이 모두 작업 대상이라 따로 짚을 동작이 없습니다.';
+  };
+  $('asm-knoll').onclick = () => { if (live()) setKnoll(!knoll); };
+  $('asm-dims').onclick = () => { if (!live()) return; dims = !dims; viewer.dims(dims); syncTools(); };
   $('asm-section').onclick = () => setCut(cut ? null : defaultCut());
   $('asm-section-axis').onclick = () => setCut(defaultCut(cut.axis === 'x' ? 'y' : 'x'));
   $('asm-section-at').oninput = () => { cut = {...cut, at: +$('asm-section-at').value}; viewer?.section(cut); syncCut(); };
@@ -217,7 +259,8 @@ try {
   };
   let opening3D = false;
   function close3D() {
-    expand(false); $('asm-canvas').hidden = true; $('asm-drawing').hidden = false;
+    if (knoll) setKnoll(false);
+    expand(false); $('asm-canvas').hidden = true; $('asm-drawing').hidden = false; syncMarks();
     if (cut) { cut = null; viewer.section(null); syncCut(); }
     $('asm-installed').hidden = !data.steps[index].installedIllustration;
     $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live'); $('asm-3d').textContent = '3D로 보기';
@@ -252,14 +295,14 @@ try {
         const total = data.model_bytes, size = total ? ` / ${(total / 1e6).toFixed(1)} MB` : '';
         status.textContent = `3D 모델 불러오는 중${size}`;
         viewer = await createViewer(canvas, data, id => selectPart(id, true), {
-          ghost: true,
+          ghost: true, onMark: toggleMark,
           onProgress: total ? loaded => {
             const percent = Math.min(99, Math.floor(100 * loaded / total));
             button.textContent = `불러오는 중 ${percent}%`;
             status.textContent = `3D 모델 불러오는 중 · ${percent}%${size}`;
           } : null,
           onLost: () => {
-            expand(false); canvas.hidden = true; drawing.hidden = false; cut = null; syncCut();
+            expand(false); canvas.hidden = true; drawing.hidden = false; cut = null; knoll = dims = false; syncCut(); syncTools(); syncMarks();
       $('asm-installed').hidden = !data.steps[index].installedIllustration; $('asm-3d-tools').hidden = true; $('asm-visual').classList.remove('live');
             button.textContent = '3D로 보기';
             status.textContent = '3D 연결이 끊겼습니다. 단계별 조립도를 표시합니다.';
@@ -269,7 +312,9 @@ try {
       }
       drawing.hidden = true; canvas.hidden = false; $('asm-installed').hidden = true;
       $('asm-3d-tools').hidden = false; $('asm-visual').classList.add('live'); button.textContent = '조립도로 돌아가기';
-      show(); syncCut(); viewer.view(stepView());
+      // For the browser check: where the fastener rings are on the page right now.
+      canvas.markPoints = () => viewer?.markPoints() || [];
+      show(); syncCut(); viewer.dims(dims); syncTools(); syncMarks(); viewer.view(stepView()); viewer.play();
       status.textContent = matchMedia('(pointer: coarse)').matches ? '3D 준비 완료 · 가로로 밀어 회전 · 두 손가락으로 확대·이동 · 두 번 눌러 그 지점 확대 · 크게 보기에서 자유 회전' : '3D 준비 완료 · 드래그 회전 · 휠 확대 · 오른쪽 드래그 이동 · 더블클릭한 곳으로 확대 · ←/→ 단계 이동';
     } catch (error) {
       console.error(error);

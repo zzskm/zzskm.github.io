@@ -43,3 +43,18 @@ html.asm-locked{overflow:hidden}
 .section-note{position:absolute;z-index:2;left:1rem;top:2.3rem;width:fit-content;max-width:calc(100% - 2rem);margin:0;padding:.3rem .55rem;pointer-events:none;font-size:.75rem;color:#26332f;background:#fffffff0;border:1px solid var(--rule);border-radius:8px}
 #asm-section-at{width:110px}
 .assembly-visual.expanded .section-note{position:static;margin:.5rem 1rem 0}
+
+/* Build-motion tools: text that follows 3D points (laid-out part names, box sizes), fastener ticks */
+#asm-canvas,.compare-canvas{position:relative}
+.asm-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.asm-tag{position:absolute;left:0;top:0;white-space:nowrap;font-size:.68rem;line-height:1.25;color:var(--ink);will-change:transform}
+.asm-tag.part{opacity:var(--knoll,1);max-width:118px;white-space:normal;text-align:center;font-variant-numeric:tabular-nums;color:#4d5f5a}
+.asm-tag.part b{display:block;font-weight:600;color:var(--ink)}
+.asm-tag.dim{padding:.1rem .35rem;border-radius:6px;background:#fffffff2;border:1px solid #c8452c55;font:600 .74rem var(--f-mono,monospace);color:#c8452c;font-variant-numeric:tabular-nums}
+.asm-tag.dim small{font-weight:400;font-size:.62rem}
+.marks-chip{position:absolute;z-index:2;right:1rem;top:2.3rem;margin:0;padding:.3rem .6rem;pointer-events:none;font:600 .75rem var(--f-mono,monospace);font-variant-numeric:tabular-nums;color:#a5600f;background:#fffffff0;border:1px solid #e7953566;border-radius:99px}
+.marks-chip.complete{color:#2f8f5b;border-color:#2f8f5b66}.marks-chip.complete::before{content:"✓ "}
+.assembly-visual.expanded .marks-chip{top:4.2rem}
+.done-dot{background:#2f8f5b}.dim-dot{border-radius:2px!important;box-sizing:border-box;border:2px solid #c8452c;background:#fff}
+#asm-play.suggest::after{content:"";display:inline-block;width:6px;height:6px;margin-left:5px;border-radius:50%;background:#e79535;vertical-align:middle}
+@media(max-width:600px){.asm-tag.part{font-size:.6rem;max-width:84px}.marks-chip{font-size:.68rem;top:2.6rem;right:.6rem}}
