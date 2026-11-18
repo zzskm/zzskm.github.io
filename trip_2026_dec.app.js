@@ -31,6 +31,8 @@
     clinic: byId("clinic-options"),
     flight: byId("flight-options"),
     airport: byId("airport-options"),
+    parking: byId("parking-options"),
+    parkingSection: byId("section-parking"),
     stayPre: byId("stayPre-options"),
     roomConfig: byId("roomConfig-options"),
     stayA: byId("stayA-options"),
@@ -92,7 +94,7 @@
   };
   // Containers whose buttons are rebuilt on every render.
   const rerenderHosts = [
-    el.city, el.party, el.departure, el.duration, el.season, el.fx, el.rxPlan, el.rxDay, el.rxPatients, el.clinic, el.flight, el.airport,
+    el.city, el.party, el.departure, el.duration, el.season, el.fx, el.rxPlan, el.rxDay, el.rxPatients, el.clinic, el.flight, el.airport, el.parking,
     el.stayPre, el.roomConfig, el.stayA, el.stayB, el.meal, el.transport, el.activityControls, el.activityPacks, el.compareBody,
   ];
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -122,11 +124,11 @@
       cityId: cityOrder[0],
       travelers: data.party.travelers.defaultValue,
       departureId: data.departures[0].id,
-      durationId: "n3",
-      seasonId: "w1211",
+      durationId: pickId(data.durations, (data.initial || {}).durationId || "n3"),
+      seasonId: pickId(data.seasons, (data.initial || {}).seasonId || "w1211"),
       fx: pickFx({}),
       rxPlan: pickRxPlans({}),
-      rxDayId: "rx_d2",
+      rxDayId: pickId(rx.days, (data.initial || {}).rxDayId || "rx_d2"),
       rxPatients: rx.patients.defaultValue,
       cities: perCity,
     };
@@ -141,6 +143,7 @@
     return {
       flightId,
       airportId: pickId(airportOptionsFor(city, flight), d.airportId),
+      parkingId: pickId(parkingOptionsFor(city, flight), d.parkingId),
       clinicId: pickId(city.clinics, d.clinicId),
       stayPreId: pickId(city.staysPre, d.stayPreId),
       roomConfigId: pickId(data.roomConfigs, d.roomConfigId),
@@ -267,6 +270,7 @@
         next.cities[cityId] = {
           flightId,
           airportId: pickId(airportOptionsFor(city, flight), savedCity.airportId || fallback.airportId),
+          parkingId: pickId(parkingOptionsFor(city, flight), savedCity.parkingId || fallback.parkingId),
           clinicId: pickId(city.clinics, savedCity.clinicId || fallback.clinicId),
           stayPreId: pickId(city.staysPre, savedCity.stayPreId || fallback.stayPreId),
           roomConfigId: pickId(data.roomConfigs, savedCity.roomConfigId || fallback.roomConfigId),
@@ -330,7 +334,7 @@
   function createInitialAccordionState() {
     const mobile = window.matchMedia("(max-width: 768px)").matches;
     const open = new Set(
-      mobile ? ["city", "schedule", "rx", "clinic"] : ["city", "party", "schedule", "rx", "clinic", "flight", "stayPre", "stayA", "activities"]
+      mobile ? ["city", "schedule", "rx", "clinic"] : ["city", "party", "schedule", "rx", "clinic", "flight", "parking", "stayPre", "stayA", "activities"]
     );
     const result = {};
     el.categories.forEach((categoryEl) => {
@@ -409,9 +413,14 @@
       s.flightId = id;
       const options = airportOptionsFor(city, findById(city.flights, id));
       if (!findById(options, s.airportId)) s.airportId = options[0].id;
+      const parking = parkingOptionsFor(city, findById(city.flights, id));
+      if (!findById(parking, s.parkingId)) s.parkingId = parking.length ? parking[0].id : null;
     });
     onCardClick(el.airport, (id) => {
       cityState().airportId = id;
+    });
+    onCardClick(el.parking, (id) => {
+      cityState().parkingId = id;
     });
     onCardClick(el.roomConfig, (id) => {
       cityState().roomConfigId = id;
@@ -727,7 +736,18 @@
     );
     renderCards(el.flight, city.flights, s.flightId, (item) => `${item.subtitle} · ${formatKRWRange(item.priceKRW)}`, ifCity("flightId"));
     renderCards(el.airport, airportOptionsFor(city, flight), s.airportId, null, ifCity("airportId"));
-    renderCards(el.stayPre, city.staysPre, s.stayPreId, (item) => `${item.subtitle} · ${describeStayPrice(item, money)}`, ifCity("stayPreId"));
+    const parkingOptions = parkingOptionsFor(city, flight);
+    if (el.parkingSection) el.parkingSection.hidden = !parkingOptions.length;
+    if (parkingOptions.length) {
+      renderCards(
+        el.parking,
+        parkingOptions,
+        s.parkingId,
+        (item) => `${item.subtitle} · ${parkingNoteFor(item, result.nights, result.people)} ${formatWonRange(parkingCost(item, result.nights, result.people))}`,
+        ifCity("parkingId")
+      );
+    }
+    renderCards(el.stayPre, city.staysPre, s.stayPreId, (item) => [item.subtitle, describeStayPrice(item, money)].filter(Boolean).join(" · "), ifCity("stayPreId"));
     renderCards(
       el.roomConfig,
       data.roomConfigs,
@@ -754,8 +774,17 @@
     renderActivityControls(city, s, money);
     renderCards(el.activityPacks, city.packs, s.packId, null, (pack) => meanIf(null, { activities: packActivities(city, s.activities, pack) }) - base);
 
-    if (el.titleStayA) el.titleStayA.textContent = `처방 후 숙소 · 2인 1실 (${result.nightsA}박)`;
-    if (el.titleStayPre) el.titleStayPre.textContent = `처방 전 숙소 · 초저가 (${result.preNights}박)`;
+    if (el.titleStayPre) {
+      el.titleStayPre.textContent = result.stayPre.sameAsStayA
+        ? `처방 전 숙소 · 처방 후 숙소에 그대로 (${result.preNights}박)`
+        : `처방 전 숙소 · 초저가 (${result.preNights}박)`;
+    }
+    if (el.titleStayA) {
+      const sameHotel = !result.lodgingPre && result.stayPre.sameAsStayA;
+      el.titleStayA.textContent = sameHotel
+        ? `숙소 · 전 일정 같은 호텔 (${result.nightsA}박)`
+        : `처방 후 숙소 · 2인 1실 (${result.nightsA}박)`;
+    }
     if (el.titleClinic) el.titleClinic.textContent = `처방 클리닉 · 수령 방식 · ${city.name}`;
     if (el.titleActivities) el.titleActivities.textContent = `관광 · 이색 식사 · ${city.name}`;
     if (el.titleFlight) el.titleFlight.textContent = city.flightTitle || "항공 (1인 왕복)";
@@ -1050,6 +1079,7 @@
     set("summary-stayPre", result.preNights ? titleOf(city.staysPre, s.stayPreId) : "없음 (도착일 처방)");
     set("summary-flight", titleOf(city.flights, s.flightId));
     set("summary-airport", titleOf(airportOptionsFor(city, findById(city.flights, s.flightId)), s.airportId));
+    set("summary-parking", result.parking ? `${result.parking.short || result.parking.title} · ${formatManwon(result.breakdown.parking.mean)}` : "");
     set("summary-roomConfig", result.roomSummary);
     set("summary-stayA", titleOf(city.staysA, s.stayAId));
     set("summary-stayB", titleOf(city.staysB, s.stayBId));
@@ -1106,6 +1136,7 @@
     const rows = [
       ["마운자로 처방", b.rx, `${result.clinic.short} · ${planTitle(result.rxPlan, result.country)}${result.rxPlan.cappedFrom ? "(병원 한도)" : ""} × ${result.rxPatients}명${savingsText}`],
       [city.flightRow || "항공", b.flight, result.flightNote],
+      ["국내 공항 주차", b.parking, result.parking ? `${result.parking.title} · ${result.parkingNote}` : ""],
       ["숙박", b.stay, result.stayNote],
       [taxLabel(result.country), b.stayTax, "1인 1박 기준, 현장 결제"],
       ["식비", b.meal, `${result.mealDays}일 기준`],
@@ -1114,7 +1145,10 @@
       ["근교 이동", b.excursion, result.stayB ? `${result.stayB.short || result.stayB.title} 왕복` : ""],
       ["액티비티", b.activities, ""],
       ["예비비", b.contingency, `예상 합계의 ${pct(calculationRules.contingencyRate)} · 범위에 영향 없음`],
-    ].filter(([label, line]) => (label !== "근교 이동" && label !== taxLabel(result.country)) || line.hi > 0);
+    ].filter(([label, line]) => {
+      if (label === "국내 공항 주차") return Boolean(result.parking);
+      return (label !== "근교 이동" && label !== taxLabel(result.country)) || line.hi > 0;
+    });
 
     el.breakdown.innerHTML = rows
       .map(([label, line, note]) => {
@@ -1149,7 +1183,7 @@
           r.clinic.short,
           planTitle(r.rxPlan, r.country),
           titleOf(city.flights, s.flightId).split(" · ")[0],
-          `${r.preNights ? `${r.stayPre.short} → ` : ""}${shortTitle(titleOf(city.staysA, s.stayAId))}`,
+          `${r.lodgingPre ? `${r.stayPre.short} → ` : ""}${shortTitle(titleOf(city.staysA, s.stayAId))}`,
           r.fullDayLabels.length ? r.fullDayLabels.join(" + ") : "",
         ]
           .filter(Boolean)
@@ -1229,7 +1263,7 @@
       return roomConfig.occupancy === 2 ? "트윈(침대 2개)" : roomConfig.title;
     };
     const unitWord = (stay) => (money.of(stay, "perUnitPerNight") ? "채" : "실");
-    const departureTime = currentDeparture().arrival === "night" ? "저녁 출발" : "오전 출발";
+    const departureTime = { night: "저녁 출발", afternoon: "낮 출발" }[currentDeparture().arrival] || "오전 출발";
     const origin = flight.from || "ICN";
     const flightQuery = `Flights from ${origin} to ${flight.airport} on ${start} through ${end}`;
     const flightSlot = flight.link
@@ -1246,7 +1280,7 @@
 
     const slots = {
       flight: flightSlot,
-      stayPre: result.preNights
+      stayPre: result.lodgingPre
         ? {
             label: `처방 전 · ${stayPre.title} ${formatDate(start)}–${formatDate(checkoutPre)}`,
             sub: `Booking.com · ${money.of(stayPre, "perBedPerNight") ? `${result.people}침대 (남녀 구역 확인)` : `개인실 ${result.roomsPre}실`}`,
@@ -1256,7 +1290,7 @@
       stayA: {
         label: `처방 후 · ${stayA.title} ${formatDate(checkoutPre)}–${formatDate(checkoutA)}`,
         sub: `Booking.com · ${roomType(stayA)} ${result.roomsA}${unitWord(stayA)} · 객실 냉장고 확인`,
-        href: bookingUrl(stayA.booking || city.bookingCity, checkoutPre, checkoutA, result.roomsA),
+        href: bookingUrl(stayA.booking || city.bookingCity, checkoutPre, checkoutA, result.roomsA, stayA.bookingFilter),
       },
       stayB: result.stayB
         ? {
@@ -1470,11 +1504,14 @@
         text: `처방 후 숙박이 1박뿐이라 B숙소(${stayBWanted.short || stayBWanted.title})는 빼고 계산했습니다.`,
       });
     }
-    const nightsA = postNights - (stayB ? 1 : 0);
+    // A pre-stay card marked sameAsStayA keeps the whole trip in the main hotel: the prescription day
+    // still splits the plan, but no night is booked apart and there is no move on that day.
+    const lodgingPre = stayPre.sameAsStayA ? 0 : preNights;
+    const nightsA = nights - lodgingPre - (stayB ? 1 : 0);
 
     const start = addDays(season.startDate, Number(departure.startOffset || 0));
     const end = addDays(start, nights);
-    const checkoutPre = addDays(start, preNights);
+    const checkoutPre = addDays(start, lodgingPre);
     const checkoutA = addDays(checkoutPre, nightsA);
     // Every line is an estimate {lo, hi, mean, var} in KRW; [lo, hi] is read as that line's P10-P90.
     const fromLocal = (r, factor = 1) => estimate(r, fx * factor);
@@ -1482,7 +1519,7 @@
 
     // Stays: weekday card price × each night's calendar factor
     const calendar = country.lodgingCalendar;
-    const factorsPre = nightFactors(calendar, start, preNights);
+    const factorsPre = nightFactors(calendar, start, lodgingPre);
     const factorsA = nightFactors(calendar, checkoutPre, nightsA);
     const factorsB = stayB ? nightFactors(calendar, checkoutA, 1) : [];
     const stayPreInfo = preStayCost(stayPre, people, factorsPre, money);
@@ -1493,13 +1530,13 @@
     const roomsLabel = (info) => `${info.rooms}${info.usesUnits ? "채" : info.kind === "bed" ? "침대" : "실"}`;
     const quoteKeys = {
       flight: [flight.id, start, end].join("|"),
-      stayPre: preNights ? [stayPre.id, start, checkoutPre, stayPreInfo.kind, stayPreInfo.rooms, people].join("|") : null,
+      stayPre: lodgingPre ? [stayPre.id, start, checkoutPre, stayPreInfo.kind, stayPreInfo.rooms, people].join("|") : null,
       stayA: [stayA.id, checkoutPre, checkoutA, stayAInfo.kind, stayAInfo.rooms, people].join("|"),
       stayB: stayB ? [stayB.id, checkoutA, end, stayBInfo.kind, stayBInfo.rooms, people].join("|") : null,
     };
     const quoteContext = {
       flight: `${flight.title} ${formatDate(start)}–${formatDate(end)}`,
-      stayPre: preNights ? `${shortTitle(stayPre.title)} ${formatDate(start)}–${formatDate(checkoutPre)} · ${people}명 ${roomsLabel(stayPreInfo)}` : "",
+      stayPre: lodgingPre ? `${shortTitle(stayPre.title)} ${formatDate(start)}–${formatDate(checkoutPre)} · ${people}명 ${roomsLabel(stayPreInfo)}` : "",
       stayA: `${shortTitle(stayA.title)} ${formatDate(checkoutPre)}–${formatDate(checkoutA)} · ${people}명 ${roomsLabel(stayAInfo)}`,
       stayB: stayB ? `${shortTitle(stayB.title)} ${formatDate(checkoutA)}–${formatDate(end)} · ${people}명 ${roomsLabel(stayBInfo)}` : "",
     };
@@ -1514,7 +1551,7 @@
     const flightPerPerson = scale(flight.priceKRW, season.flightFactor * Number(departure.flightFactor || 1));
     const estimates = {
       flight: flightPerPerson,
-      stayPre: preNights ? scale(stayPreInfo.cost, fx) : null,
+      stayPre: lodgingPre ? scale(stayPreInfo.cost, fx) : null,
       stayA: scale(stayAInfo.cost, fx),
       stayB: stayB ? scale(stayBInfo.cost, fx) : null,
     };
@@ -1523,17 +1560,17 @@
     const flightLine = applied("flight") ? exact(quotes.flight.krw * people, true) : estimate(flightPerPerson, people);
 
     // Stays
-    const stayPreLine = !preNights ? exact(0) : applied("stayPre") ? exact(quotes.stayPre.krw, true) : estimate(estimates.stayPre);
+    const stayPreLine = !lodgingPre ? exact(0) : applied("stayPre") ? exact(quotes.stayPre.krw, true) : estimate(estimates.stayPre);
     const stayALine = applied("stayA") ? exact(quotes.stayA.krw, true) : estimate(estimates.stayA);
     const stayBLine = !stayB ? exact(0) : applied("stayB") ? exact(quotes.stayB.krw, true) : estimate(estimates.stayB);
     const stayLine = sumLines(stayPreLine, stayALine, stayBLine);
-    const stayParts = [preNights ? stayPreLine : null, stayALine, stayB ? stayBLine : null].filter(Boolean);
+    const stayParts = [lodgingPre ? stayPreLine : null, stayALine, stayB ? stayBLine : null].filter(Boolean);
     stayLine.locked = stayParts.every((line) => line.locked);
     stayLine.partial = !stayLine.locked && stayParts.some((line) => line.locked);
 
     // Lodging / bathing tax (per person per night)
     const taxLocal = sumRanges(
-      scale(local(stayPre, "lodgingTax"), people * preNights),
+      scale(local(stayPre, "lodgingTax"), people * lodgingPre),
       scale(local(stayA, "lodgingTax"), people * nightsA),
       stayB ? scale(local(stayB, "stayTax"), people) : [0, 0]
     );
@@ -1561,6 +1598,10 @@
 
     // Airport transfer, excursion to stay B
     const airportLine = fromLocal(transferCost(airport, people, money));
+    // Parking at the home airport (KRW), when the city lists options for this flight's origin
+    const parkingOptions = parkingOptionsFor(city, flight);
+    const parking = findById(parkingOptions, s.parkingId) || parkingOptions[0] || null;
+    const parkingLine = parking ? estimate(parkingCost(parking, nights, people)) : exact(0);
     const excursionLine = stayB ? fromLocal(local(stayB, "transferPerPerson"), people) : exact(0);
 
     // Activities: each ticket is its own estimate
@@ -1602,6 +1643,7 @@
     const breakdown = {
       rx: rxLine,
       flight: flightLine,
+      parking: parkingLine,
       stay: stayLine,
       stayTax: stayTaxLine,
       meal: mealLine,
@@ -1631,7 +1673,7 @@
     const roomSummary = stayAInfo.usesUnits
       ? `2룸 레지던스 ${stayAInfo.rooms}채 × ${nightsA}박`
       : `${roomConfig.title} · ${stayAInfo.rooms}실 × ${nightsA}박`;
-    const preSummary = preNights ? `${stayPre.short} ${roomsLabel(stayPreInfo)} × ${preNights}박 → ` : "";
+    const preSummary = lodgingPre ? `${stayPre.short} ${roomsLabel(stayPreInfo)} × ${lodgingPre}박 → ` : "";
     const fullSummary = `${preSummary}${roomSummary}${stayB ? ` + ${stayB.short || "B숙소"} 1박` : ""}`;
     const allFactors = [...factorsPre, ...factorsA, ...factorsB];
     const nightFactorText = allFactors.map((factor, i) => `${formatDate(addDays(start, i))} ×${factor.toFixed(2).replace(/0$/, "")}`).join(", ");
@@ -1643,6 +1685,7 @@
       people,
       nights,
       preNights,
+      lodgingPre,
       nightsA,
       startDate: start,
       checkoutPre,
@@ -1651,6 +1694,8 @@
       stayA,
       stayB,
       clinic,
+      parking,
+      parkingNote: parking ? parkingNoteFor(parking, nights, people) : "",
       rxPlan,
       rxPatients,
       rxSavings,
@@ -1708,12 +1753,40 @@
     });
   }
 
+  // An option may mix both: a per-person leg (metro in) and a shared-car leg (taxi out).
   function transferCost(option, people, money) {
     const perVehicle = money.of(option, "perVehicleRoundtrip");
-    if (perVehicle) {
-      return scale(perVehicle, Math.ceil(people / Number(option.vehicleCapacity || 4)));
-    }
-    return scale(money.of(option, "perPersonRoundtrip") || [0, 0], people);
+    const vehicles = perVehicle ? scale(perVehicle, Math.ceil(people / Number(option.vehicleCapacity || 4))) : [0, 0];
+    return sumRanges(vehicles, scale(money.of(option, "perPersonRoundtrip") || [0, 0], people));
+  }
+
+  // Home-airport parking in KRW for the whole trip.
+  //   dayBasis "24h": the lot repeats its daily cap every 24 hours, so the trip is `nights` full days
+  //     plus a part day (extraKRW) for entering before the flight and leaving after landing.
+  //   dayBasis "calendar": the lot charges each calendar day from entry to exit (nights + 1).
+  //   onceKRW: per car once (valet fee). One car per vehicleCapacity people.
+  function parkingCost(option, nights, people) {
+    const cars = parkingCars(option, people);
+    const days = option.dayBasis === "calendar" ? nights + 1 : nights;
+    const perCar = sumRanges(scale(option.perDayKRW || [0, 0], days), option.extraKRW || [0, 0], option.onceKRW || [0, 0]);
+    return scale(perCar, cars);
+  }
+
+  function parkingCars(option, people) {
+    return option.perDayKRW ? Math.ceil(people / Number(option.vehicleCapacity || 4)) : 0;
+  }
+
+  function parkingNoteFor(option, nights, people) {
+    const cars = parkingCars(option, people);
+    if (!cars) return "주차 없음";
+    const days = option.dayBasis === "calendar" ? `${nights + 1}일` : `${nights}일 + 자투리`;
+    return `${cars}대 × ${days}`;
+  }
+
+  function parkingOptionsFor(city, flight) {
+    const all = city.homeParking || [];
+    const origin = (flight && flight.from) || "ICN";
+    return all.filter((option) => !option.airports || option.airports.includes(origin));
   }
 
   function roomCountFor(roomConfig, people) {
@@ -1852,6 +1925,9 @@
     const flight = findById(city.flights, s.flightId);
     const airport = findById(airportOptionsFor(city, flight), s.airportId);
     const airportLabel = airport ? airport.short || airport.title : "공항 이동";
+    // An option that mixes modes can name each leg (metro in, early taxi out).
+    const airportIn = (airport && airport.shortIn) || airportLabel;
+    const airportOut = (airport && airport.shortOut) || airportLabel;
     const clinic = result.clinic;
     const country = result.country;
     const planText = planTitle(result.rxPlan, country);
@@ -1859,14 +1935,17 @@
     const preShort = result.stayPre.short;
     const postShort = shortTitle(result.stayA.title);
     const morningArrival = departure.arrival === "morning";
+    // A midday flight lands in the afternoon: no lunch, but the evening is free.
+    const afternoonArrival = departure.arrival === "afternoon";
+    const lodgingPre = result.lodgingPre;
     const warnings = [...result.rxAdjust];
     const overflow = [];
 
     const days = Array.from({ length: dayCount }, (_, i) => {
       const date = addDays(result.startDate, i);
       let night = "";
-      if (i < rxIdx) night = preShort;
-      else if (i < rxIdx + result.nightsA) night = postShort;
+      if (i < lodgingPre) night = preShort;
+      else if (i < lodgingPre + result.nightsA) night = postShort;
       else if (i < nights) night = result.stayB ? result.stayB.short || "B숙소" : postShort;
       return {
         date,
@@ -1891,7 +1970,7 @@
     arrivalDay.cap = morningArrival ? 1 : 0;
     arrivalDay.morningOk = false;
     arrivalDay.lunchOk = morningArrival;
-    arrivalDay.eveningOk = morningArrival;
+    arrivalDay.eveningOk = morningArrival || afternoonArrival;
 
     const departureDay = days[last];
     departureDay.kind = "departure";
@@ -1906,10 +1985,11 @@
       days[bDay].cap = 1;
       days[bDay].eveningOk = false;
     }
-    // The prescription morning leaves room for one more half-day item.
+    // The prescription morning leaves room for one more half-day item. A parcel the front desk takes in
+    // during the afternoon (pickupLate) leaves the whole day free; it is collected on coming back.
     if (rxIdx > 0 && days[rxIdx].kind === "open") {
       days[rxIdx].kind = "rx";
-      days[rxIdx].cap = 1;
+      days[rxIdx].cap = clinic.pickupLate ? 2 : 1;
     }
 
     // Prescription day checks
@@ -1933,14 +2013,21 @@
     if (clinic.weekendNote && (rxWd === 0 || rxWd === 6)) {
       warnings.push({ scopes: ["clinic"], conflict: false, text: `${formatDate(rxDate)}은 주말이라 ${clinic.weekendNote}` });
     }
-    if (clinic.eve && rxIdx === 0) {
+    if (clinic.eve && rxIdx === 0 && clinic.eveAhead) {
+      warnings.push({
+        scopes: ["rx", "clinic"],
+        conflict: false,
+        text: `택배가 체크인보다 먼저 올 수 있습니다. 호텔에 '도착 전 택배 대리 수령·냉장 보관'을 미리 확인하세요. 하루 늦으면 ${formatDate(addDays(result.startDate, 1))}에 받으면 되니 일정은 그대로 둡니다.`,
+      });
+    }
+    if (clinic.eve && rxIdx === 0 && !clinic.eveAhead) {
       warnings.push({
         scopes: ["rx", "clinic"],
         conflict: true,
         text: `${withTopic(clinic.short)} 전날 주문해야 해서 도착일(Day1) 수령이 안 됩니다. 처방일을 Day2 이후로 바꾸세요.`,
       });
     }
-    if (clinic.eveLateNote && rxIdx === 1 && !morningArrival) {
+    if (clinic.eveLateNote && rxIdx === 1 && departure.arrival === "night") {
       warnings.push({ scopes: ["rx", "clinic"], conflict: false, text: clinic.eveLateNote });
     }
     // The clinic cannot fill the picked plan: priced at what it gives, and flagged as not matching the plan.
@@ -2022,12 +2109,15 @@
     });
     // A delivery route is ordered the evening before it arrives.
     if (clinic.eve && rxIdx > 0) days[rxIdx - 1].evenings.push(clinic.eve);
+    // An early return flight needs packing and a car booked the night before.
+    if (departure.lastEvening && last > 0) days[last - 1].evenings.push(departure.lastEvening);
 
     const rxSteps = (arrivedToday) => {
       const steps = [];
-      if (!arrivedToday && rxIdx > 0) steps.push(`${preShort} 체크아웃 → ${country.luggageRxDay}`);
+      const moves = arrivedToday || lodgingPre > 0;
+      if (!arrivedToday && lodgingPre > 0) steps.push(`${preShort} 체크아웃 → ${country.luggageRxDay}`);
       steps.push(`처방 · ${clinic.action}`);
-      steps.push(`${postShort} 체크인 · 펜은 객실 냉장고에`);
+      steps.push(moves ? `${postShort} 체크인 · 펜은 객실 냉장고에` : "펜은 바로 객실 냉장고에 (연박이라 이동 없음)");
       return steps;
     };
 
@@ -2035,43 +2125,67 @@
       const items = [];
       if (day.morning) items.push(day.morning);
       if (day.kind === "arrival") {
-        const when = morningArrival ? "오전" : "밤";
-        if (day.rx) {
-          items.push(`${when} ${flight.airport} 도착 → ${airportLabel}`);
+        const when = morningArrival ? "오전" : afternoonArrival ? "오후" : "밤";
+        if (day.rx && clinic.pickupLate) {
+          items.push(`${when} ${flight.airport} 도착 → ${airportIn} → ${day.night} 체크인`);
+          items.push(`체크인하며 처방 수령 · ${clinic.action}`);
+          items.push("펜은 바로 객실 냉장고에");
+        } else if (day.rx) {
+          items.push(`${when} ${flight.airport} 도착 → ${airportIn}`);
           items.push(...rxSteps(true));
         } else {
-          items.push(`${when} ${flight.airport} 도착 → ${airportLabel} → ${day.night} 체크인`);
+          items.push(`${when} ${flight.airport} 도착 → ${airportIn} → ${day.night} 체크인`);
         }
       } else if (day.kind === "departure") {
         const checkout = `${result.stayB ? result.stayB.short || "B숙소" : postShort} 체크아웃`;
         if (day.lunch) {
           items.push(`${checkout} · ${country.luggageLastDay}`, day.lunch);
           day.lunch = null;
-          items.push(`${airportLabel} → 귀국 (펜은 기내 휴대)`);
+          items.push(`${airportOut} → 귀국 (펜은 기내 휴대)`);
         } else {
-          items.push(`${checkout} → ${airportLabel} → 귀국 (펜은 기내 휴대)`);
+          items.push(`${checkout} → ${airportOut} → 귀국 (펜은 기내 휴대)`);
         }
       } else if (day.kind === "rx") {
-        items.push(...rxSteps(false));
+        if (!clinic.pickupLate) items.push(...rxSteps(false));
       } else if (day.kind === "toB") {
         if (!day.halves.length) items.push("오전 시내 자유");
       } else if (day.main) {
         items.push(day.main);
       }
-      items.push(...day.halves);
+      // Lunch goes after the morning block: the day's main course, or else its first half-day item.
+      const halves = [...day.halves];
+      if (day.lunch && !day.main && halves.length) items.push(halves.shift());
       if (day.lunch) items.push(day.lunch);
+      items.push(...halves);
+      if (day.kind === "rx" && clinic.pickupLate) {
+        items.push(`귀가 후 처방 수령 · ${clinic.action}`);
+        items.push(lodgingPre > 0 ? `${postShort} 체크인 · 펜은 객실 냉장고에` : "펜은 바로 객실 냉장고에 (연박이라 이동 없음)");
+      }
       if (day.kind === "toB") items.push(`오후 ${result.stayB.short || "B숙소"} 이동 · ${result.stayB.includesMeals ? "온천·석식" : "체크인"}`);
       items.push(...day.evenings);
       day.items = items;
     });
 
-    const preTrip = [];
+    // Pre-trip steps in date order: the clinic's booking step plus the city's own checklist.
+    const steps = [];
     if (clinic.book) {
       const booking = bookingStep(clinic, rxDate, planText);
-      preTrip.push(`${booking.when} ${booking.text}`);
+      steps.push({ date: addDays(rxDate, -clinic.book.daysBefore), order: 0, text: `${booking.when} ${booking.text}` });
     } else {
-      preTrip.push(`${clinic.short} ${formatDate(rxDate)} 오전 진료 예약 · ${planText} 재고 확인`);
+      steps.push({ date: rxDate, order: 0, text: `${clinic.short} ${formatDate(rxDate)} 오전 진료 예약 · ${planText} 재고 확인` });
     }
+    // Ordered from home the night before departure, so it lands on arrival day.
+    if (clinic.eveAhead && rxIdx === 0) {
+      const date = addDays(result.startDate, -1);
+      steps.push({ date, order: 99, text: `${formatDate(date)} ${clinic.eveAhead}` });
+    }
+    (city.preTrip || []).forEach((item, i) => {
+      const date = addDays(result.startDate, -Number(item.daysBefore || 0));
+      const when = item.daysBefore ? `${formatDate(date)}쯤` : `${formatDate(date)} 출발일`;
+      steps.push({ date, order: i + 1, text: `${when} ${item.text}` });
+    });
+    steps.sort((a, b) => (a.date === b.date ? a.order - b.order : a.date < b.date ? -1 : 1));
+    const preTrip = steps.map((step) => step.text);
     const money = result.money;
     const cashToCarry = roundUp(result.cash.total[1], money.currency.cashStep);
     preTrip.push(`${money.currency.name} 현금 약 ${money.format([cashToCarry, cashToCarry])} 준비 ('처방 준비' 탭에 내역)`);
@@ -2172,7 +2286,8 @@
     return parts.join(" · ");
   }
 
-  function bookingUrl(query, checkin, checkout, rooms) {
+  // filter: Booking.com nflt value, e.g. "class=4" for 4-star results only.
+  function bookingUrl(query, checkin, checkout, rooms, filter) {
     const params = new URLSearchParams({
       ss: query,
       checkin,
@@ -2183,6 +2298,7 @@
       lang: "ko",
       selected_currency: "KRW",
     });
+    if (filter) params.set("nflt", filter);
     return `https://www.booking.com/searchresults.ko.html?${params.toString()}`;
   }
 
@@ -2288,6 +2404,12 @@
 
   function formatKRWRange(r) {
     return `${Math.round(r[0] / 10000).toLocaleString("ko-KR")}-${Math.round(r[1] / 10000).toLocaleString("ko-KR")}만원`;
+  }
+
+  // Small amounts (parking) read better to the thousand won than in 만원.
+  function formatWonRange(r) {
+    const k = (v) => (Math.round(v / 1000) * 1000).toLocaleString("ko-KR");
+    return r[0] === r[1] ? `${k(r[0])}원` : `${k(r[0])}-${k(r[1])}원`;
   }
 
   function pct(value) {

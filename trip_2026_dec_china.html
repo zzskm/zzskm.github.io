@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-  <title>12월 중국 처방 여행</title>
-  <meta name="description" content="마운자로 처방을 넣은 2026년 12월 칭다오·톈진·상하이·다롄·웨이하이·옌타이 금요일 밤 포함 여행 일정과 1인 평균 견적" />
+  <title>상하이 처방 여행 · 청주 출발</title>
+  <meta name="description" content="청주공항에서 춘추항공으로 떠나는 2026년 11/28-12/01 상하이 여행. 4성급 호텔로 마운자로 냉장 택배를 받는 일정과 주차비 포함 1인 평균 견적" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="12월 중국 처방 여행" />
-  <meta property="og:description" content="칭다오·톈진·상하이·다롄·웨이하이·옌타이 6개 도시 비교, 1인 평균 견적" />
+  <meta property="og:title" content="상하이 처방 여행 · 청주 출발" />
+  <meta property="og:description" content="청주 출발 상하이 3박 4일 · 4성급 호텔 택배 수령 · 주차비 포함 1인 평균 견적" />
   <link rel="preload" as="script" href="trip_2026_dec_china.data.js" />
   <link rel="stylesheet" href="trip_2026_dec.styles.css" />
 </head>
 <body>
   <a class="skip-link" href="#result-panel">결과로 건너뛰기</a>
   <header class="topbar">
-    <h1>12월 중국 처방 여행 · 칭다오 / 톈진 / 상하이 / 다롄 / 웨이하이 / 옌타이</h1>
-    <p>금요일 밤을 끼워 떠나 마운자로를 처방받아 오는 여행의 일정과 예상 비용입니다. 중국 6개 도시를 같은 조건으로 비교합니다. 처방 전에는 캡슐·도미토리·게스트하우스에, 처방받은 날부터는 객실 냉장고가 있는 2인 1실에 묵습니다. 시장 먹거리와 가벼운 관광도 넣었습니다. 카드를 바꾸면 일정과 금액이 바로 바뀝니다. 가격은 <span id="head-asof">2026-11-13</span> 기준 추정치입니다.</p>
+    <h1>상하이 처방 여행 · 청주 출발 11/28(토)–12/01(화)</h1>
+    <p>청주공항까지 차로 가서 춘추항공으로 상하이에 다녀오는 일정과 예상 비용입니다. 마운자로는 타오바오·징둥 냉장 택배로 호텔에서 받습니다. 그래서 프런트·컨시어지가 늘 있는 4성급 호텔 한 곳에 첫날부터 묵습니다. 청주공항 주차비도 총액에 넣었습니다. 카드를 바꾸면 일정과 금액이 바로 바뀝니다. 가격은 <span id="head-asof">2026-11-18</span> 기준 추정치입니다.</p>
     <nav class="page-switch" aria-label="다른 나라 일정">
       <span class="page-switch-label">다른 일정</span>
       <a href="trip_2026_dec_japan.html">일본 · 후쿠오카 / 오사카 / 도쿄 / 쓰시마</a>
@@ -66,7 +66,7 @@
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
         <div class="category-body" id="cat-schedule">
-          <p class="group-label">출발 방식 (금요일 밤 포함)</p>
+          <p class="group-label">출발 방식</p>
           <div id="departure-options" class="card-grid"></div>
           <p class="group-label">기간</p>
           <div id="duration-options" class="card-grid"></div>
@@ -128,6 +128,17 @@
         </button>
         <div class="category-body" id="cat-flight">
           <div id="flight-options" class="card-grid"></div>
+        </div>
+      </div>
+
+      <div class="category is-open" data-section="parking" id="section-parking" hidden>
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-parking">
+          <span id="title-parking" class="category-title">국내 공항 주차 (자차)</span>
+          <span id="summary-parking" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body" id="cat-parking">
+          <div id="parking-options" class="card-grid"></div>
         </div>
       </div>
 
@@ -274,7 +285,7 @@
               </thead>
               <tbody id="compare-body"></tbody>
             </table>
-            <p class="field-note">인원·일정·시기·환율은 모든 도시 공통이고, 나머지는 도시마다 고른 카드 기준입니다. 도시 이름을 누르면 그 도시로 바뀝니다. 병원은 한 번에 4주분만 주는 곳이 많아 가져오는 약의 양이 도시마다 다릅니다. 총액보다 ‘1개월분당’으로 비교하세요.</p>
+            <p class="field-note">금액은 고른 카드 기준입니다. 항공·호텔은 출발이 가까워 실제 가격과 차이가 날 수 있으니, '예약 링크' 탭에서 확인한 가격을 확정가로 넣으세요. 병원 대면은 한 번에 4주분만 주는 곳이 많으니 총액보다 ‘1개월분당’으로 비교하세요.</p>
           </div>
 
           <div class="result-block">
