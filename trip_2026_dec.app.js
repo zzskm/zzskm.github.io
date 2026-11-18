@@ -33,6 +33,8 @@
     airport: byId("airport-options"),
     parking: byId("parking-options"),
     parkingSection: byId("section-parking"),
+    dataPlan: byId("data-options"),
+    dataSection: byId("section-data"),
     stayPre: byId("stayPre-options"),
     roomConfig: byId("roomConfig-options"),
     stayA: byId("stayA-options"),
@@ -42,6 +44,17 @@
     activityControls: byId("activity-controls"),
     activityPacks: byId("activityPack-options"),
     titleStayA: byId("title-stayA"),
+    titleRoomConfig: byId("title-roomConfig"),
+    labelRxDay: byId("label-rxDay"),
+    compareBlock: byId("compare-block"),
+    pretripBlock: byId("pretrip-block"),
+    pretripList: byId("pretrip-list"),
+    pretripCount: byId("pretrip-count"),
+    groupTotalLabel: byId("group-total-label"),
+    groupTotalSub: byId("group-total-sub"),
+    perMonthLabel: byId("per-month-label"),
+    perMonthValue: byId("per-month-value"),
+    perMonthSub: byId("per-month-sub"),
     titleStayPre: byId("title-stayPre"),
     titleClinic: byId("title-clinic"),
     titleActivities: byId("title-activities"),
@@ -83,7 +96,7 @@
     tabPlanBadge: byId("tab-plan-badge"),
     toggleAll: byId("toggle-all"),
     cityDivider: byId("city-divider"),
-    warnSlots: { rx: byId("warn-rx"), clinic: byId("warn-clinic"), stayB: byId("warn-stayB"), activities: byId("warn-activities") },
+    warnSlots: { rx: byId("warn-rx"), clinic: byId("warn-clinic"), data: byId("warn-data"), stayB: byId("warn-stayB"), activities: byId("warn-activities") },
     mobileBarTotal: byId("mobile-bar-total"),
     mobileBarDelta: byId("mobile-bar-delta"),
     mobileBarSub: byId("mobile-bar-sub"),
@@ -94,10 +107,15 @@
   };
   // Containers whose buttons are rebuilt on every render.
   const rerenderHosts = [
-    el.city, el.party, el.departure, el.duration, el.season, el.fx, el.rxPlan, el.rxDay, el.rxPatients, el.clinic, el.flight, el.airport, el.parking,
+    el.city, el.party, el.departure, el.duration, el.season, el.fx, el.rxPlan, el.rxDay, el.rxPatients, el.clinic, el.flight, el.airport, el.parking, el.dataPlan,
     el.stayPre, el.roomConfig, el.stayA, el.stayB, el.meal, el.transport, el.activityControls, el.activityPacks, el.compareBody,
   ];
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // A page with one city has nothing to compare or switch between: the city cards, the note about
+  // per-city choices and the comparison table are left out.
+  const singleCity = cityOrder.length === 1;
+  // Leading time-of-day word of a timeline line, shown as its own column.
+  const DAY_SLOT = /^(아침|오전|점심|오후|저녁|밤) /;
 
   const state = loadState() || createInitialState();
   state.ui = loadUi();
@@ -107,6 +125,9 @@
   let toastTimer = null;
   let toastUndo = null;
   let cardsMark = null; // where the reader was in the cards before jumping to the result on a phone
+
+  // One column (phone, narrow window): the result sits above the cards, so the long to-do list starts folded.
+  if (window.matchMedia("(max-width: 980px)").matches) el.pretripBlock.open = false;
 
   bindEvents();
   render();
@@ -144,6 +165,7 @@
       flightId,
       airportId: pickId(airportOptionsFor(city, flight), d.airportId),
       parkingId: pickId(parkingOptionsFor(city, flight), d.parkingId),
+      dataId: pickId(city.dataPlans, d.dataId),
       clinicId: pickId(city.clinics, d.clinicId),
       stayPreId: pickId(city.staysPre, d.stayPreId),
       roomConfigId: pickId(data.roomConfigs, d.roomConfigId),
@@ -271,6 +293,7 @@
           flightId,
           airportId: pickId(airportOptionsFor(city, flight), savedCity.airportId || fallback.airportId),
           parkingId: pickId(parkingOptionsFor(city, flight), savedCity.parkingId || fallback.parkingId),
+          dataId: pickId(city.dataPlans, savedCity.dataId || fallback.dataId),
           clinicId: pickId(city.clinics, savedCity.clinicId || fallback.clinicId),
           stayPreId: pickId(city.staysPre, savedCity.stayPreId || fallback.stayPreId),
           roomConfigId: pickId(data.roomConfigs, savedCity.roomConfigId || fallback.roomConfigId),
@@ -306,10 +329,16 @@
 
   // Open sections and the result tab are remembered per browser, apart from the trip selections.
   function loadUi() {
-    const ui = { accordion: createInitialAccordionState(), tab: TABS[0] };
+    // done: pre-trip to-dos ticked off, keyed by their text.
+    const ui = { accordion: createInitialAccordionState(), tab: TABS[0], done: {} };
     try {
       const saved = JSON.parse(window.localStorage.getItem(UI_KEY) || "null");
       if (saved && typeof saved === "object") {
+        if (saved.done && typeof saved.done === "object") {
+          Object.keys(saved.done).forEach((key) => {
+            if (saved.done[key] === true) ui.done[key] = true;
+          });
+        }
         Object.keys(ui.accordion).forEach((section) => {
           const value = saved.accordion ? saved.accordion[section] : undefined;
           if (typeof value === "boolean") ui.accordion[section] = value;
@@ -334,7 +363,7 @@
   function createInitialAccordionState() {
     const mobile = window.matchMedia("(max-width: 768px)").matches;
     const open = new Set(
-      mobile ? ["city", "schedule", "rx", "clinic"] : ["city", "party", "schedule", "rx", "clinic", "flight", "parking", "stayPre", "stayA", "activities"]
+      mobile ? ["city", "schedule", "rx", "clinic"] : ["city", "party", "schedule", "rx", "clinic", "flight", "parking", "data", "stayPre", "stayA", "activities"]
     );
     const result = {};
     el.categories.forEach((categoryEl) => {
@@ -421,6 +450,9 @@
     });
     onCardClick(el.parking, (id) => {
       cityState().parkingId = id;
+    });
+    onCardClick(el.dataPlan, (id) => {
+      cityState().dataId = id;
     });
     onCardClick(el.roomConfig, (id) => {
       cityState().roomConfigId = id;
@@ -530,6 +562,24 @@
 
     el.tabs.forEach((tab) => {
       tab.addEventListener("click", () => selectTab(tab.dataset.tab));
+    });
+    // Links inside a tab that lead to another tab ("확정가 넣으러 가기").
+    el.resultScroll.addEventListener("click", (event) => {
+      const btn = event.target.closest("button[data-goto-tab]");
+      if (!btn) return;
+      selectTab(btn.dataset.gotoTab);
+      byId(`tab-${btn.dataset.gotoTab}`).focus({ preventScroll: true });
+    });
+
+    // Ticking a to-do is kept per browser; the row is updated in place, so nothing else re-renders.
+    el.pretripList.addEventListener("change", (event) => {
+      const box = event.target.closest("input[data-done]");
+      if (!box) return;
+      if (box.checked) state.ui.done[box.dataset.done] = true;
+      else delete state.ui.done[box.dataset.done];
+      saveUi();
+      box.closest("li").classList.toggle("is-done", box.checked);
+      renderPretripCount();
     });
     el.tablist.addEventListener("keydown", (event) => {
       const index = TABS.indexOf(state.ui.tab);
@@ -641,7 +691,7 @@
   }
 
   function updateMobileBar() {
-    el.mobileBarJump.textContent = viewingResult() ? "옵션 바꾸기 ↓" : "결과 보기 ↑";
+    el.mobileBarJump.textContent = viewingResult() ? "카드 고르기 ↓" : "결과 보기 ↑";
   }
 
   function smoothScrollBy(top) {
@@ -707,34 +757,43 @@
       state.rxPlan[country.id],
       (item) => {
         const month = perRxMonth(computeIf({ rxPlan: { ...state.rxPlan, [country.id]: item.id } }));
-        return month ? `${item.subtitle} · 1개월분당 약 ${formatManwon(month.mean)}` : item.subtitle;
+        return { sub: item.subtitle, meta: month ? `1개월분당 약 ${formatManwon(month.mean)}` : "" };
       },
       (item) => meanIf({ rxPlan: { ...state.rxPlan, [country.id]: item.id } }) - base
     );
     renderCards(
       el.rxDay,
-      rx.days,
+      rx.days.map((day) => ({ ...day, title: `${day.title} · ${formatDate(addDays(result.startDate, day.dayIndex))}` })),
       state.rxDayId,
-      (item) => `${formatDate(addDays(result.startDate, item.dayIndex))} · ${item.subtitle}`,
+      null,
       ifShared("rxDayId")
     );
     renderRxPatients(country);
+    // Price what each clinic actually hands out, and the per-month figure, since a clinic
+    // that gives 4 weeks makes the trip cheaper in total but far dearer per month.
+    const describeClinic = (item) => {
+      const plan = capPlanToClinic(rxPlanFor(country), item);
+      const month = perRxMonth(computeIf(null, { clinicId: item.id }));
+      const capped = plan.cappedFrom ? ` (${planTitle(plan, country)}만)` : "";
+      const perMonth = month ? ` · 1개월분당 약 ${formatManwon(month.mean)}` : "";
+      return { sub: item.subtitle, meta: `1인 약값 ${money.format(rxDrugCost(item, plan, money))}${capped}${perMonth}` };
+    };
+    // A city can sort its clinics under headings (e.g. delivery to the hotel / visit in person).
+    const clinicGroups = (city.clinicGroups || [])
+      .map((group) => ({ label: group.label, items: city.clinics.filter((clinic) => group.modes.includes(clinic.mode)) }))
+      .filter((group) => group.items.length);
+    if (clinicGroups.length && sum(clinicGroups.map((group) => group.items.length)) === city.clinics.length) {
+      renderCardGroups(el.clinic, clinicGroups, s.clinicId, describeClinic, ifCity("clinicId"));
+    } else {
+      renderCards(el.clinic, city.clinics, s.clinicId, describeClinic, ifCity("clinicId"));
+    }
     renderCards(
-      el.clinic,
-      city.clinics,
-      s.clinicId,
-      (item) => {
-        // Price what this clinic actually hands out, and the per-month figure, since a clinic
-        // that gives 4 weeks makes the trip cheaper in total but far dearer per month.
-        const plan = capPlanToClinic(rxPlanFor(country), item);
-        const month = perRxMonth(computeIf(null, { clinicId: item.id }));
-        const capped = plan.cappedFrom ? ` · ${planTitle(plan, country)}만` : "";
-        const perMonth = month ? ` · 1개월분당 약 ${formatManwon(month.mean)}` : "";
-        return `${item.subtitle} · 1인 약값 ${money.format(rxDrugCost(item, plan, money))}${capped}${perMonth}`;
-      },
-      ifCity("clinicId")
+      el.flight,
+      city.flights,
+      s.flightId,
+      (item) => ({ sub: item.subtitle, meta: `1인 왕복 ${formatKRWRange(item.priceKRW)}` }),
+      ifCity("flightId")
     );
-    renderCards(el.flight, city.flights, s.flightId, (item) => `${item.subtitle} · ${formatKRWRange(item.priceKRW)}`, ifCity("flightId"));
     renderCards(el.airport, airportOptionsFor(city, flight), s.airportId, null, ifCity("airportId"));
     const parkingOptions = parkingOptionsFor(city, flight);
     if (el.parkingSection) el.parkingSection.hidden = !parkingOptions.length;
@@ -743,54 +802,84 @@
         el.parking,
         parkingOptions,
         s.parkingId,
-        (item) => `${item.subtitle} · ${parkingNoteFor(item, result.nights, result.people)} ${formatWonRange(parkingCost(item, result.nights, result.people))}`,
+        (item) => ({
+          sub: item.subtitle,
+          meta: `${parkingNoteFor(item, result.nights, result.people)} · ${formatWonRange(parkingCost(item, result.nights, result.people))}`,
+        }),
         ifCity("parkingId")
       );
     }
-    renderCards(el.stayPre, city.staysPre, s.stayPreId, (item) => [item.subtitle, describeStayPrice(item, money)].filter(Boolean).join(" · "), ifCity("stayPreId"));
+    // Mobile data for the trip (roaming eSIM, home-carrier roaming, local SIM), for cities that list plans.
+    const dataPlans = city.dataPlans || [];
+    if (el.dataSection) el.dataSection.hidden = !dataPlans.length;
+    if (dataPlans.length) {
+      renderCards(
+        el.dataPlan,
+        dataPlans,
+        s.dataId,
+        (item) => ({ sub: item.subtitle, meta: `1인 ${formatWonRange(item.perPersonKRW)}` }),
+        ifCity("dataId")
+      );
+    }
+    const describeStay = (item) => ({ sub: item.subtitle, meta: describeStayPrice(item, money) });
+    renderCards(el.stayPre, city.staysPre, s.stayPreId, describeStay, ifCity("stayPreId"));
+    // A room for more people than are travelling is not an option (the picked one always stays listed).
     renderCards(
       el.roomConfig,
-      data.roomConfigs,
+      data.roomConfigs.filter((item) => item.occupancy <= state.travelers || item.id === s.roomConfigId),
       s.roomConfigId,
-      (item) => `${item.subtitle} · ${state.travelers}명 → ${roomCountFor(item, state.travelers)}실`,
+      (item) => ({ sub: item.subtitle, meta: `${state.travelers}명 → ${roomCountFor(item, state.travelers)}실` }),
       ifCity("roomConfigId")
     );
-    renderCards(el.stayA, city.staysA, s.stayAId, (item) => `${item.subtitle} · ${describeStayPrice(item, money)}`, ifCity("stayAId"));
-    renderCards(
-      el.stayB,
-      city.staysB,
-      s.stayBId,
-      (item) => (item.id === "none" ? item.subtitle : `${item.subtitle} · ${describeStayPrice(item, money)}`),
-      ifCity("stayBId")
-    );
+    renderCards(el.stayA, city.staysA, s.stayAId, describeStay, ifCity("stayAId"));
+    renderCards(el.stayB, city.staysB, s.stayBId, describeStay, ifCity("stayBId"));
     renderCards(
       el.meal,
       data.mealLevels,
       s.mealId,
-      (item) => `${item.subtitle} · 1인 ${money.format(money.of(item, "perPersonPerDay"))}/일`,
+      (item) => ({ sub: item.subtitle, meta: `1인 ${money.format(money.of(item, "perPersonPerDay"))}/일` }),
       ifCity("mealId")
     );
     renderCards(el.transport, city.transports, s.transportId, null, ifCity("transportId"));
     renderActivityControls(city, s, money);
-    renderCards(el.activityPacks, city.packs, s.packId, null, (pack) => meanIf(null, { activities: packActivities(city, s.activities, pack) }) - base);
+    // Packs are shortcuts, not a standing choice, so a lone pack is still a button.
+    renderCards(
+      el.activityPacks,
+      city.packs,
+      s.packId,
+      null,
+      (pack) => meanIf(null, { activities: packActivities(city, s.activities, pack) }) - base,
+      { fixedWhenSingle: false }
+    );
 
+    // The whole trip in one hotel (the pre-stay card says "same hotel"): nothing moves on the prescription day.
+    const sameHotel = !result.lodgingPre && Boolean(result.stayPre.sameAsStayA);
     if (el.titleStayPre) {
       el.titleStayPre.textContent = result.stayPre.sameAsStayA
         ? `처방 전 숙소 · 처방 후 숙소에 그대로 (${result.preNights}박)`
         : `처방 전 숙소 · 초저가 (${result.preNights}박)`;
     }
     if (el.titleStayA) {
-      const sameHotel = !result.lodgingPre && result.stayPre.sameAsStayA;
       el.titleStayA.textContent = sameHotel
         ? `숙소 · 전 일정 같은 호텔 (${result.nightsA}박)`
         : `처방 후 숙소 · 2인 1실 (${result.nightsA}박)`;
     }
-    if (el.titleClinic) el.titleClinic.textContent = `처방 클리닉 · 수령 방식 · ${city.name}`;
-    if (el.titleActivities) el.titleActivities.textContent = `관광 · 이색 식사 · ${city.name}`;
+    if (el.titleRoomConfig) el.titleRoomConfig.textContent = sameHotel ? "객실 구성" : "처방 후 객실 구성";
+    if (el.labelRxDay) el.labelRxDay.textContent = sameHotel ? "처방일 · 약을 받는 날" : "처방일 (이날 밤부터 2인 1실)";
+    if (el.titleClinic) el.titleClinic.textContent = singleCity ? "처방 클리닉 · 수령 방식" : `처방 클리닉 · 수령 방식 · ${city.name}`;
+    if (el.titleActivities) el.titleActivities.textContent = singleCity ? "관광 · 이색 식사" : `관광 · 이색 식사 · ${city.name}`;
     if (el.titleFlight) el.titleFlight.textContent = city.flightTitle || "항공 (1인 왕복)";
     if (el.titleAirport) el.titleAirport.textContent = city.airportTitle || "공항 이동";
     if (el.titleFx) el.titleFx.textContent = `환율 · ${money.currency.name}`;
-    if (el.labelRxPlan) el.labelRxPlan.textContent = `용량 · 수량 · ${country.name} 도시 공통 (${country.penNote})`;
+    if (el.labelRxPlan) {
+      el.labelRxPlan.innerHTML = `용량 · 수량${singleCity ? "" : ` · ${esc(country.name)} 도시 공통`} <small>${esc(country.penNote)}</small>`;
+    }
+    // With one city there is no city to pick and nothing saved per city; a pre-stay section whose
+    // only card is "same hotel" has nothing to choose either.
+    setSectionHidden("city", singleCity);
+    setSectionHidden("stayPre", city.staysPre.length === 1 && Boolean(city.staysPre[0].sameAsStayA));
+    el.cityDivider.hidden = singleCity;
+    if (el.compareBlock) el.compareBlock.hidden = singleCity;
     el.cityDivider.textContent = `여기부터는 도시마다 따로 저장됩니다 · 지금 ${city.name}`;
 
     const plan = buildTimeline(city, s, result);
@@ -876,16 +965,33 @@
   }
 
   // Each warning is shown where it can be fixed, and the section header is marked while it is closed.
+  // A conflict is repeated in every section that can fix it; a reminder appears once, in its first section.
   function renderWarnings(warnings, conflicts) {
     Object.entries(el.warnSlots).forEach(([scope, node]) => {
-      const mine = warnings.filter((warning) => warning.scopes.includes(scope));
+      const mine = warnings.filter((warning) => (warning.conflict ? warning.scopes.includes(scope) : warning.scopes[0] === scope));
       node.hidden = !mine.length;
-      node.innerHTML = mine.map((warning) => esc(warning.text)).join("<br />");
+      node.innerHTML = warningsHtml(mine);
       const categoryEl = node.closest(".category");
       if (categoryEl) categoryEl.classList.toggle("has-warning", mine.some((warning) => warning.conflict));
     });
     el.tabPlanBadge.hidden = !conflicts;
     el.tabPlanBadge.textContent = conflicts ? `주의 ${conflicts}` : "";
+  }
+
+  // Conflicts (the plan does not work as picked) first and in the stronger tone; reminders after.
+  function warningsHtml(warnings) {
+    return [...warnings]
+      .sort((a, b) => Number(Boolean(b.conflict)) - Number(Boolean(a.conflict)))
+      .map(
+        (warning) =>
+          `<p class="warn ${warning.conflict ? "is-conflict" : "is-info"}"><strong class="warn-tag">${warning.conflict ? "주의" : "확인"}</strong>${esc(warning.text)}</p>`
+      )
+      .join("");
+  }
+
+  function setSectionHidden(section, hidden) {
+    const node = el.categories.find((categoryEl) => categoryEl.dataset.section === section);
+    if (node) node.hidden = hidden;
   }
 
   function renderRxPatients(country) {
@@ -909,14 +1015,14 @@
     const country = countryOf(city);
     const rxDate = addDays(result.startDate, result.preNights);
     const booking = bookingStep(clinic, rxDate, planTitle(result.rxPlan, country));
-    const items = [`<strong>${esc(booking.when)}</strong> ${esc(booking.text)}`];
-    (clinic.prep || []).forEach((line) => items.push(esc(line)));
+    const items = [`<strong class="note-lead">${esc(booking.when)}</strong>${esc(booking.text)}`];
+    (clinic.prep || []).forEach((line) => items.push(noteHtml(line)));
     if (clinic.link) {
-      items.push(`<a href="${esc(clinic.link.href)}" target="_blank" rel="noopener noreferrer">${esc(clinic.link.label)}</a>`);
+      items.push(`<a href="${esc(clinic.link.href)}" target="_blank" rel="noopener noreferrer">${esc(clinic.link.label)} ↗</a>`);
     }
-    items.push(`결제: ${esc(clinic.payment)}`);
-    items.push("여권 지참 (진료·수령 모두 본인 확인)");
-    items.push(`귀국: 1인 ${importLimitPens(country)}펜 이하 · 영수증·처방 내역·원래 상자 · 펜은 기내 휴대. 출국 전 관세청(125)에 최신 기준 확인`);
+    items.push(noteHtml(`결제: ${clinic.payment}`));
+    items.push(noteHtml("여권: 진료·수령 모두 본인 확인에 필요"));
+    items.push(noteHtml(`귀국: 1인 ${importLimitPens(country)}펜 이하 · 영수증·처방 내역·원래 상자 · 펜은 기내 휴대. 출국 전 관세청(125)에 최신 기준 확인`));
     el.rxPrep.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
     renderCash(result);
   }
@@ -996,72 +1102,130 @@
     }
     el.party.innerHTML = `
       <div class="activity-row">
-        <span>인원 (명)</span>
+        <span>여행 인원</span>
         <div class="qty-group" role="group" aria-label="여행 인원">${buttons.join("")}</div>
       </div>
       <p class="field-note">${esc(data.party.note)}</p>
     `;
   }
 
-  function renderCards(container, list, selectedId, subtitleFn, deltaFn) {
+  // describe(item) gives the card's text under the title: { sub, meta }, where sub is the description
+  // and meta the computed figures (price, per-month cost) on a line of their own. Without it the
+  // card shows item.subtitle. A list with a single item is not a choice, so it is shown as plain
+  // information instead of a button (opts.fixedWhenSingle: false keeps it a button).
+  function renderCards(container, list, selectedId, describe, deltaFn, opts = {}) {
     const items = Array.isArray(list) ? list : [];
+    const fixed = items.length === 1 && opts.fixedWhenSingle !== false;
+    const group = container.closest(".card-group");
+    if (group) group.classList.toggle("is-fixed", fixed);
+    container.classList.remove("is-grouped");
     if (!items.length) {
       container.innerHTML = `<p class="empty-hint">선택 항목 없음</p>`;
       return;
     }
-    container.innerHTML = items
-      .map((item) => {
-        const active = item.id === selectedId;
-        const subtitleText = subtitleFn ? subtitleFn(item) : item.subtitle;
-        const subtitle = subtitleText ? `<span class="sub">${esc(subtitleText)}</span>` : "";
-        const deltaValue = !active && deltaFn ? deltaFn(item) : 0;
-        const deltaText = formatDelta(deltaValue);
-        const delta = deltaText ? `<span class="delta ${deltaValue > 0 ? "is-up" : "is-down"}">${esc(deltaText)}</span>` : "";
-        return `
-          <button type="button" class="card-btn ${active ? "active" : ""}" data-id="${esc(item.id)}" aria-pressed="${active}">
-            <span class="title">${esc(item.title)}</span>
-            ${subtitle}
-            ${delta}
-          </button>
-        `;
-      })
+    container.innerHTML = items.map((item) => cardHtml(item, item.id === selectedId, describe, deltaFn, fixed)).join("");
+  }
+
+  // The same cards under headings: groups = [{ label, items }].
+  function renderCardGroups(container, groups, selectedId, describe, deltaFn) {
+    container.classList.add("is-grouped");
+    container.innerHTML = groups
+      .map(
+        (group) => `
+          <div class="card-group">
+            <p class="group-label">${esc(group.label)}</p>
+            <div class="card-grid card-grid-wide">
+              ${group.items.map((item) => cardHtml(item, item.id === selectedId, describe, deltaFn, false)).join("")}
+            </div>
+          </div>
+        `
+      )
       .join("");
+  }
+
+  function cardHtml(item, active, describe, deltaFn, fixed) {
+    const described = describe ? describe(item) : null;
+    const subText = described ? described.sub : item.subtitle;
+    const sub = subText ? `<span class="sub">${esc(subText)}</span>` : "";
+    const meta = described && described.meta ? `<span class="meta">${esc(described.meta)}</span>` : "";
+    if (fixed) {
+      return `
+        <div class="card-btn is-fixed">
+          <span class="title">${esc(item.title)}</span>
+          ${sub}
+          ${meta}
+        </div>
+      `;
+    }
+    const deltaValue = !active && deltaFn ? deltaFn(item) : 0;
+    const deltaText = formatDelta(deltaValue);
+    const delta = deltaText ? `<span class="delta ${deltaValue > 0 ? "is-up" : "is-down"}">${esc(deltaText)}</span>` : "";
+    return `
+      <button type="button" class="card-btn ${active ? "active" : ""}" data-id="${esc(item.id)}" aria-pressed="${active}">
+        <span class="title">${esc(item.title)}</span>
+        ${sub}
+        ${meta}
+        ${delta}
+      </button>
+    `;
   }
 
   function renderActivityControls(city, s, money) {
     const season = currentSeason();
-    el.activityControls.innerHTML = city.activities
-      .map((act) => {
-        const priceText = describeActivityPrice(act, season, money);
-        const label = `<span class="activity-label">${esc(act.title)}<small>${esc(priceText)}</small></span>`;
+    const row = (act) => {
+      const price = describeActivityPrice(act, season, money);
+      const tag = act.tag ? `<span class="act-tag">${esc(act.tag)}</span>` : "";
+      const note = price.note ? ` · ${esc(price.note)}` : "";
+      const label = `<span class="activity-label"><span class="act-title">${esc(act.title)}${tag}</span><small><b>${esc(price.price)}</b>${note}</small></span>`;
+      const toggle = (on, attrs, extra = "") =>
+        `<button type="button" class="toggle-btn ${on ? "active" : ""}" ${attrs} aria-pressed="${on}">${on ? "✓ 포함" : "추가"}${extra}</button>`;
 
-        if (act.kind === "toggle") {
-          const on = Boolean(s.activities[act.id]);
-          const disabledNote = act.perUnitOf && !Number(s.activities[act.perUnitOf] || 0) ? " (USJ 0일)" : "";
-          return `
-            <div class="activity-row">
-              ${label}
-              <button type="button" class="toggle-btn ${on ? "active" : ""}" data-activity-toggle="${esc(act.id)}" aria-pressed="${on}">${on ? "ON" : "OFF"}${disabledNote}</button>
-            </div>
-          `;
-        }
+      if (act.kind === "toggle") {
+        const on = Boolean(s.activities[act.id]);
+        const disabledNote = act.perUnitOf && !Number(s.activities[act.perUnitOf] || 0) ? " (USJ 0일)" : "";
+        return `<div class="activity-row is-compact">${label}${toggle(on, `data-activity-toggle="${esc(act.id)}"`, disabledNote)}</div>`;
+      }
 
-        const selected = Number(s.activities[act.id] || 0);
-        const buttons = [];
-        for (let qty = act.min ?? 0; qty <= (act.max ?? 0); qty += 1) {
-          const active = qty === selected;
-          buttons.push(
-            `<button type="button" class="qty-btn ${active ? "active" : ""}" data-activity="${esc(act.id)}" data-qty="${qty}" aria-pressed="${active}">${qty}</button>`
-          );
-        }
-        return `
-          <div class="activity-row">
-            ${label}
-            <div class="qty-group" role="group" aria-label="${esc(act.title)}">${buttons.join("")}</div>
-          </div>
-        `;
-      })
-      .join("");
+      const selected = Number(s.activities[act.id] || 0);
+      const min = act.min ?? 0;
+      const max = act.max ?? 0;
+      // "0 or 1 time" is a yes/no like the toggles above, so it gets the same button.
+      if (min === 0 && max === 1) {
+        return `<div class="activity-row is-compact">${label}${toggle(selected > 0, `data-activity="${esc(act.id)}" data-qty="${selected > 0 ? 0 : 1}"`)}</div>`;
+      }
+      const buttons = [];
+      for (let qty = min; qty <= max; qty += 1) {
+        const active = qty === selected;
+        buttons.push(
+          `<button type="button" class="qty-btn ${active ? "active" : ""}" data-activity="${esc(act.id)}" data-qty="${qty}" aria-pressed="${active}" aria-label="${qty}회">${qty}</button>`
+        );
+      }
+      return `
+        <div class="activity-row ${max - min <= 2 ? "is-compact" : ""}">
+          ${label}
+          <div class="qty-group" role="group" aria-label="${esc(act.title)} 횟수">${buttons.join("")}</div>
+        </div>
+      `;
+    };
+
+    // A city can sort its long list under headings by the part of the day each item takes.
+    const groups = (city.activityGroups || [])
+      .map((group) => ({ label: group.label, items: city.activities.filter((act) => group.slots.includes(act.slot)) }))
+      .filter((group) => group.items.length);
+    const grouped = groups.length && sum(groups.map((group) => group.items.length)) === city.activities.length;
+    el.activityControls.innerHTML = grouped
+      ? groups
+          .map((group) => {
+            const picked = group.items.filter((act) => (act.kind === "toggle" ? s.activities[act.id] : Number(s.activities[act.id] || 0) > 0)).length;
+            return `
+              <div class="activity-group">
+                <p class="group-label">${esc(group.label)} <small>${picked}/${group.items.length} 선택</small></p>
+                ${group.items.map(row).join("")}
+              </div>
+            `;
+          })
+          .join("")
+      : city.activities.map(row).join("");
   }
 
   function renderSummaries(city, s, result) {
@@ -1080,6 +1244,7 @@
     set("summary-flight", titleOf(city.flights, s.flightId));
     set("summary-airport", titleOf(airportOptionsFor(city, findById(city.flights, s.flightId)), s.airportId));
     set("summary-parking", result.parking ? `${result.parking.short || result.parking.title} · ${formatManwon(result.breakdown.parking.mean)}` : "");
+    set("summary-data", result.dataPlan ? result.dataPlan.short || result.dataPlan.title : "");
     set("summary-roomConfig", result.roomSummary);
     set("summary-stayA", titleOf(city.staysA, s.stayAId));
     set("summary-stayB", titleOf(city.staysB, s.stayBId));
@@ -1116,18 +1281,24 @@
     const dates = `${formatDate(result.startDate)}–${formatDate(addDays(result.startDate, result.nights))}`;
     el.resultContext.textContent = `${city.name} · ${currentDuration().title} · ${dates} · 연차 ${result.leaveDays}일`;
     const pp = result.perPerson;
-    el.perPersonTotal.textContent = `약 ${formatManwon(pp.mean)} / 1인`;
-    el.perPersonBand.textContent = `80% 범위 ${formatBand(pp.band)}`;
-    el.groupTotal.textContent = `총액 약 ${formatManwon(result.total.mean)} (${formatBand(result.total.band)}) · ${result.people}명 · ${result.money.fx.title}`;
+    el.perPersonTotal.textContent = `약 ${formatManwon(pp.mean)}`;
+    el.perPersonBand.textContent = `80% 확률로 ${formatBand(pp.band)}`;
+    el.groupTotalLabel.textContent = result.people > 1 ? `${result.people}명 총액` : "총액";
+    el.groupTotal.textContent = `약 ${formatManwon(result.total.mean)}`;
+    el.groupTotalSub.textContent = `${formatBand(result.total.band)} · ${result.money.fx.title}`;
     const month = perRxMonth(result);
     el.perMonth.hidden = !month;
     if (month) {
-      el.perMonth.innerHTML = `처방 1개월분당 <strong>약 ${esc(formatManwon(month.mean))}</strong> (${esc(formatBand(month.band))})<small>${result.people}명 여행 총액 ÷ ${esc(formatMonths(month.months))} · 그중 약값·진료비 ${esc(formatManwon(month.drug))}</small>`;
+      el.perMonthValue.textContent = `약 ${formatManwon(month.mean)}`;
+      el.perMonthLabel.textContent = `처방 1개월분당 (총액 ÷ ${formatMonths(month.months)})`;
+      el.perMonthSub.textContent = `${formatBand(month.band)} · 그중 약값·진료비 ${formatManwon(month.drug)}`;
     }
     // A route open only to some patients (e.g. online sale limited to diabetes) says so next to the price.
     if (el.rxCondition) {
       el.rxCondition.hidden = !result.clinic.eligibility;
-      el.rxCondition.textContent = result.clinic.eligibility ? `${result.clinic.short}: ${result.clinic.eligibility}` : "";
+      el.rxCondition.innerHTML = result.clinic.eligibility
+        ? `<strong class="warn-tag">조건</strong>${esc(result.clinic.short)}: ${esc(result.clinic.eligibility)}`
+        : "";
     }
     if (el.breakdownUnit) el.breakdownUnit.textContent = result.people > 1 ? `${result.people}명 합계` : "";
 
@@ -1142,25 +1313,36 @@
       ["식비", b.meal, `${result.mealDays}일 기준`],
       [city.airportRow || "공항 이동", b.airport, titleOf(airportOptionsFor(city, findById(city.flights, cityState().flightId)), cityState().airportId)],
       ["시내 교통", b.transport, titleOf(city.transports, cityState().transportId)],
+      ["인터넷", b.data, result.dataPlan ? result.dataPlan.short || result.dataPlan.title : ""],
       ["근교 이동", b.excursion, result.stayB ? `${result.stayB.short || result.stayB.title} 왕복` : ""],
-      ["액티비티", b.activities, ""],
+      ["액티비티", b.activities, result.activityCount ? `관광·이색 식사 ${result.activityCount}가지` : ""],
       ["예비비", b.contingency, `예상 합계의 ${pct(calculationRules.contingencyRate)} · 범위에 영향 없음`],
     ].filter(([label, line]) => {
       if (label === "국내 공항 주차") return Boolean(result.parking);
+      if (label === "인터넷") return Boolean(result.dataPlan);
       return (label !== "근교 이동" && label !== taxLabel(result.country)) || line.hi > 0;
     });
 
-    el.breakdown.innerHTML = rows
-      .map(([label, line, note]) => {
-        const detail = lineDetail(line);
-        return `
-          <li>
-            <span>${esc(label)}${note ? `<small>${esc(note)}</small>` : ""}</span>
-            <strong>${formatManwon(line.mean)}${detail ? `<small class="${line.locked ? "is-locked" : ""}">${esc(detail)}</small>` : ""}</strong>
-          </li>
-        `;
-      })
-      .join("");
+    // The bar under each row is its share of the largest row, so the big items stand out at a glance.
+    const largest = Math.max(1, ...rows.map(([, line]) => line.mean));
+    el.breakdown.innerHTML =
+      rows
+        .map(([label, line, note]) => {
+          const detail = lineDetail(line);
+          const share = Math.max(0, Math.min(100, (line.mean / largest) * 100));
+          return `
+            <li>
+              <span>${esc(label)}${note ? `<small>${esc(note)}</small>` : ""}</span>
+              <strong>${formatManwon(line.mean)}${detail ? `<small class="${line.locked ? "is-locked" : ""}">${esc(detail)}</small>` : ""}</strong>
+              <span class="share-bar" aria-hidden="true"><span style="width:${share.toFixed(1)}%"></span></span>
+            </li>
+          `;
+        })
+        .join("") +
+      `<li class="is-total">
+        <span>합계${result.people > 1 ? `<small>1인 약 ${formatManwon(result.perPerson.mean)}</small>` : ""}</span>
+        <strong>${formatManwon(result.total.mean)}<small>${esc(formatBand(result.total.band))}</small></strong>
+      </li>`;
   }
 
   function lineDetail(line) {
@@ -1205,25 +1387,55 @@
   }
 
   function renderTimeline(plan, warnings) {
-    const itemsHtml = (items) => `<span class="day-items">${items.map((item) => `<span>${esc(item)}</span>`).join("")}</span>`;
-    const pre = plan.preTrip.length
-      ? `<li class="is-pre"><strong>출발 전</strong>${itemsHtml(plan.preTrip)}</li>`
-      : "";
-    el.timeline.innerHTML =
-      pre +
-      plan.days
-        .map(
-          (day, index) => `
-          <li class="${day.rx ? "is-rx" : ""}">
-            <strong>Day${index + 1}</strong> <span class="day-date">${esc(formatDate(day.date))}</span>${day.night ? `<span class="day-night">${esc(day.night)} 숙박</span>` : ""}
-            ${itemsHtml(day.items)}
+    // A line that starts with a time of day ("저녁 와이탄 야경") shows that word in its own column.
+    const itemHtml = (item) => {
+      const slot = item.match(DAY_SLOT);
+      const text = slot ? item.slice(slot[0].length) : item;
+      return `<li><span class="day-slot">${slot ? esc(slot[1]) : ""}</span><span>${esc(text)}</span></li>`;
+    };
+    el.timeline.innerHTML = plan.days
+      .map(
+        (day, index) => `
+          <li class="day ${day.rx ? "is-rx" : ""}">
+            <div class="day-head">
+              <strong class="day-num">Day${index + 1}</strong>
+              <span class="day-date">${esc(formatDate(day.date))}</span>
+              ${day.rx ? `<span class="day-tag">처방일</span>` : ""}
+              ${day.night ? `<span class="day-night">${esc(day.night)} 숙박</span>` : `<span class="day-night">귀국</span>`}
+            </div>
+            <ul class="day-items">${day.items.map(itemHtml).join("")}</ul>
           </li>
         `
-        )
-        .join("");
+      )
+      .join("");
+
+    // Pre-trip to-dos in date order, each with a checkbox remembered per browser.
+    el.pretripBlock.hidden = !plan.preTrip.length;
+    el.pretripList.innerHTML = plan.preTrip
+      .map((step) => {
+        const done = Boolean(state.ui.done[step.text]);
+        return `
+          <li class="${done ? "is-done" : ""}">
+            <label>
+              <input type="checkbox" data-done="${esc(step.text)}" ${done ? "checked" : ""} />
+              <span class="check-when">${esc(step.when)}</span>
+              <span class="check-text">${esc(step.text)}</span>
+            </label>
+          </li>
+        `;
+      })
+      .join("");
+    renderPretripCount();
 
     el.timelineWarning.hidden = !warnings.length;
-    el.timelineWarning.innerHTML = warnings.map((warning) => esc(warning.text)).join("<br />");
+    el.timelineWarning.innerHTML = warningsHtml(warnings);
+  }
+
+  function renderPretripCount() {
+    const boxes = Array.from(el.pretripList.querySelectorAll("input[data-done]"));
+    const done = boxes.filter((box) => box.checked).length;
+    el.pretripCount.textContent = boxes.length ? `${done}/${boxes.length} 완료` : "";
+    el.pretripCount.classList.toggle("is-complete", boxes.length > 0 && done === boxes.length);
   }
 
   // The three slots are built once and then updated in place, so a quote input keeps focus across renders.
@@ -1288,7 +1500,7 @@
           }
         : null,
       stayA: {
-        label: `처방 후 · ${stayA.title} ${formatDate(checkoutPre)}–${formatDate(checkoutA)}`,
+        label: `${result.lodgingPre ? "처방 후" : "숙소"} · ${stayA.title} ${formatDate(checkoutPre)}–${formatDate(checkoutA)}`,
         sub: `Booking.com · ${roomType(stayA)} ${result.roomsA}${unitWord(stayA)} · 객실 냉장고 확인`,
         href: bookingUrl(stayA.booking || city.bookingCity, checkoutPre, checkoutA, result.roomsA, stayA.bookingFilter),
       },
@@ -1370,17 +1582,29 @@
     const groups = [
       ["반입 · 보관 · 복용", rx.notes || []],
       [`${country.name} 처방 · 결제`, country.rxNotes || []],
+      ...(city.noteGroups || []).map((group) => [group.title, group.notes || []]),
       [city.name, cityNotes],
       ["숙박 · 항공", notes],
     ].filter(([, list]) => list.length);
+    // Each topic folds; which ones are open is kept in the DOM across renders by updating in place.
+    const open = new Set(Array.from(el.notes.querySelectorAll("details[open]")).map((node) => node.dataset.group));
+    const first = !el.notes.children.length;
     el.notes.innerHTML = groups
       .map(
-        ([title, list]) =>
-          `<li class="note-group"><p class="note-group-title">${esc(title)}</p><ul class="note-list">${list
-            .map((note) => `<li>${esc(note)}</li>`)
-            .join("")}</ul></li>`
+        ([title, list], index) =>
+          `<details class="fold note-group" data-group="${esc(title)}" ${(first ? index === 0 : open.has(title)) ? "open" : ""}>
+            <summary><span class="note-group-title">${esc(title)}</span><span class="fold-count">${list.length}</span></summary>
+            <ul class="note-list">${list.map((note) => `<li>${noteHtml(note)}</li>`).join("")}</ul>
+          </details>`
       )
       .join("");
+  }
+
+  // "택배 수령: 받는 사람은…" → the short topic before the colon is set in bold so the list can be scanned.
+  function noteHtml(note) {
+    const lead = String(note).match(/^([^:.]{2,16}): /);
+    if (!lead) return esc(note);
+    return `<strong class="note-lead">${esc(lead[1])}</strong>${esc(String(note).slice(lead[0].length))}`;
   }
 
   function renderEvidence() {
@@ -1436,7 +1660,7 @@
 
   function collectCitySources(city) {
     const items = [];
-    [city.clinics, city.flights, city.airportTransfers, city.staysPre, city.staysA, city.staysB, city.transports, city.activities].forEach((list) => {
+    [city.clinics, city.flights, city.airportTransfers, city.homeParking, city.dataPlans, city.staysPre, city.staysA, city.staysB, city.transports, city.activities].forEach((list) => {
       (list || []).forEach((item) => {
         if (item.sourceRef) items.push(item.sourceRef);
         if (item.sourceRef2) items.push(item.sourceRef2);
@@ -1603,9 +1827,13 @@
     const parking = findById(parkingOptions, s.parkingId) || parkingOptions[0] || null;
     const parkingLine = parking ? estimate(parkingCost(parking, nights, people)) : exact(0);
     const excursionLine = stayB ? fromLocal(local(stayB, "transferPerPerson"), people) : exact(0);
+    // Mobile data (KRW per person), when the city lists plans
+    const dataPlan = findById(city.dataPlans, s.dataId) || (city.dataPlans || [])[0] || null;
+    const dataLine = dataPlan ? estimate(dataPlan.perPersonKRW, people) : exact(0);
 
     // Activities: each ticket is its own estimate
     const activityLines = [];
+    let activityCount = 0;
     const fullDayLabels = [];
     let cashActivities = [0, 0];
     city.activities.forEach((act) => {
@@ -1613,6 +1841,7 @@
       let qty = act.kind === "toggle" ? (value ? 1 : 0) : Number(value || 0);
       if (act.perUnitOf) qty = qty ? Number(s.activities[act.perUnitOf] || 0) : 0;
       if (qty <= 0) return;
+      activityCount += 1;
 
       if (act.slot === "full") fullDayLabels.push(qty > 1 ? `${shortTitle(act.title)} ×${qty}` : shortTitle(act.title));
 
@@ -1649,6 +1878,7 @@
       meal: mealLine,
       airport: airportLine,
       transport: transportLine,
+      data: dataLine,
       excursion: excursionLine,
       activities: sumLines(...activityLines),
     };
@@ -1695,6 +1925,8 @@
       stayB,
       clinic,
       parking,
+      dataPlan,
+      activityCount,
       parkingNote: parking ? parkingNoteFor(parking, nights, people) : "",
       rxPlan,
       rxPatients,
@@ -2039,6 +2271,11 @@
       });
     }
 
+    // A data plan on the local network: the sites the travellers are used to do not open.
+    if (result.dataPlan && result.dataPlan.blockedNote) {
+      warnings.push({ scopes: ["data"], conflict: false, text: result.dataPlan.blockedNote });
+    }
+
     const activityQueue = (slot) => {
       const list = [];
       city.activities.forEach((act) => {
@@ -2125,6 +2362,8 @@
       const items = [];
       if (day.morning) items.push(day.morning);
       if (day.kind === "arrival") {
+        // What to do about mobile data on landing comes first, ahead of the ride into town.
+        const landing = items.length;
         const when = morningArrival ? "오전" : afternoonArrival ? "오후" : "밤";
         if (day.rx && clinic.pickupLate) {
           items.push(`${when} ${flight.airport} 도착 → ${airportIn} → ${day.night} 체크인`);
@@ -2136,6 +2375,7 @@
         } else {
           items.push(`${when} ${flight.airport} 도착 → ${airportIn} → ${day.night} 체크인`);
         }
+        if (result.dataPlan && result.dataPlan.onArrival) items.splice(landing, 0, result.dataPlan.onArrival);
       } else if (day.kind === "departure") {
         const checkout = `${result.stayB ? result.stayB.short || "B숙소" : postShort} 체크아웃`;
         if (day.lunch) {
@@ -2167,28 +2407,34 @@
     });
 
     // Pre-trip steps in date order: the clinic's booking step plus the city's own checklist.
+    // Each step is { when, text }: when it is due (shown as a column) and what to do.
     const steps = [];
     if (clinic.book) {
       const booking = bookingStep(clinic, rxDate, planText);
-      steps.push({ date: addDays(rxDate, -clinic.book.daysBefore), order: 0, text: `${booking.when} ${booking.text}` });
+      steps.push({ date: addDays(rxDate, -clinic.book.daysBefore), order: 0, when: booking.when, text: booking.text });
     } else {
-      steps.push({ date: rxDate, order: 0, text: `${clinic.short} ${formatDate(rxDate)} 오전 진료 예약 · ${planText} 재고 확인` });
+      // An appointment has no due date of its own; the sooner the better, so it leads the list.
+      steps.push({ date: "", order: 0, when: "미리", text: `${clinic.short} ${formatDate(rxDate)} 오전 진료 예약 · ${planText} 재고 확인` });
     }
     // Ordered from home the night before departure, so it lands on arrival day.
     if (clinic.eveAhead && rxIdx === 0) {
       const date = addDays(result.startDate, -1);
-      steps.push({ date, order: 99, text: `${formatDate(date)} ${clinic.eveAhead}` });
+      steps.push({ date, order: 99, when: formatDate(date), text: clinic.eveAhead });
     }
     (city.preTrip || []).forEach((item, i) => {
       const date = addDays(result.startDate, -Number(item.daysBefore || 0));
-      const when = item.daysBefore ? `${formatDate(date)}쯤` : `${formatDate(date)} 출발일`;
-      steps.push({ date, order: i + 1, text: `${when} ${item.text}` });
+      steps.push({
+        date,
+        order: i + 1,
+        when: item.daysBefore ? `${formatDate(date)}쯤` : formatDate(date),
+        text: item.daysBefore ? item.text : `출발일 · ${item.text}`,
+      });
     });
     steps.sort((a, b) => (a.date === b.date ? a.order - b.order : a.date < b.date ? -1 : 1));
-    const preTrip = steps.map((step) => step.text);
+    const preTrip = steps.map(({ when, text }) => ({ when, text }));
     const money = result.money;
     const cashToCarry = roundUp(result.cash.total[1], money.currency.cashStep);
-    preTrip.push(`${money.currency.name} 현금 약 ${money.format([cashToCarry, cashToCarry])} 준비 ('처방 준비' 탭에 내역)`);
+    preTrip.push({ when: "출발 전", text: `${money.currency.name} 현금 약 ${money.format([cashToCarry, cashToCarry])} 준비 ('처방 준비' 탭에 내역)` });
 
     return { days, overflow, warnings, preTrip };
   }
@@ -2274,16 +2520,17 @@
     return (peak && money.of(act, "peakAdult")) || money.of(act, "adult") || [0, 0];
   }
 
+  // { price, note }: the price is shown first and stronger, the note after it.
   function describeActivityPrice(act, season, money) {
-    if (money.of(act, "group")) return "무료";
+    const group = money.of(act, "group");
     const peak = season.parkTier === "peak";
-    const price = activityPrice(act, peak, money);
-    const parts = [price[1] === 0 ? "무료" : `1인 ${money.format(price)}`];
-    if (act.tag) parts.unshift(act.tag);
-    if (act.note) parts.push(act.note);
-    if (act.cash) parts.push("현금 위주");
-    if (peak && money.of(act, "peakAdult")) parts.push("성수기 등급");
-    return parts.join(" · ");
+    const amount = group || activityPrice(act, peak, money);
+    const free = amount[1] === 0;
+    // A note that itself says "무료" would only repeat the price.
+    const notes = (act.note ? act.note.split(" · ") : []).filter((part) => !(free && part === "무료"));
+    if (act.cash) notes.push("현금 위주");
+    if (!group && peak && money.of(act, "peakAdult")) notes.push("성수기 등급");
+    return { price: free ? "무료" : `${group ? "일행" : "1인"} ${money.format(amount)}`, note: notes.join(" · ") };
   }
 
   // filter: Booking.com nflt value, e.g. "class=4" for 4-star results only.

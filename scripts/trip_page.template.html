@@ -16,12 +16,16 @@
 <body>
   <a class="skip-link" href="#result-panel">결과로 건너뛰기</a>
   <header class="topbar">
+    <p class="eyebrow">{{EYEBROW}}</p>
     <h1>{{H1}}</h1>
-    <p>{{INTRO}}</p>
-    <nav class="page-switch" aria-label="다른 나라 일정">
-      <span class="page-switch-label">다른 일정</span>
-      <a href="{{OTHER_HREF}}">{{OTHER_LABEL}}</a>
-    </nav>
+    <p class="lede">{{INTRO}}</p>
+    <div class="topbar-meta">
+      <span class="meta-chip">가격은 <strong id="head-asof">-</strong> 기준 추정치</span>
+      <nav class="page-switch" aria-label="다른 나라 일정">
+        <span class="page-switch-label">다른 일정</span>
+        <a href="{{OTHER_HREF}}">{{OTHER_LABEL}} →</a>
+      </nav>
+    </div>
   </header>
 
   <main class="layout">
@@ -33,9 +37,9 @@
           <button id="reset-state" class="mini-btn" type="button">초기화</button>
         </div>
       </div>
-      <p class="field-note panel-hint">카드의 <span class="delta is-up">+금액</span> <span class="delta is-down">−금액</span>은 그 카드로 바꿨을 때 1인 평균이 달라지는 금액입니다.</p>
+      <p class="field-note panel-hint">카드를 고르면 일정과 금액이 바로 바뀝니다. <span class="delta is-up">+금액</span> <span class="delta is-down">−금액</span>은 그 카드로 바꿀 때 1인 비용이 달라지는 폭입니다.</p>
 
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">1</span>언제 · 어디로</h3>
+      <h3 class="step-title"><span class="step-num" aria-hidden="true">1</span>{{STEP1_TITLE}}</h3>
 
       <div class="category is-open" data-section="city">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-city">
@@ -66,12 +70,18 @@
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
         <div class="category-body" id="cat-schedule">
-          <p class="group-label">출발 방식</p>
-          <div id="departure-options" class="card-grid"></div>
-          <p class="group-label">기간</p>
-          <div id="duration-options" class="card-grid"></div>
-          <p class="group-label">출발 시기</p>
-          <div id="season-options" class="card-grid"></div>
+          <div class="card-group">
+            <p class="group-label">출발 방식</p>
+            <div id="departure-options" class="card-grid"></div>
+          </div>
+          <div class="card-group">
+            <p class="group-label">기간</p>
+            <div id="duration-options" class="card-grid"></div>
+          </div>
+          <div class="card-group">
+            <p class="group-label">출발 시기</p>
+            <div id="season-options" class="card-grid"></div>
+          </div>
         </div>
       </div>
 
@@ -95,11 +105,15 @@
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
         <div class="category-body" id="cat-rx">
-          <p id="label-rxPlan" class="group-label">용량 · 수량</p>
-          <div id="rxPlan-options" class="card-grid"></div>
-          <p class="group-label">처방일 (이날 밤부터 2인 1실)</p>
-          <div id="rxDay-options" class="card-grid"></div>
-          <p id="warn-rx" class="warn warn-inline" role="status" hidden></p>
+          <div class="card-group">
+            <p id="label-rxPlan" class="group-label">용량 · 수량</p>
+            <div id="rxPlan-options" class="card-grid"></div>
+          </div>
+          <div class="card-group">
+            <p id="label-rxDay" class="group-label">처방일 (이날 밤부터 2인 1실)</p>
+            <div id="rxDay-options" class="card-grid"></div>
+          </div>
+          <div id="warn-rx" class="warn-list" role="status" hidden></div>
           <div id="rxPatients-controls"></div>
         </div>
       </div>
@@ -113,8 +127,8 @@
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
         <div class="category-body" id="cat-clinic">
-          <div id="clinic-options" class="card-grid"></div>
-          <p id="warn-clinic" class="warn warn-inline" role="status" hidden></p>
+          <div id="clinic-options" class="card-grid card-grid-wide"></div>
+          <div id="warn-clinic" class="warn-list" role="status" hidden></div>
         </div>
       </div>
 
@@ -153,6 +167,18 @@
         </div>
       </div>
 
+      <div class="category is-open" data-section="data" id="section-data" hidden>
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-data">
+          <span class="category-title">인터넷 (eSIM · 로밍)</span>
+          <span id="summary-data" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body" id="cat-data">
+          <div id="data-options" class="card-grid card-grid-wide"></div>
+          <div id="warn-data" class="warn-list" role="status" hidden></div>
+        </div>
+      </div>
+
       <div class="category is-open" data-section="stayPre">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayPre">
           <span id="title-stayPre" class="category-title">처방 전 숙소 · 초저가</span>
@@ -166,7 +192,7 @@
 
       <div class="category is-open" data-section="roomConfig">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-roomConfig">
-          <span class="category-title">처방 후 객실 구성</span>
+          <span id="title-roomConfig" class="category-title">처방 후 객실 구성</span>
           <span id="summary-roomConfig" class="category-summary"></span>
           <span class="category-arrow" aria-hidden="true">▾</span>
         </button>
@@ -194,7 +220,7 @@
         </button>
         <div class="category-body" id="cat-stayB">
           <div id="stayB-options" class="card-grid"></div>
-          <p id="warn-stayB" class="warn warn-inline" role="status" hidden></p>
+          <div id="warn-stayB" class="warn-list" role="status" hidden></div>
         </div>
       </div>
 
@@ -222,18 +248,6 @@
         </div>
       </div>
 
-      <div class="category is-open" data-section="activities">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activities">
-          <span id="title-activities" class="category-title">액티비티</span>
-          <span id="summary-activities" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-activities">
-          <p id="warn-activities" class="warn warn-inline" role="status" hidden></p>
-          <div id="activity-controls"></div>
-        </div>
-      </div>
-
       <div class="category is-open" data-section="activityPacks">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activityPacks">
           <span class="category-title">액티비티 팩 (한 번에 고르기)</span>
@@ -244,16 +258,42 @@
           <div id="activityPack-options" class="card-grid"></div>
         </div>
       </div>
+
+      <div class="category is-open" data-section="activities">
+        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activities">
+          <span id="title-activities" class="category-title">액티비티</span>
+          <span id="summary-activities" class="category-summary"></span>
+          <span class="category-arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="category-body" id="cat-activities">
+          <div id="warn-activities" class="warn-list" role="status" hidden></div>
+          <div id="activity-controls"></div>
+        </div>
+      </div>
     </section>
 
     <section class="panel panel-right" id="result-panel" aria-label="결과" tabindex="-1">
       <div class="result-head">
-        <h2>결과 <small>1인 평균</small></h2>
-        <p class="result-context" id="result-context">-</p>
-        <p class="big-number"><span id="per-person-total" aria-live="polite">-</span><span id="result-delta" class="delta-flash" hidden></span></p>
-        <p class="result-band" id="per-person-band">-</p>
-        <p class="result-total" id="group-total">-</p>
-        <p class="result-month" id="per-month" hidden></p>
+        <div class="result-top">
+          <h2>1인 예상 비용</h2>
+          <p class="result-context" id="result-context">-</p>
+        </div>
+        <div class="result-main">
+          <p class="big-number"><span id="per-person-total" aria-live="polite">-</span><span id="result-delta" class="delta-flash" hidden></span></p>
+          <p class="result-band" id="per-person-band">-</p>
+        </div>
+        <dl class="result-stats">
+          <div class="stat">
+            <dt id="group-total-label">총액</dt>
+            <dd class="stat-value" id="group-total">-</dd>
+            <dd class="stat-sub" id="group-total-sub"></dd>
+          </div>
+          <div class="stat" id="per-month" hidden>
+            <dt id="per-month-label">처방 1개월분당</dt>
+            <dd class="stat-value" id="per-month-value">-</dd>
+            <dd class="stat-sub" id="per-month-sub"></dd>
+          </div>
+        </dl>
         <p class="result-cond" id="rx-condition" hidden></p>
       </div>
 
@@ -266,13 +306,17 @@
 
       <div class="result-scroll" id="result-scroll">
         <div class="tab-panel" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
-          <p id="timeline-warning" class="warn" role="status" hidden></p>
-          <ul id="timeline-list" class="timeline-list"></ul>
-          <p class="field-note">날짜 옆은 그날 밤 숙소, 색칠된 날은 처방일입니다.</p>
+          <div id="timeline-warning" class="warn-list" role="status" hidden></div>
+          <details class="fold pretrip" id="pretrip-block" open>
+            <summary><span class="pretrip-title">출발 전 할 일</span><span id="pretrip-count" class="fold-count"></span></summary>
+            <ul id="pretrip-list" class="check-list"></ul>
+          </details>
+          <ol id="timeline-list" class="timeline-list"></ol>
+          <p class="field-note">날짜 옆 회색 표시는 그날 밤 숙소입니다. 끝낸 할 일에 체크하면 이 브라우저에 저장됩니다.</p>
         </div>
 
         <div class="tab-panel" id="panel-cost" role="tabpanel" aria-labelledby="tab-cost" hidden>
-          <div class="result-block">
+          <div class="result-block" id="compare-block">
             <h3>도시 비교</h3>
             <table class="compare-table">
               <thead>
@@ -291,13 +335,14 @@
           <div class="result-block">
             <h3>항목별 비용 <small id="breakdown-unit"></small></h3>
             <ul id="breakdown-list" class="breakdown-list"></ul>
-            <p class="field-note">큰 숫자는 예상값, 작은 숫자는 80% 범위입니다. 모든 항목이 한꺼번에 최고가가 되지는 않으므로 합계 범위는 항목 범위를 그냥 더한 것보다 좁습니다.</p>
+            <p class="field-note">큰 숫자는 예상값, 작은 숫자는 80% 확률로 들어오는 범위입니다. 모든 항목이 한꺼번에 최고가가 되지는 않으므로 합계 범위는 항목 범위를 그냥 더한 것보다 좁습니다.</p>
+            <p class="field-note">항공·숙박은 예약 사이트에서 확인한 가격을 넣으면 추정 대신 그 값으로 계산합니다. <button type="button" class="link-btn" data-goto-tab="book">확정가 넣으러 가기</button></p>
           </div>
         </div>
 
         <div class="tab-panel" id="panel-rx" role="tabpanel" aria-labelledby="tab-rx" hidden>
           <div class="result-block">
-            <h3>처방 준비 체크리스트</h3>
+            <h3>처방 준비 · 확인할 것</h3>
             <ul id="rx-prep" class="note-list"></ul>
           </div>
 
@@ -312,12 +357,12 @@
           <div class="result-block">
             <h3>실시간 가격 확인 · 확정가 입력</h3>
             <ul id="check-links" class="link-list"></ul>
-            <p class="field-note">링크에서 확인한 가격을 넣으면 추정 대신 그 값으로 계산합니다. 날짜·인원·객실·카드를 바꾸면 잠시 빠지고, 원래 조건으로 돌아오면 다시 들어갑니다. 도시마다 따로 저장됩니다.</p>
+            <p id="quote-note" class="field-note">링크에서 확인한 가격을 넣으면 추정 대신 그 값으로 계산합니다. 날짜·인원·객실·카드를 바꾸면 잠시 빠지고, 원래 조건으로 돌아오면 다시 들어갑니다.</p>
           </div>
 
           <div class="result-block">
             <h3>메모</h3>
-            <ul id="note-list" class="note-list"></ul>
+            <div id="note-list" class="note-groups"></div>
           </div>
 
           <div class="result-actions">
@@ -333,7 +378,7 @@
       <strong><span id="mobile-bar-total">-</span><span id="mobile-bar-delta" class="delta-flash" hidden></span></strong>
       <span id="mobile-bar-sub" class="mobile-bar-sub">-</span>
     </div>
-    <button id="mobile-bar-jump" class="mobile-bar-btn" type="button">옵션 바꾸기 ↓</button>
+    <button id="mobile-bar-jump" class="mobile-bar-btn" type="button">카드 고르기 ↓</button>
   </div>
 
   <div id="toast" class="toast" role="status" hidden>
