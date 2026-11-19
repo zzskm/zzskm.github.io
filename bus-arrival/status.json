@@ -1,34 +1,26 @@
 {
-  "last_poll": "2026-11-19T19:33:51+09:00",
-  "last_poll_local": "2026-11-19 19:33:53+09:00",
+  "last_poll": "2026-11-19T19:35:45+09:00",
+  "last_poll_local": "2026-11-19 19:35:46+09:00",
   "error": "no_bus",
   "secondary_station_id": 205000029,
   "secondary_mobile_no": "06004",
-  "daily_calls": 139,
-  "last_success": "2026-11-19T19:33:51+09:00",
-  "primary_source": "station_list",
-  "data_source": "official",
+  "daily_calls": 140,
+  "last_success": "2026-11-19T19:35:45+09:00",
+  "primary_source": "kakao",
+  "data_source": "kakao",
   "source_attempts": [
     {
-      "source": "gbis_web",
-      "ok": false,
-      "error": {
-        "kind": "timeout",
-        "phase": "connect"
-      }
-    },
-    {
-      "source": "official",
+      "source": "kakao",
       "ok": true
     }
   ],
   "sources": {
     "official": {
-      "calls": 88,
-      "ok": 88,
+      "calls": 89,
+      "ok": 89,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-19T19:33:45+09:00"
+      "last_success": "2026-11-19T19:34:45+09:00"
     },
     "gbis_web": {
       "calls": 55,
@@ -42,11 +34,11 @@
       }
     },
     "kakao": {
-      "calls": 90,
-      "ok": 90,
+      "calls": 91,
+      "ok": 91,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-19T19:32:45+09:00"
+      "last_success": "2026-11-19T19:35:45+09:00"
     },
     "naver": {
       "calls": 84,
@@ -57,28 +49,28 @@
     }
   },
   "gbis_web": {
-    "ok": true,
-    "vehicles": 4,
-    "waiting_vehicles": 1,
-    "passes": 0,
-    "calls": 129,
-    "request_duration_sec": 0.927,
+    "ok": false,
+    "error_detail": {
+      "kind": "connection_error"
+    },
+    "consec_fail": 1,
+    "calls": 130,
+    "request_duration_sec": 0.558,
     "last_success": "2026-11-19T19:33:53+09:00"
   },
-  "station_route_count": 29,
   "consecutive_connect_timeouts": 0,
   "collect_window": "16:00-22:00",
   "poll_interval_sec": 60,
-  "api_request_started_at": "2026-11-19T19:33:45+09:00",
-  "api_response_received_at": "2026-11-19T19:33:52+09:00",
-  "api_request_duration_sec": 6.669,
+  "api_request_started_at": "2026-11-19T19:35:45+09:00",
+  "api_response_received_at": "2026-11-19T19:35:46+09:00",
+  "api_request_duration_sec": 0.866,
   "publish_interval_sec": 120,
   "urgent_publication": false,
   "publication_reason": "normal",
   "runtime_schema_version": 2,
   "model_status": "ready",
   "model_trained_through": "2026-11-18",
-  "publish_prepared_at": "2026-11-19T10:34:24.387059+00:00",
-  "poll_to_publish_prepare_sec": 33.387,
+  "publish_prepared_at": "2026-11-19T10:36:28.276450+00:00",
+  "poll_to_publish_prepare_sec": 43.276,
   "publication_stage": "prepared_not_deployed"
 }
