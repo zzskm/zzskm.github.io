@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-// Single source for the December 2026 trip pages.
+// Single source for the December 2026 Japan trip page.
+// (trip_2026_dec_china.html is maintained independently as a Shanghai dual-mode page.)
 //
 //   node scripts/build_trip_pages.mjs           regenerate the HTML files
 //   node scripts/build_trip_pages.mjs --check   fail if a file is out of date
 //
-// The shared page shell lives in scripts/trip_page.template.html. Only the
-// per-page copy below differs between Japan and China, so a shell change is
-// made once in the template and both pages are rebuilt together. Run the build
+// The page shell lives in scripts/trip_page.template.html. Run the build
 // after editing the template or this config, then commit the generated HTML.
 
 import fs from "node:fs";
@@ -34,24 +33,6 @@ const PAGES = [
     otherLabel: "상하이 · 청주 출발 11/28–12/1",
     costNote:
       "인원·일정·시기·환율은 공통, 나머지는 각 도시에서 고른 카드 기준입니다. 도시 이름을 누르면 그 도시로 전환합니다. 용량·수량이 다르면 총액보다 ‘1개월분당’으로 비교하세요.",
-  },
-  {
-    file: "trip_2026_dec_china.html",
-    title: "상하이 처방 여행 · 청주 출발",
-    metaDescription:
-      "청주공항에서 춘추항공으로 떠나는 2026년 11/28-12/1 상하이 여행. 4성급 호텔로 마운자로 냉장 택배를 받는 일정과 주차비 포함 1인 평균 견적",
-    ogTitle: "상하이 처방 여행 · 청주 출발",
-    ogDescription: "청주 출발 상하이 3박 4일 · 4성급 호텔 택배 수령 · 주차비 포함 1인 평균 견적",
-    dataSrc: "trip_2026_dec_china.data.js",
-    eyebrow: "청주 출발 · 11/28(토)–12/1(화) · 3박 4일",
-    h1: "상하이 처방 여행",
-    intro:
-      "청주공항에 차를 세우고 춘추항공으로 다녀오는 상하이 일정과 예상 비용입니다. 마운자로는 타오바오·징둥 냉장 택배로 호텔에서 받습니다. 그래서 프런트·컨시어지가 늘 있는 4성급 호텔 한 곳에 첫날부터 묵습니다. 주차비까지 넣은 금액입니다.",
-    step1Title: "일정 · 인원",
-    otherHref: "trip_2026_dec_japan.html",
-    otherLabel: "일본 · 후쿠오카 / 오사카 / 도쿄 / 쓰시마",
-    // 도시가 하나라 도시 비교표를 숨깁니다(엔진이 처리). 비교표 아래 안내문도 필요 없습니다.
-    costNote: "",
   },
 ];
 
