@@ -1,16 +1,24 @@
 {
-  "last_poll": "2026-11-19T17:15:31+09:00",
-  "last_poll_local": "2026-11-19 17:15:33+09:00",
+  "last_poll": "2026-11-19T17:17:36+09:00",
+  "last_poll_local": "2026-11-19 17:17:37+09:00",
   "error": "no_bus",
   "secondary_station_id": 205000029,
   "secondary_mobile_no": "06004",
   "daily_calls": 55,
-  "last_success": "2026-11-19T17:15:31+09:00",
-  "primary_source": "station_list_confirmed",
-  "data_source": "official",
+  "last_success": "2026-11-19T17:17:36+09:00",
+  "primary_source": "naver",
+  "data_source": "naver",
   "source_attempts": [
     {
-      "source": "official",
+      "source": "gbis_web",
+      "ok": false,
+      "error": {
+        "kind": "timeout",
+        "phase": "connect"
+      }
+    },
+    {
+      "source": "naver",
       "ok": true
     }
   ],
@@ -23,49 +31,52 @@
       "last_success": "2026-11-19T17:15:31+09:00"
     },
     "gbis_web": {
-      "calls": 24,
+      "calls": 25,
       "ok": 15,
-      "fail": 9,
-      "consec_fail": 0,
-      "last_success": "2026-11-19T17:13:31+09:00"
+      "fail": 10,
+      "consec_fail": 1,
+      "last_success": "2026-11-19T17:13:31+09:00",
+      "last_error": {
+        "kind": "timeout",
+        "phase": "connect"
+      }
     },
     "kakao": {
-      "calls": 32,
-      "ok": 32,
-      "fail": 0,
-      "consec_fail": 0,
-      "last_success": "2026-11-19T17:14:31+09:00"
-    },
-    "naver": {
       "calls": 33,
       "ok": 33,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-19T17:15:01+09:00"
+      "last_success": "2026-11-19T17:16:31+09:00"
+    },
+    "naver": {
+      "calls": 34,
+      "ok": 34,
+      "fail": 0,
+      "consec_fail": 0,
+      "last_success": "2026-11-19T17:17:31+09:00"
     }
   },
   "gbis_web": {
     "ok": false,
     "skipped": "backoff",
-    "retry_after": "2026-11-19T17:16:31+09:00",
-    "consec_fail": 3,
-    "calls": 39,
+    "retry_after": "2026-11-19T17:26:31+09:00",
+    "consec_fail": 4,
+    "calls": 40,
     "last_success": "2026-11-19T17:03:36+09:00"
   },
-  "station_route_count": 29,
   "consecutive_connect_timeouts": 0,
   "collect_window": "16:00-22:00",
   "poll_interval_sec": 60,
-  "api_request_started_at": "2026-11-19T17:15:31+09:00",
-  "api_response_received_at": "2026-11-19T17:15:33+09:00",
-  "api_request_duration_sec": 2.209,
+  "api_request_started_at": "2026-11-19T17:17:31+09:00",
+  "api_response_received_at": "2026-11-19T17:17:37+09:00",
+  "api_request_duration_sec": 6.205,
   "publish_interval_sec": 120,
   "urgent_publication": false,
   "publication_reason": "normal",
   "runtime_schema_version": 2,
   "model_status": "ready",
   "model_trained_through": "2026-11-18",
-  "publish_prepared_at": "2026-11-19T08:15:34.295967+00:00",
-  "poll_to_publish_prepare_sec": 3.296,
+  "publish_prepared_at": "2026-11-19T08:17:38.939503+00:00",
+  "poll_to_publish_prepare_sec": 2.94,
   "publication_stage": "prepared_not_deployed"
 }
