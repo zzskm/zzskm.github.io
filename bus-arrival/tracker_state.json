@@ -13,11 +13,11 @@
   "consec_fail": 0,
   "last_flag": "",
   "miss_count": 0,
-  "last_poll": "2026-11-20T19:51:42+09:00",
-  "last_success": "2026-11-20T19:51:42+09:00",
+  "last_poll": "2026-11-20T19:53:47+09:00",
+  "last_success": "2026-11-20T19:53:47+09:00",
   "last_location": null,
   "first_miss_ts": null,
-  "next_poll_ts": "2026-11-20T19:52:41+09:00",
+  "next_poll_ts": "2026-11-20T19:54:41+09:00",
   "near_stall_since": null,
   "near_stall_predict": null,
   "connection_health": {
@@ -47,22 +47,25 @@
     },
     "gbis_web": {
       "date": "2026-11-20",
-      "calls": 73,
+      "calls": 74,
       "ok": 56,
-      "fail": 17,
-      "consec_fail": 0,
+      "fail": 18,
+      "consec_fail": 1,
       "skip_until": null,
       "last_success": "2026-11-20T19:49:11+09:00",
-      "last_error": null
+      "last_error": {
+        "kind": "timeout",
+        "phase": "connect"
+      }
     },
     "kakao": {
       "date": "2026-11-20",
-      "calls": 90,
-      "ok": 90,
+      "calls": 92,
+      "ok": 92,
       "fail": 0,
       "consec_fail": 0,
       "skip_until": null,
-      "last_success": "2026-11-20T19:51:41+09:00",
+      "last_success": "2026-11-20T19:53:41+09:00",
       "last_error": null
     }
   },
@@ -80,38 +83,35 @@
     "204003593": "2026-11-20T19:51:42+09:00"
   },
   "rotation": {
-    "bag": [
-      "kakao",
-      "gbis_web"
-    ]
+    "bag": []
   },
   "gbis_web": {
     "date": "2026-11-20",
-    "calls": 174,
-    "last_call": "2026-11-20T19:51:11+09:00",
-    "consec_fail": 1,
+    "calls": 176,
+    "last_call": "2026-11-20T19:53:47+09:00",
+    "consec_fail": 0,
     "skip_until": null,
-    "last_success": "2026-11-20T19:50:16+09:00",
+    "last_success": "2026-11-20T19:53:49+09:00",
     "positions": {
       "204003593": {
-        "order": 5,
+        "order": 6,
         "bus_position": "2",
-        "ts": "2026-11-20T19:50:16+09:00"
+        "ts": "2026-11-20T19:53:49+09:00"
       },
       "204001378": {
-        "order": 14,
+        "order": 15,
         "bus_position": "2",
-        "ts": "2026-11-20T19:50:16+09:00"
+        "ts": "2026-11-20T19:53:49+09:00"
       },
       "204001377": {
-        "order": 26,
+        "order": 27,
         "bus_position": "2",
-        "ts": "2026-11-20T19:50:16+09:00"
+        "ts": "2026-11-20T19:53:49+09:00"
       },
       "204003591": {
-        "order": 34,
+        "order": 35,
         "bus_position": "2",
-        "ts": "2026-11-20T19:50:16+09:00"
+        "ts": "2026-11-20T19:53:49+09:00"
       },
       "204001379": {
         "order": 39,
