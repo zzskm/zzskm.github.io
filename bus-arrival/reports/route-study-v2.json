@@ -299,6 +299,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000146,
+      "route_name": "누리2",
+      "sta_order": 24,
+      "observed_days": 17,
+      "vehicle_events": 132,
+      "labelled_events": 115,
+      "matched": 57,
+      "nonmatched": 58,
+      "censored": 17,
+      "proxy_hit_rate": 0.496,
+      "target_absent_at_first_signal": 73,
+      "simultaneous_eta_pairs": 59,
+      "candidate_eta_before_target_eta": 40,
+      "median_simultaneous_lead_min": 1.43,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 57,
+        "candidate_hit_rate": 0.474,
+        "time_only_hit_rate": 0.545,
+        "difference_pp": -7.1,
+        "train_days": 10,
+        "test_days": 7
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000192,
       "route_name": "311",
       "sta_order": 84,
@@ -319,32 +345,6 @@
         "candidate_hit_rate": 0.542,
         "time_only_hit_rate": 0.637,
         "difference_pp": -9.4,
-        "train_days": 10,
-        "test_days": 7
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000146,
-      "route_name": "누리2",
-      "sta_order": 24,
-      "observed_days": 17,
-      "vehicle_events": 132,
-      "labelled_events": 114,
-      "matched": 57,
-      "nonmatched": 57,
-      "censored": 18,
-      "proxy_hit_rate": 0.5,
-      "target_absent_at_first_signal": 73,
-      "simultaneous_eta_pairs": 59,
-      "candidate_eta_before_target_eta": 40,
-      "median_simultaneous_lead_min": 1.43,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 56,
-        "candidate_hit_rate": 0.482,
-        "time_only_hit_rate": 0.543,
-        "difference_pp": -6.1,
         "train_days": 10,
         "test_days": 7
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-20T17:10:16.775580+09:00"
+  "generated_at": "2026-11-20T17:11:15.638441+09:00"
 }
