@@ -8,9 +8,9 @@
   "arrival_truth": "target_api_derived_proxy_not_measured_arrival",
   "poll_coverage_max_gap_sec": 180,
   "window_minutes": 20,
-  "observed_station_list_polls": 2052,
+  "observed_station_list_polls": 2053,
   "prediction_poll_days": 43,
-  "discarded_signal_rows": 52325,
+  "discarded_signal_rows": 52353,
   "candidate_routes": [
     {
       "route_id": 204000044,
@@ -122,21 +122,21 @@
       "sta_order": 16,
       "observed_days": 17,
       "vehicle_events": 221,
-      "labelled_events": 202,
+      "labelled_events": 203,
       "matched": 101,
-      "nonmatched": 101,
-      "censored": 19,
-      "proxy_hit_rate": 0.5,
+      "nonmatched": 102,
+      "censored": 18,
+      "proxy_hit_rate": 0.498,
       "target_absent_at_first_signal": 136,
       "simultaneous_eta_pairs": 85,
       "candidate_eta_before_target_eta": 63,
       "median_simultaneous_lead_min": 4.08,
       "forward_date_test": {
         "status": "screening_only",
-        "test_events": 107,
-        "candidate_hit_rate": 0.486,
-        "time_only_hit_rate": 0.598,
-        "difference_pp": -11.2,
+        "test_events": 108,
+        "candidate_hit_rate": 0.481,
+        "time_only_hit_rate": 0.599,
+        "difference_pp": -11.8,
         "train_days": 10,
         "test_days": 7
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-20T18:23:17.699499+09:00"
+  "generated_at": "2026-11-20T18:24:11.067599+09:00"
 }
