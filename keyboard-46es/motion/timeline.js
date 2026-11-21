@@ -7,23 +7,55 @@ export const easeInOutQuint = (u) => (u < 0.5 ? 16 * u * u * u * u * u : 1 - Mat
 export const easeOutCubic = (u) => 1 - Math.pow(1 - u, 3);
 
 const PHASES = [
-  { start: 0, end: 7, index: 1, code: '01 · DIM + EXPLODE' },
-  { start: 7, end: 13, index: 2, code: '02 · X-RAY SCAN' },
-  { start: 13, end: 17, index: 3, code: '03 · CORE FOCUS' },
-  { start: 17, end: 23, index: 4, code: '04 · GAP CHECK' },
-  { start: 23, end: 29, index: 5, code: '05 · BOM GRID' },
-  { start: 29, end: 32, index: 6, code: '06 · BUILD REPORT' },
+  { start: 0, end: 11.0, index: 1, code: '01 · DIM + BUILD' },
+  { start: 11.0, end: 16.0, index: 2, code: '02 · X-RAY SCAN' },
+  { start: 16.0, end: 20.0, index: 3, code: '03 · CORE FOCUS' },
+  { start: 20.0, end: 26.0, index: 4, code: '04 · SEAT SIM' },
+  { start: 26.0, end: 32.0, index: 5, code: '05 · BOM GRID' },
+  { start: 32.0, end: 36.0, index: 6, code: '06 · CAD REPORT' },
 ];
 
+const ALL_FASTENER_PARTS = [
+  'inserts',
+  'case-screws',
+  'm2-bracket',
+  'm2-nuts-bracket',
+  'm2-plate',
+  'm2-5',
+  'm2-nuts-plate',
+  'm3-upper',
+  'magnets',
+];
+
+function makeFastenerState(defaultProg = 1) {
+  const progressByPart = {};
+  const guideOpacityByPart = {};
+  for (const pid of ALL_FASTENER_PARTS) {
+    progressByPart[pid] = defaultProg;
+    guideOpacityByPart[pid] = 0;
+  }
+  return {
+    progressByPart,
+    guideOpacityByPart,
+    activePartIds: [],
+    activeTag: null,
+  };
+}
+
+export const MANUAL_STEP_DURATIONS_MS = [1100, 900, 1200, 650, 900, 650];
+
 export function evaluateTimeline(tRaw, metrics, isCompact = false) {
-  const t = Math.max(0, Math.min(metrics.durationSec, tRaw));
+  const dur = metrics.durationSec || 36.0;
+  const t = Math.max(0, Math.min(dur, tRaw));
   const phase = PHASES.find((p) => t < p.end) || PHASES[PHASES.length - 1];
 
   const baseExplode = metrics.groups.map((g) => g.explodeZ);
-  const groupExplodeZ = [0, 0, 0, 0, 0];
-  const groupVisibility = [true, true, true, true, true];
+  const nGroups = baseExplode.length; // 6
+  const groupExplodeZ = new Array(nGroups).fill(0);
+  const groupVisibility = new Array(nGroups).fill(true);
+  const fasteners = makeFastenerState(1);
 
-  // Camera defaults (continuous across all 32s, zero hard cuts)
+  // Camera defaults (continuous across all 36.0s, zero hard cuts)
   let azimuthDeg = -34;
   let elevationDeg = 35.264;
   let zoom = 1.0;
@@ -36,6 +68,7 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
   let xray = 0;
   let coreFocus = 0;
   let ghostOpacity = 1;
+  let phaseCode = phase.code;
 
   // Segment feature states
   let bboxDraw = 0;
@@ -62,47 +95,101 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
   let reportProgress = 0;
   let reportOpacity = 0;
 
-  // ----------------------------------------------------------------- 0–7s: Outer dims + 5-layer explode/assemble
-  if (t <= 7.0) {
-    bboxDraw = easeOutCubic(seg(t, 0.05, 1.85));
+  // ----------------------------------------------------------------- 0.00–11.00s: Dims + 6-Step Non-Overlapping Build + 0.60s Hold
+  if (t <= 11.0) {
+    // 0.00–1.75s BBox + exact count-up (Bug A fix: reaches 1.00 at 1.75s so 1.8s = exact 320.0 mm)
+    bboxDraw = easeOutCubic(seg(t, 0.05, 1.70));
     const bboxIn = easeOutCubic(seg(t, 0.02, 0.25));
-    const bboxOut = 1 - easeInOutCubic(seg(t, 2.0, 2.55));
+    const bboxOut = 1 - easeInOutCubic(seg(t, 2.00, 2.50));
     bboxOpacity = bboxIn * bboxOut;
-    dimCountUp = easeOutCubic(seg(t, 0.1, 1.9));
+    dimCountUp = easeOutCubic(seg(t, 0.08, 1.75));
 
-    const explodeUp = easeInOutCubic(seg(t, 2.0, 4.0));
-    if (t < 4.2) {
-      for (let i = 0; i < 5; i++) {
+    if (t < 2.0) {
+      phaseCode = '01 · DIM + TILT';
+    } else if (t < 4.05) {
+      // 2.00–3.80s 6-layer explode + 3.80–4.05s hold
+      phaseCode = '01 · EXPLODE (6 LAYERS)';
+      const explodeUp = easeInOutCubic(seg(t, 2.00, 3.80));
+      for (let i = 0; i < nGroups; i++) {
         groupExplodeZ[i] = baseExplode[i] * explodeUp;
       }
-      layerTagsOpacity = easeOutCubic(seg(t, 2.4, 3.1));
-    } else {
-      // Bottom-to-top staggered seating (G1 -> G2 -> G3 -> G4 -> G5)
-      const seatWindows = [
-        [4.2, 5.05],
-        [4.65, 5.55],
-        [5.1, 6.0],
-        [5.55, 6.45],
-        [6.0, 6.9],
+      for (const pid of ALL_FASTENER_PARTS) {
+        fasteners.progressByPart[pid] = 1 - explodeUp;
+      }
+      layerTagsOpacity = easeOutCubic(seg(t, 2.35, 3.05));
+    } else if (t < 10.40) {
+      // Non-overlapping 6-step sequential seating + physical fastener insertion
+      const bodyWindows = [
+        [4.05, 4.45], // STEP 1 G1-BASE
+        [5.15, 5.55], // STEP 2 G2-CORE
+        [5.95, 6.45], // STEP 3 G3-PLATE (Hero)
+        [8.20, 8.95], // STEP 4 G4-SW
+        [8.95, 9.35], // STEP 5 G5-COVER
+        [9.75, 10.40], // STEP 6 G6-KEYCAP
       ];
-      for (let i = 0; i < 5; i++) {
-        const down = easeInOutCubic(seg(t, seatWindows[i][0], seatWindows[i][1]));
+      for (let i = 0; i < nGroups; i++) {
+        const down = easeInOutCubic(seg(t, bodyWindows[i][0], bodyWindows[i][1]));
         groupExplodeZ[i] = baseExplode[i] * (1 - down);
       }
-      layerTagsOpacity = 1 - easeOutCubic(seg(t, 5.8, 6.6));
+
+      // Non-overlapping fastener insertion windows
+      const fWindows = [
+        { pid: 'inserts', t0: 4.45, t1: 4.80, tag: 'STEP 1 · M3 INS Ø5×4 (6) → MOUNT SO1..SO6' },
+        { pid: 'case-screws', t0: 4.80, t1: 5.15, tag: 'STEP 1 · M2×5 CASE (6) → H01..H06' },
+        { pid: 'm2-bracket', t0: 5.55, t1: 5.95, tag: 'STEP 2 · M2×6 (2) + M2 NUT (2) → BRACKET' },
+        { pid: 'm2-nuts-bracket', t0: 5.55, t1: 5.95, tag: null },
+        { pid: 'm2-plate', t0: 6.45, t1: 7.20, tag: 'STEP 3 · M2×6 (4) + M2×5 (1) + M2 NUT (5) → SPINE' },
+        { pid: 'm2-5', t0: 6.45, t1: 7.20, tag: null },
+        { pid: 'm2-nuts-plate', t0: 6.45, t1: 7.20, tag: null },
+        { pid: 'm3-upper', t0: 7.20, t1: 8.20, tag: 'STEP 3 · M3×10 (6) → PLATE CB → SO1..SO6 INS' },
+        { pid: 'magnets', t0: 9.35, t1: 9.75, tag: 'STEP 5 · MAG Ø3×2 (10) → COVER & PLATE' },
+      ];
+
+      for (const fw of fWindows) {
+        if (t < fw.t0) {
+          fasteners.progressByPart[fw.pid] = 0;
+          fasteners.guideOpacityByPart[fw.pid] = 0;
+        } else if (t <= fw.t1) {
+          const p = easeInOutCubic(seg(t, fw.t0, fw.t1));
+          fasteners.progressByPart[fw.pid] = p;
+          fasteners.guideOpacityByPart[fw.pid] = 1.0;
+          fasteners.activePartIds.push(fw.pid);
+          if (fw.tag) fasteners.activeTag = fw.tag;
+        } else {
+          fasteners.progressByPart[fw.pid] = 1;
+          // Brief 0.25s blue lock ring fade-out after seating
+          const holdFade = 1 - seg(t, fw.t1, fw.t1 + 0.25);
+          fasteners.guideOpacityByPart[fw.pid] = holdFade;
+        }
+      }
+
+      if (t < 5.15) phaseCode = '01 · STEP 1 · G1-BASE';
+      else if (t < 5.95) phaseCode = '01 · STEP 2 · G2-CORE';
+      else if (t < 8.20) phaseCode = '01 · STEP 3 · G3-PLATE + BOLTS';
+      else if (t < 8.95) phaseCode = '01 · STEP 4 · G4-SW';
+      else if (t < 9.75) phaseCode = '01 · STEP 5 · G5-COVER + MAG';
+      else phaseCode = '01 · STEP 6 · G6-KEYCAP';
+
+      layerTagsOpacity = 1 - easeOutCubic(seg(t, 4.10, 4.75));
+    } else {
+      // 10.40–11.00s: 0.60s clean full-assembly hold
+      phaseCode = '01 · ASSEMBLED HOLD';
     }
 
-    const camOut = easeInOutCubic(seg(t, 2.0, 4.0));
-    const camIn = easeInOutCubic(seg(t, 4.4, 6.9));
-    const camK = camOut * (1 - camIn);
-    zoom = lerp(1.0, 0.78, camK);
-    targetOffset = [0, 0, lerp(0, 14, camK)];
+    // Camera choreography across 0–11s:
+    // Pull back during explode, subtly zoom in during G3-PLATE hero bolts (6.2–8.3s), then return cleanly by 10.6s
+    const camExplode = easeInOutCubic(seg(t, 2.00, 3.80)) * (1 - easeInOutCubic(seg(t, 8.95, 10.60)));
+    const heroBoltK = easeInOutCubic(seg(t, 6.20, 7.10)) * (1 - easeInOutCubic(seg(t, 8.05, 8.85)));
+    zoom = lerp(1.0, 0.76, camExplode) + 0.28 * heroBoltK;
+    elevationDeg = lerp(35.264, 38.5, heroBoltK);
+    azimuthDeg = lerp(-34, -30, heroBoltK);
+    targetOffset = [0, 0, lerp(0, 16, camExplode * (1 - heroBoltK * 0.7))];
   }
 
-  // ----------------------------------------------------------------- 7–13s: X-Ray wireframe & vertical scan
-  if (t > 7.0 && t <= 13.0) {
-    const enter = easeInOutCubic(seg(t, 7.0, 8.0));
-    const exit = easeInOutCubic(seg(t, 12.2, 13.0));
+  // ----------------------------------------------------------------- 11.00–16.00s: X-Ray wireframe & vertical scan
+  if (t > 11.0 && t <= 16.0) {
+    const enter = easeInOutCubic(seg(t, 11.0, 11.85));
+    const exit = easeInOutCubic(seg(t, 15.25, 16.0));
     xray = enter * (1 - exit);
     mono = 1 - enter;
     coreFocus = exit;
@@ -111,35 +198,35 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
     azimuthDeg = lerp(-34, -26, enter);
     zoom = lerp(1.0, 1.06, enter);
 
-    if (t >= 7.8) {
+    if (t >= 11.65) {
       scanActive = true;
-      scanProgress = easeInOutCubic(seg(t, 8.0, 12.2));
-      scanOpacity = easeOutCubic(seg(t, 7.8, 8.15)) * (1 - exit);
-      const scanTop = Math.min(metrics.bbox.max.z + 1.0, metrics.bbox.min.z + 32.5);
-      scanZ = lerp(metrics.bbox.min.z + 8.0, scanTop, scanProgress);
+      scanProgress = easeInOutCubic(seg(t, 11.85, 15.25));
+      scanOpacity = easeOutCubic(seg(t, 11.65, 12.0)) * (1 - exit);
+      const scanTop = Math.min(metrics.bbox.max.z + 1.5, metrics.bbox.min.z + 33.0);
+      scanZ = lerp(metrics.bbox.min.z + 6.5, scanTop, scanProgress);
     }
   }
 
-  // ----------------------------------------------------------------- 13–17s: Core focus + 20% exterior ghost + leaders
-  if (t > 13.0 && t <= 17.0) {
+  // ----------------------------------------------------------------- 16.00–20.00s: Core focus + 20% exterior ghost + leaders
+  if (t > 16.0 && t <= 20.0) {
     mono = 0;
     xray = 0;
     coreFocus = 1;
     ghostOpacity = 0.2;
 
-    const move = easeInOutCubic(seg(t, 13.0, 14.3));
+    const move = easeInOutCubic(seg(t, 16.0, 17.3));
     azimuthDeg = lerp(-26, -38, move);
     elevationDeg = lerp(35.264, 40.0, move);
     zoom = lerp(1.06, 1.16, move);
 
-    leadersProgress = easeOutCubic(seg(t, 13.6, 15.6));
-    leadersOpacity = easeOutCubic(seg(t, 13.5, 14.0)) * (1 - easeOutCubic(seg(t, 16.4, 17.0)));
+    leadersProgress = easeOutCubic(seg(t, 16.6, 18.6));
+    leadersOpacity = easeOutCubic(seg(t, 16.5, 17.0)) * (1 - easeOutCubic(seg(t, 19.4, 20.0)));
   }
 
-  // ----------------------------------------------------------------- 17–23s: Single-switch gap close-up (seamless from ghost)
-  if (t > 17.0 && t <= 23.0) {
-    const zoomIn = easeInOutQuint(seg(t, 17.0, 18.5));
-    const zoomOut = easeInOutQuint(seg(t, 21.3, 23.0));
+  // ----------------------------------------------------------------- 20.00–26.00s: Single-switch seat simulation (Key #40)
+  if (t > 20.0 && t <= 26.0) {
+    const zoomIn = easeInOutQuint(seg(t, 20.0, 21.5));
+    const zoomOut = easeInOutQuint(seg(t, 24.3, 26.0));
     const focusK = zoomIn * (1 - zoomOut);
 
     const keyOffset = [
@@ -153,8 +240,8 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
       keyOffset[1] * focusK,
       keyOffset[2] * focusK,
     ];
-    // Seamless angle interpolation: 17s starts at (-38, 40, 1.16), zooms to (-26, 25, 4.6), returns to (-34, 35.264, 1.0)
-    if (t < 21.3) {
+
+    if (t < 24.3) {
       azimuthDeg = lerp(-38, -26, zoomIn);
       elevationDeg = lerp(40.0, 25.0, zoomIn);
       zoom = lerp(1.16, isCompact ? 3.5 : 4.6, zoomIn);
@@ -170,27 +257,26 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
       ghostOpacity = lerp(0.2, 1.0, zoomOut);
     }
 
-    closeupActive = t >= 17.5 && t <= 22.0;
-    closeupCapOpacity = lerp(0.2, 0.05, easeOutCubic(seg(t, 17.2, 18.0))) * (1 - zoomOut) + zoomOut;
+    closeupActive = t >= 20.5 && t <= 25.0;
+    closeupCapOpacity = lerp(0.2, 0.05, easeOutCubic(seg(t, 20.2, 21.0))) * (1 - zoomOut) + zoomOut;
 
-    // Switch #40 lifts smoothly to +1.8mm gap, warns with orange blink, then presses vertically down to 0.0mm
-    const liftIn = easeOutCubic(seg(t, 17.0, 17.75));
-    const pressDown = easeOutCubic(seg(t, 19.8, 20.75));
+    const liftIn = easeOutCubic(seg(t, 20.0, 20.75));
+    const pressDown = easeOutCubic(seg(t, 22.8, 23.75));
     closeupGapMm = 1.8 * liftIn * (1 - pressDown);
 
-    if (t >= 17.75 && t < 20.55) {
+    if (t >= 20.75 && t < 23.55) {
       closeupStatus = 'warn';
-      closeupBlink = 0.5 + 0.5 * Math.sin((t - 17.75) * Math.PI * 6.5);
-    } else if (t >= 20.55 && t <= 22.1) {
+      closeupBlink = 0.5 + 0.5 * Math.sin((t - 20.75) * Math.PI * 6.5);
+    } else if (t >= 23.55 && t <= 25.1) {
       closeupStatus = 'ok';
       closeupBlink = 1;
     }
   }
 
-  // ----------------------------------------------------------------- 23–29s: BOM 16-card 3D isometric grid
-  if (t > 23.0 && t <= 29.0) {
-    const enter = easeInOutCubic(seg(t, 23.0, 24.4));
-    const exit = easeInOutCubic(seg(t, 28.2, 29.0));
+  // ----------------------------------------------------------------- 26.00–32.00s: BOM 16-card interactive grid
+  if (t > 26.0 && t <= 32.0) {
+    const enter = easeInOutCubic(seg(t, 26.0, 27.4));
+    const exit = easeInOutCubic(seg(t, 31.2, 32.0));
     const k = enter * (1 - exit);
 
     if (isCompact) {
@@ -205,35 +291,37 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
     azimuthDeg = lerp(-34, -30, k);
     elevationDeg = 35.264;
 
-    bomProgress = seg(t, 23.4, 27.2);
-    bomOpacity = easeOutCubic(seg(t, 23.3, 23.9)) * (1 - exit);
+    bomProgress = seg(t, 26.4, 30.0);
+    bomOpacity = easeOutCubic(seg(t, 26.3, 26.9)) * (1 - exit);
   }
 
-  // ----------------------------------------------------------------- 29–32s: Final isometric return + 6-cell report
-  if (t > 29.0) {
-    const enter = easeInOutCubic(seg(t, 29.0, 30.1));
-    zoom = lerp(1.0, 0.94, enter);
-    screenShiftY = lerp(0, isCompact ? 0.14 : 0.08, enter);
+  // ----------------------------------------------------------------- 32.00–36.00s: Final CAD Report + 6-group legend
+  if (t > 32.0) {
+    const enter = easeInOutCubic(seg(t, 32.0, 33.1));
+    zoom = lerp(1.0, 0.90, enter);
+    screenShiftY = lerp(0, isCompact ? 0.16 : 0.10, enter);
     azimuthDeg = -34;
     elevationDeg = 35.264;
 
-    reportOpacity = easeOutCubic(seg(t, 29.15, 29.85));
-    reportProgress = easeOutCubic(seg(t, 29.25, 31.4));
+    reportOpacity = easeOutCubic(seg(t, 32.15, 32.85));
+    reportProgress = easeOutCubic(seg(t, 32.25, 34.8));
   }
 
   return {
     t,
     mode: 'timeline',
     phaseIndex: phase.index,
-    phaseCode: phase.code,
+    phaseCode,
     camera: { azimuthDeg, elevationDeg, zoom, targetOffset, screenShiftX, screenShiftY },
     groupExplodeZ,
     groupVisibility,
+    fasteners,
     materials: {
       mono,
       xray,
       coreFocus,
       ghostOpacity,
+      activeFastenerParts: fasteners.activePartIds.length ? new Set(fasteners.activePartIds) : null,
       closeupKeyId: metrics.closeupKeyId,
       closeupCapOpacity,
       closeupSwitchAlert: closeupActive ? (closeupStatus === 'idle' ? null : closeupStatus) : null,
@@ -254,18 +342,74 @@ export function evaluateTimeline(tRaw, metrics, isCompact = false) {
   };
 }
 
-export function evaluateManualStep(stepNum, animK, metrics) {
-  const k = clamp01(animK);
-  const drop = (1 - easeOutCubic(k)) * 24.0;
-  const pulse = Math.sin(k * Math.PI);
-  const groupVisibility = [0, 1, 2, 3, 4].map((i) => i < stepNum);
-  const groupExplodeZ = [0, 1, 2, 3, 4].map((i) => (i === stepNum - 1 ? drop : 0));
-  const step = metrics.groups[stepNum - 1] || metrics.groups[0];
+export function evaluateManualStep(stepNum, elapsedMs, metrics, manualExplodeWeight = 0) {
+  const idx = Math.max(0, Math.min(metrics.groups.length - 1, stepNum - 1));
+  const totalMs = MANUAL_STEP_DURATIONS_MS[idx] || 900;
+  const k = clamp01(elapsedMs / totalMs);
+  const step = metrics.groups[idx] || metrics.groups[0];
+  const nGroups = metrics.groups.length;
+  const groupVisibility = Array.from({ length: nGroups }, (_, i) => i < stepNum);
+  const fasteners = makeFastenerState(1);
+
+  // Per-step differentiated body landing & fastener choreography
+  let bodyK = k;
+  const stepFastenerStages = {
+    1: [
+      { pids: ['inserts'], k0: 0.36, k1: 0.68, tag: 'STEP 1 · M3 INS Ø5×4 (6) → MOUNT SO1..SO6' },
+      { pids: ['case-screws'], k0: 0.68, k1: 1.0, tag: 'STEP 1 · M2×5 CASE (6) → H01..H06' },
+    ],
+    2: [
+      { pids: ['m2-bracket', 'm2-nuts-bracket'], k0: 0.44, k1: 1.0, tag: 'STEP 2 · M2×6 (2) + M2 NUT (2) → BRACKET' },
+    ],
+    3: [
+      { pids: ['m2-plate', 'm2-5', 'm2-nuts-plate'], k0: 0.30, k1: 0.64, tag: 'STEP 3 · M2×6 (4) + M2×5 (1) + M2 NUT (5) → SPINE' },
+      { pids: ['m3-upper'], k0: 0.64, k1: 1.0, tag: 'STEP 3 · M3×10 (6) → PLATE CB → SO1..SO6 INS' },
+    ],
+    4: [],
+    5: [
+      { pids: ['magnets'], k0: 0.44, k1: 1.0, tag: 'STEP 5 · MAG Ø3×2 (10) → COVER & PLATE' },
+    ],
+    6: [],
+  };
+
+  const stages = stepFastenerStages[stepNum] || [];
+  if (stages.length > 0) {
+    const bodyEnd = stages[0].k0;
+    bodyK = clamp01(k / bodyEnd);
+    for (const st of stages) {
+      for (const pid of st.pids) {
+        if (k < st.k0) {
+          fasteners.progressByPart[pid] = 0;
+          fasteners.guideOpacityByPart[pid] = 0.35;
+        } else if (k <= st.k1) {
+          const fp = easeInOutCubic(seg(k, st.k0, st.k1));
+          fasteners.progressByPart[pid] = fp;
+          fasteners.guideOpacityByPart[pid] = 1.0;
+          fasteners.activePartIds.push(pid);
+          fasteners.activeTag = st.tag;
+        } else {
+          fasteners.progressByPart[pid] = 1;
+          fasteners.guideOpacityByPart[pid] = k < 0.99 ? 0.85 : 0.35;
+        }
+      }
+    }
+    if (k >= 0.99 && stages.length) {
+      fasteners.activeTag = stages[stages.length - 1].tag;
+    }
+  }
+
+  const drop = (1 - easeOutCubic(bodyK)) * 22.0;
+  const pulse = Math.sin(bodyK * Math.PI);
+  const groupExplodeZ = metrics.groups.map((g, i) => {
+    const baseExp = i < stepNum ? g.explodeZ * manualExplodeWeight : 0;
+    return baseExp + (i === idx ? drop : 0);
+  });
 
   return {
     t: null,
     mode: 'manual',
     stepNum,
+    stepDurationMs: totalMs,
     phaseIndex: stepNum,
     phaseCode: `STEP ${stepNum} · ${step.code} (${step.count} pcs)`,
     camera: {
@@ -278,19 +422,21 @@ export function evaluateManualStep(stepNum, animK, metrics) {
     },
     groupExplodeZ,
     groupVisibility,
+    fasteners,
     materials: {
-      mono: 0.35,
+      mono: 0.32,
       xray: 0,
-      coreFocus: 0.65,
+      coreFocus: 0.68,
       ghostOpacity: 1.0,
       highlightGroup: step.code,
       highlightPulse: pulse,
+      activeFastenerParts: fasteners.activePartIds.length ? new Set(fasteners.activePartIds) : null,
       closeupKeyId: null,
       closeupCapOpacity: 1,
       closeupSwitchAlert: null,
       closeupBlink: 0,
     },
-    bbox: { draw: 0, opacity: 0, dimCountUp: 0, layerTagsOpacity: 0 },
+    bbox: { draw: 0, opacity: 0, dimCountUp: 0, layerTagsOpacity: manualExplodeWeight > 0.25 ? manualExplodeWeight : 0 },
     scan: { active: false, progress: 0, opacity: 0, zWorld: 0 },
     leaders: { progress: 0, opacity: 0 },
     closeup: { active: false, gapMm: 0, status: 'idle', blink: 0, keyId: metrics.closeupKeyId },

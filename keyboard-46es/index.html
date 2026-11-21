@@ -181,24 +181,37 @@ footer p+p{margin-top:.5rem}
 <body class="motion-page">
 <section id="motion-stage" class="motion-stage" aria-label="46es v5 3D Technical Assembly Guide">
   <div class="stage-frame" id="stage-frame">
-    <div id="motion-canvas" class="motion-canvas" aria-label="46es v5 3D isometric assembly canvas"></div>
+    <div id="motion-canvas" class="motion-canvas" aria-label="46es v5 3D interactive assembly canvas"></div>
     <svg id="motion-overlay" class="motion-overlay" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true"></svg>
     <div class="stage-header" aria-hidden="true">
       <div class="brand-tag"><span class="brand-code">46ES-V5</span><span class="brand-sep">/</span><span id="hud-phase-code" class="phase-code">01 · DIM + EXPLODE</span></div>
       <div id="hud-telemetry" class="hud-telemetry" hidden></div>
-      <div class="time-readout"><span id="hud-time-big">00.0</span><span class="unit">s</span><span class="time-total">/ 32.0s</span></div>
+      <div class="header-right">
+        <div id="hud-cam-chip" class="hud-cam-chip" hidden>FREE ORBIT</div>
+        <div class="time-readout"><span id="hud-time-big">00.0</span><span class="unit">s</span><span class="time-total">/ 36.0s</span></div>
+      </div>
     </div>
+    <div id="hud-bolt-tag" class="hud-bolt-tag" hidden aria-hidden="true"></div>
+    <div id="hud-pick" class="hud-pick" hidden aria-live="polite"></div>
+    <div id="hud-legend" class="hud-legend" hidden aria-label="Scene legend"></div>
     <div id="hud-bom" class="hud-bom" hidden aria-label="BOM inventory grid">
-      <div class="bom-head"><span class="bom-title">BOM</span><span id="bom-total-badge" class="bom-total">0 pcs</span></div>
+      <div class="bom-head">
+        <span class="bom-title">BOM</span>
+        <div id="bom-legend" class="bom-legend" aria-label="Assembly step groups"></div>
+        <span id="bom-total-badge" class="bom-total">—</span>
+      </div>
       <div id="bom-grid" class="bom-grid"></div>
     </div>
-    <div id="hud-report" class="hud-report" hidden aria-label="Build verification report">
-      <div class="rep-cell"><span class="rep-k">PARTS</span><strong id="rep-parts" class="rep-v">0</strong><span class="rep-u">pcs</span></div>
-      <div class="rep-cell"><span class="rep-k">STEPS</span><strong id="rep-steps" class="rep-v">0</strong><span class="rep-u">seq</span></div>
-      <div class="rep-cell"><span class="rep-k">GROUPS</span><strong id="rep-groups" class="rep-v">0</strong><span class="rep-u">grp</span></div>
-      <div class="rep-cell"><span class="rep-k">CYCLE</span><strong id="rep-time" class="rep-v">0.0</strong><span class="rep-u">s</span></div>
-      <div class="rep-cell rep-ok"><span class="rep-k">SHORT</span><strong id="rep-short" class="rep-v">0</strong><span class="rep-u">err</span></div>
-      <div class="rep-cell rep-ok"><span class="rep-k">GAP</span><strong id="rep-gap" class="rep-v">0 ✓</strong><span class="rep-u">mm</span></div>
+    <div id="hud-report-panel" class="hud-report-panel" hidden aria-label="Build verification report">
+      <div id="report-legend" class="report-legend" aria-label="Assembly step breakdown"></div>
+      <div id="hud-report" class="hud-report">
+        <div class="rep-cell"><span class="rep-k">ENVELOPE</span><strong id="rep-env" class="rep-v">—</strong><span id="rep-env-sub" class="rep-sub">—</span></div>
+        <div class="rep-cell"><span class="rep-k">3D PRINT</span><strong id="rep-print" class="rep-v">—</strong><span id="rep-print-sub" class="rep-sub">—</span></div>
+        <div class="rep-cell"><span class="rep-k">FASTENERS</span><strong id="rep-fast" class="rep-v">—</strong><span id="rep-fast-sub" class="rep-sub">—</span></div>
+        <div class="rep-cell"><span class="rep-k">KEYS · LAYOUT</span><strong id="rep-keys" class="rep-v">—</strong><span id="rep-keys-sub" class="rep-sub">—</span></div>
+        <div class="rep-cell"><span class="rep-k">MATRIX · WIRE</span><strong id="rep-matrix" class="rep-v">—</strong><span id="rep-matrix-sub" class="rep-sub">—</span></div>
+        <div class="rep-cell rep-ok"><span class="rep-k">CAD FIT</span><strong id="rep-fit" class="rep-v">—</strong><span id="rep-fit-sub" class="rep-sub">—</span></div>
+      </div>
     </div>
     <div id="motion-loading" class="motion-loading" role="status"><span class="load-code">46ES-V5</span><span id="motion-status-text">LOADING CAD</span></div>
     <div id="motion-fallback" class="motion-fallback" hidden>
@@ -206,22 +219,37 @@ footer p+p{margin-top:.5rem}
       <div class="fallback-badge">WEBGL UNAVAILABLE · STATIC CAD FALLBACK</div>
     </div>
   </div>
-  <div class="control-bar" role="region" aria-label="Sequence controls">
-    <button id="btn-play" class="ctrl-play" type="button" aria-label="Play or pause" aria-pressed="false">▶</button>
-    <div class="scrubber-wrap">
-      <input id="timeline-scrubber" class="scrubber" type="range" min="0" max="32" step="0.05" value="0" aria-label="Timeline scrubber (seconds)">
-      <div class="phase-ticks" aria-hidden="true">
-        <span style="left:0%">0s</span>
-        <span style="left:21.875%">7s</span>
-        <span style="left:40.625%">13s</span>
-        <span style="left:53.125%">17s</span>
-        <span style="left:71.875%">23s</span>
-        <span style="left:90.625%">29s</span>
-        <span style="left:100%">32s</span>
+  <div class="control-bar" role="region" aria-label="Sequence and 3D inspection controls">
+    <div class="ctrl-row ctrl-row-1">
+      <button id="btn-play" class="ctrl-play" type="button" aria-label="Play or pause" aria-pressed="false" title="Play / Pause (Space)">▶</button>
+      <button id="btn-speed" class="ctrl-speed" type="button" aria-label="Playback speed" title="Toggle speed (0.5× / 1× / 1.5×)">1×</button>
+      <div class="scrubber-wrap">
+        <input id="timeline-scrubber" class="scrubber" type="range" min="0" max="36" step="0.05" value="0" aria-label="Timeline scrubber (seconds)">
+        <div class="phase-ticks"><button type="button" class="phase-tick" data-seek="0.00" style="left:0.000%" title="Jump to 01 · DIM (0.0s)">0s</button><button type="button" class="phase-tick" data-seek="4.05" style="left:11.250%" title="Jump to 01 · BUILD (4.0s)">4s</button><button type="button" class="phase-tick" data-seek="11.00" style="left:30.556%" title="Jump to 02 · X-RAY (11.0s)">11s</button><button type="button" class="phase-tick" data-seek="16.00" style="left:44.444%" title="Jump to 03 · CORE (16.0s)">16s</button><button type="button" class="phase-tick" data-seek="20.00" style="left:55.556%" title="Jump to 04 · SEAT (20.0s)">20s</button><button type="button" class="phase-tick" data-seek="26.00" style="left:72.222%" title="Jump to 05 · BOM (26.0s)">26s</button><button type="button" class="phase-tick" data-seek="32.00" style="left:88.889%" title="Jump to 06 · REPORT (32.0s)">32s</button><button type="button" class="phase-tick" data-seek="36.00" style="left:100.000%" title="Jump to END (36.0s)">36s</button></div>
       </div>
+      <span id="ctrl-time" class="ctrl-time">00.0s</span>
+      <button id="btn-spec" class="ctrl-spec" type="button" title="Open and scroll to Spec, BOM & SVG Diagrams">SPEC ↓</button>
     </div>
-    <span id="ctrl-time" class="ctrl-time">00.0s</span>
-    <div class="step-toggles" role="group" aria-label="Manual assembly steps"><button type="button" class="step-btn" data-step="1" aria-pressed="false" title="G1-BASE · BASE">STEP 1</button><button type="button" class="step-btn" data-step="2" aria-pressed="false" title="G2-CORE · CORE">STEP 2</button><button type="button" class="step-btn" data-step="3" aria-pressed="false" title="G3-PLATE · PLATE">STEP 3</button><button type="button" class="step-btn" data-step="4" aria-pressed="false" title="G4-SW · SWITCHES">STEP 4</button><button type="button" class="step-btn" data-step="5" aria-pressed="false" title="G5-TOP · TOP">STEP 5</button></div>
+    <div class="ctrl-row ctrl-row-2">
+      <div class="mob-drawer-bar">
+        <button id="btn-mob-layers" class="mob-drawer-btn" type="button" aria-expanded="false">LAYERS ▾</button>
+        <button id="btn-mob-view" class="mob-drawer-btn" type="button" aria-expanded="false">VIEW ▾</button>
+      </div>
+      <div id="layer-toggles" class="ctrl-group layer-toggles" role="group" aria-label="Layer visibility toggles"><button type="button" id="btn-layers-all" class="layer-btn layer-all" data-layer="all" aria-pressed="true" title="Show all layers">ALL</button><button type="button" class="layer-btn" data-layer="case" aria-pressed="true" title="PSD60 Case Housing (Hotkey: C) · Shift/DblClick: Solo">CASE</button><button type="button" class="layer-btn" data-layer="mounts" aria-pressed="true" title="Mounts & Rear Rests · Shift/DblClick: Solo">MNT</button><button type="button" class="layer-btn" data-layer="wiring" aria-pressed="true" title="Controller, Bracket, USB, Diodes & Matrix Wires · Shift/DblClick: Solo">WIRE</button><button type="button" class="layer-btn" data-layer="plate" aria-pressed="true" title="3-Layer Split Plate & Spine · Shift/DblClick: Solo">PLT</button><button type="button" class="layer-btn" data-layer="switches" aria-pressed="true" title="46 MX 5-Pin Switches · Shift/DblClick: Solo">SW</button><button type="button" class="layer-btn" data-layer="cover" aria-pressed="true" title="3 SLA Clear Resin Covers · Shift/DblClick: Solo">CVR</button><button type="button" class="layer-btn" data-layer="keycaps" aria-pressed="true" title="46 OEM Keycaps · Shift/DblClick: Solo">CAP</button><button type="button" class="layer-btn" data-layer="bolts" aria-pressed="true" title="32 Fasteners (M3 Inserts, M3×10, M2 Screws & Nuts) · Shift/DblClick: Solo">BOLT</button><button type="button" class="layer-btn" data-layer="magnets" aria-pressed="true" title="10 Neodymium Ø3×2 Magnets · Shift/DblClick: Solo">MAG</button></div>
+      <div id="view-toggles" class="ctrl-group view-toggles" role="group" aria-label="Camera presets and inspection tools">
+        <button type="button" class="view-btn" data-preset="iso" aria-pressed="false" title="Isometric View">ISO</button>
+        <button type="button" class="view-btn" data-preset="top" aria-pressed="false" title="Top View">TOP</button>
+        <button type="button" class="view-btn" data-preset="front" aria-pressed="false" title="Front View">FRT</button>
+        <button type="button" class="view-btn" data-preset="side" aria-pressed="false" title="Side View">SID</button>
+        <button type="button" class="view-btn" data-preset="bottom" aria-pressed="false" title="Bottom Underside View">BTM</button>
+        <span class="ctrl-sep" aria-hidden="true"></span>
+        <button type="button" id="btn-turntable" class="tool-btn" aria-pressed="false" title="Auto 360° Turntable">⟳</button>
+        <button type="button" id="btn-explode" class="tool-btn" aria-pressed="false" title="Manual Exploded View (Hotkey: E)">EXP</button>
+        <button type="button" id="btn-xray" class="tool-btn" aria-pressed="false" title="Manual X-Ray Inspection (Hotkey: X)">XRAY</button>
+        <button type="button" id="btn-reset-view" class="tool-btn" title="Reset Camera & Layers (Hotkey: R)">↺</button>
+      </div>
+      <div id="step-toggles" class="ctrl-group step-toggles" role="group" aria-label="Manual assembly steps"><button type="button" class="step-btn" data-step="1" aria-pressed="false" title="G1-BASE · BASE (Hotkey: 1)"><span class="step-lbl-full">STEP 1</span><span class="step-lbl-short">S1</span></button><button type="button" class="step-btn" data-step="2" aria-pressed="false" title="G2-CORE · CORE (Hotkey: 2)"><span class="step-lbl-full">STEP 2</span><span class="step-lbl-short">S2</span></button><button type="button" class="step-btn" data-step="3" aria-pressed="false" title="G3-PLATE · PLATE (Hotkey: 3)"><span class="step-lbl-full">STEP 3</span><span class="step-lbl-short">S3</span></button><button type="button" class="step-btn" data-step="4" aria-pressed="false" title="G4-SW · SWITCHES (Hotkey: 4)"><span class="step-lbl-full">STEP 4</span><span class="step-lbl-short">S4</span></button><button type="button" class="step-btn" data-step="5" aria-pressed="false" title="G5-COVER · COVERS (Hotkey: 5)"><span class="step-lbl-full">STEP 5</span><span class="step-lbl-short">S5</span></button><button type="button" class="step-btn" data-step="6" aria-pressed="false" title="G6-KEYCAP · KEYCAPS (Hotkey: 6)"><span class="step-lbl-full">STEP 6</span><span class="step-lbl-short">S6</span></button></div>
+    </div>
   </div>
 </section>
 <div class="ref-shell">

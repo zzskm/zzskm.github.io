@@ -29,28 +29,46 @@ function clipGeometryToBox(geometry, boxMin, boxMax, pad = 0.6) {
   return out;
 }
 
-function cloneSampleForThumbnail(sampleKey, sampleObjects, partsById) {
+function cloneSampleForThumbnail(item, sampleObjects, partsById) {
+  const sampleKey = item.sample;
   const src = sampleObjects.get(sampleKey);
   if (!src) return new THREE.Group();
 
   const partMeta = partsById.get(sampleKey);
-  const firstInst =
+  // Deterministic body_meta clipping when thumbnailBody is declared (never relies on unstable instances[0])
+  let clipBox = null;
+  if (item.thumbnailBody && partMeta?.body_meta?.[item.thumbnailBody]) {
+    clipBox = partMeta.body_meta[item.thumbnailBody].bbox;
+  } else if (
     partMeta &&
     partMeta.pieces &&
     partMeta.pieces[0] &&
     partMeta.pieces[0].instances &&
     partMeta.pieces[0].instances.length > 1
-      ? partMeta.pieces[0].instances[0]
-      : null;
+  ) {
+    clipBox = [partMeta.pieces[0].instances[0][0], partMeta.pieces[0].instances[0][1]];
+  }
 
   const root = new THREE.Group();
   src.updateMatrixWorld(true);
 
+  let foundSingleFastener = false;
+  if (item.thumbnailBody) {
+    src.traverse((obj) => {
+      if (obj.isMesh && obj.userData?.pickInfo?.bodyName === item.thumbnailBody) {
+        foundSingleFastener = true;
+      }
+    });
+  }
+
   src.traverse((obj) => {
     if (!obj.isMesh) return;
+    if (foundSingleFastener && obj.userData?.pickInfo?.bodyName !== item.thumbnailBody) {
+      return;
+    }
     let geo = obj.geometry;
-    if (firstInst) {
-      geo = clipGeometryToBox(geo, firstInst[0], firstInst[1], 0.8);
+    if (!foundSingleFastener && clipBox) {
+      geo = clipGeometryToBox(geo, clipBox[0], clipBox[1], 0.8);
     } else {
       geo = geo.clone();
     }
@@ -60,15 +78,15 @@ function cloneSampleForThumbnail(sampleKey, sampleObjects, partsById) {
       : sampleKey === 'controller' || sampleKey === 'diodes' ? (obj.material?.color?.clone() || new THREE.Color(0x2e7d6c))
       : sampleKey.startsWith('keycap:') ? new THREE.Color(0xebe6dc)
       : sampleKey.startsWith('COVER_') ? new THREE.Color(0xa6c4df)
-      : sampleKey === 'magnets' ? new THREE.Color(0xc5ccd3)
-      : sampleKey === 'm3-upper' ? new THREE.Color(0x4d545c)
-      : sampleKey === 'm2-plate' ? new THREE.Color(0x889098)
+      : sampleKey === 'magnets' ? new THREE.Color(0xd8e0e8)
+      : sampleKey === 'm3-upper' ? new THREE.Color(0x2a3038)
+      : sampleKey === 'm2-plate' ? new THREE.Color(0xb8c2cc)
       : new THREE.Color(0x6e757d);
     const isTransparent = sampleKey.startsWith('COVER_');
     const mat = new THREE.MeshStandardMaterial({
       color: baseColor,
-      roughness: isTransparent ? 0.3 : 0.68,
-      metalness: sampleKey === 'magnets' || sampleKey === 'm3-upper' || sampleKey === 'm2-plate' ? 0.25 : 0.05,
+      roughness: isTransparent ? 0.3 : 0.62,
+      metalness: sampleKey === 'magnets' || sampleKey === 'm3-upper' || sampleKey === 'm2-plate' ? 0.45 : 0.06,
       flatShading: true,
       transparent: isTransparent,
       opacity: isTransparent ? 0.66 : 1.0,
@@ -92,7 +110,6 @@ function cloneSampleForThumbnail(sampleKey, sampleObjects, partsById) {
     root.add(edge);
   });
 
-  // Center at origin
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);
   const center = box.getCenter(new THREE.Vector3());
@@ -102,9 +119,10 @@ function cloneSampleForThumbnail(sampleKey, sampleObjects, partsById) {
   return wrapper;
 }
 
-export function buildBomGrid(renderer, data, sceneAssets, domRefs) {
+export function buildBomGrid(renderer, data, sceneAssets, domRefs, callbacks = {}) {
   const { sampleObjects, metrics } = sceneAssets;
-  const { container, gridEl, totalBadgeEl } = domRefs;
+  const { container, gridEl, totalBadgeEl, legendEl } = domRefs;
+  const { onHover = () => {}, onSelect = () => {}, onGroupHover = () => {} } = callbacks;
   const partsById = new Map(data.parts.map((p) => [p.id, p]));
 
   const W = 256;
@@ -153,11 +171,28 @@ export function buildBomGrid(renderer, data, sceneAssets, domRefs) {
   const prevPixelRatio = renderer.getPixelRatio();
   renderer.setPixelRatio(1);
 
+  // Build 6-group legend inside .bom-head
+  if (legendEl) {
+    legendEl.innerHTML = '';
+    for (const g of metrics.groups) {
+      const chip = document.createElement('span');
+      chip.className = 'bom-leg-chip';
+      chip.dataset.group = g.code;
+      chip.innerHTML = `<i style="background:${g.color}"></i>${g.code.split('-')[0]}`;
+      chip.title = `${g.code} · ${g.label} (${g.count} pcs)`;
+      chip.addEventListener('mouseenter', () => onGroupHover(g));
+      chip.addEventListener('mouseleave', () => onGroupHover(null));
+      legendEl.appendChild(chip);
+    }
+  }
+
   const cards = [];
+  const cardById = new Map();
+  let selectedId = null;
   gridEl.innerHTML = '';
 
   for (const item of metrics.bom) {
-    const obj = cloneSampleForThumbnail(item.sample, sampleObjects, partsById);
+    const obj = cloneSampleForThumbnail(item, sampleObjects, partsById);
     thumbScene.add(obj);
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
@@ -180,7 +215,6 @@ export function buildBomGrid(renderer, data, sceneAssets, domRefs) {
     renderer.render(thumbScene, cam);
     renderer.readRenderTargetPixels(target, 0, 0, W, H, pixels);
 
-    // Flip Y from WebGL bottom-up to 2D canvas top-down + convert linear render target to sRGB
     const rowBytes = W * 4;
     const dst = imageData.data;
     for (let y = 0; y < H; y++) {
@@ -202,15 +236,32 @@ export function buildBomGrid(renderer, data, sceneAssets, domRefs) {
       if (child.material) child.material.dispose();
     });
 
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'bom-card';
     card.dataset.bomId = item.id;
+    card.dataset.group = item.group;
     card.dataset.count = String(item.count);
+    card.setAttribute('aria-pressed', 'false');
+    card.title = `${item.code} · ${item.spec} · ${item.group} (×${item.count})`;
     card.innerHTML =
-      `<div class="bom-thumb"><img src="${dataUrl}" width="${W}" height="${H}" alt="${item.code}"></div>` +
-      `<div class="bom-meta"><span class="bom-code">${item.code}</span><span class="bom-qty">×${item.count}</span></div>`;
+      `<div class="bom-thumb"><img src="${dataUrl}" width="${W}" height="${H}" alt="${item.code}">` +
+      `<span class="bom-hidden-tag" hidden>HIDDEN</span></div>` +
+      `<div class="bom-meta"><span class="bom-pip" style="background:${item.groupColor}"></span>` +
+      `<span class="bom-code">${item.code}</span><span class="bom-spec">${item.spec}</span>` +
+      `<span class="bom-qty">×${item.count}</span></div>`;
+
+    card.addEventListener('mouseenter', () => onHover(item));
+    card.addEventListener('mouseleave', () => onHover(null));
+    card.addEventListener('click', () => {
+      selectedId = selectedId === item.id ? null : item.id;
+      syncSelection();
+      onSelect(selectedId ? item : null);
+    });
+
     gridEl.appendChild(card);
-    cards.push(card);
+    cards.push({ card, item });
+    cardById.set(item.id, { card, item });
   }
 
   renderer.setRenderTarget(prevTarget);
@@ -220,6 +271,28 @@ export function buildBomGrid(renderer, data, sceneAssets, domRefs) {
   totalBadgeEl.textContent = `${metrics.totalParts} pcs`;
   container.dataset.bomCount = String(cards.length);
   container.dataset.bomSum = String(metrics.totalParts);
+
+  function syncSelection() {
+    for (const { card, item } of cards) {
+      const active = selectedId === item.id;
+      card.classList.toggle('is-active', active);
+      card.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+
+  function syncHiddenLayers(hiddenLayers) {
+    for (const { card, item } of cards) {
+      const allHidden = item.layerIds.length > 0 && item.layerIds.every((lid) => hiddenLayers.has(lid));
+      card.classList.toggle('is-hidden-layer', allHidden);
+      const badge = card.querySelector('.bom-hidden-tag');
+      if (badge) badge.hidden = !allHidden;
+    }
+  }
+
+  function setSelectedId(id) {
+    selectedId = id && cardById.has(id) ? id : null;
+    syncSelection();
+  }
 
   function update(progress, opacity) {
     if (opacity <= 0.01) {
@@ -234,10 +307,10 @@ export function buildBomGrid(renderer, data, sceneAssets, domRefs) {
       const start = (i / n) * 0.68;
       const local = Math.max(0, Math.min(1, (progress - start) / 0.24));
       const eased = 1 - Math.pow(1 - local, 3);
-      cards[i].style.opacity = eased.toFixed(3);
-      cards[i].style.transform = `translateY(${((1 - eased) * 14).toFixed(1)}px)`;
+      cards[i].card.style.opacity = eased.toFixed(3);
+      cards[i].card.style.transform = `translateY(${((1 - eased) * 14).toFixed(1)}px)`;
     }
   }
 
-  return { cards, update };
+  return { cards, cardById, update, syncHiddenLayers, setSelectedId };
 }
