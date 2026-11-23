@@ -50,7 +50,7 @@
     yes: { label: "가능 답변", pill: "used" },
     no: { label: "불가 답변", pill: "need_booking" },
   };
-  const INQUIRY_ROLE_LABELS = { booked: "예약한 A숙소 (택배 수령 확인)", a: "예비 A숙소 후보 (A숙소가 거절할 때)", b: "B숙소 후보 (냉장 보관)" };
+  const INQUIRY_ROLE_LABELS = { booked: "예약한 A숙소 (택배 수령 확인)", booked_b: "예약한 B숙소 (냉장 보관 확인)", a: "예비 A숙소 후보 (A숙소가 거절할 때)", b: "B숙소 후보 (냉장 보관)" };
   const TRIP_DAYS = shanghai.itinerary.length;
   const TRIP_LABEL =
     (shanghai.tripMeta && shanghai.tripMeta.dateLabel) ||
@@ -207,7 +207,7 @@
 
     // Inquiry answers, kept only for hotels still on the list
     const savedInquiry = saved.hotelInquiry && typeof saved.hotelInquiry === "object" ? saved.hotelInquiry : {};
-    (shanghai.staysA || []).forEach((stay) => {
+    [...(shanghai.staysA || []), ...(shanghai.staysB || [])].forEach((stay) => {
       const rec = savedInquiry[stay.id];
       if (!rec || typeof rec !== "object") return;
       next.hotelInquiry[stay.id] = {
@@ -930,7 +930,11 @@
 
     const selectedStayBId = quote && quote.stayB ? quote.stayB.id : "";
     const inquiry = shanghai.hotelInquiry;
-    const inquiryTargets = (shanghai.staysA || []).filter((s) => s.inquire);
+    const bStayIds = new Set((shanghai.staysB || []).map((s) => s.id));
+    // Booked hotels first (A, then B), then the backups
+    const inquiryTargets = [...(shanghai.staysA || []), ...(shanghai.staysB || [])]
+      .filter((s) => s.inquire)
+      .sort((a, b) => Number(Boolean(b.booked)) - Number(Boolean(a.booked)));
     const inquiryOf = (stayId) => state.hotelInquiry[stayId] || { status: "none", memo: "" };
     const bookingSearchUrl = (stay) => {
       const tpl = inquiry && inquiry.templates[stay.inquiryRole || "a"];
@@ -981,7 +985,8 @@
                   const rec = inquiryOf(stay.id);
                   const meta = INQUIRY_STATUS[rec.status] || INQUIRY_STATUS.none;
                   const isA = stay.id === selectedStayId;
-                  const isB = Boolean(stay.pairB) && stay.pairB === selectedStayBId;
+                  const pairB = bStayIds.has(stay.id) ? stay.id : stay.pairB;
+                  const isB = Boolean(pairB) && pairB === selectedStayBId;
                   return `
                     <li class="inq-row ${rec.status === "yes" ? "is-yes" : rec.status === "no" ? "is-no" : ""}">
                       <div>
@@ -1001,8 +1006,8 @@
                         <div class="tl-actions-row">
                           ${stay.booked ? "" : `<a class="sh-btn is-sm" href="${esc(bookingSearchUrl(stay))}" target="_blank" rel="noopener noreferrer">Booking.com 날짜 검색 ↗</a>`}
                           <button type="button" class="sh-btn is-sm" data-copy-hotel="${esc(stay.id)}">중문 이름·주소 복사</button>
-                          <button type="button" class="sh-btn is-sm ${isA ? "is-primary" : ""}" data-pick-stay="${esc(stay.id)}">${isA ? "현재 A숙소" : "A숙소로"}</button>
-                          ${stay.pairB ? `<button type="button" class="sh-btn is-sm ${isB ? "is-primary" : ""}" data-pick-stayb="${esc(stay.pairB)}">${isB ? "현재 B숙소" : "B숙소로"}</button>` : ""}
+                          ${bStayIds.has(stay.id) ? "" : `<button type="button" class="sh-btn is-sm ${isA ? "is-primary" : ""}" data-pick-stay="${esc(stay.id)}">${isA ? "현재 A숙소" : "A숙소로"}</button>`}
+                          ${pairB ? `<button type="button" class="sh-btn is-sm ${isB ? "is-primary" : ""}" data-pick-stayb="${esc(pairB)}">${isB ? "현재 B숙소" : "B숙소로"}</button>` : ""}
                         </div>
                       </div>
                     </li>
@@ -1542,7 +1547,7 @@
 
     const copyHotelBtn = target.closest("[data-copy-hotel]");
     if (copyHotelBtn) {
-      const stay = (shanghai.staysA || []).find((s) => s.id === copyHotelBtn.dataset.copyHotel);
+      const stay = [...(shanghai.staysA || []), ...(shanghai.staysB || [])].find((s) => s.id === copyHotelBtn.dataset.copyHotel);
       if (stay) copyText(`${stay.nameZh} ${stay.addressZh}`, "숙소 중문 이름·주소를 복사했습니다.");
       return;
     }
