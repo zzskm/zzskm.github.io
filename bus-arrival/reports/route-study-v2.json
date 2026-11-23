@@ -559,6 +559,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 241223008,
+      "route_name": "602-2B",
+      "sta_order": 12,
+      "observed_days": 18,
+      "vehicle_events": 97,
+      "labelled_events": 81,
+      "matched": 29,
+      "nonmatched": 52,
+      "censored": 16,
+      "proxy_hit_rate": 0.358,
+      "target_absent_at_first_signal": 54,
+      "simultaneous_eta_pairs": 43,
+      "candidate_eta_before_target_eta": 36,
+      "median_simultaneous_lead_min": 4.82,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 45,
+        "candidate_hit_rate": 0.378,
+        "time_only_hit_rate": 0.418,
+        "difference_pp": -4.1,
+        "train_days": 10,
+        "test_days": 8
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000131,
       "route_name": "370",
       "sta_order": 9,
@@ -579,32 +605,6 @@
         "candidate_hit_rate": 0.591,
         "time_only_hit_rate": 0.551,
         "difference_pp": 4.0,
-        "train_days": 10,
-        "test_days": 8
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 241223008,
-      "route_name": "602-2B",
-      "sta_order": 12,
-      "observed_days": 18,
-      "vehicle_events": 97,
-      "labelled_events": 80,
-      "matched": 28,
-      "nonmatched": 52,
-      "censored": 17,
-      "proxy_hit_rate": 0.35,
-      "target_absent_at_first_signal": 54,
-      "simultaneous_eta_pairs": 43,
-      "candidate_eta_before_target_eta": 36,
-      "median_simultaneous_lead_min": 4.82,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 44,
-        "candidate_hit_rate": 0.364,
-        "time_only_hit_rate": 0.413,
-        "difference_pp": -5.0,
         "train_days": 10,
         "test_days": 8
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-23T17:03:05.566689+09:00"
+  "generated_at": "2026-11-23T17:03:59.952957+09:00"
 }
