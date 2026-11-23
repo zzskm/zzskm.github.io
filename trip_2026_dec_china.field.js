@@ -42,6 +42,20 @@
     unverified: "미확인",
     no: "불가",
   };
+  // Pre-booking inquiry to a candidate hotel: can the front desk take in the cold parcel?
+  // `pill` reuses the reservation status colours.
+  const INQUIRY_STATUS = {
+    none: { label: "미문의", pill: "review" },
+    sent: { label: "문의함 · 답 대기", pill: "need_booking" },
+    yes: { label: "가능 답변", pill: "used" },
+    no: { label: "불가 답변", pill: "need_booking" },
+  };
+  const INQUIRY_ROLE_LABELS = { booked: "예약한 A숙소 (택배 수령 확인)", a: "예비 A숙소 후보 (A숙소가 거절할 때)", b: "B숙소 후보 (냉장 보관)" };
+  const TRIP_DAYS = shanghai.itinerary.length;
+  const TRIP_LABEL =
+    (shanghai.tripMeta && shanghai.tripMeta.dateLabel) ||
+    `${shanghai.itinerary[0].date.slice(5).replace("-", "/")}–${shanghai.itinerary[TRIP_DAYS - 1].date.slice(5).replace("-", "/")}`;
+  const dayChipLabel = (d) => `Day ${d.dayIndex + 1} (${d.date.slice(5).replace("-", "/")})`;
 
   const dom = {
     body: document.body,
@@ -124,6 +138,7 @@
       itemState: {},
       itemOrder,
       reservations,
+      hotelInquiry: {},
       checklistDone: {},
       customChecks: [],
       expenses: [],
@@ -153,6 +168,7 @@
       itemState: saved.itemState && typeof saved.itemState === "object" ? { ...saved.itemState } : {},
       itemOrder: { ...base.itemOrder },
       reservations: { ...base.reservations },
+      hotelInquiry: {},
       checklistDone: saved.checklistDone && typeof saved.checklistDone === "object" ? { ...saved.checklistDone } : {},
       customChecks: Array.isArray(saved.customChecks) ? saved.customChecks.slice(0, 100) : [],
       expenses: Array.isArray(saved.expenses) ? saved.expenses.slice(0, 300) : [],
@@ -179,6 +195,24 @@
         refNo: typeof s.refNo === "string" ? s.refNo : "",
         amountKRW: s.amountKRW === "" || Number.isFinite(Number(s.amountKRW)) ? String(s.amountKRW || "") : "",
         note: typeof s.note === "string" ? s.note : base.reservations[resId].note,
+      };
+      // A reservation the data marks as confirmed (flights are booked) is never shown as still open,
+      // and its note follows the data unless the traveller has moved it on themselves.
+      const def = (shanghai.reservations || []).find((r) => r.id === resId);
+      if (def && def.confirmed && next.reservations[resId].status !== "used") {
+        next.reservations[resId].status = "booked";
+        next.reservations[resId].note = base.reservations[resId].note;
+      }
+    });
+
+    // Inquiry answers, kept only for hotels still on the list
+    const savedInquiry = saved.hotelInquiry && typeof saved.hotelInquiry === "object" ? saved.hotelInquiry : {};
+    (shanghai.staysA || []).forEach((stay) => {
+      const rec = savedInquiry[stay.id];
+      if (!rec || typeof rec !== "object") return;
+      next.hotelInquiry[stay.id] = {
+        status: INQUIRY_STATUS[rec.status] ? rec.status : "none",
+        memo: typeof rec.memo === "string" ? rec.memo.slice(0, 300) : "",
       };
     });
 
@@ -305,7 +339,7 @@
     if (diffDays > 0) return `출발 D-${diffDays}`;
     if (now <= end) {
       const dayNum = Math.floor((todayStart.getTime() - start.getTime()) / 86400000) + 1;
-      return `여행 Day ${clampInt(dayNum, 1, 4, 1)} 진행 중`;
+      return `여행 Day ${clampInt(dayNum, 1, TRIP_DAYS, 1)} 진행 중`;
     }
     return "여행 완료";
   }
@@ -456,7 +490,12 @@
         <div class="dash-card">
           <span class="dash-label">여행 기간 · 상태</span>
           <div class="dash-value">${esc(getDdayText())}</div>
-          <div class="dash-sub">11/28(토) – 12/01(화) · 3박 4일 · 2인</div>
+          <div class="dash-sub">${esc(TRIP_LABEL)} · ${shanghai.tripMeta.nights}박 ${shanghai.tripMeta.days}일 · ${shanghai.tripMeta.travelers}인</div>
+          ${
+            shanghai.tripMeta.flights
+              ? `<div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.out)}</div><div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.back)}</div>`
+              : ""
+          }
         </div>
         <div class="dash-card">
           <span class="dash-label">예약 완료율</span>
@@ -651,13 +690,7 @@
       return dayOk && catOk;
     });
 
-    const dayFilters = [
-      ["all", "전체 날짜"],
-      ["0", "Day 1 (11/28)"],
-      ["1", "Day 2 (11/29)"],
-      ["2", "Day 3 (11/30)"],
-      ["3", "Day 4 (12/01)"],
-    ];
+    const dayFilters = [["all", "전체 날짜"], ...shanghai.itinerary.map((d) => [String(d.dayIndex), dayChipLabel(d)])];
     const catFilters = [
       ["all", "전체 분류"],
       ["stay", "숙박"],
@@ -673,7 +706,7 @@
         <div class="sh-card">
           <div class="sh-card-head">
             <h2>상하이 필수 미식 · 추천 식당 가이드 (털게 · 본방차이 · 딤섬 · 면)</h2>
-            <span class="field-note" style="margin:0">11/28–12/01은 상하이 털게(大闸蟹) 제철 막바지 골든타임</span>
+            <span class="field-note" style="margin:0">11월 말–12월 초는 상하이 털게(大闸蟹) 제철 막바지</span>
           </div>
           <div class="place-grid">
             ${shanghai.diningGuide
@@ -772,15 +805,17 @@
     dom.panels.prep.innerHTML = `
       <div class="sh-card">
         <div class="sh-card-head">
-          <h2>체크리스트 (출발 전 D-8 긴급 &amp; 날짜별 할 일)</h2>
+          <h2>체크리스트 (출발 전 필수 &amp; 날짜별 할 일)</h2>
           <button type="button" class="sh-btn is-sm" data-switch-mode="plan">처방 준비·현금 상세 (견적 모드) →</button>
         </div>
         <div class="sh-chip-bar" role="group" aria-label="체크리스트 범위">
           <button type="button" class="sh-chip ${prepDayFilter === "pre" ? "is-active" : ""}" data-prep-scope="pre">출발 전 공통</button>
-          <button type="button" class="sh-chip ${prepDayFilter === "0" ? "is-active" : ""}" data-prep-scope="0">Day 1 (11/28)</button>
-          <button type="button" class="sh-chip ${prepDayFilter === "1" ? "is-active" : ""}" data-prep-scope="1">Day 2 (11/29)</button>
-          <button type="button" class="sh-chip ${prepDayFilter === "2" ? "is-active" : ""}" data-prep-scope="2">Day 3 (11/30)</button>
-          <button type="button" class="sh-chip ${prepDayFilter === "3" ? "is-active" : ""}" data-prep-scope="3">Day 4 (12/01)</button>
+          ${shanghai.itinerary
+            .map(
+              (d) =>
+                `<button type="button" class="sh-chip ${prepDayFilter === String(d.dayIndex) ? "is-active" : ""}" data-prep-scope="${d.dayIndex}">${esc(dayChipLabel(d))}</button>`
+            )
+            .join("")}
         </div>
 
         <ul class="check-list">
@@ -791,7 +826,7 @@
                 <li class="check-row ${c.urgent && !done ? "is-urgent" : ""} ${done ? "is-done" : ""}">
                   <input type="checkbox" class="tl-check" ${done ? "checked" : ""} data-check-id="${esc(c.id)}" aria-label="${esc(c.title)}" />
                   <div class="check-body">
-                    <div class="check-title">${c.urgent ? `<span class="sh-status-pill st-need_booking" style="margin-right:6px">D-8 필수</span>` : ""}${esc(c.title)}</div>
+                    <div class="check-title">${c.urgent ? `<span class="sh-status-pill st-need_booking" style="margin-right:6px">출발 전 필수</span>` : ""}${esc(c.title)}</div>
                     ${c.note ? `<div class="check-note">${esc(c.note)}</div>` : ""}
                   </div>
                   ${c.custom ? `<button type="button" class="sh-btn is-sm is-danger" data-del-check="${esc(c.id)}">삭제</button>` : ""}
@@ -845,7 +880,7 @@
             <div class="check-note">노점 조식·우중시장·알리페이 장애 대비 (온라인 택배는 알리페이 선결제)</div>
           </div>
           <div class="tl-detail-box">
-            <small>11/28–12/01 상하이 예상 날씨 · 복장</small>
+            <small>${esc(TRIP_LABEL)} 상하이 예상 날씨 · 복장</small>
             <strong>${esc(shanghai.tripMeta.weather.tempC)} · ${esc(shanghai.tripMeta.weather.rainNote)}</strong>
             <div class="check-note">${esc(shanghai.tripMeta.weather.clothing)}</div>
           </div>
@@ -870,7 +905,7 @@
               <div>
                 <span class="sh-badge cat-stay">${esc(r.category)}</span>
                 <span class="sh-status-pill st-${esc(rec.status)}">${esc(stMeta.label)}</span>
-                ${isPendingUrgent ? `<span class="sh-status-pill st-need_booking">D-8 우선</span>` : ""}
+                ${isPendingUrgent ? `<span class="sh-status-pill st-need_booking">우선</span>` : ""}
                 <strong style="margin-left:6px">${esc(r.title)}</strong>
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -893,23 +928,115 @@
       })
       .join("");
 
-    const stays = (shanghai.staysA || []).filter((s) => hotelTypeFilter === "all" || s.stayType === hotelTypeFilter);
+    const selectedStayBId = quote && quote.stayB ? quote.stayB.id : "";
+    const inquiry = shanghai.hotelInquiry;
+    const inquiryTargets = (shanghai.staysA || []).filter((s) => s.inquire);
+    const inquiryOf = (stayId) => state.hotelInquiry[stayId] || { status: "none", memo: "" };
+    const bookingSearchUrl = (stay) => {
+      const tpl = inquiry && inquiry.templates[stay.inquiryRole || "a"];
+      const params = new URLSearchParams({ ss: stay.booking || stay.nameZh || "Shanghai", group_adults: String(shanghai.tripMeta.travelers || 2), no_rooms: "1" });
+      if (tpl && tpl.checkin) {
+        params.set("checkin", tpl.checkin);
+        params.set("checkout", tpl.checkout);
+      }
+      return `https://www.booking.com/searchresults.ko.html?${params.toString()}`;
+    };
+
+    const inquiryHtml =
+      inquiry && inquiryTargets.length
+        ? `
+          <div class="sh-card">
+            <div class="sh-card-head">
+              <h2>${esc(inquiry.title || "예약 전 문의 · 냉장 택배를 받아 주는지 먼저 확인")}</h2>
+              <span class="sh-status-pill st-need_booking">답 기한 ${esc(inquiry.deadline.slice(5).replace("-", "/"))}</span>
+            </div>
+            <p class="field-note" style="margin-top:0">${esc(inquiry.deadlineNote)} 가능 답변 ${inquiryTargets.filter((s) => inquiryOf(s.id).status === "yes").length}곳 · 답 대기 ${inquiryTargets.filter((s) => inquiryOf(s.id).status === "sent").length}곳 / 후보 ${inquiryTargets.length}곳</p>
+
+            <div class="tl-detail-grid">
+              ${Object.entries(inquiry.templates)
+                .map(
+                  ([key, tpl]) => `
+                    <div class="tl-detail-box">
+                      <small>${esc(tpl.label)}</small>
+                      <div class="template-box" style="white-space:pre-wrap;word-break:normal;overflow-wrap:anywhere;margin:6px 0">${esc(tpl.zh)}</div>
+                      <div class="check-note">뜻: ${esc(tpl.ko)}</div>
+                      <div class="tl-actions-row">
+                        <button type="button" class="sh-btn is-sm is-primary" data-copy-inq="${esc(key)}" data-lang="zh">중문 복사</button>
+                        <button type="button" class="sh-btn is-sm" data-copy-inq="${esc(key)}" data-lang="en">영문 복사</button>
+                      </div>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+
+            <div class="planb-box" style="margin:12px 0">
+              <strong>문의하는 방법</strong>
+              <ol style="margin:6px 0 0;padding-left:18px">${inquiry.howTo.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
+            </div>
+
+            <ul class="inq-list">
+              ${inquiryTargets
+                .map((stay) => {
+                  const rec = inquiryOf(stay.id);
+                  const meta = INQUIRY_STATUS[rec.status] || INQUIRY_STATUS.none;
+                  const isA = stay.id === selectedStayId;
+                  const isB = Boolean(stay.pairB) && stay.pairB === selectedStayBId;
+                  return `
+                    <li class="inq-row ${rec.status === "yes" ? "is-yes" : rec.status === "no" ? "is-no" : ""}">
+                      <div>
+                        <div class="check-title">
+                          ${stay.booked ? `<span class="sh-status-pill st-booked" style="margin-right:6px">예약 완료</span>` : ""}<span class="sh-status-pill st-${esc(meta.pill)}" style="margin-right:6px">${esc(meta.label)}</span>${esc(stay.short || stay.title)}
+                          <small style="font-weight:600;color:var(--muted)"> · ${esc(INQUIRY_ROLE_LABELS[stay.inquiryRole] || "")}</small>
+                        </div>
+                        <div class="check-note">${esc(stay.nameZh)} · ${esc(stay.addressZh)}${stay.phone ? ` · <a href="tel:${esc(stay.phone.replaceAll("-", ""))}">${esc(stay.phone)}</a>` : " · 전화번호는 숙소 페이지에서 확인"}</div>
+                        <div class="inq-controls">
+                          <select class="sh-select" aria-label="${esc(stay.short || stay.title)} 문의 상태" data-inq-status="${esc(stay.id)}">
+                            ${Object.entries(INQUIRY_STATUS)
+                              .map(([k, v]) => `<option value="${k}" ${rec.status === k ? "selected" : ""}>${v.label}</option>`)
+                              .join("")}
+                          </select>
+                          <input class="sh-input" type="text" placeholder="답변 메모 (예: 代收可以, 객실 냉장고 없음)" value="${esc(rec.memo || "")}" data-inq-memo="${esc(stay.id)}" />
+                        </div>
+                        <div class="tl-actions-row">
+                          ${stay.booked ? "" : `<a class="sh-btn is-sm" href="${esc(bookingSearchUrl(stay))}" target="_blank" rel="noopener noreferrer">Booking.com 날짜 검색 ↗</a>`}
+                          <button type="button" class="sh-btn is-sm" data-copy-hotel="${esc(stay.id)}">중문 이름·주소 복사</button>
+                          <button type="button" class="sh-btn is-sm ${isA ? "is-primary" : ""}" data-pick-stay="${esc(stay.id)}">${isA ? "현재 A숙소" : "A숙소로"}</button>
+                          ${stay.pairB ? `<button type="button" class="sh-btn is-sm ${isB ? "is-primary" : ""}" data-pick-stayb="${esc(stay.pairB)}">${isB ? "현재 B숙소" : "B숙소로"}</button>` : ""}
+                        </div>
+                      </div>
+                    </li>
+                  `;
+                })
+                .join("")}
+            </ul>
+          </div>
+        `
+        : "";
+
+    // Hotels waiting on an inquiry lead the matrix.
+    const stays = (shanghai.staysA || [])
+      .filter((s) => hotelTypeFilter === "all" || s.stayType === hotelTypeFilter)
+      .sort((a, b) => Number(Boolean(b.inquire)) - Number(Boolean(a.inquire)));
     const hotelsHtml = stays
       .map((stay) => {
         const v = stay.verification || { grade: "B", label: "확인 필요", checks: {}, summary: "" };
         const isSelected = stay.id === selectedStayId;
         const priceRange = stay.perRoomPerNightCNY ? `¥${formatNum(stay.perRoomPerNightCNY[0])}–${formatNum(stay.perRoomPerNightCNY[1])}/박` : "";
+        const inqMeta = stay.inquire ? INQUIRY_STATUS[inquiryOf(stay.id).status] || INQUIRY_STATUS.none : null;
         return `
           <article class="hotel-card ${isSelected ? "is-selected" : ""}">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
               <div>
                 <span class="grade-pill is-grade-${esc(v.grade)}" style="margin-left:0">${esc(v.label)}</span>
                 <span class="sh-badge cat-transport" style="margin-left:4px">${esc(STAY_TYPE_LABELS[stay.stayType] || "호텔")}</span>
+                ${inqMeta ? `<span class="sh-status-pill st-${esc(inqMeta.pill)}" style="margin-left:4px">${esc(inqMeta.label)}</span>` : ""}
                 <h3 style="margin:6px 0 2px;font-size:0.98rem">${esc(stay.title)}</h3>
                 <div class="place-meta">${esc(stay.nameZh || "")} · ${esc(stay.area || "")} · <strong>${esc(priceRange)}</strong></div>
+                ${stay.inquire ? `<div class="place-meta">${esc(stay.addressZh || "")}${stay.phone ? ` · ${esc(stay.phone)}` : ""}</div>` : ""}
               </div>
               <button type="button" class="sh-btn is-sm ${isSelected ? "is-primary" : ""}" data-pick-stay="${esc(stay.id)}">
-                ${isSelected ? "현재 견적 숙소" : "견적에 선택"}
+                ${isSelected ? "현재 A숙소" : "A숙소로 선택"}
               </button>
             </div>
             <div class="verify-grid">
@@ -928,7 +1055,16 @@
       .map((ex) => `<li><strong>${esc(ex.title)}</strong> — ${esc(ex.reason)}</li>`)
       .join("");
 
+    const totalStayNights = quote ? quote.nightsA + quote.nightsB : shanghai.tripMeta.nights;
+    const bNightButtons = [];
+    for (let b = 1; b <= Math.min(2, totalStayNights - 1); b += 1) {
+      bNightButtons.push(
+        `<button type="button" class="sh-btn is-sm ${quote && quote.nightsB === b ? "is-primary" : ""}" data-field-bnights="${b}">A ${totalStayNights - b}박 + B ${b}박</button>`
+      );
+    }
+
     dom.panels.bookings.innerHTML = `
+      ${inquiryHtml}
       <div class="sh-card">
         <div class="sh-card-head">
           <h2>예약 관리 파이프라인 (검토 → 예약 필요 → 예약 완료 → 이용 완료)</h2>
@@ -940,26 +1076,19 @@
       <div class="sh-card">
         <div class="sh-card-head">
           <h2>상하이 시내 숙소 검증 매트릭스 (24h 유인 프런트 · 택배 수령 기준)</h2>
-          <span class="field-note" style="margin:0">시내 핵심 권역 중심(공항·근교·탕천 제외) · A숙소 연박 또는 A/B 1·2박 분할</span>
+          <span class="field-note" style="margin:0">시내 핵심 권역 중심(공항·근교·탕천 제외) · A숙소 2박 + B숙소 2박 기준 · 예약한 A숙소와 예비 후보의 택배 수령은 숙소 답을 받기 전까지 미확인</span>
         </div>
         <div class="tl-detail-box" style="margin-bottom:12px">
           <small>현재 숙박 구성 (견적 연동)</small>
           <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:4px">
-            <strong>${esc(quote ? quote.stayNote : "래디슨 블루 뉴월드 3박 연박")}</strong>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-              <select class="sh-select" style="width:auto;min-height:34px" aria-label="B숙소 선택" data-field-stayb="1">
+            <strong>${esc(quote ? quote.stayNote : "A숙소 2박 + B숙소 2박")}</strong>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0;max-width:100%">
+              <select class="sh-select" style="width:auto;max-width:100%;min-height:34px" aria-label="B숙소 선택" data-field-stayb="1">
                 ${(shanghai.staysB || [])
-                  .map((sb) => `<option value="${esc(sb.id)}" ${quote && quote.stayB && quote.stayB.id === sb.id ? "selected" : !quote?.stayB && sb.id === "none" ? "selected" : ""}>B숙소: ${esc(sb.title)}</option>`)
+                  .map((sb) => `<option value="${esc(sb.id)}" ${quote && quote.stayB && quote.stayB.id === sb.id ? "selected" : !quote?.stayB && sb.id === "none" ? "selected" : ""}>B숙소: ${esc(sb.short || sb.title)}</option>`)
                   .join("")}
               </select>
-              ${
-                quote && quote.stayB
-                  ? `
-                    <button type="button" class="sh-btn is-sm ${quote.nightsB === 1 ? "is-primary" : ""}" data-field-bnights="1">A 2박 + B 1박</button>
-                    <button type="button" class="sh-btn is-sm ${quote.nightsB === 2 ? "is-primary" : ""}" data-field-bnights="2">A 1박 + B 2박</button>
-                  `
-                  : ""
-              }
+              ${quote && quote.stayB ? bNightButtons.join("") : ""}
             </div>
           </div>
         </div>
@@ -1392,12 +1521,39 @@
       return;
     }
 
+    const pickStayBBtn = target.closest("[data-pick-stayb]");
+    if (pickStayBBtn) {
+      if (window.TRIP_APP_BRIDGE) {
+        window.TRIP_APP_BRIDGE.selectStayB(pickStayBBtn.dataset.pickStayb);
+        showFieldToast("견적 계산기의 B숙소를 변경했습니다.");
+      }
+      renderBookingsTab();
+      renderDashboard();
+      return;
+    }
+
+    const copyInqBtn = target.closest("[data-copy-inq]");
+    if (copyInqBtn) {
+      const tpl = shanghai.hotelInquiry && shanghai.hotelInquiry.templates[copyInqBtn.dataset.copyInq];
+      const lang = copyInqBtn.dataset.lang === "en" ? "en" : "zh";
+      if (tpl) copyText(tpl[lang], lang === "en" ? "영문 문의 메시지를 복사했습니다." : "중문 문의 메시지를 복사했습니다.");
+      return;
+    }
+
+    const copyHotelBtn = target.closest("[data-copy-hotel]");
+    if (copyHotelBtn) {
+      const stay = (shanghai.staysA || []).find((s) => s.id === copyHotelBtn.dataset.copyHotel);
+      if (stay) copyText(`${stay.nameZh} ${stay.addressZh}`, "숙소 중문 이름·주소를 복사했습니다.");
+      return;
+    }
+
     const bNightsBtn = target.closest("[data-field-bnights]");
     if (bNightsBtn) {
       const n = Number(bNightsBtn.dataset.fieldBnights);
       if (window.TRIP_APP_BRIDGE) {
         window.TRIP_APP_BRIDGE.setStayBNights(n);
-        showFieldToast(`숙박 배분을 A ${3 - n}박 + B ${n}박으로 변경했습니다.`);
+        const res = getShanghaiQuoteResult();
+        showFieldToast(res ? `숙박 배분을 A ${res.nightsA}박 + B ${res.nightsB}박으로 변경했습니다.` : "숙박 배분을 변경했습니다.");
       }
       renderBookingsTab();
       renderDashboard();
@@ -1484,6 +1640,18 @@
       }
       renderBookingsTab();
       renderDashboard();
+      return;
+    }
+
+    if (target.matches("[data-inq-status]") || target.matches("[data-inq-memo]")) {
+      const isStatus = target.matches("[data-inq-status]");
+      const id = isStatus ? target.dataset.inqStatus : target.dataset.inqMemo;
+      const rec = state.hotelInquiry[id] || { status: "none", memo: "" };
+      if (isStatus) rec.status = INQUIRY_STATUS[target.value] ? target.value : "none";
+      else rec.memo = target.value.slice(0, 300);
+      state.hotelInquiry[id] = rec;
+      saveFieldState();
+      if (isStatus) renderBookingsTab();
       return;
     }
 
