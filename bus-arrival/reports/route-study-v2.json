@@ -434,21 +434,21 @@
       "sta_order": 21,
       "observed_days": 18,
       "vehicle_events": 129,
-      "labelled_events": 118,
+      "labelled_events": 119,
       "matched": 82,
-      "nonmatched": 36,
-      "censored": 11,
-      "proxy_hit_rate": 0.695,
+      "nonmatched": 37,
+      "censored": 10,
+      "proxy_hit_rate": 0.689,
       "target_absent_at_first_signal": 90,
       "simultaneous_eta_pairs": 39,
       "candidate_eta_before_target_eta": 29,
       "median_simultaneous_lead_min": 5.2,
       "forward_date_test": {
         "status": "screening_only",
-        "test_events": 66,
-        "candidate_hit_rate": 0.727,
-        "time_only_hit_rate": 0.638,
-        "difference_pp": 9.0,
+        "test_events": 67,
+        "candidate_hit_rate": 0.716,
+        "time_only_hit_rate": 0.639,
+        "difference_pp": 7.7,
         "train_days": 10,
         "test_days": 8
       },
@@ -559,6 +559,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000131,
+      "route_name": "370",
+      "sta_order": 9,
+      "observed_days": 18,
+      "vehicle_events": 89,
+      "labelled_events": 83,
+      "matched": 49,
+      "nonmatched": 34,
+      "censored": 6,
+      "proxy_hit_rate": 0.59,
+      "target_absent_at_first_signal": 49,
+      "simultaneous_eta_pairs": 40,
+      "candidate_eta_before_target_eta": 34,
+      "median_simultaneous_lead_min": 5.89,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 47,
+        "candidate_hit_rate": 0.596,
+        "time_only_hit_rate": 0.564,
+        "difference_pp": 3.1,
+        "train_days": 10,
+        "test_days": 8
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 241223008,
       "route_name": "602-2B",
       "sta_order": 12,
@@ -579,32 +605,6 @@
         "candidate_hit_rate": 0.362,
         "time_only_hit_rate": 0.428,
         "difference_pp": -6.6,
-        "train_days": 10,
-        "test_days": 8
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000131,
-      "route_name": "370",
-      "sta_order": 9,
-      "observed_days": 18,
-      "vehicle_events": 89,
-      "labelled_events": 82,
-      "matched": 49,
-      "nonmatched": 33,
-      "censored": 7,
-      "proxy_hit_rate": 0.598,
-      "target_absent_at_first_signal": 49,
-      "simultaneous_eta_pairs": 40,
-      "candidate_eta_before_target_eta": 34,
-      "median_simultaneous_lead_min": 5.89,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 46,
-        "candidate_hit_rate": 0.609,
-        "time_only_hit_rate": 0.561,
-        "difference_pp": 4.8,
         "train_days": 10,
         "test_days": 8
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-23T18:24:04.018844+09:00"
+  "generated_at": "2026-11-23T18:25:02.411929+09:00"
 }
