@@ -351,6 +351,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000182,
+      "route_name": "351",
+      "sta_order": 49,
+      "observed_days": 18,
+      "vehicle_events": 140,
+      "labelled_events": 123,
+      "matched": 58,
+      "nonmatched": 65,
+      "censored": 17,
+      "proxy_hit_rate": 0.472,
+      "target_absent_at_first_signal": 81,
+      "simultaneous_eta_pairs": 59,
+      "candidate_eta_before_target_eta": 40,
+      "median_simultaneous_lead_min": 1.83,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 68,
+        "candidate_hit_rate": 0.441,
+        "time_only_hit_rate": 0.55,
+        "difference_pp": -10.9,
+        "train_days": 10,
+        "test_days": 8
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 228000179,
       "route_name": "101",
       "sta_order": 76,
@@ -371,32 +397,6 @@
         "candidate_hit_rate": 0.632,
         "time_only_hit_rate": 0.637,
         "difference_pp": -0.4,
-        "train_days": 10,
-        "test_days": 8
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000182,
-      "route_name": "351",
-      "sta_order": 49,
-      "observed_days": 18,
-      "vehicle_events": 140,
-      "labelled_events": 122,
-      "matched": 57,
-      "nonmatched": 65,
-      "censored": 18,
-      "proxy_hit_rate": 0.467,
-      "target_absent_at_first_signal": 81,
-      "simultaneous_eta_pairs": 59,
-      "candidate_eta_before_target_eta": 40,
-      "median_simultaneous_lead_min": 1.83,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 67,
-        "candidate_hit_rate": 0.433,
-        "time_only_hit_rate": 0.549,
-        "difference_pp": -11.6,
         "train_days": 10,
         "test_days": 8
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-23T17:02:01.238992+09:00"
+  "generated_at": "2026-11-23T17:03:05.566689+09:00"
 }
