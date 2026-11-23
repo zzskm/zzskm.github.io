@@ -52,6 +52,7 @@
   };
   const INQUIRY_ROLE_LABELS = { booked: "예약한 A숙소 (택배 수령 확인)", booked_b: "예약한 B숙소 (냉장 보관 확인)", a: "예비 A숙소 후보 (A숙소가 거절할 때)", b: "B숙소 후보 (냉장 보관)" };
   const TRIP_DAYS = shanghai.itinerary.length;
+  const ITINERARY_REV = shanghai.itineraryRev || "";
   const TRIP_LABEL =
     (shanghai.tripMeta && shanghai.tripMeta.dateLabel) ||
     `${shanghai.itinerary[0].date.slice(5).replace("-", "/")}–${shanghai.itinerary[TRIP_DAYS - 1].date.slice(5).replace("-", "/")}`;
@@ -137,6 +138,7 @@
       activeDay: 0,
       itemState: {},
       itemOrder,
+      itineraryRev: ITINERARY_REV,
       reservations,
       hotelInquiry: {},
       checklistDone: {},
@@ -167,6 +169,7 @@
       activeDay: clampInt(saved.activeDay, 0, shanghai.itinerary.length - 1, 0),
       itemState: saved.itemState && typeof saved.itemState === "object" ? { ...saved.itemState } : {},
       itemOrder: { ...base.itemOrder },
+      itineraryRev: ITINERARY_REV,
       reservations: { ...base.reservations },
       hotelInquiry: {},
       checklistDone: saved.checklistDone && typeof saved.checklistDone === "object" ? { ...saved.checklistDone } : {},
@@ -175,10 +178,12 @@
       freeNotes: Array.isArray(saved.freeNotes) ? saved.freeNotes.slice(0, 100) : [],
     };
 
-    // Reconcile itemOrder so new/missing items are always preserved
+    // Reconcile itemOrder so new/missing items are always preserved.
+    // An order saved for an older itinerary is dropped: items were moved between slots since then.
+    const sameItinerary = saved.itineraryRev === ITINERARY_REV;
     shanghai.itinerary.forEach((day) => {
       const validIds = day.items.map((it) => it.id);
-      const savedIds = saved.itemOrder && Array.isArray(saved.itemOrder[day.dayIndex]) ? saved.itemOrder[day.dayIndex] : [];
+      const savedIds = sameItinerary && saved.itemOrder && Array.isArray(saved.itemOrder[day.dayIndex]) ? saved.itemOrder[day.dayIndex] : [];
       const kept = savedIds.filter((id) => validIds.includes(id));
       validIds.forEach((id) => {
         if (!kept.includes(id)) kept.push(id);
