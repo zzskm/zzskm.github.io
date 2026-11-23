@@ -1,23 +1,23 @@
 {
   "date": "2026-11-23",
-  "daily_calls": 99,
+  "daily_calls": 101,
   "cur_vid": 204003592,
   "cur_plate": "경기70아6518",
   "first_seen": "2026-11-23T18:11:59+09:00",
-  "last_seen": "2026-11-23T18:30:29+09:00",
-  "min_predict": 206,
+  "last_seen": "2026-11-23T18:31:29+09:00",
+  "min_predict": 60,
   "max_predict": 1132,
-  "samples": 38,
-  "last_predict": 206,
+  "samples": 40,
+  "last_predict": 60,
   "last_state_cd": null,
   "consec_fail": 0,
-  "last_flag": "",
+  "last_flag": "PASS",
   "miss_count": 0,
-  "last_poll": "2026-11-23T18:30:29+09:00",
-  "last_success": "2026-11-23T18:30:29+09:00",
+  "last_poll": "2026-11-23T18:31:29+09:00",
+  "last_success": "2026-11-23T18:31:29+09:00",
   "last_location": 1,
   "first_miss_ts": null,
-  "next_poll_ts": "2026-11-23T18:30:59+09:00",
+  "next_poll_ts": "2026-11-23T18:31:59+09:00",
   "near_stall_since": null,
   "near_stall_predict": null,
   "connection_health": {
@@ -27,12 +27,12 @@
   "sources": {
     "official": {
       "date": "2026-11-23",
-      "calls": 60,
-      "ok": 60,
+      "calls": 61,
+      "ok": 61,
       "fail": 0,
       "consec_fail": 0,
       "skip_until": null,
-      "last_success": "2026-11-23T18:29:29+09:00",
+      "last_success": "2026-11-23T18:30:59+09:00",
       "last_error": null
     },
     "naver": {
@@ -47,16 +47,13 @@
     },
     "gbis_web": {
       "date": "2026-11-23",
-      "calls": 49,
-      "ok": 37,
+      "calls": 50,
+      "ok": 38,
       "fail": 12,
-      "consec_fail": 2,
+      "consec_fail": 0,
       "skip_until": null,
-      "last_success": "2026-11-23T18:24:29+09:00",
-      "last_error": {
-        "kind": "timeout",
-        "phase": "connect"
-      }
+      "last_success": "2026-11-23T18:31:29+09:00",
+      "last_error": null
     },
     "kakao": {
       "date": "2026-11-23",
@@ -84,38 +81,36 @@
   },
   "rotation": {
     "bag": [
-      "official",
-      "gbis_web",
       "naver"
     ]
   },
   "gbis_web": {
     "date": "2026-11-23",
-    "calls": 104,
-    "last_call": "2026-11-23T18:30:29+09:00",
+    "calls": 105,
+    "last_call": "2026-11-23T18:31:29+09:00",
     "consec_fail": 0,
     "skip_until": null,
-    "last_success": "2026-11-23T18:30:30+09:00",
+    "last_success": "2026-11-23T18:31:32+09:00",
     "positions": {
       "204003592": {
         "order": 5,
         "bus_position": "2",
-        "ts": "2026-11-23T18:30:30+09:00"
+        "ts": "2026-11-23T18:31:32+09:00"
       },
       "204003593": {
-        "order": 15,
+        "order": 16,
         "bus_position": "2",
-        "ts": "2026-11-23T18:30:30+09:00"
+        "ts": "2026-11-23T18:31:32+09:00"
       },
       "204001378": {
-        "order": 20,
+        "order": 21,
         "bus_position": "1",
-        "ts": "2026-11-23T18:30:30+09:00"
+        "ts": "2026-11-23T18:31:32+09:00"
       },
       "204001377": {
         "order": 32,
         "bus_position": "2",
-        "ts": "2026-11-23T18:30:30+09:00"
+        "ts": "2026-11-23T18:31:32+09:00"
       }
     }
   }
