@@ -507,6 +507,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000056,
+      "route_name": "4500",
+      "sta_order": 83,
+      "observed_days": 17,
+      "vehicle_events": 100,
+      "labelled_events": 95,
+      "matched": 52,
+      "nonmatched": 43,
+      "censored": 5,
+      "proxy_hit_rate": 0.547,
+      "target_absent_at_first_signal": 48,
+      "simultaneous_eta_pairs": 52,
+      "candidate_eta_before_target_eta": 23,
+      "median_simultaneous_lead_min": -0.47,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 47,
+        "candidate_hit_rate": 0.447,
+        "time_only_hit_rate": 0.658,
+        "difference_pp": -21.1,
+        "train_days": 10,
+        "test_days": 7
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000076,
       "route_name": "382",
       "sta_order": 55,
@@ -529,32 +555,6 @@
         "difference_pp": -9.1,
         "train_days": 10,
         "test_days": 8
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000056,
-      "route_name": "4500",
-      "sta_order": 83,
-      "observed_days": 17,
-      "vehicle_events": 100,
-      "labelled_events": 94,
-      "matched": 52,
-      "nonmatched": 42,
-      "censored": 6,
-      "proxy_hit_rate": 0.553,
-      "target_absent_at_first_signal": 48,
-      "simultaneous_eta_pairs": 52,
-      "candidate_eta_before_target_eta": 23,
-      "median_simultaneous_lead_min": -0.47,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 46,
-        "candidate_hit_rate": 0.457,
-        "time_only_hit_rate": 0.655,
-        "difference_pp": -19.8,
-        "train_days": 10,
-        "test_days": 7
       },
       "eligible_for_alert_use": false
     },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-23T20:14:43.602130+09:00"
+  "generated_at": "2026-11-23T20:15:43.650816+09:00"
 }
