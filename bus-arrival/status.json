@@ -1,20 +1,16 @@
 {
-  "last_poll": "2026-11-24T18:28:24+09:00",
-  "last_poll_local": "2026-11-24 18:28:25+09:00",
+  "last_poll": "2026-11-24T18:30:23+09:00",
+  "last_poll_local": "2026-11-24 18:30:25+09:00",
   "error": "no_bus",
   "secondary_station_id": 205000029,
   "secondary_mobile_no": "06004",
   "daily_calls": 85,
-  "last_success": "2026-11-24T18:28:24+09:00",
-  "primary_source": "gbis_web",
-  "data_source": "gbis_web",
+  "last_success": "2026-11-24T18:30:23+09:00",
+  "primary_source": "kakao",
+  "data_source": "kakao",
   "source_attempts": [
     {
-      "source": "naver",
-      "ok": true
-    },
-    {
-      "source": "gbis_web",
+      "source": "kakao",
       "ok": true
     }
   ],
@@ -27,18 +23,18 @@
       "last_success": "2026-11-24T18:27:53+09:00"
     },
     "gbis_web": {
+      "calls": 57,
+      "ok": 57,
+      "fail": 0,
+      "consec_fail": 0,
+      "last_success": "2026-11-24T18:29:23+09:00"
+    },
+    "kakao": {
       "calls": 56,
       "ok": 56,
       "fail": 0,
       "consec_fail": 0,
-      "last_success": "2026-11-24T18:28:23+09:00"
-    },
-    "kakao": {
-      "calls": 55,
-      "ok": 55,
-      "fail": 0,
-      "consec_fail": 0,
-      "last_success": "2026-11-24T18:25:53+09:00"
+      "last_success": "2026-11-24T18:30:23+09:00"
     },
     "naver": {
       "calls": 52,
@@ -50,24 +46,26 @@
   },
   "gbis_web": {
     "ok": true,
-    "skipped": "min_gap",
-    "calls": 146,
-    "consec_fail": 0,
-    "last_success": "2026-11-24T18:27:56+09:00"
+    "vehicles": 3,
+    "waiting_vehicles": 2,
+    "passes": 0,
+    "calls": 148,
+    "request_duration_sec": 0.993,
+    "last_success": "2026-11-24T18:30:25+09:00"
   },
   "consecutive_connect_timeouts": 0,
   "collect_window": "16:00-22:00",
   "poll_interval_sec": 60,
-  "api_request_started_at": "2026-11-24T18:28:23+09:00",
-  "api_response_received_at": "2026-11-24T18:28:25+09:00",
-  "api_request_duration_sec": 2.317,
+  "api_request_started_at": "2026-11-24T18:30:23+09:00",
+  "api_response_received_at": "2026-11-24T18:30:24+09:00",
+  "api_request_duration_sec": 1.191,
   "publish_interval_sec": 120,
   "urgent_publication": false,
   "publication_reason": "normal",
   "runtime_schema_version": 2,
   "model_status": "ready",
   "model_trained_through": "2026-11-23",
-  "publish_prepared_at": "2026-11-24T09:28:27.939754+00:00",
-  "poll_to_publish_prepare_sec": 3.94,
+  "publish_prepared_at": "2026-11-24T09:30:33.243110+00:00",
+  "poll_to_publish_prepare_sec": 10.243,
   "publication_stage": "prepared_not_deployed"
 }
