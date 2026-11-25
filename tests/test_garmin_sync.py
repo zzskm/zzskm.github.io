@@ -263,6 +263,35 @@ class TrainingLoadTests(unittest.TestCase):
         self.assertEqual(222, result.rows[DAY]["training_load_acute"])
 
 
+class MetabolicAgeTests(unittest.TestCase):
+    """P5(D2): 대사 나이는 epoch ms(그 나이의 생일)로 온다. 측정일 기준 만 나이로 바꾼다."""
+
+    def test_epoch_ms_becomes_age_on_the_measurement_day(self) -> None:
+        born = 378518400000.0  # 1981-12-30 00:00 UTC
+        self.assertEqual(44, sync_garmin._safe_metabolic_age(born, DAY))
+        self.assertEqual(43, sync_garmin._safe_metabolic_age(born, "2025-12-29"))
+        self.assertEqual(44, sync_garmin._safe_metabolic_age(born, "2025-12-30"))
+        self.assertIsNone(sync_garmin._safe_metabolic_age(born, None))
+
+    def test_years_and_implausible_values(self) -> None:
+        self.assertEqual(45, sync_garmin._safe_metabolic_age(45.4, DAY))
+        self.assertIsNone(sync_garmin._safe_metabolic_age(5.0, DAY))
+        self.assertIsNone(sync_garmin._safe_metabolic_age(1.0e9, DAY))  # epoch 초는 받지 않는다
+        self.assertIsNone(sync_garmin._safe_metabolic_age(4102444800000.0, DAY))  # 미래 생일
+
+    def test_row_gets_metabolic_age_from_total_average(self) -> None:
+        client = FakeGarmin()
+        original = client.get_body_composition
+
+        def body(day):
+            payload = original(day)
+            payload["totalAverage"]["metabolicAge"] = 378518400000.0
+            return payload
+
+        client.get_body_composition = body
+        self.assertEqual(44, _sync_one(client, None)[0].rows[DAY]["metabolic_age"])
+
+
 class ExerciseSourceTests(unittest.TestCase):
     """P5(D3): 운동 값의 출처를 남기고, 활동이 있는 날은 일일 요약과 섞지 않는다."""
 

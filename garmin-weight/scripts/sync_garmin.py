@@ -560,12 +560,29 @@ def fetch_activities_for_date(client: Any, day: str, log: CallLog | None = None)
     return [], CALL_EMPTY
 
 
-def _safe_metabolic_age(value: Any) -> int | None:
-    age = parse_int(value)
+def _safe_metabolic_age(value: Any, day: str | None = None) -> int | None:
+    """대사 나이(세). Garmin 체성분 응답은 이 값을 "그 나이에 해당하는 생일"의 epoch ms로 준다.
+
+    2026-11-25 probe에서 확인했다: 체중이 있는 날 metabolicAge는 epoch ms였고, 측정일 기준 나이로 읽으면
+    모두 10~120세 안이었다. 그래서 epoch ms면 측정일(day) 기준 만 나이로 바꾼다. 세 단위 값도 받는다.
+    """
+    number = parse_float(value)
+    if number is None:
+        return None
+    if number >= 1e11:
+        if not day:
+            return None
+        try:
+            born = datetime.fromtimestamp(number / 1000, tz=timezone.utc).date()
+            measured = date.fromisoformat(day)
+        except (OverflowError, OSError, ValueError):
+            return None
+        number = measured.year - born.year - ((measured.month, measured.day) < (born.month, born.day))
+    age = parse_int(number)
     return age if age is not None and 10 <= age <= 120 else None
 
 
-def extract_body_metrics(body: Any) -> dict[str, Any]:
+def extract_body_metrics(body: Any, day: str | None = None) -> dict[str, Any]:
     total_average = body.get("totalAverage") if isinstance(body, dict) else None
     payload = total_average if isinstance(total_average, dict) else (body if isinstance(body, dict) else {})
 
@@ -611,7 +628,7 @@ def extract_body_metrics(body: Any) -> dict[str, Any]:
             first_number(payload, "visceralFat", "visceralFatRating", "visceralFatMass"),
             2,
         ),
-        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge")),
+        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge"), day),
         "body_fat_percent": round_or_none(body_fat, 1),
     }
 
@@ -795,7 +812,7 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
     if sleep_status == CALL_FAILED:
         failed |= SLEEP_FIELDS
 
-    body_metrics = extract_body_metrics(body)
+    body_metrics = extract_body_metrics(body, day)
 
     resting_hr = extract_resting_hr(stats, heart_rates, sleep)
     if resting_hr is None and CALL_FAILED in (stats_status, hr_status, sleep_status):
