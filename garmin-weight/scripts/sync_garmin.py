@@ -26,6 +26,8 @@ KST = timezone(timedelta(hours=9))
 MAX_BACKFILL_DAYS = 60
 # 이 날 수 이상을 다시 받으면 보호 병합(--protect-existing과 같은 동작)을 쓴다.
 PROTECT_FROM_DAYS = 4
+# 수집이 며칠 멈췄다가 돌아오면 그 사이의 날까지 받는다. 스스로 넓히는 창의 상한이다(재검토 SY7).
+AUTO_WIDEN_MAX_DAYS = 30
 
 CSV_HEADERS = [
     "date",
@@ -439,9 +441,10 @@ class CallLog:
         totals = self.totals()
         if self.stop_reason is not None:
             return "failed"
-        if totals[CALL_FAILED] == 0:
-            return "ok"
-        return "partial" if totals[CALL_OK] + totals[CALL_EMPTY] else "failed"
+        if totals[CALL_OK] == 0:
+            # 받은 것이 하나도 없다. 전부 빈 응답이어도 성공이 아니다(예전에는 ok=0 empty=N이 ok였다, 재검토 SY10).
+            return "failed"
+        return "ok" if totals[CALL_FAILED] == 0 else "partial"
 
 
 def safe_call(client: Any, method_name: str, *args: Any, log: CallLog | None = None,
@@ -979,6 +982,8 @@ class DayFetch:
     sources: dict[str, str]
     # dry-run 전용: 값 대신 값의 종류(단위 추정, 키 존재 여부)만 담는다.
     kinds: dict[str, Any] = field(default_factory=dict)
+    # 설정으로 받지 않은 필드. 실패한 필드처럼 기존 값을 그대로 둔다.
+    skipped_fields: set[str] = field(default_factory=set)
 
 
 def _combine_fallback(primary: str, fallback: str) -> str:
@@ -987,8 +992,12 @@ def _combine_fallback(primary: str, fallback: str) -> str:
     return CALL_FAILED if CALL_FAILED in (primary, fallback) else CALL_EMPTY
 
 
-def fetch_day_row(client: Any, day: str, log: CallLog | None = None, existing: dict[str, Any] | None = None) -> DayFetch:
-    """하루치를 받는다. existing은 CSV의 그날 행이다. 활동이 있던 날이면 빈 활동 목록을 한 번 더 확인한다."""
+def fetch_day_row(client: Any, day: str, log: CallLog | None = None, existing: dict[str, Any] | None = None,
+                  training: bool = True) -> DayFetch:
+    """하루치를 받는다. existing은 CSV의 그날 행이다. 활동이 있던 날이면 빈 활동 목록을 한 번 더 확인한다.
+
+    training이 거짓이면 훈련 준비도·훈련 상태를 부르지 않고 급성 부하 칸의 기존 값을 그대로 둔다.
+    """
     stats, stats_status = safe_call(client, "get_stats", day, log=log)
     heart_rates, hr_status = safe_call(client, "get_heart_rates", day, log=log)
     sleep, sleep_status = safe_call(client, "get_sleep_data", day, log=log)
@@ -996,13 +1005,26 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None, existing: d
     had_activities = bool(existing) and (existing.get("activity_count") or 0) > 0
     activities, activities_status = fetch_activities_for_date(client, day, log=log, confirm_empty=had_activities)
     # 급성 훈련 부하. 준비도에서 값을 얻으면 훈련 상태는 부르지 않는다.
-    readiness, training_status = safe_call(client, "get_training_readiness", day, log=log)
-    training_load = extract_readiness_load(readiness, day)
+    readiness: Any = None
     training_payload: Any = None
-    if training_load is None:
-        training_payload, status_call = safe_call(client, "get_training_status", day, log=log)
-        training_load = extract_status_load(training_payload, day)
-        training_status = _combine_fallback(training_status, status_call)
+    training_load: int | None = None
+    training_unknown = False
+    skipped: set[str] = set()
+    if training:
+        readiness, training_status = safe_call(client, "get_training_readiness", day, log=log)
+        training_load = extract_readiness_load(readiness, day)
+        training_calls = [training_status]
+        if training_load is None:
+            training_payload, status_call = safe_call(client, "get_training_status", day, log=log)
+            training_load = extract_status_load(training_payload, day)
+            training_status = _combine_fallback(training_status, status_call)
+            training_calls.append(status_call)
+        # 값을 못 얻었는데 두 호출 중 하나라도 실패했으면 값을 알 수 없는 것이다. 예전에는 준비도가 실패하고
+        # 훈련 상태가 값 없이 성공하면 "값 없음"으로 보고 기존 값을 지웠다(재검토 SY12).
+        training_unknown = training_load is None and CALL_FAILED in training_calls
+    else:
+        training_status = "skipped"
+        skipped.add("training_load_acute")
 
     stats = stats if isinstance(stats, dict) else {}
     failed: set[str] = set()
@@ -1042,7 +1064,7 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None, existing: d
             if minutes > 0 or calories > 0:
                 activity_totals["exercise_source"] = EXERCISE_SOURCE_INTENSITY
 
-    if training_load is None and training_status == CALL_FAILED:
+    if training_unknown:
         failed.add("training_load_acute")
 
     row = {
@@ -1069,7 +1091,7 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None, existing: d
         "activities": activities_status, "training": training_status,
     }
     kinds = probe_value_kinds(body, sleep, readiness, training_payload) if log is not None and log.keep_structures else {}
-    return DayFetch(row=row, failed_fields=failed, sources=sources, kinds=kinds)
+    return DayFetch(row=row, failed_fields=failed, sources=sources, kinds=kinds, skipped_fields=skipped)
 
 
 def normalize_rows(rows: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1091,6 +1113,8 @@ FEATURE_DEFAULTS = {
     # 12주 예측과 목표 도달일에 느린 감량률(28일·56일 기울기)을 쓴다(재검토 MD2, 2026-11-25 사용자 결정이라 기본이 켜짐).
     # 끄면 모든 기간이 혼합 감량률의 곡선이다. 켜면 3개월 값과 도달일이 덜 흔들리고, 이 이력의 84일 오차는 커진다.
     "slowLongRangeRate": True,
+    # 급성 훈련 부하를 받는다(하루에 호출 2건). 훈련 자료가 없는 계정은 꺼도 된다. 끄면 그 칸의 기존 값을 그대로 둔다.
+    "trainingEndpoints": True,
 }
 
 
@@ -1610,7 +1634,7 @@ def merge_day_row(existing: dict[str, Any] | None, fetched: DayFetch, protect: b
     row = dict(fetched.row)
     protected: set[str] = set()
     if existing:
-        for name in fetched.failed_fields:
+        for name in fetched.failed_fields | fetched.skipped_fields:
             row[name] = existing.get(name)
         if protect:
             held = {name for name in CSV_HEADERS[1:] if _loses_value(existing.get(name), row.get(name))}
@@ -1634,7 +1658,7 @@ class SyncResult:
 
 
 def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, Any]], log: CallLog,
-              protect: bool = False) -> SyncResult:
+              protect: bool = False, training: bool = True) -> SyncResult:
     rows = dict(existing_rows)
     fetched_by_day: dict[str, DayFetch] = {}
     kept: list[str] = []
@@ -1642,13 +1666,13 @@ def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, A
     for day in days:
         LOGGER.info("syncing %s", day)
         existing = existing_rows.get(day)
-        fetched = fetch_day_row(client, day, log=log, existing=existing)
+        fetched = fetch_day_row(client, day, log=log, existing=existing, training=training)
         if log.stop_reason is not None:
             # 속도 제한이나 연속 실패로 멈췄다. 받다 만 날은 병합하지 않고 남은 날도 받지 않는다.
             LOGGER.warning("garmin stopped at day=%s reason=%s", day, log.stop_reason)
             break
         fetched_by_day[day] = fetched
-        if existing is None and fetched.failed_fields >= ROW_FIELDS:
+        if existing is None and (fetched.failed_fields | fetched.skipped_fields) >= ROW_FIELDS:
             LOGGER.warning("garmin day=%s every call failed, no row created", day)
             continue
         merged, protected = merge_day_row(existing, fetched, protect=protect)
@@ -1679,8 +1703,12 @@ def report_calls(log: CallLog, auth: str) -> None:
         annotate("warning", f"garmin endpoint={endpoint} failed={log.endpoints[endpoint][CALL_FAILED]}")
     if log.stop_reason is not None:
         annotate("error", f"garmin stopped early reason={log.stop_reason}; data left unchanged")
-    elif status == "failed":
+    elif status == "failed" and totals[CALL_EMPTY] == 0:
         annotate("error", "garmin every call failed; data left unchanged")
+    elif status == "failed" and totals[CALL_FAILED] == 0:
+        annotate("error", "garmin every call came back empty; data left unchanged")
+    elif status == "failed":
+        annotate("error", "garmin no call returned data; data left unchanged")
 
 
 def load_previous_sync(path: Path) -> dict[str, Any] | None:
@@ -1694,18 +1722,28 @@ def load_previous_sync(path: Path) -> dict[str, Any] | None:
     return previous if isinstance(previous, dict) else None
 
 
-def build_sync_block(log: CallLog, auth: str, days: list[str], previous: dict[str, Any] | None, now: str) -> dict[str, Any]:
+def build_sync_block(log: CallLog, auth: str, days: list[str], previous: dict[str, Any] | None, now: str,
+                     kept_days: list[str] | None = None, today: date | None = None) -> dict[str, Any]:
+    """요약의 sync 블록. 화면의 동기화 표시가 읽는다.
+
+    lastSuccessAt은 "오늘까지의 자료를 마지막으로 받은 시각"이다. 과거 구간만 다시 받은 실행(backfill)은 성공해도
+    이 값을 바꾸지 않는다. 바꾸면 오늘 자료를 받지 않았는데도 화면이 방금 동기화한 것으로 보인다(재검토 SY10).
+    today를 주지 않으면 창이 오늘까지인지 따지지 않는다.
+    keptDays는 핵심 필드가 모두 빈 응답이라 기존 행을 그대로 둔 날이다.
+    """
     status = log.status()
+    reaches_today = today is None or (bool(days) and days[-1] >= today.isoformat())
     return {
         "status": status,
         "auth": auth,
         "lastAttemptAt": now,
-        "lastSuccessAt": now if status != "failed" else (previous or {}).get("lastSuccessAt"),
+        "lastSuccessAt": now if status != "failed" and reaches_today else (previous or {}).get("lastSuccessAt"),
         "days": len(days),
         "endDate": days[-1] if days else None,
         "calls": log.totals(),
         "failedEndpoints": log.failed_endpoints(),
         "endpoints": {name: dict(counts) for name, counts in sorted(log.endpoints.items())},
+        "keptDays": sorted(kept_days or []),
     }
 
 
@@ -1727,7 +1765,7 @@ def merge_stats(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) ->
         merged = result.rows.get(day, existing)
         for name in CSV_HEADERS[1:]:
             before, after = existing.get(name), merged.get(name)
-            if name in fetched.failed_fields or day in result.kept_rows:
+            if name in fetched.failed_fields or name in fetched.skipped_fields or day in result.kept_rows:
                 bucket = "kept"
             elif (day, name) in result.protected:
                 bucket = "protected"
@@ -1767,8 +1805,11 @@ def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, An
     fields: dict[str, dict[str, int]] = {name: {"value": 0, "none": 0, "failed": 0} for name in CSV_HEADERS[1:]}
     for fetched in result.fetched.values():
         for name in CSV_HEADERS[1:]:
-            bucket = "failed" if name in fetched.failed_fields else ("none" if fetched.row.get(name) is None else "value")
-            fields[name][bucket] += 1
+            if name in fetched.skipped_fields:
+                bucket = "skipped"  # 설정으로 받지 않은 필드. 있을 때만 이 키가 생긴다.
+            else:
+                bucket = "failed" if name in fetched.failed_fields else ("none" if fetched.row.get(name) is None else "value")
+            fields[name][bucket] = fields[name].get(bucket, 0) + 1
     new_days, merge = merge_stats(result, existing_rows)
     return {
         "generatedAt": utc_now_iso(),
@@ -1826,6 +1867,19 @@ def _parse_day(text: str, name: str) -> date:
     if day is None or day.isoformat() != value:
         raise InputError(f"{name} must be a real date in YYYY-MM-DD form")
     return day
+
+
+def gap_window_days(backfill_days: int, last_csv_day: str | None, today: date) -> tuple[int, int]:
+    """(받을 날 수, 그 창으로도 덮지 못한 날 수). 수집이 며칠 멈췄다가 돌아왔을 때 쓴다(재검토 SY7).
+
+    창은 3일로 고정이었다. 닷새 동안 실패한 뒤 복구되면 마지막 사흘만 받고 앞의 날은 CSV에 빈 채로 남았다.
+    CSV의 마지막 날부터 오늘까지가 요청한 날 수보다 길면 그만큼 넓힌다. 스스로 넓히는 것은 AUTO_WIDEN_MAX_DAYS까지다.
+    """
+    if not last_csv_day:
+        return backfill_days, 0
+    wanted = max(backfill_days, (today - date.fromisoformat(last_csv_day)).days + 1)
+    days = max(backfill_days, min(wanted, AUTO_WIDEN_MAX_DAYS))
+    return days, wanted - days
 
 
 def plan_window(backfill_days: int, end_text: str | None, first_csv_day: str | None, today: date) -> tuple[list[str], bool]:
@@ -1892,7 +1946,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # 입력 검증은 로그인 전에 한다. 워크플로는 숫자 형태만 보고 나머지는 여기서 정한다.
-    protect = args.protect_existing or args.backfill_days >= PROTECT_FROM_DAYS
+    today = today_kst()
+    window_days = args.backfill_days
     try:
         if args.probe_dates:
             if not args.dry_run:
@@ -1901,12 +1956,23 @@ def main(argv: list[str] | None = None) -> int:
             if not days:
                 raise InputError("--probe-dates has no date")
         else:
-            days, clamped = plan_window(args.backfill_days, args.date, min(existing_rows, default=None), today_kst())
+            uncovered = 0
+            if not args.date:
+                # 오늘까지 받는 실행만 넓힌다. 끝 날짜를 준 실행(과거 구간 backfill)은 요청한 그대로 받는다.
+                window_days, uncovered = gap_window_days(args.backfill_days, max(existing_rows, default=None), today)
+            days, clamped = plan_window(window_days, args.date, min(existing_rows, default=None), today)
+            if window_days != args.backfill_days:
+                annotate("notice", f"garmin window widened days={args.backfill_days}->{window_days} start={days[0]}; "
+                                   f"the CSV ended on {max(existing_rows)}")
+            if uncovered:
+                annotate("warning", f"garmin gap not covered days={uncovered}; backfill the days before {days[0]}")
             if clamped:
                 annotate("notice", f"garmin window cut at the first CSV day start={days[0]} days={len(days)}")
     except InputError as exc:
         annotate("error", str(exc))
         return 2
+    # 스스로 넓힌 창도 4일 이상이면 보호 병합으로 받는다.
+    protect = args.protect_existing or window_days >= PROTECT_FROM_DAYS
 
     try:
         client, auth = build_client(args.token_dir)
@@ -1922,7 +1988,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     log = CallLog(keep_structures=args.dry_run)
-    result = sync_days(client, days, existing_rows, log, protect=protect)
+    result = sync_days(client, days, existing_rows, log, protect=protect,
+                       training=feature_flags(config)["trainingEndpoints"])
     report_calls(log, auth)
     failed = log.status() == "failed"
 
@@ -1945,6 +2012,9 @@ def main(argv: list[str] | None = None) -> int:
         report_merge(result, existing_rows)
         if protect:
             annotate("notice", f"garmin protect=on days={len(days)} start={days[0]} end={days[-1]}")
+        if result.kept_rows:
+            # 핵심 필드가 모두 빈 응답이라 기존 행을 그대로 둔 날. 요약의 sync.keptDays에도 남긴다.
+            annotate("warning", f"garmin kept days={len(result.kept_rows)}; every key field came back empty")
         lost_days = set(existing_rows) - set(result.rows)
         if lost_days:
             # 병합은 행을 지우지 않는다. 지워졌다면 코드가 잘못된 것이므로 CSV를 덮어쓰지 않는다.
@@ -1953,7 +2023,8 @@ def main(argv: list[str] | None = None) -> int:
         write_rows(paths.csv, result.rows)
         rows = normalize_rows(result.rows)
     summary = build_summary(rows, config)
-    summary["sync"] = build_sync_block(log, auth, days, previous_sync, summary["generatedAt"])
+    summary["sync"] = build_sync_block(log, auth, days, previous_sync, summary["generatedAt"],
+                                       kept_days=[] if failed else result.kept_rows, today=today)
     save_json(paths.summary, summary)
     LOGGER.info("%s %s rows and refreshed %s", "kept" if failed else "wrote", len(rows), paths.summary)
     # 실패하면 작업을 실패시킨다. 커밋 스텝이 건너뛰어지고 GitHub가 실패를 알린다.

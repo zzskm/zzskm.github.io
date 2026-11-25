@@ -8,7 +8,7 @@ Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·�
 
 | 단계 | 파일 | 하는 일 |
 |---|---|---|
-| 수집 | `scripts/sync_garmin.py` | garminconnect로 로그인해 최근 N일을 받고 CSV와 필드 단위로 병합한다. 이어서 요약을 만든다. |
+| 수집 | `scripts/sync_garmin.py` | garminconnect로 로그인해 최근 N일(평소 3일)을 받고 CSV와 필드 단위로 병합한다. 이어서 요약을 만든다. 수집이 며칠 멈췄다가 돌아오면 그 사이의 날까지 받는다. |
 | 모델 | `scripts/sync_modeling.py` | EWMA 추세, 감량률, 감쇠 곡선 예측, 시나리오, 백테스트(모든 모델 같은 표본), 신뢰구간, 인사이트를 계산한다. |
 | 보조 | `scripts/kalman_predictor.py`, `scripts/model_audit.py` | Kalman 섀도 후보, 오프라인 감사(요약과 같은 코드 경로). |
 | 화면 | `index.html`, `app.js`, `app.helpers.js`, `enhancements.js`, `style.css`, `sw.js` | 요약을 읽어 그린다. 서비스 워커가 오프라인을 맡는다. |
@@ -17,7 +17,7 @@ Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·�
 
 | 워크플로 | 언제 | 하는 일 |
 |---|---|---|
-| `garmin weight sync` | 매일 00:41, 09:41 KST, 수동 실행 | 수집 → CSV·요약 커밋(`main`에서만). 수집이 실패하면 커밋하지 않고 실패로 끝난다(실패 알림). 실패는 모든 호출 실패, 중간에 멈춤(첫 429 또는 연속 실패 5건), Garmin이 응답하지 않아 토큰 로그인을 못 한 경우다. 커밋은 수집 스텝의 결과만 본다. 수집 뒤의 뒷정리가 실패해도 받은 데이터는 커밋한다. |
+| `garmin weight sync` | 매일 00:41, 09:41 KST, 수동 실행 | 수집 → CSV·요약 커밋(`main`에서만). 수집이 실패하면 커밋하지 않고 실패로 끝난다(실패 알림). 실패는 받은 것이 하나도 없는 수집(모든 호출이 실패했거나 빈 응답), 중간에 멈춤(첫 429 또는 연속 실패 5건), Garmin이 응답하지 않아 토큰 로그인을 못 한 경우다. 커밋은 수집 스텝의 결과만 본다. 수집 뒤의 뒷정리가 실패해도 받은 데이터는 커밋한다. |
 | `garmin weight probe` | `garmin-probe/**` 브랜치 푸시, 수동 실행 | `--dry-run`으로 받아 보기만 한다. 결과(건수·상태·키와 타입만, 값 없음)는 그 브랜치의 `probe-results/`에 커밋된다. |
 | `garmin weight tests` | 코드·테스트·워크플로 변경 | 단위 테스트(워크플로의 셸 스텝을 떼어 bash로 돌리는 테스트 포함), 고정한 garminconnect의 메서드 검사, 브라우저 테스트, 서비스 워커 테스트. |
 
@@ -27,7 +27,8 @@ Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·�
 |---|---|---|
 | `GARMIN_EMAIL`, `GARMIN_PASSWORD` | 예 | 비밀번호 로그인. 토큰 캐시가 없거나 거부될 때의 대체 경로라 항상 있어야 한다. |
 | `GARMIN_TOKENS` | 권장 | **토큰 캐시 암호화 키다(Garmin 토큰이 아니다).** 이름은 예전 것을 그대로 쓴다. 워크플로 셸 스텝만 읽고 Python에는 넘기지 않는다. 비우면 매번 비밀번호로 로그인한다. 바꾸거나 지우면 기존 캐시를 풀지 못해 한 번 비밀번호로 로그인한 뒤 새 키로 다시 저장한다. 새 값은 `openssl rand -base64 32`로 만든다. |
-| `GARMIN_IS_CN` | 아니오 | 중국 계정이면 `true`. |
+
+`GARMIN_IS_CN`(중국 계정이면 `true`)은 스크립트가 읽는 환경 변수다. 워크플로는 넘기지 않으므로 로컬 실행에서만 쓸 수 있다. 워크플로에서 쓰려면 수집 스텝의 `env`에 추가해야 한다.
 
 ### 토큰 캐시
 
@@ -53,7 +54,8 @@ Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·�
 # 요약만 다시 만들기(CSV는 그대로). 커밋하지 말 것: 데이터 파일은 봇만 커밋한다.
 python garmin-weight/scripts/sync_garmin.py --skip-garmin --output-summary /tmp/summary.json
 
-# 받아 보기만(파일을 쓰지 않음). GARMIN_EMAIL/GARMIN_PASSWORD 필요, garminconnect==0.3.20 설치 필요.
+# 받아 보기만(파일을 쓰지 않음). GARMIN_EMAIL/GARMIN_PASSWORD 필요, 루트의 requirements.txt 설치 필요
+# (garminconnect 0.3.20과 그 의존성 전체를 버전까지 고정해 둔 목록이다).
 python garmin-weight/scripts/sync_garmin.py --dry-run --backfill-days 3 --stats-output /tmp/probe.json
 python garmin-weight/scripts/sync_garmin.py --dry-run --probe-dates 2026-11-19,2026-09-27 --stats-output /tmp/probe.json
 
@@ -89,6 +91,14 @@ Garmin 호출을 바꿨으면 로컬 성공만 믿지 말고 probe 브랜치로 
 - 첫 429에서 멈춘다(`garmin stopped early reason=rate_limited`).
 - 호출이 연속 5건 실패하면 멈춘다(`reason=consecutive_failures`). 사이에 성공한 호출이 있으면 다시 센다. 한 엔드포인트만 계속 실패하는 경우는 멈추지 않고 `partial`로 끝난다.
 - 멈춘 수집은 그때까지 받은 것이 있어도 실패다. CSV를 쓰지 않고 종료 코드 1로 끝난다.
+- 받은 것이 하나도 없는 수집도 실패다. 모든 호출이 빈 응답으로 온 경우(`garmin every call came back empty`)도 그렇다.
+
+## 수집 창
+
+- 평소에는 오늘까지 3일을 받는다. 어제와 그제의 값이 뒤늦게 바뀌는 것을 따라가기 위해서다.
+- **CSV의 마지막 날이 그보다 오래됐으면 창을 그날까지 넓힌다**(`garmin window widened days=3->6 …`). 수집이 닷새 멈췄다가 돌아오면 그 닷새가 빈 날로 남지 않는다. 4일 이상이 되면 보호 병합으로 받는다.
+- 스스로 넓히는 것은 30일까지다. 그보다 오래 멈췄으면 `garmin gap not covered days=N` 경고가 남는다. 그 앞의 날은 backfill로 받는다.
+- 끝 날짜(`end_date`)를 준 실행은 과거 구간을 다시 받는 것이라 넓히지 않는다.
 
 ## CSV (`data/daily_metrics.csv`)
 
@@ -102,16 +112,16 @@ Garmin 호출을 바꿨으면 로컬 성공만 믿지 말고 probe 브랜치로 
 | `resting_hr` | `get_heart_rates` → `get_sleep_data` → `get_stats` 중 처음 값 | |
 | `sleep_hours`, `sleep_score` | `get_sleep_data`(`dailySleepDTO`) | 밤에 기기를 찬 날만 있다. |
 | `activity_count`, `exercise_minutes`, `exercise_calories`, `exercise_source` | 활동(`get_activities_fordate`, 실패하면 `get_activities_by_date`) | 활동이 없는 날은 일일 요약의 강도 운동 시간(보통+격렬, 실제 분)과 하루 활동 칼로리를 쓰고 `exercise_source=intensity`로 적는다. |
-| `training_load_acute` | `get_training_readiness` → `get_training_status` | 그날 항목만 쓴다. 이 계정에는 데이터가 없다(2026-11-25 확인). |
+| `training_load_acute` | `get_training_readiness` → `get_training_status` | 그날 항목만 쓴다. 이 계정에는 데이터가 없다(2026-11-25 확인). `config.json`의 `features.trainingEndpoints`를 `false`로 두면 이 두 호출을 하지 않고 칸의 기존 값을 그대로 둔다. |
 
 활동 조회:
 - `get_activities_fordate`는 게이트웨이 응답이다. `ActivitiesForDay`의 `successful`이 거짓이거나 `statusCode`가 400 이상이면 HTTP가 200이어도 실패로 센다.
 - CSV에 활동이 있던 날인데 빈 목록이 오면 `get_activities_by_date`로 한 번 더 확인한다. 두 경로가 모두 빈 목록일 때만 0건으로 본다.
 
 병합 규칙:
-- 원천 호출이 실패한 필드는 기존 값을 유지한다.
+- 원천 호출이 실패한 필드는 기존 값을 유지한다. 급성 훈련 부하는 두 호출 중 하나라도 실패했고 값을 얻지 못했으면 실패로 본다.
 - 호출이 성공했는데 값이 없으면 비운다.
-- 핵심 필드가 한꺼번에 비면 일시적인 빈 응답으로 보고 기존 행을 유지한다.
+- 핵심 필드가 한꺼번에 비면 일시적인 빈 응답으로 보고 기존 행을 유지한다. 그런 날은 `garmin kept days=N` 경고와 요약의 `sync.keptDays`에 남는다.
 - 4일 이상을 다시 받을 때(보호 병합)는 값이 있던 칸을 비우거나 0으로 만들지 않고, 활동 수와 체중 측정 횟수를 낮추지 않는다. 활동 수를 지킨 날은 운동 시간·칼로리·출처도 함께 지킨다.
 - 병합은 행을 지우지 않는다.
 
@@ -130,7 +140,9 @@ CSV를 손으로 고쳤다면:
 주요 블록:
 
 - **`sync`**: 마지막 수집의 상태다.
-  - `status`(ok/partial/failed), `auth`, `lastAttemptAt`, `lastSuccessAt`, 호출 집계, `failedEndpoints`가 있다.
+  - `status`(ok/partial/failed), `auth`, `lastAttemptAt`, `lastSuccessAt`, 호출 집계, `failedEndpoints`, `days`·`endDate`(받은 창), `keptDays`가 있다.
+  - `lastSuccessAt`은 오늘까지의 자료를 마지막으로 받은 시각이다. 과거 구간만 다시 받은 실행(backfill)은 성공해도 이 값을 바꾸지 않는다. `lastAttemptAt`과 나머지 필드는 마지막 실행의 것이다.
+  - `keptDays`는 핵심 필드가 모두 빈 응답이라 기존 행을 그대로 둔 날이다.
   - 화면의 동기화 표시는 `lastSuccessAt` 기준이고, 24시간이 지나면 경고 색이 된다.
 - **`coverage`**: 최근 30일 측정률이다. 완료된 날만 세고 오늘 행은 넣지 않는다.
   - `windowStart`~`windowEnd`가 센 창이다. 화면의 측정 점은 이 날짜들을 그린다.
@@ -186,10 +198,11 @@ CSV를 손으로 고쳤다면:
 | `etaToleranceKg` | 0.3 | ETA 판정 여유. |
 | `features.sleepMeasurementWeighting`, `loadMeasurementWeighting`, `plateauLoadClassification` | false | 수면·부하 측정 가중치, 부하로 정체 유형 나누기. 백테스트로 나빠지지 않을 때만 켠다. |
 | `features.slowLongRangeRate` | true | 12주 값과 목표 도달일에 느린 감량률을 쓴다(위 "모델에 대해 알아 둘 것"). `false`면 모든 기간이 혼합 감량률이다. |
+| `features.trainingEndpoints` | true | 급성 훈련 부하를 받는다(하루에 호출 2건). 훈련 자료가 없는 계정은 `false`로 둬도 된다. |
 
 ## backfill
 
-`garmin weight sync`를 수동 실행한다.
+`garmin weight sync`를 수동 실행한다. 며칠 멈췄던 수집은 다음 실행이 스스로 메우므로(위 "수집 창"), backfill은 그보다 오래된 날이나 값을 바로잡을 날에 쓴다.
 
 - 입력:
   - `backfill_days`는 1~60의 정수다. 앞에 0을 붙이지 않는다(`08`, `030`은 거절된다).
