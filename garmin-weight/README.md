@@ -124,7 +124,7 @@ CSV를 손으로 고쳤다면:
 
 | 소비자 | 읽는 곳 |
 |---|---|
-| 이 페이지 | 대부분: `current`, `rolling`, `predictions`(시나리오 `series` 포함), `goal`, `insight`, `plateau`, `predictionCI`, `modelDiagnostics`, `coverage`, `sync`, `series` |
+| 이 페이지 | 대부분: `current`, `rolling`, `predictions`(시나리오 `series` 포함), `goal`, `insight`, `predictionCI`, `modelDiagnostics`, `coverage`, `sync`, `series` |
 | 개인 대시보드(`/dashboard.js`, `/dashboard-model.js`) | `tests/test_garmin_weight.py`의 `DASHBOARD_FIELDS`. 바꿀 때 그 목록과 `tests/test_dashboard_browser.py`의 픽스처를 함께 본다. |
 
 주요 블록:
@@ -132,9 +132,18 @@ CSV를 손으로 고쳤다면:
 - **`sync`**: 마지막 수집의 상태다.
   - `status`(ok/partial/failed), `auth`, `lastAttemptAt`, `lastSuccessAt`, 호출 집계, `failedEndpoints`가 있다.
   - 화면의 동기화 표시는 `lastSuccessAt` 기준이고, 24시간이 지나면 경고 색이 된다.
+- **`coverage`**: 최근 30일 측정률이다. 완료된 날만 세고 오늘 행은 넣지 않는다.
+  - `windowStart`~`windowEnd`가 센 창이다. 화면의 측정 점은 이 날짜들을 그린다.
+  - `modelDiagnostics.coverage`와 `modelDiagnostics.dataQuality`(`recentMeasuredDays`, `recentCoveragePct`)도 같은 창을 센다. 세 곳의 숫자가 같아야 한다.
+  - `dataQuality.outlierCandidates`는 최근 `outlierWindowDays`(60)일 안에서 직전 측정과 크게 벌어진 측정 수다.
+- **`insight`**: 상태별 안내 문구다. 첫 줄의 "오늘 Xkg"는 그 체중이 요약의 마지막 날에 잰 것일 때만 쓴다. 아니면 "최근 측정(월/일) Xkg"이다.
+- **`plateau`**: 추세가 14일 동안 평평한지다. 14일 창 양 끝의 변화와 창 끝 7일의 기울기가 모두 주 0.05kg 미만이어야 한다. 양 끝만 보면 내려갔다 올라온 구간도 평평이 된다. 화면은 이 블록을 직접 읽지 않고 `insight`의 문구로 본다.
 - **`predictions.scenarios.<낙관|기준|보수>.series`**: 0~12주 13점과 80% 구간이다. 카드 값은 이 시계열의 마지막 점이다.
 - **`goal`**: `etaStatus`는 `reached`/`date`/`beyond`/`no_loss`/`unknown`이다. ETA는 곡선이 `목표 + etaToleranceKg`에 처음 닿는 날이고, 최대 104주까지 계산한다.
 - **`modelDiagnostics`**:
+  - `confidence`: 최근 측정과 2주 예측 오차로 매기는 등급이다(0~6점: 측정률 0~3, 일별 변동 0~1, 14일 MAE 0~2). 측정률 점수는 30일 중 20일·22일·24일에서 한 단계씩 오른다. 3개월 값의 품질은 보지 않는다.
+  - `longRange`: 84일 예측이 "변화 없음"보다 나은지다. `status`는 `ok`/`worse_than_flat`/`unverified`(표본 부족)다. `ok`가 아니면 화면이 3개월 값(시나리오 안내 문구)과 목표 도달일 옆에 "장기 추정"을 붙이고, 개인 대시보드도 그렇게 적는다.
+  - `trend.direction`: 추세 배지다. 7일 기울기로 정한다. 주간 변화·예측·ETA·인사이트는 혼합 감량률을 쓰므로 둘이 다른 방향을 가리키는 날이 있다(아래 "모델에 대해 알아 둘 것").
   - `backtest`: 운영 모델의 7/14/28/84일 성적이다.
   - `backtestSampleCounts`: 모든 모델이 공유하는 표본 수다.
   - `modelAudit`: 섀도 후보의 성적이다. 화면용 필드만 담는다.
@@ -146,6 +155,7 @@ CSV를 손으로 고쳤다면:
 - 예측 곡선은 목표 체중으로 수렴하는 감쇠 곡선이다. **`targetWeightKg`를 바꾸면 예측과 백테스트 수치가 함께 바뀐다.**
 - 84일 예측은 지금 "변화 없음"보다 성적이 나쁘다. 2027-02-25에 감량기 데이터로 다시 비교한다(계획 P7 기록).
 - 섀도 후보가 게이트를 통과해도 운영 모델은 자동으로 바뀌지 않는다.
+- **추세 배지와 주간 변화는 기준이 다르다.** 배지("감량 중"/"증량 중"/"유지")는 최근 7일 기울기이고, 주간 변화·예측·ETA·인사이트는 3/7/14/28일 혼합 감량률이다. 배지를 혼합 감량률로 통일하지 않기로 했다(2026-11-25 사용자 결정). 실제 이력을 날짜별로 재생하면 243일 중 14일에 배지와 주간 변화의 부호가 다르다. "N일째 평평" 문구와 움직이는 배지가 함께 나오는 경우(11일)는 정체 판정을 고쳐 없앴다.
 
 ## `config.json`
 
