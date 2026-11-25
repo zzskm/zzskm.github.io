@@ -108,7 +108,7 @@ jobs:
             echo "No token cache yet."
             exit 0
           fi
-          if openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY               -in "$enc" -out "$dir/garmin_tokens.json" 2>/dev/null; then
+          if openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY -in "$enc" -out "$dir/garmin_tokens.json" 2>/dev/null; then
             sha256sum "$dir/garmin_tokens.json" | cut -d' ' -f1 > "$RUNNER_TEMP/garmin-tokens.sha"
             echo "Token cache restored."
           else
@@ -161,7 +161,7 @@ jobs:
             exit 0
           fi
           mkdir -p "$RUNNER_TEMP/garmin-token-cache"
-          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY             -in "$token" -out "$RUNNER_TEMP/garmin-token-cache/garmin_tokens.json.enc"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY -in "$token" -out "$RUNNER_TEMP/garmin-token-cache/garmin_tokens.json.enc"
           echo "save=true" >> "$GITHUB_OUTPUT"
 
       - name: Save token cache

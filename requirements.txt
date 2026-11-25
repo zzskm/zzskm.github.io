@@ -1,11 +1,14 @@
 -c security-constraints.txt
-anyio==4.13.0
+# Dependencies of the garmin-weight collection (garmin-weight/scripts/sync_garmin.py):
+# garminconnect and its whole dependency closure, pinned to exact versions.
+# When bumping, check with tests/test_garmin_library.py (the "library" CI job) and a garmin-probe/** branch.
 certifi==2026.10.23
+cffi==2.1.1
+charset-normalizer==3.5.3
 curl_cffi==0.17.0
 garminconnect==0.3.20
-h11==0.16.0
-httpcore==1.0.9
-httpx==0.28.1
 idna==3.11
-typing_extensions==4.15.0
-requests>=2.31.0
+pycparser==3.12
+requests==2.34.2
+ua-generator==2.1.9
+urllib3==2.8.0

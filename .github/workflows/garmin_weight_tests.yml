@@ -14,6 +14,7 @@ on:
       - 'tests/test_garmin*'
       - 'tests/garmin_weight*'
       - 'requirements.txt'
+      - 'security-constraints.txt'
       # 수집·probe 워크플로의 셸 스텝도 테스트가 본다(tests/test_garmin_workflows.py).
       - '.github/workflows/garmin_weight_*.yml'
   pull_request:
@@ -28,6 +29,7 @@ on:
       - 'tests/test_garmin*'
       - 'tests/garmin_weight*'
       - 'requirements.txt'
+      - 'security-constraints.txt'
       - '.github/workflows/garmin_weight_*.yml'
   workflow_dispatch:
 
@@ -43,8 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
       # 요약 생성과 테스트는 표준 라이브러리만 쓴다(garminconnect는 수집 단계에서만 지연 임포트).
@@ -73,8 +75,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
       - name: Install pinned dependencies
@@ -90,13 +92,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
       - name: Install Playwright
         run: |
-          python -m pip install playwright
+          python -m pip install playwright==1.64.1
           python -m playwright install --with-deps chromium
       - name: Page display regressions
         env:

@@ -214,7 +214,9 @@ class FieldMergeTests(unittest.TestCase):
         result, log = _sync_one(FakeGarmin(empty=empty_all))
         self.assertEqual(EXISTING, result.rows[DAY])
         self.assertEqual([DAY], result.kept_rows)
-        self.assertEqual("ok", log.status())
+        # 받은 것이 하나도 없는 수집은 성공이 아니다(재검토 SY10: 예전에는 ok=0 empty=8이 ok였다).
+        self.assertEqual({"ok": 0, "empty": 8, "failed": 0}, log.totals())
+        self.assertEqual("failed", log.status())
 
 
 class StopEarlyTests(unittest.TestCase):
@@ -646,7 +648,10 @@ class MainTests(unittest.TestCase):
         argv = ["--config", str(self.config), "--output-csv", str(self.csv), "--output-summary", str(self.summary),
                 "--previous-summary", str(self.summary), "--date", DAY, "--backfill-days", "3", "--log-level", "ERROR", *extra]
         stdout = io.StringIO()
-        with mock.patch.object(sync_garmin, "build_client", return_value=(client, "password")), contextlib.redirect_stdout(stdout):
+        # 오늘(KST)을 DAY로 고정한다. 창이 오늘까지 닿는 평소의 수집이다.
+        with mock.patch.object(sync_garmin, "build_client", return_value=(client, "password")), \
+                mock.patch.object(sync_garmin, "today_kst", return_value=sync_garmin.date.fromisoformat(DAY)), \
+                contextlib.redirect_stdout(stdout):
             code = sync_garmin.main(argv)
         return code, stdout.getvalue()
 
@@ -1295,6 +1300,203 @@ class BuildClientTests(unittest.TestCase):
         _, auth, _ = self.build(None)
         self.assertEqual("password", auth)
         self.assertNotIn("GARMIN_TOKENS", MODULE_PATH.read_text(encoding="utf-8"))
+
+
+class WindowWideningTests(unittest.TestCase):
+    """재검토 SY7: 창이 3일로 고정이라, 사흘 넘게 멈췄다가 돌아오면 그 사이의 날이 CSV에 빈 채로 남았다."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.csv, self.summary, self.config = self.tmp / "rows.csv", self.tmp / "summary.json", self.tmp / "config.json"
+        self.config.write_text(json.dumps({"targetWeightKg": 78}), encoding="utf-8")
+
+    def write_csv(self, last_day: str, days: int = 20) -> None:
+        last = sync_garmin.date.fromisoformat(last_day)
+        rows = {}
+        for offset in range(days):
+            day = (last - sync_garmin.timedelta(days=offset)).isoformat()
+            rows[day] = {**EXISTING, "date": day, "weight_kg": round(84.5 - offset * 0.02, 2)}
+        sync_garmin.write_rows(self.csv, rows)
+
+    def run_today(self, today: str, *args: str, client: FakeGarmin | None = None) -> tuple[int, str, FakeGarmin]:
+        client = client or FakeGarmin()
+        argv = ["--config", str(self.config), "--output-csv", str(self.csv), "--output-summary", str(self.summary),
+                "--previous-summary", str(self.summary), "--log-level", "ERROR", *args]
+        stdout = io.StringIO()
+        with mock.patch.object(sync_garmin, "build_client", return_value=(client, "password")), \
+                mock.patch.object(sync_garmin, "today_kst", return_value=sync_garmin.date.fromisoformat(today)), \
+                contextlib.redirect_stdout(stdout):
+            code = sync_garmin.main(argv)
+        return code, stdout.getvalue(), client
+
+    def csv_days(self) -> list[str]:
+        with self.csv.open(encoding="utf-8", newline="") as handle:
+            return [row["date"] for row in csv.DictReader(handle)]
+
+    def test_window_days(self) -> None:
+        window = sync_garmin.gap_window_days
+        today = sync_garmin.date(2026, 11, 25)
+        self.assertEqual((3, 0), window(3, None, today))            # CSV가 비어 있다
+        self.assertEqual((3, 0), window(3, "2026-11-25", today))    # 오늘 행까지 있다
+        self.assertEqual((3, 0), window(3, "2026-11-23", today))    # 평소: 그제까지 있어도 3일이면 닿는다
+        self.assertEqual((4, 0), window(3, "2026-11-22", today))    # 하루가 빈다. CSV의 마지막 날부터 다시 받는다
+        self.assertEqual((6, 0), window(3, "2026-11-20", today))
+        self.assertEqual((30, 0), window(3, "2026-10-27", today))   # 상한까지
+        self.assertEqual((30, 5), window(3, "2026-10-22", today))   # 상한을 넘는 5일은 덮지 못한다
+        self.assertEqual((45, 5), window(45, "2026-10-07", today))  # 요청이 상한보다 크면 요청대로
+        self.assertEqual((10, 0), window(10, "2026-11-20", today))  # 요청이 이미 충분하다
+        self.assertEqual((3, 0), window(3, "2026-11-28", today))    # CSV가 오늘보다 앞서 있어도 줄이지 않는다
+
+    def test_outage_of_five_days_is_filled_on_the_next_run(self) -> None:
+        self.write_csv("2026-11-20")
+        code, out, client = self.run_today("2026-11-25")
+        self.assertEqual(0, code)
+        self.assertIn("::notice::garmin window widened days=3->6 start=2026-11-20; the CSV ended on 2026-11-20\n", out)
+        self.assertIn("::notice::garmin protect=on days=6 start=2026-11-20 end=2026-11-25\n", out)
+        self.assertIn("garmin merge new_days=5 ", out)
+        self.assertEqual(["2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25"], self.csv_days()[-5:])
+        self.assertEqual(6 * 7, len(client.calls))
+        sync = json.loads(self.summary.read_text(encoding="utf-8"))["sync"]
+        self.assertEqual((6, "2026-11-25"), (sync["days"], sync["endDate"]))
+
+    def test_usual_run_keeps_three_days(self) -> None:
+        self.write_csv("2026-11-24")
+        code, out, client = self.run_today("2026-11-25")
+        self.assertEqual(0, code)
+        self.assertNotIn("widened", out)
+        self.assertNotIn("protect=on", out)
+        self.assertEqual(3 * 7, len(client.calls))
+
+    def test_long_outage_is_capped_and_says_what_is_left(self) -> None:
+        self.write_csv("2026-10-10")
+        code, out, client = self.run_today("2026-11-25")
+        self.assertEqual(0, code)
+        self.assertIn("::notice::garmin window widened days=3->30 start=2026-10-27; the CSV ended on 2026-10-10\n", out)
+        self.assertIn("::warning::garmin gap not covered days=17; backfill the days before 2026-10-27\n", out)
+        self.assertEqual(30 * 7, len(client.calls))
+        days = self.csv_days()
+        self.assertIn("2026-10-27", days)
+        self.assertNotIn("2026-10-26", days)
+
+    def test_a_past_range_is_fetched_as_asked(self) -> None:
+        # 끝 날짜를 준 실행은 과거 구간을 다시 받는 것이다. 넓히지 않는다.
+        self.write_csv("2026-11-10")
+        code, out, client = self.run_today("2026-11-25", "--date", "2026-11-08", "--backfill-days", "2")
+        self.assertEqual(0, code)
+        self.assertNotIn("widened", out)
+        self.assertEqual(2 * 7, len(client.calls))
+
+
+class SyncBlockTests(unittest.TestCase):
+    """재검토 SY10: sync 블록이 화면에 주는 뜻."""
+
+    def block(self, days: list[str], today: str | None, client: FakeGarmin | None = None, kept: list[str] | None = None) -> dict:
+        log = sync_garmin.CallLog()
+        sync_garmin.sync_days(client or FakeGarmin(), days, {}, log)
+        previous = {"lastSuccessAt": "2026-11-20T00:00:00Z"}
+        return sync_garmin.build_sync_block(log, "token", days, previous, "2026-11-25T01:00:00Z", kept_days=kept,
+                                            today=sync_garmin.date.fromisoformat(today) if today else None)
+
+    def test_a_past_range_does_not_refresh_the_last_success(self) -> None:
+        # 오늘까지 받은 실행만 "마지막 성공"을 새로 쓴다. 과거 구간만 받고도 새로 쓰면 화면이 방금 동기화한 것으로 보인다.
+        current = self.block(["2026-11-24", "2026-11-25"], "2026-11-25")
+        self.assertEqual(("ok", "2026-11-25T01:00:00Z"), (current["status"], current["lastSuccessAt"]))
+        past = self.block(["2026-10-01", "2026-10-02"], "2026-11-25")
+        self.assertEqual(("ok", "2026-11-20T00:00:00Z", "2026-11-25T01:00:00Z", "2026-10-02"),
+                         (past["status"], past["lastSuccessAt"], past["lastAttemptAt"], past["endDate"]))
+        # today를 주지 않는 호출자는 예전처럼 성공이면 새로 쓴다.
+        self.assertEqual("2026-11-25T01:00:00Z", self.block(["2026-10-01"], None)["lastSuccessAt"])
+        failed = self.block(["2026-11-25"], "2026-11-25", client=FakeGarmin(fail="*"))
+        self.assertEqual(("failed", "2026-11-20T00:00:00Z"), (failed["status"], failed["lastSuccessAt"]))
+
+    def test_kept_days_are_recorded(self) -> None:
+        self.assertEqual([], self.block(["2026-11-25"], "2026-11-25")["keptDays"])
+        self.assertEqual(["2026-11-23", "2026-11-24"], self.block(["2026-11-25"], "2026-11-25", kept=["2026-11-24", "2026-11-23"])["keptDays"])
+
+    def test_an_all_empty_day_is_kept_and_reported(self) -> None:
+        # 사흘 가운데 하루만 모든 응답이 비어 왔다. 그 날의 기존 행은 그대로 두고 주석과 sync.keptDays에 남긴다.
+        class EmptyOn(FakeGarmin):
+            def _respond(self, name, payload, day=None):
+                self.calls.append(name)
+                return {} if day == "2026-11-23" else payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path, summary_path, config_path = Path(tmp) / "rows.csv", Path(tmp) / "summary.json", Path(tmp) / "config.json"
+            config_path.write_text(json.dumps({"targetWeightKg": 78}), encoding="utf-8")
+            rows = {day: {**EXISTING, "date": day} for day in ("2026-11-22", "2026-11-23", "2026-11-24")}
+            sync_garmin.write_rows(csv_path, rows)
+            argv = ["--config", str(config_path), "--output-csv", str(csv_path), "--output-summary", str(summary_path),
+                    "--previous-summary", str(summary_path), "--date", "2026-11-24", "--log-level", "ERROR"]
+            stdout = io.StringIO()
+            with mock.patch.object(sync_garmin, "build_client", return_value=(EmptyOn(), "password")), \
+                    mock.patch.object(sync_garmin, "today_kst", return_value=sync_garmin.date(2026, 11, 24)), \
+                    contextlib.redirect_stdout(stdout):
+                code = sync_garmin.main(argv)
+            self.assertEqual(0, code)
+            self.assertIn("::warning::garmin kept days=1; every key field came back empty\n", stdout.getvalue())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertEqual(["2026-11-23"], summary["sync"]["keptDays"])
+            self.assertEqual("ok", summary["sync"]["status"])
+            with csv_path.open(encoding="utf-8", newline="") as handle:
+                kept = {row["date"]: row for row in csv.DictReader(handle)}["2026-11-23"]
+            self.assertEqual(("84.1", "7000"), (kept["weight_kg"], kept["steps"]))
+
+    def test_a_run_that_received_nothing_is_failed(self) -> None:
+        log = sync_garmin.CallLog()
+        log.record("get_stats", "empty")
+        log.record("get_sleep_data", "empty")
+        self.assertEqual("failed", log.status())
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            sync_garmin.report_calls(log, "token")
+        self.assertIn("::error::garmin every call came back empty; data left unchanged\n", stdout.getvalue())
+        log.record("get_body_composition", "failed", error="FakeApiError status=500")
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            sync_garmin.report_calls(log, "token")
+        self.assertIn("::error::garmin no call returned data; data left unchanged\n", stdout.getvalue())
+        log.record("get_heart_rates", "ok")
+        self.assertEqual("partial", log.status())
+
+
+class TrainingLoadTests(unittest.TestCase):
+    """재검토 SY12: 급성 훈련 부하의 병합과, 훈련 호출을 끄는 설정."""
+
+    WITH_LOAD = {**EXISTING, "training_load_acute": 222}
+
+    def test_failed_readiness_keeps_the_stored_load(self) -> None:
+        # 준비도 호출이 실패하고 훈련 상태가 값 없이 성공했다. 값을 알 수 없으므로 기존 값을 지우지 않는다(예전에는 222 → 빈 칸).
+        client = FakeGarmin(fail=("get_training_readiness",))
+        client.training_status = {"userId": 1}
+        result, _ = _sync_one(client, existing=self.WITH_LOAD)
+        self.assertEqual(222, result.rows[DAY]["training_load_acute"])
+        self.assertIn("training_load_acute", result.fetched[DAY].failed_fields)
+        # 두 호출이 모두 성공했는데 값이 없으면 "없음"이다.
+        clean = FakeGarmin()
+        clean.training_status = {"userId": 1}
+        result, _ = _sync_one(clean, existing=self.WITH_LOAD)
+        self.assertIsNone(result.rows[DAY]["training_load_acute"])
+
+    def test_training_calls_can_be_switched_off(self) -> None:
+        self.assertTrue(sync_garmin.feature_flags({})["trainingEndpoints"])
+        self.assertFalse(sync_garmin.feature_flags({"features": {"trainingEndpoints": False}})["trainingEndpoints"])
+        client = FakeGarmin()
+        log = sync_garmin.CallLog()
+        result = sync_garmin.sync_days(client, [DAY], {DAY: dict(self.WITH_LOAD)}, log, training=False)
+        self.assertEqual(5, len(client.calls))
+        self.assertFalse([name for name in client.calls if "training" in name])
+        # 받지 않은 칸은 기존 값 그대로다. 실패로 세지 않는다.
+        self.assertEqual(222, result.rows[DAY]["training_load_acute"])
+        self.assertEqual({"training_load_acute"}, result.fetched[DAY].skipped_fields)
+        self.assertNotIn("training_load_acute", result.fetched[DAY].failed_fields)
+        self.assertEqual("ok", log.status())
+        _, merge = sync_garmin.merge_stats(result, {DAY: dict(self.WITH_LOAD)})
+        self.assertEqual(1, merge["training_load_acute"]["kept"])
+        report = sync_garmin.build_probe_report(result, {DAY: dict(self.WITH_LOAD)}, "token", [DAY])
+        self.assertEqual({"value": 0, "none": 0, "failed": 0, "skipped": 1}, report["fields"]["training_load_acute"])
+        self.assertEqual({"value": 1, "none": 0, "failed": 0}, report["fields"]["steps"])
 
 
 if __name__ == "__main__":
