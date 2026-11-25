@@ -733,13 +733,203 @@ class DisplayConsistencyTests(unittest.TestCase):
         # 재검토 MD9: 전체 이력에서 세면 지난 일이 남아 값이 늘기만 한다.
         weights = [84.0] * 200
         for index in (10, 40, 70):
-            weights[index] = 86.5  # 직전 측정과 2.5kg 차이: 오를 때와 내릴 때 한 번씩 센다
+            weights[index] = 86.5  # 추세(84.0)에서 2.5kg 벗어난 측정
         quality = sync_garmin._modeling.data_quality_diagnostics
-        self.assertEqual(0, quality(_series_rows(weights))["outlierCandidates"])
-        self.assertEqual(60, quality(_series_rows(weights))["outlierWindowDays"])
+        rows = _series_rows(weights)
+        self.assertEqual(0, quality(rows)["outlierCandidates"])
+        self.assertEqual(60, quality(rows)["outlierWindowDays"])
+        self.assertEqual([rows[i]["date"] for i in (10, 40, 70)], quality(rows)["limitedDates"])
         weights[170] = 86.5
-        self.assertEqual(2, quality(_series_rows(weights))["outlierCandidates"])
-        self.assertEqual(8, quality(_series_rows(weights), outlier_window_days=400)["outlierCandidates"])
+        rows = _series_rows(weights)
+        self.assertEqual(1, quality(rows)["outlierCandidates"])
+        self.assertEqual(4, quality(rows, outlier_window_days=400)["outlierCandidates"])
+        # 요약이 넘겨준 날짜를 그대로 센다(차트 표시와 같은 정의).
+        self.assertEqual(1, quality(rows, limited_dates=[rows[190]["date"], rows[5]["date"], "1999-01-01"])["outlierCandidates"])
+
+
+class StrayMeasurementTests(unittest.TestCase):
+    """재검토 MD8: 잘못된 측정 한 건이 추세·예측·ETA를 끌고 가지 못한다."""
+
+    def test_stray_reading_moves_the_trend_by_a_fraction(self) -> None:
+        ewma = sync_garmin._modeling.ewma_with_limits
+        values, limited = ewma([84.0] * 10 + [70.0] + [84.0] * 5)
+        # λ = 0.1이고 갱신 폭은 0.8kg까지다. 70kg(추세보다 14kg 아래)이 추세를 0.08kg만 내린다(제한이 없으면 1.4kg).
+        self.assertEqual(83.92, values[10])
+        self.assertEqual([i == 10 for i in range(16)], limited)
+        unlimited, flags = ewma([84.0] * 10 + [70.0] + [84.0] * 5, limit_kg=None)
+        self.assertEqual(82.6, unlimited[10])
+        self.assertFalse(any(flags))
+
+    def test_plain_ewma_is_unchanged_inside_the_limit(self) -> None:
+        from math import sin
+        weights = [84.0 + 0.3 * sin(i * 1.3) if i % 3 else None for i in range(60)]  # 추세에서 0.8kg 넘게 벗어나지 않는다
+        z, expected = None, []
+        for x in weights:
+            if x is not None:
+                z = x if z is None else 0.1 * x + 0.9 * z
+            expected.append(None if z is None else round(z, 2))
+        values, limited = sync_garmin._modeling.ewma_with_limits(weights)
+        self.assertEqual(expected, values)
+        self.assertFalse(any(limited))
+        self.assertEqual(expected, sync_garmin._modeling.compute_ewma(weights))
+
+    def test_real_level_shift_is_followed_after_three_readings(self) -> None:
+        ewma = sync_garmin._modeling.ewma_with_limits
+        shifted = [84.0] * 10 + [86.5] * 20
+        values, limited = ewma(shifted)
+        # 처음 두 번은 잘못된 측정일 수 있어 일부만 반영한다. 같은 방향으로 세 번째부터는 실제 변화로 보고 그대로 반영한다.
+        self.assertEqual([True, True, False, False], limited[10:14])
+        self.assertFalse(any(limited[14:]))
+        always_limited, _ = ewma(shifted, release_after=None)
+        unlimited, _ = ewma(shifted, limit_kg=None)
+        self.assertGreater(values[23], always_limited[23] + 0.4)   # 14번째 측정에서 제한만 둔 경우보다 훨씬 가깝다
+        self.assertLess(unlimited[23] - values[23], 0.15)           # 제한이 없는 경우와 거의 같다
+
+    def test_strays_in_both_directions_do_not_count_as_a_shift(self) -> None:
+        _, limited = sync_garmin._modeling.ewma_with_limits([84.0] * 10 + [86.0, 82.0, 86.0, 82.0, 86.0])
+        self.assertEqual([True] * 5, limited[10:])
+
+    def test_summary_survives_a_stray_reading(self) -> None:
+        # 리포트의 재현: 어제 측정을 70kg으로 바꾸면 추세 84.20 → 82.79, 3개월 예측 84.7 → 79.1, ETA가 154일이 됐다.
+        from math import sin
+        weights = [round(84.2 + 0.3 * sin(i * 1.3), 2) for i in range(89)] + [None]
+        clean = sync_garmin.build_summary(_series_rows(weights), {"targetWeightKg": 78})
+        weights[-2] = 70.0
+        rows = _series_rows(weights)
+        stray = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        self.assertAlmostEqual(clean["current"]["weightEwmaKg"], stray["current"]["weightEwmaKg"], delta=0.12)
+        self.assertAlmostEqual(clean["predictions"]["threeMonthWeightKg"], stray["predictions"]["threeMonthWeightKg"], delta=1.0)
+        # 추세가 0.08kg 내려가 감량률의 부호가 바뀔 수는 있다. 그래도 도달일이 생기지는 않는다.
+        self.assertEqual("no_loss", clean["goal"]["etaStatus"])
+        self.assertIn(stray["goal"]["etaStatus"], ("no_loss", "beyond"))
+        self.assertIsNone(stray["goal"]["etaDays"])
+        quality = stray["modelDiagnostics"]["dataQuality"]
+        self.assertIn(rows[-2]["date"], quality["limitedDates"])
+        self.assertGreaterEqual(quality["outlierCandidates"], 1)
+        self.assertEqual(70.0, stray["current"]["weightKg"])  # 측정값 자체는 그대로 보여 준다
+
+    def test_implausible_weights_are_not_weights(self) -> None:
+        plausible = sync_garmin.plausible_weight
+        self.assertEqual([None, 30.0, 84.1, 250.0, None, None, None, None, None],
+                         [plausible(v) for v in (29.9, 30, "84.1", 250.0, 250.1, 0, float("inf"), float("nan"), "")])
+        self.assertIsNone(sync_garmin.parse_float(float("inf")))
+        self.assertIsNone(sync_garmin.parse_float("-inf"))
+        extract = sync_garmin.extract_body_metrics
+        for raw in (0.0, 5000.0, 500000.0):  # 0kg, 5kg(그램 값), 500kg(그램 값)
+            with self.subTest(raw=raw):
+                with self.assertLogs(sync_garmin.LOGGER, "WARNING") as logs:
+                    metrics = extract({"totalAverage": {"weight": raw}, "dateWeightList": [{"samplePk": 1}]})
+                self.assertEqual((None, 0), (metrics["weight_kg"], metrics["weight_measure_count"]))
+                # 버린 값 자체는 로그에 남기지 않는다(공개 로그 규칙).
+                self.assertEqual(["WARNING:garmin_weight:garmin weight outside 30.0-250.0 kg ignored"], logs.output)
+        self.assertEqual(83.9, extract({"totalAverage": {"weight": 83900.0}, "dateWeightList": [{"samplePk": 1}]})["weight_kg"])
+
+    def test_implausible_csv_value_is_left_out_of_the_model(self) -> None:
+        # CSV를 손으로 고치다 생긴 값(84.1을 841로)은 모델에 넣지 않는다.
+        weights = [84.0] * 40
+        weights[30] = 841.0
+        rows = _series_rows(weights)
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        self.assertEqual(84.0, summary["current"]["weightEwmaKg"])
+        self.assertIsNone(summary["series"]["daily"][30]["valueKg"])
+        self.assertEqual(1, summary["modelDiagnostics"]["dataQuality"]["implausibleWeights"])
+        self.assertEqual(841.0, rows[30]["weight_kg"], "the caller's rows are not modified")
+        self.assertEqual(0, sync_garmin.build_summary(_series_rows([84.0] * 40), {"targetWeightKg": 78})["modelDiagnostics"]["dataQuality"]["implausibleWeights"])
+
+
+class IntervalShapeTests(unittest.TestCase):
+    """재검토 MD3: 80% 띠는 주마다 그 기간 과거 오차의 80분위로 만든다. 9주차의 계단이 없다."""
+
+    @staticmethod
+    def _noisy_rows(days: int = 320) -> list[dict]:
+        """완만한 감량에 고른 잡음을 얹는다(표준편차 0.4kg, 시드 고정). 닷새에 하루는 재지 않는다.
+
+        오차의 분포가 기간 내내 같아서, 기준 시점마다 다시 만든 80% 구간의 적중률이 80% 근처에 나와야 한다.
+        """
+        import random
+        noise = random.Random(20261125)
+        return _series_rows([round(86.0 - 0.01 * i + noise.gauss(0.0, 0.4), 2) if i % 5 else None for i in range(days)])
+
+    def test_half_widths_follow_past_errors_week_by_week(self) -> None:
+        widths = sync_garmin._modeling.interval_half_widths
+        quantile = sync_garmin._modeling.quantile
+        errors = {week: sorted(0.1 * week + 0.01 * i for i in range(40)) for week in range(1, 13)}
+        result = widths(errors, std_residual=0.3)
+        self.assertEqual([round(quantile(errors[week], 0.8), 6) for week in range(1, 13)], [round(v, 6) for v in result])
+
+    def test_half_widths_never_shrink_and_fall_back_without_samples(self) -> None:
+        widths = sync_garmin._modeling.interval_half_widths
+        # 오차가 없으면 모수 추정이다: 1.28 × 표준편차 × √주.
+        parametric = widths({}, std_residual=0.4, weeks=4)
+        self.assertEqual([round(1.28 * 0.4 * week ** 0.5, 6) for week in (1, 2, 3, 4)], [round(v, 6) for v in parametric])
+        # 3주까지만 오차가 충분하다. 4주부터는 3주의 반폭을 √(주 비)로 늘린다. 모수 추정과 섞지 않는다.
+        errors = {1: [0.5] * 30, 2: [0.7] * 30, 3: [1.2] * 30, 4: [0.1] * 5}
+        partial = widths(errors, std_residual=0.1, weeks=6)
+        self.assertEqual([0.5, 0.7, 1.2], partial[:3])
+        self.assertAlmostEqual(1.2 * (4 / 3) ** 0.5, partial[3])
+        self.assertAlmostEqual(1.2 * (6 / 3) ** 0.5, partial[5])
+        # 어느 주의 과거 오차가 앞 주보다 작아도 반폭은 줄지 않는다.
+        dipping = widths({1: [0.9] * 30, 2: [0.6] * 30, 3: [1.0] * 30}, std_residual=0.1, weeks=3)
+        self.assertEqual([0.9, 0.9, 1.0], dipping)
+
+    def test_band_has_no_step_and_matches_the_backtest_errors(self) -> None:
+        rows = self._noisy_rows()
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78}, detail=True)
+        band = summary["predictionCI"]["series"]
+        half = [round(point["upper80"] - point["central"], 2) for point in band]
+        self.assertEqual(12, len(half))
+        self.assertEqual(half, [round(point["central"] - point["lower80"], 2) for point in band])
+        self.assertEqual([point["valueKg"] for point in summary["series"]["prediction"][1:]], [point["central"] for point in band])
+        for earlier, later in zip(half, half[1:]):
+            self.assertGreaterEqual(later, earlier)
+            # 예전에는 8주 → 9주에 1.8배로 뛰었다(12주의 RMSE를 9주부터 빌려 썼다).
+            self.assertLessEqual(later, earlier * 1.5 + 0.01)
+
+        # 요약과 따로 다시 계산한다: 주마다 운영 모델의 |실측 − 예측|의 80분위.
+        modeling = sync_garmin._modeling
+        usable = rows  # 마지막 행에 체중이 있다
+        ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(usable, modeling.compute_ewma([r["weight_kg"] for r in usable]))]
+        ma7 = {p["date"]: p["valueKg"] for p in summary["series"]["daily"]}
+        run = modeling.run_backtest(usable, ewma, ma7, target_weight=78.0, horizons=modeling.CI_HORIZONS)
+        expected = []
+        for week in range(1, 13):
+            errors = sorted(abs(s["actual"] - s["predictions"]["current"]) for s in run["samples"][7 * week])
+            self.assertGreaterEqual(len(errors), 20, f"fixture should give enough samples at week {week}")
+            expected.append(modeling.quantile(errors, 0.8))
+        for week in range(1, 12):
+            expected[week] = max(expected[week], expected[week - 1])
+        self.assertEqual([round(v, 2) for v in expected], half)
+
+    def test_replayed_hit_rate_is_near_the_target_every_week(self) -> None:
+        summary = sync_garmin.build_summary(self._noisy_rows(), {"targetWeightKg": 78}, detail=True)
+        calibration = summary["modelDiagnostics"]["ciCalibration"]
+        self.assertEqual([f"{7 * week}d" for week in range(1, 13)], list(calibration["hitRate"]))
+        self.assertEqual(0.8, calibration["targetHitRate"])
+        for horizon, rate in calibration["hitRate"].items():
+            with self.subTest(horizon=horizon):
+                self.assertIsNotNone(rate)
+                self.assertGreater(rate, 0.6)
+                self.assertLess(rate, 0.97)
+        # 화면이 쓰는 네 기간만 predictionCI.hitRate에 둔다.
+        self.assertEqual(["7d", "14d", "28d", "84d"], list(summary["predictionCI"]["hitRate"]))
+        self.assertEqual(calibration["hitRate"]["28d"], summary["predictionCI"]["hitRate"]["28d"])
+
+    def test_comparison_table_keeps_its_four_horizons(self) -> None:
+        for detail in (False, True):
+            diag = sync_garmin.build_summary(self._noisy_rows(), {"targetWeightKg": 78}, detail=detail)["modelDiagnostics"]
+            with self.subTest(detail=detail):
+                self.assertEqual(["7d", "14d", "28d", "84d"], list(diag["backtest"]))
+                self.assertEqual(["7d", "14d", "28d", "84d"], list(diag["backtestSampleCounts"]))
+                for name, stats in diag["modelAudit"].items():
+                    self.assertEqual(["7d", "14d", "28d", "84d"], list(stats), name)
+
+    def test_short_history_uses_the_parametric_band(self) -> None:
+        from math import sin
+        rows = _series_rows([round(84.0 + 0.3 * sin(i * 1.3), 2) for i in range(40)])
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        std = summary["predictionCI"]["stdResidual"]
+        half = [round(point["upper80"] - point["central"], 2) for point in summary["predictionCI"]["series"]]
+        self.assertEqual([round(1.28 * std * week ** 0.5, 2) for week in range(1, 13)], half)
 
 
 class SummarySlimTests(unittest.TestCase):

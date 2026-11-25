@@ -80,6 +80,17 @@ def reached_summary() -> dict:
     return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
 
 
+STRAY_DAY = 40
+
+
+def stray_summary() -> dict:
+    """steady와 같은 60일인데 41번째 날에 다른 사람이 잰 70kg이 섞여 있다."""
+    start = date(2030, 1, 1)
+    rows = [_row(start + timedelta(days=i), round(84.0 + 0.25 * sin(i * 1.3), 2)) for i in range(60)]
+    rows[STRAY_DAY]["weight_kg"] = 70.0
+    return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
+
+
 def patched(summary: dict, *, scenario_values: float | None = None, long_range: str | None = None,
             eta: tuple[int, str] | None = None, blended: float | None = None) -> dict:
     """요약의 사본에서 화면이 읽는 값 몇 개만 바꾼다(백엔드로는 만들기 번거로운 상태를 그리기 위한 것)."""
@@ -139,6 +150,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
         cls.summaries.update({
             "empty": sync_garmin.build_summary([], {"targetWeightKg": TARGET_KG}),
             "reached": with_sync(reached_summary(), 2),
+            "stray": with_sync(stray_summary(), 2),
             "equal": patched(long, scenario_values=78.0, long_range="ok"),
             "longworse": patched(long, long_range="worse_than_flat", eta=(400, "2031-07-05")),
             "zero": patched(cls.summaries["steady"], blended=0.001),
@@ -578,6 +590,63 @@ class GarminWeightBrowserTests(unittest.TestCase):
         page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
         page.wait_for_function("!document.querySelector('.app').dataset.busy", timeout=10000)
         self.assertEqual(2, page.server["requests"])
+
+    # --- 재검토 Q4: 이상 측정과 신뢰 띠 ---------------------------------------------------
+
+    def test_stray_measurement_is_marked_on_the_chart(self) -> None:
+        """재검토 MD8: 추세에 일부만 반영한 측정은 속이 빈 점으로 그리고, 범례와 툴팁이 그 뜻을 말한다."""
+        summary = self.summaries["stray"]
+        stray_date = summary["series"]["daily"][STRAY_DAY]["date"]
+        self.assertEqual([stray_date], summary["modelDiagnostics"]["dataQuality"]["limitedDates"])
+        self.assertAlmostEqual(84.0, summary["current"]["weightEwmaKg"], delta=0.15)  # 70kg 한 건이 추세를 끌고 가지 않는다
+
+        page = self.open_page("stray")
+        facts = page.evaluate(f"""() => {{
+          const norm = {NORMALIZE_COLOR_JS};
+          const chart = Chart.getChart(document.getElementById('weightChart'));
+          const index = chart.data.datasets.findIndex((d) => d.label === '실제');
+          const points = chart.data.datasets[index].data;
+          const elements = chart.getDatasetMeta(index).data;
+          const marked = points.map((p, i) => (p.limited ? i : -1)).filter((i) => i >= 0);
+          const style = (i) => {{ const o = elements[i].options; return [norm(o.backgroundColor), norm(o.borderColor), o.radius]; }};
+          const label = chart.options.plugins.tooltip.callbacks.label;
+          return {{
+            marked: marked.map((i) => window.GWAppHelpers.dayIso(points[i].x)),
+            markedStyle: style(marked[0]), plainStyle: style(0),
+            white: norm('#fff'), accent: norm('#FF6F61'),
+            legend: [...document.querySelectorAll('[data-legend="limited"]')].map((n) => n.hidden),
+            markedLabel: label({{ dataset: {{ label: '실제' }}, formattedValue: '70', raw: points[marked[0]] }}),
+            plainLabel: label({{ dataset: {{ label: '실제' }}, formattedValue: '84', raw: points[0] }}),
+            help: document.querySelector('#detailQuality .quality-row-label').title,
+            count: document.querySelector('#detailQuality .quality-val').textContent,
+          }};
+        }}""")
+        self.assertEqual([stray_date], facts["marked"])
+        self.assertEqual([facts["white"], facts["accent"], 4], facts["markedStyle"])
+        self.assertNotEqual(facts["markedStyle"], facts["plainStyle"])
+        self.assertEqual([False, False], facts["legend"])
+        self.assertEqual("실제: 70 · 추세에 일부만 반영", facts["markedLabel"])
+        self.assertEqual("실제: 84", facts["plainLabel"])
+        self.assertIn("일부만 반영", facts["help"])
+        self.assertEqual("낮음 1", facts["count"])
+
+        clean = self.open_page("steady")
+        self.assertEqual([True, True], clean.evaluate("[...document.querySelectorAll('[data-legend=limited]')].map((n) => n.hidden)"))
+
+    def test_band_has_no_step_between_neighbouring_weeks(self) -> None:
+        """재검토 MD3: 8주 → 9주에 폭이 1.8배로 뛰던 계단이 차트에 없다."""
+        page = self.open_page("long")
+        half = page.evaluate("""() => {
+          const chart = Chart.getChart(document.getElementById('weightChart'));
+          const pick = (label) => chart.data.datasets.find((d) => d.label === label).data;
+          const upper = pick('ciUpper'), line = pick('예측');
+          return upper.map((p, i) => p.y - line[i].y);
+        }""")
+        self.assertEqual(13, len(half))
+        self.assertAlmostEqual(0.0, half[0], places=6)
+        for earlier, later in zip(half[1:], half[2:]):
+            self.assertGreaterEqual(later + 1e-9, earlier)
+            self.assertLessEqual(later, earlier * 1.5 + 0.01)
 
     def test_no_console_warnings(self) -> None:
         """P8(W5): 콘솔 경고가 없다(Playwright가 서비스 워커를 막는다는 안내는 테스트 환경 탓이라 뺀다)."""

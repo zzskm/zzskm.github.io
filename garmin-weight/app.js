@@ -356,7 +356,10 @@
           legend: { display: false },
           tooltip: {
             filter: (item) => !String(item.dataset.label || '').startsWith('ci'),
-            callbacks: { title: (items) => (items.length ? fmtDate(dayIso(items[0].parsed.x)) : '') },
+            callbacks: {
+              title: (items) => (items.length ? fmtDate(dayIso(items[0].parsed.x)) : ''),
+              label: (item) => `${item.dataset.label}: ${item.formattedValue}${item.raw?.limited ? ' · 추세에 일부만 반영' : ''}`,
+            },
             backgroundColor: THEME.tooltipBg,
             borderColor: THEME.tooltipBorder,
             borderWidth: 1,
@@ -382,6 +385,10 @@
     state.chart.options.plugins.targetLine.value = Number.isFinite(target) ? target : null;
 
     const daily = sliceByRange(s.series?.daily || [], state.range);
+    // 추세에서 크게 벗어나 추세에 일부만 반영한 측정(재검토 MD8). 속이 빈 점으로 그린다.
+    const limitedDates = new Set(s.modelDiagnostics?.dataQuality?.limitedDates || []);
+    const actual = toXY(daily).map((point) => (limitedDates.has(dayIso(point.x)) ? { ...point, limited: true } : point));
+    document.querySelectorAll('[data-legend="limited"]').forEach((item) => { item.hidden = !actual.some((point) => point.limited); });
     const ewma = sliceByRange(s.series?.ewma || [], state.range);
     const ma14 = sliceByRange(s.series?.ma14 || [], state.range);
     const prediction = buildPredictionFromScenario(s, state.scenario);
@@ -405,7 +412,8 @@
       state.chart.data.datasets.push({ label: '14일 평균', data: toXY(ma14), borderColor: THEME.ma14, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
     }
 
-    state.chart.data.datasets.push({ label: '실제', data: toXY(daily), borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: THEME.actualPoint, pointBorderColor: '#fff', pointBorderWidth: 1.5, tension: 0.3, spanGaps: true, fill: true, order: 0 });
+    const whenLimited = (limitedValue, value) => (ctx) => (ctx.raw?.limited ? limitedValue : value);
+    state.chart.data.datasets.push({ label: '실제', data: actual, borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: whenLimited(4, 3), pointHoverRadius: 5, pointBackgroundColor: whenLimited('#fff', THEME.actualPoint), pointBorderColor: whenLimited(THEME.predict, '#fff'), pointBorderWidth: whenLimited(2, 1.5), tension: 0.3, spanGaps: true, fill: true, order: 0 });
 
     state.chart.update();
   }

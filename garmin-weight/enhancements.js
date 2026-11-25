@@ -271,12 +271,13 @@
       // 최근 창(기본 60일)에서 직전 측정과 크게 벌어진 측정 수. 창 길이가 없는 예전 요약은 전체 이력에서 센 값이다.
       const outliers = dq.outlierCandidates ?? 0;
       const outlierLabel = isFiniteNumber(dq.outlierWindowDays) ? `이상치 · ${dq.outlierWindowDays}일` : '이상치';
+      const outlierHelp = '추세에서 0.8kg 넘게 벗어나 추세에 일부만 반영한 측정 수입니다. 차트에는 속이 빈 점으로 나옵니다.';
       const coveragePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
       const outlierLevel = outliers <= 3 ? '낮음' : (outliers <= 8 ? '중간' : '높음');
       const coverageLevel = coveragePct >= 80 ? '좋음' : (coveragePct >= 50 ? '보통' : '부족');
       detailQuality.replaceChildren(node('div', 'quality-section', null, [
         node('div', 'quality-row', null, [
-          node('span', 'quality-row-label', outlierLabel),
+          Object.assign(node('span', 'quality-row-label', outlierLabel), { title: outlierHelp }),
           bar('quality-bar-track', 'quality-bar-fill', outliers * 10),
           node('span', 'quality-val', `${outlierLevel}${outliers > 0 ? ` ${outliers}` : ''}`),
         ]),

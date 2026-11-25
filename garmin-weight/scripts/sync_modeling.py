@@ -514,48 +514,145 @@ def measurement_weight(row: dict[str, Any], use_sleep: bool = True, use_load: bo
     return max(w, 0.4)
 
 
+# 측정 하나가 추세에서 이만큼 넘게 벗어나 있으면, 이만큼만 벗어난 것으로 보고 추세에 반영한다(재검토 MD8).
+# 다른 사람이 잰 값 같은 잘못된 측정 한 건이 추세·예측·ETA를 끌고 가지 못하게 한다. 0.8kg은 일별 실측과 추세의
+# 차이(표준편차 0.3~0.5kg)의 약 2배다. 실제 이력에서 측정의 약 5분의 1이 이 선을 넘는다.
+EWMA_UPDATE_LIMIT_KG = 0.8
+# 같은 방향으로 이 횟수만큼 연속으로 벗어나면 잘못된 측정이 아니라 실제 변화로 보고, 그 측정부터 그대로 반영한다.
+# 제한만 두면 2.5kg의 실제 변화를 따라잡는 데 25일이 걸린다(제한이 없으면 15일, 3회 뒤에 풀면 17일).
+EWMA_LIMIT_RELEASE_AFTER = 3
+
+
+def ewma_with_limits(
+    weight_values: list[float | None],
+    lambda_: float = EWMA_LAMBDA,
+    weights: list[float] | None = None,
+    limit_kg: float | None = EWMA_UPDATE_LIMIT_KG,
+    release_after: int | None = EWMA_LIMIT_RELEASE_AFTER,
+) -> tuple[list[float | None], list[bool]]:
+    """(EWMA 값, 측정마다 반영이 제한됐는지).
+
+    Z_t = λ_eff·X_t + (1 − λ_eff)·Z_{t-1}. None은 건너뛰고 직전 Z를 유지한다.
+    weights가 있으면 그 날의 가중치만큼 λ를 줄인다(λ_eff = λ·w, 1.0이면 그대로).
+    X_t가 Z_{t-1}에서 limit_kg 넘게 벗어나 있으면 X_t 대신 Z_{t-1} ± limit_kg를 넣는다. 같은 방향으로
+    release_after번 연속 벗어나면 X_t를 그대로 넣는다. limit_kg가 None이면 제한이 없다.
+    제한에 걸리지 않는 측정의 계산은 제한을 두기 전과 한 자리도 다르지 않다.
+    """
+    z: float | None = None
+    out: list[float | None] = []
+    limited: list[bool] = []
+    streak, direction = 0, 0
+    for i, x in enumerate(weight_values):
+        was_limited = False
+        if x is not None:
+            w = (weights[i] if weights is not None and i < len(weights) else 1.0)
+            lam_eff = lambda_ * max(min(w, 1.0), 0.0)
+            if z is None:
+                z = x
+            else:
+                if limit_kg is not None and abs(x - z) > limit_kg:
+                    sign = 1 if x > z else -1
+                    streak = streak + 1 if sign == direction else 1
+                    direction = sign
+                    if release_after is None or streak < release_after:
+                        x = z + sign * limit_kg
+                        was_limited = True
+                else:
+                    streak, direction = 0, 0
+                z = lam_eff * x + (1 - lam_eff) * z
+        out.append(round(z, 2) if z is not None else None)
+        limited.append(was_limited)
+    return out, limited
+
+
 def compute_ewma(
     weight_values: list[float | None],
     lambda_: float = EWMA_LAMBDA,
     weights: list[float] | None = None,
 ) -> list[float | None]:
-    """Z_t = λ_eff·X_t + (1-λ_eff)·Z_{t-1}. None은 건너뛰고 직전 Z 유지.
+    """ewma_with_limits의 EWMA 값만 돌려준다."""
+    return ewma_with_limits(weight_values, lambda_, weights)[0]
 
-    weights가 제공되면 그 날의 가중치만큼 λ를 축소(`λ_eff = λ · w`).
-    가중치 1.0 = 기존 동작, 0.7 = 영향력 30% 감소.
+
+# 80% 구간을 그리는 주 수와, 그 구간을 만들 때 평가하는 예측 기간(일). 화면의 비교 표는 BACKTEST_HORIZONS만 쓴다.
+CI_WEEKS = 12
+CI_LEVEL = 0.8
+CI_HORIZONS = tuple(7 * week for week in range(1, CI_WEEKS + 1))
+CI_MIN_SAMPLES = 20
+
+
+def quantile(sorted_values: list[float], q: float) -> float:
+    """정렬된 값의 분위수(선형 보간). 빈 목록이면 0.0."""
+    if not sorted_values:
+        return 0.0
+    position = (len(sorted_values) - 1) * q
+    lower = int(math.floor(position))
+    upper = min(lower + 1, len(sorted_values) - 1)
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * (position - lower)
+
+
+def interval_half_widths(
+    abs_errors_by_week: dict[int, list[float]],
+    std_residual: float,
+    weeks: int = CI_WEEKS,
+    min_samples: int = CI_MIN_SAMPLES,
+) -> list[float]:
+    """1주~weeks주의 80% 구간 반폭(kg).
+
+    abs_errors_by_week[주]는 그 기간 과거 예측의 |실측 − 예측|을 오름차순으로 정렬한 목록이다.
+    - 오차가 min_samples개 이상인 주: 그 오차의 80분위다. 과거 예측의 80%가 이 폭 안에 들었다는 뜻이다.
+    - 모자란 주: 오차가 충분한 가장 가까운 앞 주의 반폭을 √(주 비)로 늘린다. 그런 주가 하나도 없으면(이력이 짧다)
+      모수 추정(1.28 × 잔차 표준편차 × √주)을 쓴다. 두 방법을 한 띠에 섞지 않는다. 섞으면 그 경계에서 폭이 뛴다
+      (실제 이력을 재생하면 잔차 표준편차가 컸던 2026-05~07에 3배까지 뛰었다).
+    - 반폭은 주가 갈수록 줄지 않는다.
+
+    이웃한 주의 반폭 비는 모수 추정과 √ 연장에서 √2를 넘지 않는다. 오차로 정한 주끼리는 과거 오차가 그만큼
+    달랐을 때만 넘는다.
+    예전에는 평가한 기간(1·2·4·12주)의 RMSE를 가장 가까운 주에 빌려 써서 9주차에 폭이 1.8배로 뛰었고,
+    5~8주는 그 기간의 실제 오차보다 좁았다(재검토 MD3).
     """
-    z: float | None = None
-    out: list[float | None] = []
-    for i, x in enumerate(weight_values):
-        if x is not None:
-            w = (weights[i] if weights is not None and i < len(weights) else 1.0)
-            lam_eff = lambda_ * max(min(w, 1.0), 0.0)
-            z = x if z is None else lam_eff * x + (1 - lam_eff) * z
-        out.append(round(z, 2) if z is not None else None)
-    return out
+    widths: list[float] = []
+    anchor: tuple[int, float] | None = None  # (오차가 충분했던 마지막 주, 그 반폭)
+    for week in range(1, weeks + 1):
+        errors = abs_errors_by_week.get(week) or []
+        if len(errors) >= min_samples:
+            width = quantile(errors, CI_LEVEL)
+            anchor = (week, width)
+        elif anchor is not None:
+            width = anchor[1] * math.sqrt(week / anchor[0])
+        else:
+            width = 1.28 * std_residual * math.sqrt(week)
+        if widths:
+            width = max(width, widths[-1])
+        widths.append(width)
+    return widths
+
+
+def residual_std(residuals: list[float | None]) -> float:
+    """일별 실측과 추세의 차이의 표준편차. 값이 5개 미만이면 0.5kg으로 둔다."""
+    known = [value for value in residuals if value is not None]
+    return statistics.stdev(known) if len(known) >= 5 else 0.5
 
 
 def compute_prediction_ci(
     ewma_series: list[dict[str, Any]],
     weight_series: list[dict[str, Any]],
     effective_weekly_loss: float,
-    prediction_weeks: int = 12,
+    prediction_weeks: int = CI_WEEKS,
     target_weight: float | None = None,
-    backtest: dict[str, Any] | None = None,
+    backtest_samples: dict[int, list[dict[str, Any]]] | None = None,
     start_date: str | None = None,
 ) -> dict[str, Any]:
-    """예측 구간 (80% 밴드). start_date가 있으면 그 날부터 주 단위로 점을 찍는다(예측선과 날짜를 맞춘다).
+    """예측 구간(80% 띠). start_date가 있으면 그 날부터 주 단위로 점을 찍는다(예측선과 날짜를 맞춘다).
 
-    P3: central은 지수 감쇠 외삽과 일치.
-    P4: 잔차 std × √t 와 horizon별 backtest RMSE 중 더 큰 값 사용 (CI 저평가 방지).
+    중심은 예측 곡선이고 반폭은 interval_half_widths가 정한다. backtest_samples는 run_backtest의 samples다
+    (예측 기간(일) → 표본). 주마다 운영 모델의 과거 오차를 모아 넘긴다.
     """
     ew_map = {p["date"]: p["valueKg"] for p in ewma_series if p["valueKg"] is not None}
-    residuals = [
-        p["valueKg"] - ew_map[p["date"]]
+    std = residual_std([
+        p["valueKg"] - ew_map[p["date"]] if p["valueKg"] is not None and p["date"] in ew_map else None
         for p in weight_series[-30:]
-        if p["valueKg"] is not None and p["date"] in ew_map
-    ]
-    std = statistics.stdev(residuals) if len(residuals) >= 5 else 0.5
+    ])
 
     last_valid = next((p for p in reversed(ewma_series) if p["valueKg"] is not None), None)
     if last_valid is None:
@@ -564,38 +661,16 @@ def compute_prediction_ci(
     start = last_valid["valueKg"]
     last_date = date.fromisoformat(start_date or last_valid["date"])
 
-    # P4: backtest RMSE를 주(week) 단위 키로 사전 인덱싱. 키는 7d/14d/28d → 1/2/4주.
-    bt_rmse_by_week: dict[int, float] = {}
-    if backtest:
-        for horizon_key, val in backtest.items():
-            if not isinstance(val, dict) or val.get("status") != "ok":
-                continue
-            try:
-                days = int(horizon_key.rstrip("d"))
-            except ValueError:
-                continue
-            wk = max(1, round(days / 7))
-            rmse = val.get("rmseKg")
-            if isinstance(rmse, (int, float)):
-                bt_rmse_by_week[wk] = float(rmse)
-
-    def _backtest_rmse_for(week: int) -> float | None:
-        """가장 가까운 horizon의 RMSE를 반환. (예: 5주차 → 4주 backtest 사용)"""
-        if not bt_rmse_by_week:
-            return None
-        nearest = min(bt_rmse_by_week.keys(), key=lambda w: abs(w - week))
-        return bt_rmse_by_week[nearest]
+    abs_errors = {
+        week: sorted(abs(sample["actual"] - sample["predictions"][OPERATIONAL_MODEL]) for sample in (backtest_samples or {}).get(7 * week, []))
+        for week in range(1, prediction_weeks + 1)
+    }
+    widths = interval_half_widths(abs_errors, std, weeks=prediction_weeks)
 
     series = []
     for week in range(1, prediction_weeks + 1):
-        central_raw = _projected_weight(start, effective_weekly_loss, week, target_weight)
-        central = round(central_raw, 2)
-        residual_spread = 1.28 * std * (week ** 0.5)
-        bt_rmse = _backtest_rmse_for(week)
-        # backtest RMSE는 이미 실측 오차이므로 1.28σ에 해당한다고 보고 동일 스케일로 비교
-        # (분포가 가우시안 80%면 1.28σ ≈ RMSE 수준).
-        bt_spread = bt_rmse if bt_rmse is not None else 0.0
-        spread80 = round(max(residual_spread, bt_spread), 2)
+        central = round(_projected_weight(start, effective_weekly_loss, week, target_weight), 2)
+        spread80 = round(widths[week - 1], 2)
         series.append({
             "date": (last_date + timedelta(weeks=week)).isoformat(),
             "central": central,
@@ -888,13 +963,16 @@ def build_insight(
 OUTLIER_WINDOW_DAYS = 60
 
 
-def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, outlier_delta_kg: float = 1.5,
+def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30,
                              streak_penalty_days: int = 5, coverage_penalty_pct: float = 70.0,
-                             outlier_window_days: int = OUTLIER_WINDOW_DAYS) -> dict[str, Any]:
+                             outlier_window_days: int = OUTLIER_WINDOW_DAYS,
+                             limited_dates: list[str] | None = None) -> dict[str, Any]:
     """자료 품질 진단. rows는 완료된 날만 준다(오늘 행 제외). 요약의 측정률과 같은 창을 세기 위해서다(재검토 MD6).
 
-    outlierCandidates는 최근 outlier_window_days일 안에서 직전 측정과 크게 벌어진 측정 수다. 전체 이력에서 세면
-    지난 일이 계속 남아 값이 늘기만 한다(재검토 MD9).
+    이상치는 한 가지 뜻으로만 쓴다: 추세에서 EWMA_UPDATE_LIMIT_KG 넘게 벗어나 추세에 일부만 반영한 측정이다
+    (ewma_with_limits). limited_dates는 그런 측정의 날짜이고, 주지 않으면 rows의 체중으로 계산한다.
+    - limitedDates: rows 안의 그런 날짜 전부. 화면이 차트에 표시한다.
+    - outlierCandidates: 그중 최근 outlier_window_days일 안의 건수. 전체 이력에서 세면 지난 일이 남아 값이 늘기만 한다(재검토 MD9).
     """
     if not rows:
         return {
@@ -907,6 +985,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
             "longestMissingStreak": 0,
             "outlierCandidates": 0,
             "outlierWindowDays": outlier_window_days,
+            "limitedDates": [],
             "usableForRegression": False,
             "recentMeasurementCadence": None,
             "confidencePenalties": ["no_data"],
@@ -922,42 +1001,22 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
 
     longest_missing = 0
     current_streak = 0
-    outlier_candidates = 0
-    previous_weight: float | None = None
-    measured_dates = 0
-    total_dates = total_days
-
-    recent_measured_weights: list[float] = []
-    for row in last_n:
-        w = row.get("weight_kg")
-        if w is not None:
-            recent_measured_weights.append(float(w))
-
-    diffs: list[float] = []
-    for i in range(1, len(recent_measured_weights)):
-        diffs.append(abs(recent_measured_weights[i] - recent_measured_weights[i - 1]))
-
-    adaptive_delta = outlier_delta_kg
-    if len(diffs) >= 3:
-        mean_diff = sum(diffs) / len(diffs)
-        variance = sum((d - mean_diff) ** 2 for d in diffs) / len(diffs)
-        std_diff = variance ** 0.5
-        adaptive_delta = max(outlier_delta_kg, std_diff * 2)
-
-    outlier_from = max(0, len(rows) - outlier_window_days)
-    for index, row in enumerate(rows):
-        weight = row.get("weight_kg")
-        if weight is None:
+    for row in rows:
+        if row.get("weight_kg") is None:
             current_streak += 1
             longest_missing = max(longest_missing, current_streak)
         else:
             current_streak = 0
-            measured_dates += 1
-            if index >= outlier_from and previous_weight is not None and abs(weight - previous_weight) >= adaptive_delta:
-                outlier_candidates += 1
-            previous_weight = weight
 
-    cadence = round(measured_dates / total_dates, 3) if total_dates else None
+    if limited_dates is None:
+        _, flags = ewma_with_limits([row.get("weight_kg") for row in rows])
+        limited_dates = [row["date"] for row, was_limited in zip(rows, flags) if was_limited]
+    row_dates = {row["date"] for row in rows}
+    limited = sorted(day for day in limited_dates if day in row_dates)
+    outlier_start = rows[max(0, len(rows) - outlier_window_days)]["date"]
+    outlier_candidates = sum(1 for day in limited if day >= outlier_start)
+
+    cadence = round(measured_days / total_days, 3) if total_days else None
     usable_for_regression = (
         total_days >= 14
         and measured_days >= 14
@@ -987,6 +1046,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
         "longestMissingStreak": longest_missing,
         "outlierCandidates": outlier_candidates,
         "outlierWindowDays": outlier_window_days,
+        "limitedDates": limited,
         "usableForRegression": usable_for_regression,
         "recentMeasurementCadence": cadence,
         "confidencePenalties": penalties,
@@ -1364,46 +1424,55 @@ def replay_ci_hit_rate(
 ) -> dict[str, Any]:
     """운영 모델의 80% 구간을 기준 시점마다 그때의 자료로 다시 만들어 실측 포함률을 잰다(M4).
 
-    구간 반폭은 compute_prediction_ci와 같다: max(1.28 × 잔차 표준편차 × √주, 같은 기간 백테스트 RMSE).
-    잔차 표준편차는 기준 시점까지 마지막 30행의 (체중 − EWMA)로, RMSE는 기준 시점까지 실측이 나온 오차만으로 구한다.
+    구간 반폭은 compute_prediction_ci와 같은 함수(interval_half_widths)로 만든다. 기준 시점마다 그때까지 실측이
+    나온 오차만 쓰고, 잔차 표준편차도 기준 시점까지 마지막 30행의 (체중 − EWMA)로 구한다.
     추세 방향과 무관하게 모든 표본에서 잰다.
     """
+    import bisect
+
     ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
     residuals: list[float | None] = []
     for row in rows:
         weight, level = row.get("weight_kg"), ewma_by_date.get(row["date"])
         residuals.append(weight - level if weight is not None and level is not None else None)
 
-    hit_rate: dict[str, float | None] = {}
-    counts: dict[str, int] = {}
-    for horizon in backtest.get("horizons", ()):
-        samples = sorted(backtest["samples"][horizon], key=lambda s: s["cutoff"])
-        known = sorted(
-            ((s["actualOrdinal"], s["predictions"][OPERATIONAL_MODEL] - s["actual"]) for s in samples),
-            key=lambda item: item[0],
-        )
-        week = max(1, round(horizon / 7))
-        pointer, sum_sq, known_count = 0, 0.0, 0
-        hits = total = 0
-        for sample in samples:
-            while pointer < len(known) and known[pointer][0] <= sample["cutoff"]:
-                sum_sq += known[pointer][1] ** 2
-                known_count += 1
-                pointer += 1
-            window = [r for r in residuals[max(0, sample["index"] - 30):sample["index"]] if r is not None]
-            std = statistics.stdev(window) if len(window) >= 5 else 0.5
-            rmse = math.sqrt(sum_sq / known_count) if known_count >= min_samples else 0.0
-            spread = max(1.28 * std * math.sqrt(week), rmse)
-            total += 1
-            if abs(sample["actual"] - sample["predictions"][OPERATIONAL_MODEL]) <= spread:
-                hits += 1
-        key = f"{horizon}d"
-        counts[key] = total
-        hit_rate[key] = round(hits / total, 3) if total >= min_samples else None
+    horizons = tuple(backtest.get("horizons", ()))
+    week_of = {horizon: max(1, round(horizon / 7)) for horizon in horizons}
+    weeks = max(week_of.values(), default=0)
+
+    def error_of(sample: dict[str, Any]) -> float:
+        return abs(sample["actual"] - sample["predictions"][OPERATIONAL_MODEL])
+
+    # 기간마다: 실측일 순서로 줄을 세워 두고, 기준 시점이 지나갈 때 그때까지 나온 오차를 정렬된 목록에 넣는다.
+    pending = {h: sorted(backtest["samples"][h], key=lambda s: s["actualOrdinal"]) for h in horizons}
+    pointer = {h: 0 for h in horizons}
+    known: dict[int, list[float]] = {week_of[h]: [] for h in horizons}
+    by_cutoff: dict[int, list[tuple[int, dict[str, Any]]]] = {}
+    for h in horizons:
+        for sample in backtest["samples"][h]:
+            by_cutoff.setdefault(sample["cutoff"], []).append((h, sample))
+
+    hits = {h: 0 for h in horizons}
+    totals = {h: 0 for h in horizons}
+    for cutoff in sorted(by_cutoff):
+        for h in horizons:
+            queue = pending[h]
+            while pointer[h] < len(queue) and queue[pointer[h]]["actualOrdinal"] <= cutoff:
+                bisect.insort(known[week_of[h]], error_of(queue[pointer[h]]))
+                pointer[h] += 1
+        index = by_cutoff[cutoff][0][1]["index"]
+        std = residual_std(residuals[max(0, index - 30):index])
+        widths = interval_half_widths(known, std, weeks=weeks, min_samples=min_samples)
+        for h, sample in by_cutoff[cutoff]:
+            totals[h] += 1
+            if error_of(sample) <= widths[week_of[h] - 1]:
+                hits[h] += 1
+
+    hit_rate = {f"{h}d": round(hits[h] / totals[h], 3) if totals[h] >= min_samples else None for h in horizons}
     return {
         "hitRate": hit_rate,
-        "sampleCounts": counts,
+        "sampleCounts": {f"{h}d": totals[h] for h in horizons},
         "status": "ok" if any(v is not None for v in hit_rate.values()) else "insufficient",
         "method": "replay",
-        "targetHitRate": 0.8,
+        "targetHitRate": CI_LEVEL,
     }

@@ -92,6 +92,9 @@ _projected_weight = _modeling._projected_weight
 build_prediction_series = _modeling.build_prediction_series
 measurement_weight = _modeling.measurement_weight
 compute_ewma = _modeling.compute_ewma
+ewma_with_limits = _modeling.ewma_with_limits
+BACKTEST_HORIZONS = _modeling.BACKTEST_HORIZONS
+CI_HORIZONS = _modeling.CI_HORIZONS
 compute_prediction_ci = _modeling.compute_prediction_ci
 compute_trend_windows = _modeling.compute_trend_windows
 run_backtest = _modeling.run_backtest
@@ -162,9 +165,20 @@ def parse_float(value: Any) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    if math.isnan(number):
+    if not math.isfinite(number):
         return None
     return number
+
+
+# 사람 체중으로 볼 수 있는 범위(kg). 이 밖의 값은 단위 오류나 잘못된 입력이다(재검토 MD8).
+MIN_WEIGHT_KG = 30.0
+MAX_WEIGHT_KG = 250.0
+
+
+def plausible_weight(value: Any) -> float | None:
+    """체중으로 쓸 수 있는 값이면 그 값(kg), 아니면 None."""
+    number = parse_float(value)
+    return number if number is not None and MIN_WEIGHT_KG <= number <= MAX_WEIGHT_KG else None
 
 
 def parse_int(value: Any) -> int | None:
@@ -780,11 +794,15 @@ def extract_body_metrics(body: Any) -> dict[str, Any]:
             "bodyWeight",
             "totalWeight",
         )
-        # 값이 있는데 200 초과면 grams으로 간주 (정상 체중 범위 가정)
-        if weight is not None and weight > 200:
+        # 값이 있는데 범위를 넘으면 grams으로 간주한다(응답이 kg 키에 그램 값을 싣는 경우).
+        if weight is not None and weight > MAX_WEIGHT_KG:
             weight = weight / 1000
 
     weigh_count = first_list_length(body, "dateWeightList", "weightSummaries", "allWeightMetrics", "weightEntries")
+    if weight is not None and plausible_weight(weight) is None:
+        # 0kg이나 500kg 같은 값은 저장하지 않는다. 값은 로그에 남기지 않는다.
+        LOGGER.warning("garmin weight outside %s-%s kg ignored", MIN_WEIGHT_KG, MAX_WEIGHT_KG)
+        weight, weigh_count = None, 0
     if weight is not None and weigh_count == 0:
         weigh_count = 1
 
@@ -1136,6 +1154,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             },
         }
 
+    # CSV를 손으로 고쳐 들어온 터무니없는 체중(예: 841)은 모델에 넣지 않는다. CSV의 값은 건드리지 않는다.
+    implausible_weights = sum(1 for row in rows if row.get("weight_kg") is not None and plausible_weight(row.get("weight_kg")) is None)
+    if implausible_weights:
+        rows = [{**row, "weight_kg": plausible_weight(row.get("weight_kg"))} for row in rows]
+
     all_dates = [row["date"] for row in rows]
     weights_by_date = {row["date"]: row.get("weight_kg") for row in rows}
     ma7_by_date = {}
@@ -1163,7 +1186,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         measurement_weight(row, use_sleep=features["sleepMeasurementWeighting"], use_load=features["loadMeasurementWeighting"])
         for row in rows
     ]
-    ewma_values = compute_ewma(all_weights, weights=ewma_weights)
+    # 추세에서 크게 벗어난 측정은 일부만 반영한다(재검토 MD8). 그런 측정의 날짜를 화면이 차트에 표시한다.
+    ewma_values, ewma_limited = ewma_with_limits(all_weights, weights=ewma_weights)
+    limited_dates = [all_dates[i] for i, was_limited in enumerate(ewma_limited) if was_limited]
     # D4: 마지막 행은 아직 끝나지 않은 오늘이다. 체중이 없으면 EWMA 계열에 넣지 않는다
     # (전날 값을 그대로 이은 점이 추세 기울기를 0 쪽으로 끌고 차트에도 측정 없는 점을 찍는다).
     ewma_days = len(rows) if rows[-1].get("weight_kg") is not None or len(rows) == 1 else len(rows) - 1
@@ -1328,18 +1353,21 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     eta_date = _eta_date(eta_days)
 
     # P6: 모든 모델을 같은 기준 시점·같은 실측 매칭으로 한 번에 평가한다. CI·신뢰도·화면이 같은 결과를 쓴다.
+    # 80% 구간은 1~12주를 모두 평가한 오차로 만든다(재검토 MD3). 비교 표·게이트·신뢰도는 그중 네 기간만 쓴다.
     backtest_run = run_backtest(
         rows[:ewma_days], ewma_series, ma7_by_date,
         target_weight=target_weight,
         train_window=trend_window,
+        horizons=CI_HORIZONS,
     )
-    backtest = backtest_run["models"]["current"]
+    display_horizons = [f"{horizon}d" for horizon in BACKTEST_HORIZONS]
+    backtest = {horizon: backtest_run["models"]["current"][horizon] for horizon in display_horizons}
     prediction_ci = compute_prediction_ci(
         ewma_series,
         daily_series,
         base_effective_loss,
         target_weight=target_weight,
-        backtest=backtest,
+        backtest_samples=backtest_run["samples"],
         start_date=latest_date,  # 예측선과 같은 날짜에 점을 찍는다(EWMA 계열은 어제에서 끝날 수 있다)
     )
     loss_intensity = classify_loss_intensity(
@@ -1408,18 +1436,22 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     )
 
     # 요약의 측정률(coverage)과 같은 창을 센다: 완료된 날만, 오늘 행 제외(재검토 MD6).
-    data_quality = data_quality_diagnostics(complete_rows)
+    data_quality = data_quality_diagnostics(complete_rows, limited_dates=limited_dates)
+    data_quality["implausibleWeights"] = implausible_weights
 
     model_audit = {
-        name: backtest_run["models"][name] if detail else {
-            horizon: {key: stats.get(key) for key in MODEL_AUDIT_SCREEN_FIELDS}
-            for horizon, stats in backtest_run["models"][name].items()
+        name: {
+            horizon: backtest_run["models"][name][horizon] if detail else {
+                key: backtest_run["models"][name][horizon].get(key) for key in MODEL_AUDIT_SCREEN_FIELDS
+            }
+            for horizon in display_horizons
         }
         for name in SHADOW_MODELS
     }
     selection_gate = shadow_gate(backtest_run["models"])
     ci_calibration = replay_ci_hit_rate(backtest_run, rows[:ewma_days], ewma_series)
-    prediction_ci["hitRate"] = ci_calibration["hitRate"]
+    # 화면은 네 기간의 적중률만 쓴다. 12주 전체는 ciCalibration에 있다.
+    prediction_ci["hitRate"] = {horizon: ci_calibration["hitRate"].get(horizon) for horizon in display_horizons}
     prediction_ci["calibration"] = {
         "status": ci_calibration["status"],
         "targetHitRate": ci_calibration["targetHitRate"],
@@ -1451,7 +1483,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         "trendWindows": trend_windows,
         "residualStdKg": prediction_ci.get("stdResidual"),
         "backtest": backtest,
-        "backtestSampleCounts": backtest_run["sampleCounts"],
+        "backtestSampleCounts": {horizon: backtest_run["sampleCounts"][horizon] for horizon in display_horizons},
         "modelAudit": model_audit,
         "kcalPerKg": round(kcal_to_kg, 0),
         "kcalPerKgSource": kcal_source,
