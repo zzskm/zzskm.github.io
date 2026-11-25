@@ -82,13 +82,8 @@ def build_smart_scenarios(
     """
     avg_session_kcal = session_kcal or 0.0
 
-    def _scenario(name: str, label: str, extra_kcal_per_week: float, desc: str, multiplier: float) -> dict[str, Any]:
-        return {
-            "label": label,
-            "extra_weekly_kcal": extra_kcal_per_week,
-            "description": desc,
-            "multiplier": multiplier,
-        }
+    def _scenario(label: str, extra_kcal_per_week: float, desc: str) -> dict[str, Any]:
+        return {"label": label, "extra_weekly_kcal": extra_kcal_per_week, "description": desc}
 
     if avg_session_kcal >= 100:
         # 구체적 세션 기반 시나리오
@@ -104,9 +99,9 @@ def build_smart_scenarios(
         con_desc = f"하루 활동량 {con_pct*100:.0f}% 가정"
 
     return {
-        "optimistic":   _scenario("optimistic",   "낙관",   opt_extra, opt_desc, 1.0),
-        "base":         _scenario("base",         "기준",   0.0,        "현재 운동량 유지 기준 예측", 0.8),
-        "conservative": _scenario("conservative", "보수적", con_extra, con_desc, 0.6),
+        "optimistic": _scenario("낙관", opt_extra, opt_desc),
+        "base": _scenario("기준", 0.0, "현재 운동량 유지 기준 예측"),
+        "conservative": _scenario("보수적", con_extra, con_desc),
     }
 
 
@@ -252,27 +247,15 @@ def _slope_over_window(
     return _linreg_slope(pts), len(pts)
 
 
-def compute_weekly_loss_rate(
-    ewma_series: list[dict[str, Any]],
-    ma7_by_date: dict[str, float | None],
-    rows: list[dict[str, Any]],
-    latest_date: str,
-    window: int = 28,  # 호환성 유지용 (다중 윈도우에서는 무시)
-    kcal_to_kg: float = 7700.0,
-    weights: tuple[float, float, float] = (0.65, 0.35, 0.0),  # 호환성 유지용
-) -> dict[str, Any]:
-    """다중 윈도우 EWMA slope 블렌딩 기반 주간 감량률.
-
-    P2 개선: 28일 단일 EWMA+MA7 회귀(거의 동일 신호)를 3/7/14/28일 EWMA slope 합성으로 교체.
-    가중치는 최근에 더 큰 비중 → 추세 가속이 빨리 반영되어 변동폭 증가.
+def compute_weekly_loss_rate(ewma_series: list[dict[str, Any]], latest_date: str) -> dict[str, Any]:
+    """EWMA 기울기로 본 주간 감량률(kg/주, 양수 = 감량).
 
     반환:
-      blended   - 최종 합성값 (kg/주, 양수=감소).
-      ewmaSlope - 28일 EWMA slope (legacy 호환)
-      ma7Slope  - 7일 EWMA slope을 노출 (legacy 키로 매핑)
-      kcalRate  - 운동 칼로리 기반 기대 감량률 참고값(시나리오 전용)
-      weights   - 사용된 윈도우 가중치 (단기/중기/장기)
-      windowSlopes - {"3d":..., "7d":..., "14d":..., "28d":...} 각 윈도우 kg/주
+      blended         - 3/7/14/28일 기울기를 섞은 혼합 감량률. 28일 창에 점이 모자라면 None이다.
+      windowSlopes    - 창마다의 기울기. 7일 기울기는 추세 배지의 기준이다.
+      windowPoints    - 창마다 쓴 EWMA 점 수.
+      weights.windows - 실제로 쓴 창 가중치(점이 모자란 창은 0).
+      longRangeRate   - 12주 값과 목표 도달일이 쓰는 느린 감량률(28일과 56일 기울기의 평균).
     """
     end = date.fromisoformat(latest_date)
 
@@ -320,27 +303,13 @@ def compute_weekly_loss_rate(
     long_parts = [value for value in (window_slopes.get("28d"), long_slope) if value is not None]
     long_range_rate = round(sum(long_parts) / len(long_parts), 4) if blended is not None and long_parts else None
 
-    # 운동 칼로리 기대 감량률 (참고값, 시나리오에서만 사용)
-    kcal_rows = rows[-14:] if len(rows) >= 14 else rows
-    kcal_vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in kcal_rows]
-    avg_daily_kcal = sum(kcal_vals) / len(kcal_vals) if kcal_vals else 0.0
-    kcal_rate = round_or_none(avg_daily_kcal * 7 / kcal_to_kg, 4)
-
     return {
         "blended": blended,
         # 12주 예측과 목표 도달일이 쓰는 감량률과 그 재료(kg/주, 양수 = 감량).
         "longRangeRate": long_range_rate,
         "longRangeSlopes": {"28d": window_slopes.get("28d"), f"{LONG_RATE_WINDOW_DAYS}d": long_slope},
         "longRangePoints": long_points,
-        "ewmaSlope": window_slopes.get("28d"),  # legacy 호환
-        "ma7Slope": window_slopes.get("7d"),    # legacy 호환 (단기 신호로 재매핑)
-        "kcalRate": kcal_rate,
-        "weights": {  # legacy 키 유지 + 신규 윈도우 가중치
-            "ewma": normalized_weights.get("28d", 0.0),
-            "ma7": normalized_weights.get("7d", 0.0),
-            "kcal": 0.0,
-            "windows": normalized_weights,
-        },
+        "weights": {"windows": normalized_weights},
         "windowSlopes": window_slopes,
         "windowPoints": window_points,
         # blended를 만들려면 28일 창에 이만큼의 EWMA 점이 있어야 한다(위 window_specs의 가드).
@@ -427,10 +396,14 @@ def _projected_weight(
     t=0의 기울기가 감량률과 같아 곡선이 처음에는 추세를 그대로 따르고 목표로 수렴한다(M5 a안, 2026-11-25).
     예전에는 k를 2·ln2/16(주 0.087)로 묶어 목표가 가까우면 초기 기울기가 추세보다 훨씬 완만했고 시나리오가 한 곡선이 됐다.
     남은 간격이 한 주 감량보다 작을 때만 k를 1/주로 묶는다(보호).
-    목표가 없거나, 이미 목표 이하이거나, 감량률이 0 이하(유지·증량)이면 직선이다.
+    목표가 없거나 감량률이 0 이하(유지·증량)이면 직선이다.
+    이미 목표 이하인데 감량 중이면 지금 체중을 유지한다고 본다. 예전에는 직선으로 계속 내려가, 주 0.4kg 감량일 때
+    시작이 78.01이면 12주 뒤 78.00인데 시작이 78.00이면 73.20이었다(재검토 MD9).
     """
-    if target_weight is None or target_weight >= start_weight or effective_weekly_loss <= 0:
+    if target_weight is None or effective_weekly_loss <= 0:
         return start_weight - effective_weekly_loss * week
+    if target_weight >= start_weight:
+        return start_weight
     gap = start_weight - target_weight
     k = min(effective_weekly_loss / gap, 1.0)
     return target_weight + gap * math.exp(-k * week)
@@ -732,30 +705,6 @@ def compute_prediction_ci(
     return {"stdResidual": round(std, 3), "series": series}
 
 
-def compute_trend_windows(
-    ewma_series: list[dict[str, Any]],
-    latest_date: str,
-    windows: tuple[int, ...] = (7, 14, 28),
-) -> dict[str, Any]:
-    """최근 N일 EWMA 회귀 감량률(kg/주). 양수=감소."""
-    end = date.fromisoformat(latest_date)
-    ewma_map = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
-    out: dict[str, Any] = {}
-    for window in windows:
-        pts = []
-        for i in range(window + 1):
-            d = (end - timedelta(days=window - i)).isoformat()
-            v = ewma_map.get(d)
-            if v is not None:
-                pts.append((float(i), v))
-        raw = _linreg_slope(pts)
-        out[f"{window}d"] = {
-            "weeklyLossKg": round_or_none(-raw * 7, 4) if raw is not None else None,
-            "points": len(pts),
-        }
-    return out
-
-
 # 측정 점수의 맨 윗단(3점)은 최근 30일 중 이만큼 잰 경우에만 준다. 이력이 짧으면 측정률이 높아도 2점까지다.
 FULL_COVERAGE_DAYS = 24
 # 측정률(%)과 측정 점수. 한 단계씩 오른다. 30일 창에서는 20일·22일·24일이 경계다.
@@ -996,7 +945,11 @@ def build_insight(
     elif state == "gaining":
         rate = abs(weekly_loss_rate) if weekly_loss_rate is not None else None
         pace = f"주 {rate:.2f}kg씩 " if rate is not None else ""
-        lines.append(f"최근 추세가 {pace}늘고 있어 목표에서 멀어지는 중입니다. 식사량과 활동량을 점검해 보세요.")
+        if remaining_kg is not None and remaining_kg < 0:
+            # 목표보다 낮은 상태에서 느는 것은 목표에서 멀어지는 것이 아니다(재검토 MD9).
+            lines.append(f"최근 추세가 {pace}늘고 있습니다. 지금은 목표보다 {abs(remaining_kg):.1f}kg 낮습니다.")
+        else:
+            lines.append(f"최근 추세가 {pace}늘고 있어 목표에서 멀어지는 중입니다. 식사량과 활동량을 점검해 보세요.")
     elif state == "maintaining":
         lines.append(f"체중 추세가 거의 변하지 않고 있습니다(주 ±0.05kg 이내).{remaining}")
     elif state == "losing" and intensity:
@@ -1200,6 +1153,9 @@ SHADOW_GATE = {
     "minImprovementKg": 0.05,
     "minImprovementPct": 0.08,
     "minHorizonWins": 2,
+    # 후보의 |bias|가 운영 모델보다 이만큼까지 큰 것은 넘어간다. 허용 오차가 없을 때는 84일 MAE가 0.3kg 넘게 낮은 후보가
+    # 7·14일의 |bias| 0.005kg 차이로 탈락했다(재검토 MD9). bias는 소수 셋째 자리까지 반올림한 값이다.
+    "biasToleranceKg": 0.02,
 }
 
 
@@ -1320,7 +1276,6 @@ def _nearest_actual(
 def run_backtest(
     rows: list[dict[str, Any]],
     ewma_series: list[dict[str, Any]],
-    ma7_by_date: dict[str, float | None],
     target_weight: float | None = None,
     train_window: int = 28,
     horizons: tuple[int, ...] = BACKTEST_HORIZONS,
@@ -1350,7 +1305,7 @@ def run_backtest(
         level = ewma_by_date.get(cutoff_date)
         if level is None:
             continue
-        detail = compute_weekly_loss_rate(ewma_series[:idx], ma7_by_date, rows[:idx], cutoff_date, window=train_window)
+        detail = compute_weekly_loss_rate(ewma_series[:idx], cutoff_date)
         rate, long_rate = detail["blended"], (detail["longRangeRate"] if use_long_rate else None)
         k = bisect.bisect_left(meas_row, idx)
         prefix = list(zip(meas_ord[:k], meas_w[:k]))
@@ -1456,7 +1411,7 @@ def shadow_gate(models: dict[str, dict[str, Any]], horizons: tuple[int, ...] = B
                 gate: dict[str, Any] | None = None) -> dict[str, Any]:
     """섀도 후보가 운영 모델보다 나은지 본다. 결과는 진단용이며 예측을 바꾸지 않는다.
 
-    통과 조건(모두): 모든 기간에서 표본이 충분하다, 어느 기간에서도 |bias|가 운영 모델보다 크지 않다,
+    통과 조건(모두): 모든 기간에서 표본이 충분하다, 어느 기간에서도 |bias|가 운영 모델보다 biasToleranceKg 넘게 크지 않다,
     minHorizonWins개 이상의 기간에서 MAE가 minImprovementKg 또는 minImprovementPct만큼 낮다.
     통과한 후보가 있으면 MAE 비율 평균이 가장 낮은 후보가 shadow_leader다. 없으면 no_change다.
     """
@@ -1475,7 +1430,7 @@ def shadow_gate(models: dict[str, dict[str, Any]], horizons: tuple[int, ...] = B
             if base.get("status") != "ok" or cand.get("status") != "ok" or cand.get("sampleCount", 0) < gate["minSampleCount"]:
                 blocked.append(f"{key}_insufficient")
                 continue
-            if abs(cand["biasKg"]) > abs(base["biasKg"]):
+            if abs(cand["biasKg"]) > abs(base["biasKg"]) + gate["biasToleranceKg"]:
                 blocked.append(f"{key}_bias_worse")
             improvement = base["maeKg"] - cand["maeKg"]
             if improvement >= gate["minImprovementKg"] or (base["maeKg"] > 0 and improvement / base["maeKg"] >= gate["minImprovementPct"]):

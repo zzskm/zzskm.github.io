@@ -68,6 +68,10 @@
     const band = dated(summary?.predictionCI?.series).filter(p => central.has(p.date) &&
       [p.central,p.lower80,p.upper80].every(Number.isFinite) && p.lower80 <= p.central && p.central <= p.upper80)
       .map(p => ({date:p.date,lower:central.get(p.date) - (p.central - p.lower80),upper:central.get(p.date) + (p.upper80 - p.central)}));
+    // The published interval has no point for week 0, so the band used to begin a week after the forecast line.
+    // Start it at the forecast's first point with zero width.
+    const start = prediction[0];
+    if (band.length && start && band[0].date > start.date) band.unshift({date:start.date,lower:start.valueKg,upper:start.valueKg});
     return {actual,trend,prediction,band,enabled};
   }
   function weightChange(summary) {

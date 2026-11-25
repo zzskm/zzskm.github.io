@@ -1,5 +1,8 @@
 # Garmin Weight Dashboard UX Hardening Plan
 
+> **대체됨(2026-11-26).** 2026-06에 쓴 계획이고 현재 상태가 아니다. 이 계획이 다루던 내용은 `garmin-weight/reports/PLAN_2026-11-25.md`(P1~P9)와 `REVIEW_2026-11-25.md`의 작업으로 대체됐다. 기록으로만 남긴다.
+
+
 ## 1. Current State Assessment
 
 ### Files inspected

@@ -1,4 +1,4 @@
-"""Phase 5 — 2-state Kalman filter for weight tracking.
+"""2-state Kalman filter for weight tracking (a shadow candidate of the backtest).
 
 State vector: x = [weight_kg, velocity_kg_per_day]
 Transition:   x_t = F x_{t-1} + noise,  F = [[1, dt], [0, 1]],  dt = 1 day
@@ -6,27 +6,14 @@ Observation:  z_t = H x_t + noise,      H = [1, 0]
 
 Stdlib only — 2x2 행렬 연산을 풀어 쓴다.
 
-용도:
-- `kalman_estimate(weights)` → [{date_idx, weight, velocity}, ...]
-- `kalman_backtest(rows, horizons)` → V1과 동일 스키마의 backtest dict
-
-채택은 ROI 게이트 (V1 대비 backtest MAE 0.05kg 이상 개선) 통과 시.
+`kalman_filter(weights)`는 날마다의 (체중, 속도) 추정을 돌려준다. sync_modeling.run_backtest가 기준 시점의 상태로
+`체중 + 속도 × 기간`을 예측해 섀도 후보 `kalman`으로 평가한다. 운영 예측에는 쓰지 않는다.
 """
 from __future__ import annotations
-
-from typing import Any
-
 
 # 기본 노이즈 파라미터 — 체중계 측정 노이즈 ~0.3kg, 속도 변화 노이즈는 매우 작게
 DEFAULT_PROCESS_NOISE = (0.0001, 0.00005)  # (weight, velocity) variances per day
 DEFAULT_OBS_NOISE = 0.09                    # σ ≈ 0.3kg → σ² = 0.09
-
-
-def _mat2_inv(a: float, b: float, c: float, d: float) -> tuple[float, float, float, float]:
-    det = a * d - b * c
-    if abs(det) < 1e-12:
-        det = 1e-12 if det >= 0 else -1e-12
-    return (d / det, -b / det, -c / det, a / det)
 
 
 def kalman_filter(
@@ -98,89 +85,3 @@ def kalman_filter(
         out.append((x_w, x_v))
 
     return out
-
-
-def kalman_velocity_weekly(state: tuple[float, float] | None) -> float | None:
-    """현재 상태에서 추정한 주간 감량률 (kg/주, 양수=감소)."""
-    if state is None:
-        return None
-    _, v = state
-    return -v * 7
-
-
-def kalman_backtest(
-    rows: list[dict[str, Any]],
-    horizons: tuple[int, ...] = (7, 14, 28),
-    train_window: int = 28,
-    min_samples: int = 3,
-) -> dict[str, Any]:
-    """V1과 동일한 인터페이스의 백테스트 — 같은 비교 가능하도록.
-
-    각 시점 prefix로 Kalman을 돌려 그 시점의 [weight, velocity] 상태를 얻고,
-    선형 외삽 `predicted = weight + velocity * horizon`. (Kalman은 비선형 감쇠를
-    내장하지 않지만 짧은 horizon에서는 동등 비교 가능.)
-    """
-    out: dict[str, Any] = {}
-    from datetime import date, timedelta
-
-    for horizon in horizons:
-        errors: list[float] = []
-        for idx in range(train_window, len(rows) - horizon):
-            prefix_weights = [r.get("weight_kg") for r in rows[:idx]]
-            states = kalman_filter(prefix_weights)
-            last_state = next((s for s in reversed(states) if s is not None), None)
-            if last_state is None:
-                continue
-            w_now, v_now = last_state
-            # 음수 속도(=감량)만 의미 있음. 양수(증가)면 보수적으로 0.
-            v_eff = min(v_now, 0.0)
-            predicted = w_now + v_eff * horizon
-
-            latest = rows[idx - 1]["date"]
-            target_day = date.fromisoformat(latest) + timedelta(days=horizon)
-            candidates = []
-            for row in rows[idx:]:
-                actual = row.get("weight_kg")
-                if actual is None:
-                    continue
-                distance = abs((date.fromisoformat(row["date"]) - target_day).days)
-                if distance <= 3:
-                    candidates.append((distance, actual))
-            if not candidates:
-                continue
-            actual = min(candidates, key=lambda item: item[0])[1]
-            errors.append(predicted - actual)
-
-        key = f"{horizon}d"
-        if len(errors) < min_samples:
-            out[key] = {"sampleCount": len(errors), "status": "insufficient"}
-            continue
-        mae = sum(abs(e) for e in errors) / len(errors)
-        bias = sum(errors) / len(errors)
-        rmse = (sum(e * e for e in errors) / len(errors)) ** 0.5
-        out[key] = {
-            "sampleCount": len(errors),
-            "biasKg": round(bias, 3),
-            "maeKg": round(mae, 3),
-            "rmseKg": round(rmse, 3),
-            "status": "ok",
-        }
-    return out
-
-
-def compare_backtests(v1: dict[str, Any], kalman: dict[str, Any]) -> dict[str, Any]:
-    """horizon별 MAE 개선폭(=V1 - Kalman) 계산. 0.05kg 이상이면 채택 권장."""
-    result: dict[str, Any] = {}
-    for horizon in set(v1.keys()) | set(kalman.keys()):
-        a = v1.get(horizon, {})
-        b = kalman.get(horizon, {})
-        if a.get("status") == "ok" and b.get("status") == "ok":
-            delta = round(a["maeKg"] - b["maeKg"], 3)
-            result[horizon] = {
-                "v1MaeKg": a["maeKg"],
-                "kalmanMaeKg": b["maeKg"],
-                "deltaKg": delta,
-                "kalmanWins": delta >= 0.05,
-            }
-    recommend = any(v.get("kalmanWins") for v in result.values())
-    return {"perHorizon": result, "recommendKalman": recommend}

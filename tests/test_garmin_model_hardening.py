@@ -87,7 +87,7 @@ class UnifiedBacktestTests(unittest.TestCase):
         # 부호 회귀 방지(M2). EWMA 자리에 실측을 넣어 수준 지연을 없애면, 맞는 부호의 회귀는 오차가 0에 가깝다.
         rows = _rows([90.0 - 0.05 * i for i in range(150)])
         ewma = [{"date": r["date"], "valueKg": r["weight_kg"]} for r in rows]
-        models = run_backtest(rows, ewma, {}, horizons=(7, 14, 28))["models"]
+        models = run_backtest(rows, ewma, horizons=(7, 14, 28))["models"]
         for name in ("linreg_28d", "linreg_56d", "linreg_84d", "weighted_linreg_56d", "robust_56d"):
             for horizon in ("7d", "14d", "28d"):
                 with self.subTest(model=name, horizon=horizon):
@@ -108,7 +108,7 @@ class UnifiedBacktestTests(unittest.TestCase):
     def test_every_model_uses_the_same_sample(self) -> None:
         values = [84.0 + 0.3 * ((i * 7) % 5 - 2) / 2 if i % 3 else None for i in range(200)]
         rows = _rows(values)
-        result = run_backtest(rows, _ewma(rows), {})
+        result = run_backtest(rows, _ewma(rows))
         for horizon in ("7d", "14d", "28d", "84d"):
             counts = {name: result["models"][name][horizon]["sampleCount"] for name in ("current", *SHADOW_MODELS)}
             with self.subTest(horizon=horizon):
@@ -116,20 +116,39 @@ class UnifiedBacktestTests(unittest.TestCase):
                 self.assertEqual(result["sampleCounts"][horizon], counts["current"])
                 self.assertGreater(counts["current"], 20)
 
+    def test_a_cutoff_that_one_model_cannot_score_is_dropped_for_all(self) -> None:
+        # 위 테스트의 픽스처에서는 모든 모델이 모든 기준 시점에서 예측을 내므로 표본 수가 구조상 같다.
+        # 40일 동안 측정이 없으면 그 구간의 뒤쪽에서는 28일 회귀가 예측을 내지 못한다. 그 기준 시점은 모든 모델에서 뺀다.
+        values = [84.0 + 0.3 * ((i * 7) % 5 - 2) / 2 if i % 3 else None for i in range(200)]
+        gap = range(90, 130)
+        with_gap = [None if i in gap else value for i, value in enumerate(values)]
+        rows = _rows(with_gap)
+        result = run_backtest(rows, _ewma(rows))
+        full = run_backtest(_rows(values), _ewma(_rows(values)))
+        for horizon in ("7d", "14d", "28d", "84d"):
+            counts = {name: result["models"][name][horizon]["sampleCount"] for name in ("current", *SHADOW_MODELS)}
+            with self.subTest(horizon=horizon):
+                self.assertEqual(1, len(set(counts.values())), counts)
+                self.assertLess(counts["current"], full["models"]["current"][horizon]["sampleCount"])
+        # 기준 시점(index - 1번째 날)의 직전 28일에 측정이 하나도 없는 곳에는 표본이 없다.
+        blind = [s["index"] for s in result["samples"][7] if gap.start + 28 <= s["index"] - 1 < gap.stop]
+        self.assertEqual([], blind)
+        self.assertTrue([s for s in full["samples"][7] if gap.start + 28 <= s["index"] - 1 < gap.stop])
+
     def test_all_trend_directions_are_evaluated(self) -> None:
         # M3: 감량기만 고르지 않는다. 증량 시계열에서도 운영 모델 표본이 나온다.
         rows = _rows([80.0 + 0.03 * i for i in range(120)])
-        current = run_backtest(rows, _ewma(rows), {})["models"]["current"]
+        current = run_backtest(rows, _ewma(rows))["models"]["current"]
         self.assertEqual("ok", current["7d"]["status"])
         self.assertGreaterEqual(current["7d"]["sampleCount"], 80)
 
     def test_backtest_does_not_see_the_future(self) -> None:
         values = [84.0 - 0.02 * i for i in range(120)]
         rows = _rows(values)
-        base = run_backtest(rows, _ewma(rows), {}, horizons=(7,))
+        base = run_backtest(rows, _ewma(rows), horizons=(7,))
         changed_values = values[:60] + [v + 3.0 for v in values[60:]]
         changed_rows = _rows(changed_values)
-        changed = run_backtest(changed_rows, _ewma(changed_rows), {}, horizons=(7,))
+        changed = run_backtest(changed_rows, _ewma(changed_rows), horizons=(7,))
         early = [s for s in base["samples"][7] if s["index"] <= 50]
         early_changed = [s for s in changed["samples"][7] if s["index"] <= 50]
         self.assertTrue(early)
@@ -165,13 +184,13 @@ class UnifiedBacktestTests(unittest.TestCase):
         # 평평한 84kg에 ±0.4kg 교대 잡음. 잔차 표준편차가 약 0.4이므로 7일 반폭은 1.28×0.4≈0.51이고
         # 모든 오차가 그 안에 든다(포함률 1.0). 같은 시계열에 1.5kg 계단을 넣으면 계단 뒤 표본은 벗어난다.
         flat = _rows([84.0 + (0.4 if i % 2 else -0.4) for i in range(160)])
-        backtest = run_backtest(flat, _ewma(flat), {}, horizons=(7,))
+        backtest = run_backtest(flat, _ewma(flat), horizons=(7,))
         replay = replay_ci_hit_rate(backtest, flat, _ewma(flat))
         self.assertEqual(1.0, replay["hitRate"]["7d"])
         self.assertEqual(backtest["sampleCounts"]["7d"], replay["sampleCounts"]["7d"])
 
         step = _rows([84.0 + (0.4 if i % 2 else -0.4) + (1.5 if i >= 100 else 0.0) for i in range(160)])
-        step_bt = run_backtest(step, _ewma(step), {}, horizons=(7,))
+        step_bt = run_backtest(step, _ewma(step), horizons=(7,))
         step_replay = replay_ci_hit_rate(step_bt, step, _ewma(step))
         expected = sum(
             1 for s in step_bt["samples"][7]
@@ -183,9 +202,15 @@ class UnifiedBacktestTests(unittest.TestCase):
     def test_ci_replay_covers_gaining_trends(self) -> None:
         # M4: 증량 추세에서도 적중률이 나온다(예전에는 감량률이 0 이하면 전부 None).
         rows = _rows([80.0 + 0.03 * i + (0.3 if i % 2 else -0.3) for i in range(150)])
-        replay = replay_ci_hit_rate(run_backtest(rows, _ewma(rows), {}), rows, _ewma(rows))
+        backtest = run_backtest(rows, _ewma(rows))
+        replay = replay_ci_hit_rate(backtest, rows, _ewma(rows))
         self.assertEqual("ok", replay["status"])
-        self.assertIsNotNone(replay["hitRate"]["7d"])
+        # 예전 테스트는 7일만 봤다. 네 기간 모두 적중률이 나오고 표본 수가 백테스트와 같다.
+        for horizon in ("7d", "14d", "28d", "84d"):
+            with self.subTest(horizon=horizon):
+                self.assertIsNotNone(replay["hitRate"][horizon])
+                self.assertTrue(0.0 < replay["hitRate"][horizon] <= 1.0)
+                self.assertEqual(backtest["sampleCounts"][horizon], replay["sampleCounts"][horizon])
 
 
 if __name__ == "__main__":

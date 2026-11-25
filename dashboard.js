@@ -134,6 +134,15 @@
   setInterval(tick, 1000);
 
   const fmt = (value, digits = 1) => Number.isFinite(value) ? value.toLocaleString('ko-KR', {minimumFractionDigits:digits,maximumFractionDigits:digits}) : '—';
+  // 부호를 붙인 값. 반올림하면 0이 되는 값에는 부호를 붙이지 않는다("−0.0 kg"이 나왔다).
+  const signed = (value, digits = 1, plus = '+', minus = '−') => {
+    const text = fmt(Math.abs(value), digits);
+    return `${Number(text) === 0 ? '' : value > 0 ? plus : minus}${text}`;
+  };
+  // 요약이 주는 예측 보류 사유는 내부 코드(insufficient_data)다. 화면에는 문장으로 적는다.
+  const DISABLED_REASONS = {insufficient_data:'예측에 필요한 자료가 부족합니다.'};
+  const disabledReason = code => (typeof code === 'string' && code && !/^[a-z0-9_]+$/.test(code)) ? code : (DISABLED_REASONS[code] || '예측에 필요한 자료가 부족합니다.');
+  const SYNC_LATE_HOURS = 24; // 체중 페이지와 같은 기준이다
   function renderChart() {
     const {actual:points,trend,prediction,band} = M.weightChart(summary, range, showPrediction), host = $('weight-chart');
     document.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.days) === range)));
@@ -177,7 +186,7 @@
     const diag = summary.modelDiagnostics || {}, forecast = summary.predictions || {};
     const enabled = diag.trend?.predictionEnabled !== false;
     const loss = summary.rolling?.lossRateDetail?.blended;
-    set('weight-trend', Number.isFinite(loss) ? `${loss > 0 ? '−' : loss < 0 ? '+' : ''}${fmt(Math.abs(loss),2)} kg/주` : '자료 부족');
+    set('weight-trend', Number.isFinite(loss) ? `${signed(loss, 2, '−', '+')} kg/주` : '자료 부족');
     set('weight-month', enabled && Number.isFinite(forecast.oneMonthWeightKg) ? `${fmt(forecast.oneMonthWeightKg)} kg` : '예측 보류');
     set('weight-quarter', enabled && Number.isFinite(forecast.threeMonthWeightKg) ? `${fmt(forecast.threeMonthWeightKg)} kg` : '예측 보류');
     const available = enabled && (M.weightChart(summary).prediction.length > 0 || Number.isFinite(forecast.oneMonthWeightKg) || Number.isFinite(forecast.threeMonthWeightKg));
@@ -187,15 +196,15 @@
     // 신뢰도 등급은 최근 측정과 2주 예측 오차로 매긴다. 3개월 값이 "변화 없음" 가정보다 나은지는 요약의 longRange가 따로 알려 준다.
     // 등급이 높아도 3개월 값이 장기 추정이면 그렇게 적고 주의 색을 유지한다(garmin-weight 재검토 MD5).
     const longRange = {worse_than_flat:"3개월 값은 장기 추정입니다(84일 검증에서 '변화 없음' 가정보다 오차가 큼).", unverified:'3개월 값은 장기 추정입니다(84일 검증 표본 부족).'}[diag.longRange?.status] || '';
-    set('weight-prediction-note', available ? `현재 운동량 유지 기준 · 최근 측정과 2주 예측 신뢰도 ${confidenceLabel}${reasons ? ` — ${reasons}` : ''}.${longRange ? ` ${longRange}` : ''} 자료 생성 시점의 참고용 예측입니다.` : `예측 보류 · ${diag.trend?.disabledReason || '예측에 필요한 자료가 부족합니다.'}`);
+    set('weight-prediction-note', available ? `현재 운동량 유지 기준 · 최근 측정과 2주 예측 신뢰도 ${confidenceLabel}${reasons ? ` — ${reasons}` : ''}.${longRange ? ` ${longRange}` : ''} 자료 생성 시점의 참고용 예측입니다.` : `예측 보류 · ${disabledReason(diag.trend?.disabledReason)}`);
     $('weight-prediction-note').classList.toggle('is-caution', !available || confidence.level !== 'high' || Boolean(longRange));
     const activity = summary.rolling?.exerciseTrend;
-    set('weight-activity-trend', Number.isFinite(activity?.deltaPct) ? `운동 칼로리 ${activity.deltaPct > 0 ? '+' : activity.deltaPct < 0 ? '−' : ''}${fmt(Math.abs(activity.deltaPct * 100),1)}% · 최근 7일 평균 / 이전 21일 평균` : '운동량 비교 자료가 아직 없습니다.');
+    set('weight-activity-trend', Number.isFinite(activity?.deltaPct) ? `운동 칼로리 ${signed(activity.deltaPct * 100)}% · 최근 7일 평균 / 이전 21일 평균` : '운동량 비교 자료가 아직 없습니다.');
   }
   function renderWeight() {
     const c = summary.current || {}, r = summary.rolling || {}, change = M.weightChange(summary);
     set('weight', fmt(c.weightKg));
-    set('weight-change', Number.isFinite(change) ? `${change > 0 ? '+' : change < 0 ? '−' : ''}${fmt(Math.abs(change))} kg` : '—');
+    set('weight-change', Number.isFinite(change) ? `${signed(change)} kg` : '—');
     const p = M.points(summary, 30);
     set('weight-period', p.length > 1 ? `${p[0].date.slice(5).replace('-','.')} → ${p.at(-1).date.slice(5).replace('-','.')}` : '최근 30일 변화');
     const age = c.weightDate ? Math.floor((Date.parse(new Date().toLocaleDateString('sv-SE', {timeZone:'Asia/Seoul'})) - Date.parse(c.weightDate)) / 86400000) : null;
@@ -204,9 +213,15 @@
     set('weight-fat', `${fmt(c.bodyFatPercent)} %`);
     set('weight-steps', `${fmt(r.last7StepsAvg,0)} 보`);
     set('weight-exercise', `${fmt(r.last7ExerciseMinutes,0)} 분`);
-    const stamp = Date.parse(summary.generatedAt);
+    // 수집 시각은 Garmin에서 마지막으로 받아 온 시각(sync.lastSuccessAt)이다. 요약을 만든 시각(generatedAt)은
+    // sync 블록이 없는 요약에서만 쓴다.
+    const syncStamp = Date.parse(summary.sync?.lastSuccessAt);
+    const stamp = Number.isFinite(syncStamp) ? syncStamp : Date.parse(summary.generatedAt);
+    const lateHours = Number.isFinite(stamp) ? Math.floor((Date.now() - stamp) / 3600000) : 0;
     const generated = Number.isFinite(stamp) ? new Intl.DateTimeFormat('ko-KR', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Seoul'}).format(stamp) : '시각 미확인';
-    set('weight-status', `자료 생성 ${generated}${config ? '' : ' · 목표 설정 조회 실패'}`);
+    const late = lateHours > SYNC_LATE_HOURS;
+    set('weight-status', `${Number.isFinite(syncStamp) ? '동기화' : '자료 생성'} ${generated}${late ? ` · ${lateHours}시간째 수집 없음` : ''}${config ? '' : ' · 목표 설정 조회 실패'}`);
+    $('weight-status').classList.toggle('is-caution', late);
     renderPrediction(); renderChart();
   }
   async function get(url, asText = false) {

@@ -19,7 +19,7 @@ Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·�
 |---|---|---|
 | `garmin weight sync` | 매일 00:41, 09:41 KST, 수동 실행 | 수집 → CSV·요약 커밋(`main`에서만). 수집이 실패하면 커밋하지 않고 실패로 끝난다(실패 알림). 실패는 받은 것이 하나도 없는 수집(모든 호출이 실패했거나 빈 응답), 중간에 멈춤(첫 429 또는 연속 실패 5건), Garmin이 응답하지 않아 토큰 로그인을 못 한 경우다. 커밋은 수집 스텝의 결과만 본다. 수집 뒤의 뒷정리가 실패해도 받은 데이터는 커밋한다. |
 | `garmin weight probe` | `garmin-probe/**` 브랜치 푸시, 수동 실행 | `--dry-run`으로 받아 보기만 한다. 결과(건수·상태·키와 타입만, 값 없음)는 그 브랜치의 `probe-results/`에 커밋된다. |
-| `garmin weight tests` | 코드·테스트·워크플로 변경 | 단위 테스트(워크플로의 셸 스텝을 떼어 bash로 돌리는 테스트 포함), 고정한 garminconnect의 메서드 검사, 브라우저 테스트, 서비스 워커 테스트. |
+| `garmin weight tests` | 코드·테스트·워크플로 변경 | 단위 테스트(워크플로의 셸 스텝을 떼어 bash로 돌리는 테스트 포함: 입력 검증, 토큰 캐시의 암호화·복호화, 데이터 커밋의 재시도), 고정한 garminconnect의 메서드 검사, 브라우저 테스트, 서비스 워커 테스트. |
 
 ## 시크릿
 
@@ -64,7 +64,7 @@ python garmin-weight/scripts/model_audit.py --output /tmp/audit.json
 
 # 테스트
 PYTHONUTF8=1 python -m unittest discover -s tests -p 'test_garmin*.py'
-node --test tests/garmin_weight_sw.test.mjs
+node --test tests/garmin_weight_sw.test.mjs tests/garmin_weight_helpers.test.mjs
 # 브라우저 테스트(Playwright + 시스템 Chrome). 브라우저가 없으면 건너뛴다. 뒤의 것은 서비스 워커 수명 주기(약 40초)다.
 BROWSER_EXECUTABLE="C:/Program Files/Google/Chrome/Application/chrome.exe" GARMIN_REQUIRE_BROWSER_TESTS=1 \
   python -m unittest tests.test_garmin_weight_browser tests.test_garmin_weight_sw_browser
@@ -74,6 +74,8 @@ GARMIN_REQUIRE_LIBRARY_TESTS=1 python -m unittest tests.test_garmin_library
 ```
 
 Garmin 호출을 바꿨으면 로컬 성공만 믿지 말고 probe 브랜치로 러너에서 확인한다. 결과는 `git fetch`로 읽고 브랜치를 지운다.
+
+CI의 테스트 스텝은 `tests/garmin_weight_ci.sh`로 돈다. 실패하면 실패한 테스트의 이름이 실행 주석으로 남는다. 실행 로그는 로그인해야 볼 수 있지만 주석은 공개 API로 읽을 수 있다.
 
 ## 공개 로그 규칙
 
@@ -137,6 +139,10 @@ CSV를 손으로 고쳤다면:
 | 이 페이지 | 대부분: `current`, `rolling`, `predictions`(시나리오 `series` 포함), `goal`, `insight`, `predictionCI`, `modelDiagnostics`, `coverage`, `sync`, `series` |
 | 개인 대시보드(`/dashboard.js`, `/dashboard-model.js`) | `tests/test_garmin_weight.py`의 `DASHBOARD_FIELDS`. 바꿀 때 그 목록과 `tests/test_dashboard_browser.py`의 픽스처를 함께 본다. |
 
+- 요약의 키는 자료가 있을 때, 처음 며칠, 자료가 하나도 없을 때 모두 같다(값만 빈다). 테스트가 세 요약의 키를 맞춰 본다.
+- 화면 코드가 읽는 필드는 테스트가 `app.js`·`enhancements.js`·`app.helpers.js`에서 직접 뽑아 요약에 있는지 본다. 화면에서 새 필드를 읽기 시작하면 요약(빈 요약 포함)에도 있어야 테스트가 통과한다.
+- 요약을 만들 때는 오늘 날짜를 넘긴다(`build_summary(..., today=)`). 오늘 행은 7일 집계와 측정률에서 빠진다. 오늘 행이 없는 CSV에서는 마지막 행이 완료된 날로 들어간다.
+
 주요 블록:
 
 - **`sync`**: 마지막 수집의 상태다.
@@ -168,19 +174,22 @@ CSV를 손으로 고쳤다면:
   - `backtest`: 운영 모델의 7/14/28/84일 성적이다.
   - `backtestSampleCounts`: 모든 모델이 공유하는 표본 수다.
   - `modelAudit`: 섀도 후보의 성적이다. 화면용 필드만 담는다.
-  - `selectedModel`: 섀도 게이트 결과(`shadow_leader`/`no_change`)다. 예측에는 쓰지 않는다.
+  - `selectedModel`: 섀도 게이트 결과(`shadow_leader`/`no_change`)다. 예측에는 쓰지 않는다. 후보별 판정과 기준은 `model_audit.py`의 출력에만 있다.
+  - `trendWindows`: 화면의 7/14/28일 추세다. `rolling.lossRateDetail.windowSlopes`와 같은 값이다.
   - `ciCalibration`: 시점별로 재현한 80% 구간 적중률이다. 1~12주가 모두 있다(`7d`~`84d`).
 
 ## 모델에 대해 알아 둘 것
 
 - 예측 곡선은 목표 체중으로 수렴하는 감쇠 곡선이다. **`targetWeightKg`를 바꾸면 예측과 백테스트 수치가 함께 바뀐다.**
+- 이미 목표 이하인데 감량 중이면 지금 체중을 유지한다고 본다(직선으로 계속 내려가지 않는다). 증량과 유지는 직선이다.
+- 처음 약 13일은 감량률을 정할 수 없어 예측이 평평하고, 목표 도달일은 "계산 불가"(`etaStatus: unknown`)다.
 - **예측은 두 감량률을 쓴다(`forecast_weight`).** 4주까지는 혼합 감량률의 곡선이고 12주부터는 느린 감량률(28일·56일 기울기의 평균)의 곡선이다. 그 사이는 느린 감량률의 곡선에, 4주까지 벌어진 두 곡선의 차이를 12주까지 고르게 줄여 가며 더한다. 두 감량률이 같으면 한 곡선이다.
   - 3개월 값과 목표 도달일이 측정 한 번에 크게 움직이던 것을 줄이려는 것이다(2026-11-25 사용자 결정). 실제 이력을 재생하면 3개월 값의 하루 변화(90분위)가 0.52kg에서 0.17kg으로, 도달일은 108일에서 34일로 줄었다.
   - **대가가 있다.** 이 이력에서 84일 오차(MAE)가 1.35kg에서 1.51kg으로 커졌다. 감량이 멈춘 뒤에도 느린 감량률은 한동안 감량을 가리키기 때문이다. 독립 표본이 6개쯤이라 확정적인 차이는 아니다.
   - `config.json`의 `features.slowLongRangeRate`를 `false`로 두면 모든 기간이 혼합 감량률의 곡선이다(바꾸기 전과 같다). 백테스트도 같은 설정을 따른다.
   - 최근 며칠에 급히 빠졌으면 선이 4주 뒤에 방향을 바꾼다(실제 이력에서 230일 중 11일). 최근 추세와 긴 추세가 다르다는 뜻이다.
 - 84일 예측은 지금 "변화 없음"보다 성적이 나쁘다. 2027-02-25에 감량기 데이터로 다시 비교한다(계획 P7 기록).
-- 섀도 후보가 게이트를 통과해도 운영 모델은 자동으로 바뀌지 않는다.
+- 섀도 후보가 게이트를 통과해도 운영 모델은 자동으로 바뀌지 않는다. 게이트는 후보의 |bias|가 운영 모델보다 0.02kg 넘게 크면 막는다(`SHADOW_GATE`).
 - **추세(EWMA)는 크게 벗어난 측정을 일부만 반영한다.** 측정이 추세에서 0.8kg 넘게 벗어나 있으면 0.8kg만 벗어난 것으로 보고 반영한다(λ = 0.1이므로 추세는 측정 한 번에 0.08kg까지만 움직인다). 다른 사람이 잰 값 같은 잘못된 측정 한 건이 추세·예측·ETA를 끌고 가지 못하게 하려는 것이다. 같은 방향으로 세 번 연속 벗어나면 실제 변화로 보고 세 번째 측정부터 그대로 반영한다. 실제 이력에서는 측정 162건 중 31건이 이 제한에 걸린다.
 - 체중으로 볼 수 없는 값(30~250kg 밖, NaN, 무한대)은 수집할 때 저장하지 않는다. CSV를 손으로 고치다 들어간 그런 값은 CSV에는 남기고 모델에는 넣지 않는다.
 - **추세 배지와 주간 변화는 기준이 다르다.** 배지("감량 중"/"증량 중"/"유지")는 최근 7일 기울기이고, 주간 변화·예측·ETA·인사이트는 3/7/14/28일 혼합 감량률이다. 배지를 혼합 감량률로 통일하지 않기로 했다(2026-11-25 사용자 결정). 실제 이력을 날짜별로 재생하면 243일 중 6일에 배지와 주간 변화의 부호가 다르다(추세의 반영 폭을 제한하기 전에는 14일). "N일째 평평" 문구와 움직이는 배지가 함께 나오는 경우(11일)는 정체 판정을 고쳐 없앴다.
@@ -192,10 +201,11 @@ CSV를 손으로 고쳤다면:
 |---|---|---|
 | `targetWeightKg` | | 목표 체중. 곡선의 수렴점이다. |
 | `heightCm` | | 체지방이 없을 때 BMI로 kcal/kg를 정한다. |
-| `exerciseTrendWindow` | 28 | 감량률·운동 추세 창(일). |
+| `exerciseTrendWindow` | 28 | 운동 추세, 운동 효율 보정, 백테스트의 학습 창(일). 감량률은 이 값을 쓰지 않는다(창이 3/7/14/28/56일로 정해져 있다). |
 | `kcalToKgFactor` | 7700 | 체지방·BMI가 모두 없을 때의 kcal/kg. |
 | `scenarioExercisePctDelta` | ±0.3 | 활동 기록이 없을 때 시나리오의 하루 활동량 변화율. |
-| `etaToleranceKg` | 0.3 | ETA 판정 여유. |
+| `etaToleranceKg` | 0.3 | ETA 판정 여유. 0보다 커야 한다. 0 이하면 기본값을 쓴다(감쇠 곡선은 목표에 닿지 않아 여유가 없으면 도달일이 나오지 않는다). |
+| `displayName` | 없음 | 화면 맨 아래 줄에 적는 이름. 없으면 "체중 트래커"다. 공개 페이지에 나오므로 실명은 넣지 않는다. |
 | `features.sleepMeasurementWeighting`, `loadMeasurementWeighting`, `plateauLoadClassification` | false | 수면·부하 측정 가중치, 부하로 정체 유형 나누기. 백테스트로 나빠지지 않을 때만 켠다. |
 | `features.slowLongRangeRate` | true | 12주 값과 목표 도달일에 느린 감량률을 쓴다(위 "모델에 대해 알아 둘 것"). `false`면 모든 기간이 혼합 감량률이다. |
 | `features.trainingEndpoints` | true | 급성 훈련 부하를 받는다(하루에 호출 2건). 훈련 자료가 없는 계정은 `false`로 둬도 된다. |
@@ -234,6 +244,10 @@ CSV를 손으로 고쳤다면:
 
 - Chart.js를 받지 못했으면 다시 불러오기를 누를 때와 네트워크가 돌아왔을 때(`online`) 스크립트 태그를 새로 넣어 다시 받는다. `index.html`의 태그에 있는 `onerror`가 실패를 표시해 두고, `app.js`가 그 표시를 본다.
 - 글꼴이 차트보다 늦게 오면 글꼴이 도착했을 때 차트의 글자를 한 번 다시 그린다.
+- 접근성:
+  - 포커스 링과 흰 글자를 올리는 강조 바탕은 `--accent-strong`이다(`--accent`는 밝은 바탕과 3:1에 못 미친다). 선택된 시나리오 카드의 보조 문구는 `--muted-2`다.
+  - 차트는 "움직임 줄이기" 설정이면 애니메이션 없이 그리고, 캔버스의 `aria-label`에 보기 범위·추세·예측·목표를 적는다.
+  - 제목은 H1 아래로 모두 H2다. 단축키(R, 1·2·3)는 글자를 넣는 곳에서만 꺼진다.
 
 ## 자산 버전과 서비스 워커
 
