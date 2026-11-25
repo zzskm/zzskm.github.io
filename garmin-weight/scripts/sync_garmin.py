@@ -20,6 +20,13 @@ from typing import Any
 LOGGER = logging.getLogger("garmin_weight")
 EWMA_LAMBDA = 0.1
 
+# 날짜는 모두 KST 기준이다(CSV의 하루, 워크플로의 end_date).
+KST = timezone(timedelta(hours=9))
+# 한 번에 다시 받을 수 있는 날 수. 60일이면 호출이 약 420건이고 작업 제한 10분 안에 끝난다.
+MAX_BACKFILL_DAYS = 60
+# 이 날 수 이상을 다시 받으면 보호 병합(--protect-existing과 같은 동작)을 쓴다.
+PROTECT_FROM_DAYS = 4
+
 CSV_HEADERS = [
     "date",
     "weight_kg",
@@ -111,8 +118,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", default="garmin-weight/config.json")
     parser.add_argument("--output-csv", default="garmin-weight/data/daily_metrics.csv")
     parser.add_argument("--output-summary", default="garmin-weight/data/summary.json")
-    parser.add_argument("--backfill-days", type=int, default=int(os.getenv("BACKFILL_DAYS", "3")))
-    parser.add_argument("--date", default=None, help="Override end date (YYYY-MM-DD)")
+    # 문자열 기본값은 argparse가 type으로 바꾼다. 환경 변수가 숫자가 아니면 트레이스백 대신 사용법 오류가 난다.
+    parser.add_argument("--backfill-days", type=int, default=os.getenv("BACKFILL_DAYS") or "3",
+                        help=f"Days to resync, ending on --date (1-{MAX_BACKFILL_DAYS}). "
+                             f"{PROTECT_FROM_DAYS} or more turns --protect-existing on.")
+    parser.add_argument("--date", default=None, help="Last day to resync (YYYY-MM-DD, KST). Default: today. Not in the future.")
     parser.add_argument("--skip-garmin", action="store_true", help="Only rebuild summary from CSV.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Fetch from Garmin but write neither CSV nor summary; print call statistics as JSON.")
@@ -122,7 +132,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--probe-dates", default=None,
                         help="With --dry-run, comma-separated dates (YYYY-MM-DD) to fetch instead of a range ending at --date.")
     parser.add_argument("--protect-existing", action="store_true",
-                        help="Never turn an existing value into an empty cell. The workflow sets it for long backfills.")
+                        help="Never turn an existing value into an empty cell or a zero, and never lower a count. "
+                             f"Always on when --backfill-days is {PROTECT_FROM_DAYS} or more.")
     parser.add_argument("--previous-summary", default="garmin-weight/data/summary.json",
                         help="Summary whose sync block is carried over (--skip-garmin) or extended.")
     parser.add_argument("--token-dir", default=os.getenv("GARMIN_TOKEN_DIR") or None,
@@ -176,16 +187,37 @@ def format_cell(value: Any, field: str) -> str:
     return f"{float(value):.2f}".rstrip("0").rstrip(".")
 
 
+class CsvFormatError(RuntimeError):
+    """CSV를 이력으로 읽을 수 없다. 메시지에는 줄 번호만 넣고 셀 내용은 넣지 않는다(공개 로그에 그대로 나간다)."""
+
+
 def load_existing_rows(path: Path) -> dict[str, dict[str, Any]]:
+    """CSV 이력을 읽는다. 파일이 없으면 빈 이력이다.
+
+    파일이 있는데 이력으로 읽을 수 없으면 CsvFormatError를 낸다. 못 읽은 행을 건너뛴 채 진행하면 새로 받은
+    며칠만 든 CSV로 이력을 덮어쓰게 된다(재검토 SY4). 그래서 모든 행에 YYYY-MM-DD 날짜가 하나씩 있어야 한다.
+    BOM(Excel의 "CSV UTF-8", 메모장)과 헤더의 대소문자·공백 차이는 받아들인다.
+    """
     if not path.exists():
         return {}
-    with path.open("r", encoding="utf-8", newline="") as handle:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            raise CsvFormatError("file has no header line")
+        reader.fieldnames = [(name or "").strip().lower() for name in reader.fieldnames]
+        if "date" not in reader.fieldnames:
+            raise CsvFormatError("header has no date column")
         rows: dict[str, dict[str, Any]] = {}
         for row in reader:
-            key = row.get("date")
-            if not key:
-                continue
+            key = (row.get("date") or "").strip()
+            try:
+                canonical = date.fromisoformat(key).isoformat() == key
+            except ValueError:
+                canonical = False
+            if not canonical:
+                raise CsvFormatError(f"line {reader.line_num}: date is not YYYY-MM-DD")
+            if key in rows:
+                raise CsvFormatError(f"line {reader.line_num}: date appears twice")
             parsed = {"date": key}
             for field in CSV_HEADERS[1:]:
                 if field in STR_CSV_COLUMNS:
@@ -369,8 +401,13 @@ class CallLog:
         return "partial" if totals[CALL_OK] + totals[CALL_EMPTY] else "failed"
 
 
-def safe_call(client: Any, method_name: str, *args: Any, log: CallLog | None = None, **kwargs: Any) -> tuple[Any, str]:
-    """(값, 상태)를 돌려준다. 상태는 ok/empty/failed. 실패는 예외 클래스와 HTTP 상태만 기록한다."""
+def safe_call(client: Any, method_name: str, *args: Any, log: CallLog | None = None,
+              check: Any = None, **kwargs: Any) -> tuple[Any, str]:
+    """(값, 상태)를 돌려준다. 상태는 ok/empty/failed. 실패는 예외 클래스와 HTTP 상태만 기록한다.
+
+    check는 응답을 받아 오류 이름(없으면 None)을 돌려주는 함수다. HTTP는 성공인데 본문이 실패를 알리는 응답을
+    실패로 센다.
+    """
     method = getattr(client, method_name, None)
     if not callable(method):
         LOGGER.warning("garmin endpoint=%s unavailable on client", method_name)
@@ -379,8 +416,10 @@ def safe_call(client: Any, method_name: str, *args: Any, log: CallLog | None = N
         return None, CALL_FAILED
     try:
         value = method(*args, **kwargs)
+        error = check(value) if check is not None else None
     except Exception as exc:
-        error = describe_error(exc)
+        value, error = None, describe_error(exc)
+    if error:
         LOGGER.warning("garmin endpoint=%s day=%s failed error=%s", method_name, args[0] if args else "", error)
         if log is not None:
             log.record(method_name, CALL_FAILED, error=error)
@@ -395,17 +434,32 @@ class MissingCredentials(RuntimeError):
     """자격 증명 시크릿이 없다. 메시지에 비밀 값이 없으므로 그대로 출력해도 된다."""
 
 
+# 1년(365.2422일)의 ms 길이. Garmin 체성분 응답은 대사 나이를 "나이 × 이 길이"로 준다(재검토 SY2).
+YEAR_MS = 31_556_926_000
+
+
+def _years_from_span_ms(number: float) -> int | None:
+    """나이를 ms 길이로 쓴 값이면 그 나이(세). 1년의 정확한 배수(오차 1초 미만)가 아니면 모르는 형식이므로 None이다.
+
+    허용 오차를 넓히면 다른 형식의 값(예: 어떤 날짜의 epoch ms)이 우연히 배수 근처에 걸려 틀린 나이가 된다.
+    """
+    nearest = round(number / YEAR_MS)
+    return nearest if abs(number - nearest * YEAR_MS) < 1000 else None
+
+
 def _number_kind(value: Any) -> str:
-    """숫자의 단위 추정. 값 자체는 내보내지 않는다."""
+    """대사 나이 값의 형식 추정. 값 자체는 내보내지 않는다.
+
+    years: 세 단위(10~120). year_span_ms: 나이를 ms 길이로 쓴 값(1년의 배수, 10~120세). large: 그 밖의 큰 수.
+    """
     number = parse_float(value)
     if number is None:
         return "null"
     if 10 <= number <= 120:
         return "years"
-    if number >= 1e11:
-        return "epoch_ms"
-    if number >= 1e8:
-        return "epoch_s"
+    if number >= 1e9:
+        years = _years_from_span_ms(number)
+        return "year_span_ms" if years is not None and 10 <= years <= 120 else "large"
     return "other"
 
 
@@ -431,25 +485,11 @@ def probe_value_kinds(body: Any, sleep: Any, readiness: Any, status: Any) -> dic
     kinds: dict[str, Any] = {}
     items = body.get("dateWeightList") if isinstance(body, dict) else None
     items = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
-    metabolic: dict[str, Any] = {
+    # year_span_ms가 아닌 큰 수(large)가 보이면 Garmin이 형식을 바꾼 것이다. 그때는 변환을 다시 확인한다.
+    kinds["metabolicAge"] = {
         "items": sorted({_number_kind(item.get("metabolicAge")) for item in items}),
         "totalAverage": _number_kind(get_nested(body, "totalAverage", "metabolicAge")),
     }
-    implied: list[bool] = []
-    for item in items:
-        number = parse_float(item.get("metabolicAge"))
-        measured = item.get("calendarDate")
-        if _number_kind(number) != "epoch_ms" or not isinstance(measured, str):
-            continue
-        try:
-            born = datetime.fromtimestamp(number / 1000, tz=timezone.utc).date()
-            implied.append(10 <= (date.fromisoformat(measured[:10]) - born).days / 365.25 <= 120)
-        except (OverflowError, OSError, ValueError):
-            implied.append(False)
-    if implied:
-        # epoch ms를 "그 나이에 해당하는 생일"로 읽었을 때 나이가 10~120세에 드는지.
-        metabolic["epochMsAsBirthDateInRange"] = all(implied)
-    kinds["metabolicAge"] = metabolic
 
     dto = get_nested(sleep, "dailySleepDTO")
     if isinstance(dto, dict):
@@ -551,12 +591,33 @@ def _activity_list(result: Any) -> list[Any] | None:
     return None
 
 
-def fetch_activities_for_date(client: Any, day: str, log: CallLog | None = None) -> tuple[list[Any] | None, str]:
-    """(활동 목록, 상태). 두 경로가 모두 실패하면 목록은 None이다."""
+def _gateway_error(result: Any) -> str | None:
+    """get_activities_fordate는 게이트웨이 응답이다. ActivitiesForDay가 안쪽 요청의 성공 여부와 상태 코드를 따로 가진다.
+
+    안쪽 요청이 실패하면 HTTP는 200이고 payload만 빈 채로 온다. 그대로 읽으면 활동 0건이 되므로 실패로 센다(재검토 SY1).
+    """
+    inner = result.get("ActivitiesForDay") if isinstance(result, dict) else None
+    if not isinstance(inner, dict):
+        return None
+    status = inner.get("statusCode")
+    status = status if isinstance(status, int) and not isinstance(status, bool) else None
+    if inner.get("successful") is False or (status is not None and status >= 400):
+        return "GatewayUnsuccessful" + (f" status={status}" if status is not None else "")
+    return None
+
+
+def fetch_activities_for_date(client: Any, day: str, log: CallLog | None = None,
+                              confirm_empty: bool = False) -> tuple[list[Any] | None, str]:
+    """(활동 목록, 상태). 목록을 알 수 없으면 None과 failed를 돌려준다(호출자는 기존 값을 유지한다).
+
+    confirm_empty는 기존 행에 활동이 있는 날에 준다. 1차 경로가 빈 목록이면 기간 조회로 한 번 더 확인하고,
+    두 경로가 모두 빈 목록일 때만 활동 0건으로 본다. 오래된 날짜에서 1차 경로가 활동을 돌려주는지는
+    확인된 적이 없어서다(재검토 SY1).
+    """
     # python-garminconnect: get_activities_fordate (언더스코어 없음)
-    result, status = safe_call(client, "get_activities_fordate", day, log=log)
+    result, status = safe_call(client, "get_activities_fordate", day, log=log, check=_gateway_error)
     activities = _activity_list(result)
-    if activities is not None:
+    if activities is not None and (activities or not confirm_empty):
         return activities, CALL_OK if activities else CALL_EMPTY
     fallback, fallback_status = safe_call(client, "get_activities_by_date", day, day, log=log)
     if isinstance(fallback, list):
@@ -566,29 +627,21 @@ def fetch_activities_for_date(client: Any, day: str, log: CallLog | None = None)
     return [], CALL_EMPTY
 
 
-def _safe_metabolic_age(value: Any, day: str | None = None) -> int | None:
-    """대사 나이(세). Garmin 체성분 응답은 이 값을 "그 나이에 해당하는 생일"의 epoch ms로 준다.
+def _safe_metabolic_age(value: Any) -> int | None:
+    """대사 나이(세). Garmin 체성분 응답은 이 값을 나이의 ms 길이(나이 × 365.2422일)로 준다.
 
-    2026-11-25 probe에서 확인했다: 체중이 있는 날 metabolicAge는 epoch ms였고, 측정일 기준 나이로 읽으면
-    모두 10~120세 안이었다. 그래서 epoch ms면 측정일(day) 기준 만 나이로 바꾼다. 세 단위 값도 받는다.
+    저장소 이력으로 확인했다. 2026-04-24에 비워진 원시값 27칸이 모두 31,556,926,000ms의 정확한 배수였고
+    42~45세에 해당했다(재검토 SY2). 생일의 epoch ms가 아니므로 측정일은 필요 없다. 세 단위 값도 받는다.
+    1년의 배수가 아닌 큰 수는 모르는 형식이라 버린다.
     """
     number = parse_float(value)
     if number is None:
         return None
-    if number >= 1e11:
-        if not day:
-            return None
-        try:
-            born = datetime.fromtimestamp(number / 1000, tz=timezone.utc).date()
-            measured = date.fromisoformat(day)
-        except (OverflowError, OSError, ValueError):
-            return None
-        number = measured.year - born.year - ((measured.month, measured.day) < (born.month, born.day))
-    age = parse_int(number)
+    age = _years_from_span_ms(number) if number >= 1e9 else parse_int(number)
     return age if age is not None and 10 <= age <= 120 else None
 
 
-def extract_body_metrics(body: Any, day: str | None = None) -> dict[str, Any]:
+def extract_body_metrics(body: Any) -> dict[str, Any]:
     total_average = body.get("totalAverage") if isinstance(body, dict) else None
     payload = total_average if isinstance(total_average, dict) else (body if isinstance(body, dict) else {})
 
@@ -634,7 +687,7 @@ def extract_body_metrics(body: Any, day: str | None = None) -> dict[str, Any]:
             first_number(payload, "visceralFat", "visceralFatRating", "visceralFatMass"),
             2,
         ),
-        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge"), day),
+        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge")),
         "body_fat_percent": round_or_none(body_fat, 1),
     }
 
@@ -794,12 +847,14 @@ def _combine_fallback(primary: str, fallback: str) -> str:
     return CALL_FAILED if CALL_FAILED in (primary, fallback) else CALL_EMPTY
 
 
-def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch:
+def fetch_day_row(client: Any, day: str, log: CallLog | None = None, existing: dict[str, Any] | None = None) -> DayFetch:
+    """하루치를 받는다. existing은 CSV의 그날 행이다. 활동이 있던 날이면 빈 활동 목록을 한 번 더 확인한다."""
     stats, stats_status = safe_call(client, "get_stats", day, log=log)
     heart_rates, hr_status = safe_call(client, "get_heart_rates", day, log=log)
     sleep, sleep_status = safe_call(client, "get_sleep_data", day, log=log)
     body, body_status = safe_call(client, "get_body_composition", day, log=log)
-    activities, activities_status = fetch_activities_for_date(client, day, log=log)
+    had_activities = bool(existing) and (existing.get("activity_count") or 0) > 0
+    activities, activities_status = fetch_activities_for_date(client, day, log=log, confirm_empty=had_activities)
     # 급성 훈련 부하. 준비도에서 값을 얻으면 훈련 상태는 부르지 않는다.
     readiness, training_status = safe_call(client, "get_training_readiness", day, log=log)
     training_load = extract_readiness_load(readiness, day)
@@ -818,7 +873,7 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
     if sleep_status == CALL_FAILED:
         failed |= SLEEP_FIELDS
 
-    body_metrics = extract_body_metrics(body, day)
+    body_metrics = extract_body_metrics(body)
 
     resting_hr = extract_resting_hr(stats, heart_rates, sleep)
     if resting_hr is None and CALL_FAILED in (stats_status, hr_status, sleep_status):
@@ -1340,10 +1395,31 @@ def _row_is_empty(row: dict[str, Any]) -> bool:
     return all(row.get(f) in (None, 0) for f in key_fields)
 
 
+# "없음"이 None이 아니라 0으로 오는 횟수 필드. protect는 이 값이 줄어드는 것을 막는다.
+COUNT_FIELDS = ("activity_count", "weight_measure_count")
+
+
+def _is_zero(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+
+
+def _loses_value(before: Any, after: Any) -> bool:
+    """값이 있던 칸이 빈 값이 되거나, 0이 아니던 숫자가 0이 되는가.
+
+    활동 수·운동 시간·운동 칼로리·측정 횟수는 "없음"이 None이 아니라 0으로 온다.
+    """
+    if before is None:
+        return False
+    return after is None or (_is_zero(after) and not _is_zero(before))
+
+
 def merge_day_row(existing: dict[str, Any] | None, fetched: DayFetch, protect: bool = False) -> tuple[dict[str, Any], set[str]]:
     """필드 단위 병합. 원천 호출이 실패한 필드는 기존 값을 유지하고, 성공했는데 값이 없을 때만 비운다.
 
-    protect면 성공했는데 값이 없어도 기존 값을 남긴다(긴 backfill에서 값 손실을 막는다). 남긴 필드 이름도 돌려준다.
+    protect면 긴 backfill에서 값을 잃지 않게 다음을 지킨다(재검토 SY1). 남긴 필드 이름도 돌려준다.
+    - 값이 있던 칸을 빈 값이나 0으로 만들지 않는다.
+    - 활동 수와 체중 측정 횟수를 낮추지 않는다.
+    - 활동 수를 지킨 날은 운동 시간·칼로리·출처도 함께 지킨다(활동 값과 일일 요약 값이 섞이지 않게).
     """
     row = dict(fetched.row)
     protected: set[str] = set()
@@ -1351,9 +1427,13 @@ def merge_day_row(existing: dict[str, Any] | None, fetched: DayFetch, protect: b
         for name in fetched.failed_fields:
             row[name] = existing.get(name)
         if protect:
-            for name in CSV_HEADERS[1:]:
-                if row.get(name) is None and existing.get(name) is not None:
-                    row[name] = existing[name]
+            held = {name for name in CSV_HEADERS[1:] if _loses_value(existing.get(name), row.get(name))}
+            held |= {name for name in COUNT_FIELDS if (existing.get(name) or 0) > (row.get(name) or 0)}
+            if "activity_count" in held:
+                held |= ACTIVITY_FIELDS
+            for name in held:
+                if row.get(name) != existing.get(name):
+                    row[name] = existing.get(name)
                     protected.add(name)
     return row, protected
 
@@ -1375,9 +1455,9 @@ def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, A
     protected_cells: set[tuple[str, str]] = set()
     for day in days:
         LOGGER.info("syncing %s", day)
-        fetched = fetch_day_row(client, day, log=log)
-        fetched_by_day[day] = fetched
         existing = existing_rows.get(day)
+        fetched = fetch_day_row(client, day, log=log, existing=existing)
+        fetched_by_day[day] = fetched
         if existing is None and fetched.failed_fields >= ROW_FIELDS:
             LOGGER.warning("garmin day=%s every call failed, no row created", day)
             continue
@@ -1437,7 +1517,10 @@ def build_sync_block(log: CallLog, auth: str, days: list[str], previous: dict[st
     }
 
 
-MERGE_BUCKETS = ("same", "changed", "filled", "cleared", "kept", "protected")
+# zeroed는 0이 아니던 값이 0이 된 칸이다. 활동 수·운동 값·측정 횟수는 "없음"이 0이라 cleared에 잡히지 않는다.
+MERGE_BUCKETS = ("same", "changed", "zeroed", "filled", "cleared", "kept", "protected")
+# 주석에 필드별로 풀어 적는 결과. 긴 backfill 뒤에 zeroed와 cleared가 0인지 본다.
+MERGE_REPORTED = ("filled", "changed", "zeroed", "cleared", "protected")
 
 
 def merge_stats(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) -> tuple[int, dict[str, dict[str, int]]]:
@@ -1462,6 +1545,8 @@ def merge_stats(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) ->
                 bucket = "filled"
             elif after is None:
                 bucket = "cleared"
+            elif _is_zero(after):
+                bucket = "zeroed"
             else:
                 bucket = "changed"
             merge[name][bucket] += 1
@@ -1469,12 +1554,14 @@ def merge_stats(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) ->
 
 
 def report_merge(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) -> None:
+    """병합 결과를 주석으로 남긴다. 건수와 필드 이름만 적는다(값 없음)."""
     new_days, merge = merge_stats(result, existing_rows)
-    totals = {bucket: sum(counts[bucket] for counts in merge.values()) for bucket in ("filled", "changed", "cleared", "protected")}
+    totals = {bucket: sum(counts[bucket] for counts in merge.values()) for bucket in MERGE_REPORTED}
     annotate("notice", "garmin merge new_days={} {}".format(new_days, " ".join(f"{k}={v}" for k, v in totals.items())))
-    cleared = sorted(name for name, counts in merge.items() if counts["cleared"])
-    if cleared:
-        annotate("notice", "garmin cleared fields=" + ",".join(f"{name}:{merge[name]['cleared']}" for name in cleared))
+    for bucket in ("changed", "zeroed", "cleared", "protected"):
+        names = [name for name in CSV_HEADERS[1:] if merge[name][bucket]]
+        if names:
+            annotate("notice", f"garmin {bucket} fields=" + ",".join(f"{name}:{merge[name][bucket]}" for name in names))
 
 
 def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, Any]], auth: str, days: list[str]) -> dict[str, Any]:
@@ -1528,6 +1615,45 @@ def probe_activity_history(client: Any, since: str, until: str) -> dict[str, Any
     }
 
 
+class InputError(ValueError):
+    """실행 입력이 잘못됐다. 메시지는 공개 로그에 그대로 나가므로 입력 원문을 넣지 않는다."""
+
+
+def today_kst() -> date:
+    return datetime.now(KST).date()
+
+
+def _parse_day(text: str, name: str) -> date:
+    """YYYY-MM-DD이고 실제로 있는 날짜만 받는다(2026-02-31, 20261125 같은 값은 거절한다)."""
+    value = text.strip()
+    try:
+        day = date.fromisoformat(value)
+    except ValueError:
+        day = None
+    if day is None or day.isoformat() != value:
+        raise InputError(f"{name} must be a real date in YYYY-MM-DD form")
+    return day
+
+
+def plan_window(backfill_days: int, end_text: str | None, first_csv_day: str | None, today: date) -> tuple[list[str], bool]:
+    """(받을 날짜 목록, CSV 시작일에 맞춰 줄였는지). 입력이 잘못되면 InputError를 낸다.
+
+    미래 날짜는 받지 않는다. 빈 행이 생기고 요약이 그 행을 "오늘"로 읽는다(재검토 SY3).
+    CSV 첫 날짜보다 앞은 받지 않는다. 그 앞으로 넘어간 창은 첫 날짜에서 자른다.
+    """
+    if not 1 <= backfill_days <= MAX_BACKFILL_DAYS:
+        raise InputError(f"backfill_days must be 1-{MAX_BACKFILL_DAYS}")
+    end_day = _parse_day(end_text, "end_date") if end_text else today
+    if end_day > today:
+        raise InputError(f"end_date is in the future (today is {today.isoformat()} KST)")
+    days = daterange(end_day, backfill_days)
+    if first_csv_day and days[0] < first_csv_day:
+        if days[-1] < first_csv_day:
+            raise InputError(f"end_date is before the first CSV day ({first_csv_day})")
+        return [day for day in days if day >= first_csv_day], True
+    return days, False
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
@@ -1540,7 +1666,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = load_json(paths.config)
     previous_sync = load_previous_sync(Path(args.previous_summary))
-    existing_rows = load_existing_rows(paths.csv)
+    try:
+        existing_rows = load_existing_rows(paths.csv)
+    except CsvFormatError as exc:
+        # 못 읽은 이력 위에 쓰면 CSV가 새로 받은 며칠로 줄어든다. 아무것도 쓰지 않고 실패로 끝낸다.
+        annotate("error", f"garmin csv unreadable ({exc}); nothing written")
+        return 1
 
     if args.skip_garmin:
         rows = normalize_rows(existing_rows)
@@ -1550,14 +1681,23 @@ def main(argv: list[str] | None = None) -> int:
         LOGGER.info("rebuilt %s from %s rows", paths.summary, len(rows))
         return 0
 
-    end_day = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else date.today()
-    if args.probe_dates:
-        if not args.dry_run:
-            annotate("error", "--probe-dates needs --dry-run")
-            return 2
-        days = sorted({date.fromisoformat(value.strip()).isoformat() for value in args.probe_dates.split(",") if value.strip()})
-    else:
-        days = daterange(end_day, args.backfill_days)
+    # 입력 검증은 로그인 전에 한다. 워크플로는 숫자 형태만 보고 나머지는 여기서 정한다.
+    protect = args.protect_existing or args.backfill_days >= PROTECT_FROM_DAYS
+    try:
+        if args.probe_dates:
+            if not args.dry_run:
+                raise InputError("--probe-dates needs --dry-run")
+            days = sorted({_parse_day(value, "--probe-dates").isoformat() for value in args.probe_dates.split(",") if value.strip()})
+            if not days:
+                raise InputError("--probe-dates has no date")
+        else:
+            days, clamped = plan_window(args.backfill_days, args.date, min(existing_rows, default=None), today_kst())
+            if clamped:
+                annotate("notice", f"garmin window cut at the first CSV day start={days[0]} days={len(days)}")
+    except InputError as exc:
+        annotate("error", str(exc))
+        return 2
+
     try:
         client, auth = build_client(args.token_dir)
     except MissingCredentials as exc:
@@ -1568,7 +1708,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     log = CallLog(keep_structures=args.dry_run)
-    result = sync_days(client, days, existing_rows, log, protect=args.protect_existing)
+    result = sync_days(client, days, existing_rows, log, protect=protect)
     report_calls(log, auth)
     failed = log.status() == "failed"
 
@@ -1585,6 +1725,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if failed else 0
 
     report_merge(result, existing_rows)
+    if protect:
+        annotate("notice", f"garmin protect=on days={len(days)} start={days[0]} end={days[-1]}")
+    lost_days = set(existing_rows) - set(result.rows)
+    if lost_days:
+        # 병합은 행을 지우지 않는다. 지워졌다면 코드가 잘못된 것이므로 CSV를 덮어쓰지 않는다.
+        annotate("error", f"garmin merge would drop {len(lost_days)} existing rows; nothing written")
+        return 1
     write_rows(paths.csv, result.rows)
     rows = normalize_rows(result.rows)
     summary = build_summary(rows, config)

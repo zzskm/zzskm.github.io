@@ -2,7 +2,7 @@
 
 Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·활동)를 받아 `data/daily_metrics.csv`에 쌓는다. 그 CSV로 추세·예측·진단을 담은 `data/summary.json`을 만들고, 이 폴더의 정적 페이지(GitHub Pages)와 루트의 개인 대시보드가 그 요약을 읽는다.
 
-작업 이력과 판단 근거는 `reports/`에 있다(`INSPECTION_2026-11-25.md`, `PLAN_2026-11-25.md`).
+작업 이력과 판단 근거는 `reports/`에 있다(`INSPECTION_2026-11-25.md`, `PLAN_2026-11-25.md`, 구현 뒤의 재검토와 후속 작업은 `REVIEW_2026-11-25.md`).
 
 ## 흐름
 
@@ -19,7 +19,7 @@ Garmin Connect에서 하루 집계(체중·체성분·걸음·심박·수면·�
 |---|---|---|
 | `garmin weight sync` | 매일 00:41, 09:41 KST, 수동 실행 | 수집 → CSV·요약 커밋(`main`에서만). 모든 호출이 실패하면 커밋하지 않고 실패로 끝난다(실패 알림). |
 | `garmin weight probe` | `garmin-probe/**` 브랜치 푸시, 수동 실행 | `--dry-run`으로 받아 보기만 한다. 결과(건수·상태·키와 타입만, 값 없음)는 그 브랜치의 `probe-results/`에 커밋된다. |
-| `garmin weight tests` | 코드·테스트·워크플로 변경 | 단위 테스트, 고정한 garminconnect의 메서드 검사, 브라우저 테스트, 서비스 워커 테스트. |
+| `garmin weight tests` | 코드·테스트·워크플로 변경 | 단위 테스트(워크플로의 셸 스텝을 떼어 bash로 돌리는 테스트 포함), 고정한 garminconnect의 메서드 검사, 브라우저 테스트, 서비스 워커 테스트. |
 
 ## 시크릿
 
@@ -78,17 +78,28 @@ Garmin 호출을 바꿨으면 로컬 성공만 믿지 말고 probe 브랜치로 
 | 컬럼 | 원천 | 비고 |
 |---|---|---|
 | `weight_kg`, `weight_measure_count`, `visceral_fat`, `body_fat_percent` | `get_body_composition` | |
-| `metabolic_age` | 같음 | Garmin은 "그 나이에 해당하는 생일"(epoch ms)로 준다. 측정일 기준 만 나이로 바꾼다. |
+| `metabolic_age` | 같음 | Garmin은 나이를 ms 길이(나이 × 31,556,926,000ms, 1년 = 365.2422일)로 준다. 그 배수일 때만 나이로 바꾼다. 세 단위 값도 받는다. |
 | `steps` | `get_stats` | |
 | `resting_hr` | `get_heart_rates` → `get_sleep_data` → `get_stats` 중 처음 값 | |
 | `sleep_hours`, `sleep_score` | `get_sleep_data`(`dailySleepDTO`) | 밤에 기기를 찬 날만 있다. |
 | `activity_count`, `exercise_minutes`, `exercise_calories`, `exercise_source` | 활동(`get_activities_fordate`, 실패하면 `get_activities_by_date`) | 활동이 없는 날은 일일 요약의 강도 운동 시간(보통+격렬, 실제 분)과 하루 활동 칼로리를 쓰고 `exercise_source=intensity`로 적는다. |
 | `training_load_acute` | `get_training_readiness` → `get_training_status` | 그날 항목만 쓴다. 이 계정에는 데이터가 없다(2026-11-25 확인). |
 
+활동 조회:
+- `get_activities_fordate`는 게이트웨이 응답이다. `ActivitiesForDay`의 `successful`이 거짓이거나 `statusCode`가 400 이상이면 HTTP가 200이어도 실패로 센다.
+- CSV에 활동이 있던 날인데 빈 목록이 오면 `get_activities_by_date`로 한 번 더 확인한다. 두 경로가 모두 빈 목록일 때만 0건으로 본다.
+
 병합 규칙:
 - 원천 호출이 실패한 필드는 기존 값을 유지한다.
 - 호출이 성공했는데 값이 없으면 비운다.
 - 핵심 필드가 한꺼번에 비면 일시적인 빈 응답으로 보고 기존 행을 유지한다.
+- 4일 이상을 다시 받을 때(보호 병합)는 값이 있던 칸을 비우거나 0으로 만들지 않고, 활동 수와 체중 측정 횟수를 낮추지 않는다. 활동 수를 지킨 날은 운동 시간·칼로리·출처도 함께 지킨다.
+- 병합은 행을 지우지 않는다.
+
+CSV를 손으로 고쳤다면:
+- 모든 행에 `YYYY-MM-DD` 날짜가 하나씩 있어야 한다. 헤더에 `date`가 없거나, 날짜가 비었거나 겹치거나 형식이 다르면 수집이 `garmin csv unreadable` 오류로 끝나고 아무것도 쓰지 않는다.
+- BOM(Excel의 "CSV UTF-8", 메모장)과 헤더의 대소문자 차이는 받아들인다. 다시 쓸 때는 BOM 없이 쓴다.
+- 요약은 `--skip-garmin`으로 다시 만들 수 있지만 커밋은 봇의 다음 수집에 맡긴다.
 
 ## 요약 (`data/summary.json`)과 소비자
 
@@ -133,11 +144,17 @@ Garmin 호출을 바꿨으면 로컬 성공만 믿지 말고 probe 브랜치로 
 
 `garmin weight sync`를 수동 실행한다.
 
-- `backfill_days`는 1~60이다. `end_date`(KST, 비우면 오늘)부터 거꾸로 센다.
-- 4일 이상이면 `--protect-existing`이 붙어, 성공했는데 빈 값이 와도 기존 셀을 지우지 않는다.
-- 실행마다 `::notice::garmin merge new_days= filled= changed= cleared= protected=`가 남는다.
+- 입력:
+  - `backfill_days`는 1~60의 정수다. 앞에 0을 붙이지 않는다(`08`, `030`은 거절된다).
+  - `end_date`는 `YYYY-MM-DD`(KST)이고 비우면 오늘이다. 실제로 없는 날짜와 미래 날짜는 거절된다. 그날부터 거꾸로 센다.
+  - CSV 첫 날짜(2026-03-13)보다 앞으로 넘어가는 창은 첫 날짜에서 잘린다(`garmin window cut at the first CSV day`). 그 앞의 행은 생기지 않는다.
+  - 형태는 워크플로가, 범위와 날짜의 뜻은 `sync_garmin.py`가 본다. 잘못된 입력은 로그인 전에 `::error::`로 끝난다.
+- 4일 이상이면 보호 병합으로 돈다(`garmin protect=on`). 위 병합 규칙대로 값이 있던 칸을 비우거나 0으로 만들지 않는다.
+- 실행마다 주석이 남는다. 긴 backfill 뒤에는 `zeroed=0 cleared=0`인지 본다.
+  - `garmin merge new_days= filled= changed= zeroed= cleared= protected=`: 기존 CSV와 달라진 칸 수다. `zeroed`는 0이 아니던 값이 0이 된 칸, `cleared`는 빈 값이 된 칸이다.
+  - `garmin changed|zeroed|cleared|protected fields=이름:건수,…`: 어느 컬럼에서 일어났는지다.
 - 30일씩 나눠 한 번에 하나만 돌린다. 같은 워크플로가 대기 중이면 새 실행이 대기 실행을 취소한다.
-- CSV가 2026-03-13부터 시작하므로 그 이전을 만들지 않게 마지막 단계의 날 수를 맞춘다.
+- 3일이 지난 잘못된 값(예: Garmin에서 지운 측정)을 바로잡으려면 `end_date`를 그 날짜로, `backfill_days`를 1~3으로 준다. 3일 이하는 보호 없이 돌아서 Garmin에서 사라진 값이 CSV에서도 비워진다.
 
 ## 자산 버전과 서비스 워커
 
