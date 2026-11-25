@@ -380,7 +380,7 @@ class GarminWeightTests(unittest.TestCase):
                 "body_fat_percent": 22.0,
                 "sleep_score": 75, "training_load_acute": 180,
             })
-        diag = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})["modelDiagnostics"]
+        diag = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175}, detail=True)["modelDiagnostics"]
         self.assertNotIn("modelComparison", diag)  # Kalman은 modelAudit 안에서 한 번만 평가한다
         self.assertIn("kalman", diag["modelAudit"])
         for horizon in ("7d", "14d", "28d", "84d"):
@@ -431,7 +431,11 @@ class GarminWeightTests(unittest.TestCase):
             summary = sync_garmin.build_summary(sync_garmin.normalize_rows(sync_garmin.load_existing_rows(csv_path)), {"targetWeightKg": 78})
         diag = summary["modelDiagnostics"]
         self.assertEqual(diag["backtest"], audit["models"]["current"])
-        self.assertEqual(diag["modelAudit"]["kalman"], audit["models"]["kalman"])
+        # 요약에는 화면이 쓰는 필드만 있고, 감사에는 전체 통계가 있다. 같은 계산이므로 MAE가 같다.
+        for horizon in ("7d", "14d", "28d", "84d"):
+            self.assertEqual(diag["modelAudit"]["kalman"][horizon]["maeKg"], audit["models"]["kalman"][horizon]["maeKg"])
+        self.assertEqual({"maeKg", "status"}, set(diag["modelAudit"]["kalman"]["7d"]))
+        self.assertIn("biasKg", audit["models"]["kalman"]["7d"])
         self.assertEqual(diag["ciCalibration"]["hitRate"], audit["ciHitRate"]["hitRate"])
         self.assertNotIn("ciHitRateApprox", audit)
 
@@ -594,6 +598,67 @@ class ForecastCurveTests(unittest.TestCase):
         self.assertIsNone(tier([None, 0.0]))
 
 
+class SummarySlimTests(unittest.TestCase):
+    """P9: 아무도 읽지 않는 계열은 요약에 없다."""
+
+    def test_unused_series_are_gone(self) -> None:
+        rows = [_daily_row((sync_garmin.date(2030, 1, 1) + sync_garmin.timedelta(days=d)).isoformat(), 84.0 - d * 0.01)
+                for d in range(40)]
+        for summary in (sync_garmin.build_summary(rows, {"targetWeightKg": 78}), sync_garmin.build_summary([], {"targetWeightKg": 78})):
+            self.assertEqual({"daily", "ma14", "ewma", "prediction"}, set(summary["series"]))
+            self.assertIn("series", summary["predictionCI"])
+
+
+def _contrast(a: str, b: str) -> float:
+    def lum(hex_color: str) -> float:
+        h = hex_color.lstrip("#")
+        channels = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+class PageHygieneTests(unittest.TestCase):
+    """P9: 색 대비(A1), 마크업(A3), 문자열 끼워 넣기(F7), 고정 문구, 검색 노출."""
+
+    APP = MODULE_PATH.parents[1]
+
+    def _tokens(self) -> dict:
+        import re
+        css = (self.APP / "style.css").read_text(encoding="utf-8")
+        root = css[css.index(":root {"):css.index("}", css.index(":root {"))]
+        return dict(re.findall(r"--([\w-]+):\s*(#[0-9A-Fa-f]{6})", root))
+
+    def test_text_colors_meet_contrast(self) -> None:
+        tokens = self._tokens()
+        backgrounds = {"white": "#FFFFFF", "panel": tokens["panel"], "panel-alt": tokens["panel-alt"], "bg": tokens["bg"]}
+        for name in ("muted", "accent-text", "ink", "ink-soft", "accent-ink"):
+            for bg_name, bg in backgrounds.items():
+                with self.subTest(text=name, background=bg_name):
+                    self.assertGreaterEqual(_contrast(tokens[name], bg), 4.5)
+        css = (self.APP / "style.css").read_text(encoding="utf-8")
+        self.assertGreaterEqual(_contrast("#FFFFFF", tokens["accent-strong"]), 4.5)
+        self.assertIn(".hero-badge--gaining { background: var(--accent-strong); color: #fff; }", css)
+        self.assertGreaterEqual(_contrast("#FFFFFF", "#756A64"), 4.5)
+        self.assertIn(".hero-badge--neutral { background: #756A64; color: #fff; }", css)
+        self.assertNotIn("color: var(--accent);", css)  # 강조색을 글자로 쓸 때는 --accent-text
+
+    def test_markup_and_scripts(self) -> None:
+        import re
+        html = (self.APP / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<meta name="robots" content="noindex" />', html)
+        for button in re.findall(r"<button\b.*?</button>", html, flags=re.S):
+            self.assertNotRegex(button, r"<(p|div|h\d)\b")
+        for stale in ("SYNC V2.4.1", "MONITORING TREND", "LOW RELIABILITY", "Last Sync Status", "Weight Trend"):
+            self.assertNotIn(stale, html)
+        for script in ("app.js", "app.helpers.js", "enhancements.js"):
+            source = (self.APP / script).read_text(encoding="utf-8")
+            with self.subTest(script=script):
+                self.assertNotIn(".innerHTML", source)
+                self.assertNotIn("PLATEAU_CONTENT", source)
+
+
 class PwaAssetTests(unittest.TestCase):
     """P8(W3, W5): 자산 버전은 sw.js 한 곳에서 정하고, index.html·manifest가 같은 값을 쓴다."""
 
@@ -714,7 +779,7 @@ class SummaryConsumerContractTests(unittest.TestCase):
         summary = sync_garmin.build_summary([], {"targetWeightKg": 78})
         self._assert_contract(summary)
         # 계획서 기준: 빈 요약에도 아래 키가 있어야 한다.
-        for path in ("coverage", "modelDiagnostics.dataQuality", "series.exerciseCaloriesDaily"):
+        for path in ("coverage", "modelDiagnostics.dataQuality", "series.ma14"):
             with self.subTest(path=path):
                 self.assertIsNot(_MISSING, _lookup(summary, path))
         self.assertFalse(summary["modelDiagnostics"]["trend"]["predictionEnabled"])

@@ -22,15 +22,12 @@
 
   const {
     THEME,
-    PLATEAU_CONTENT,
     fmtKg,
     fmtKgBare,
-    fmtSteps,
     fmtDate,
     fmtDateShort,
     fmtEta,
     fmtEtaRange,
-    fmtMae,
     firstValidDaily,
     lastValidDaily,
     sliceByRange,
@@ -63,16 +60,16 @@
     const trendKg = Number.isFinite(current.weightEwmaKg) ? current.weightEwmaKg : (start ? start.valueKg - (rolling.lossRateDetail?.blended ?? 0) * 30 : null);
     const weeklyChange = Number.isFinite(rolling.lossRateDetail?.blended) ? rolling.lossRateDetail.blended : null;
     const confidenceLevel = confidence.level || 'low';
-    const confidenceLabel = (confidence.label || 'LOW').toUpperCase();
+    const confidenceLabel = confidence.label || '낮음';
 
     const startVal = start ? start.valueKg : null;
     const lastVal = last ? last.valueKg : null;
     setText('currentWeight', fmtKgBare(s.current?.weightKg));
 
     // weeklyLossKg 계열은 양수 = 감량. 표시할 땐 체중 변화 방향(감량 = −)으로 뒤집는다.
-    setText('heroWeeklyChange', Number.isFinite(weeklyChange) ? `${weeklyChange > 0 ? '−' : '+'}${Math.abs(weeklyChange).toFixed(2)} kg/w` : '–');
+    setText('heroWeeklyChange', Number.isFinite(weeklyChange) ? `${weeklyChange > 0 ? '−' : '+'}${Math.abs(weeklyChange).toFixed(2)} kg/주` : '–');
     setText('predictionConfidence', confidenceLabel);
-    setText('predictionError', bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `±${bt14.maeKg.toFixed(2)} kg (14D MAE)` : '–');
+    setText('predictionError', bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `±${bt14.maeKg.toFixed(2)} kg (14일 MAE)` : '–');
     setText('trendWeight', Number.isFinite(trendKg) ? `${trendKg.toFixed(1)} kg` : '–');
     setText('toTarget', Number.isFinite(s.goal?.remainingKg) ? `${s.goal.remainingKg.toFixed(1)} kg` : '–');
 
@@ -117,10 +114,10 @@
       badge.className = `hero-badge hero-badge--${trendDir === 'losing' ? 'losing' : trendDir === 'gaining' ? 'gaining' : 'neutral'}`;
     }
     if (reason) {
-      reason.textContent = confidenceLevel === 'low' ? 'LOW RELIABILITY · PROVISIONAL' : 'MONITORING TREND';
+      reason.textContent = confidenceLevel === 'low' ? '신뢰도 낮음 · 참고용' : '추세 관찰 중';
     }
 
-    // 진행률은 "To Target"(goal.remainingKg)과 같은 기준인 추세 체중으로 계산한다. 일별 실측은 수분 변동이 크다.
+    // 진행률은 "목표까지"(goal.remainingKg)과 같은 기준인 추세 체중으로 계산한다. 일별 실측은 수분 변동이 크다.
     const progressKg = Number.isFinite(trendKg) ? trendKg : lastVal;
     if (Number.isFinite(startVal) && Number.isFinite(progressKg) && Number.isFinite(target)) {
       const totalKg = startVal - target;
@@ -129,8 +126,8 @@
       setText('goalProgressBig', `${pctGoal.toFixed(0)}%`);
       el('heroProgressFill').style.width = pctGoal + '%';
       el('heroProgressMarker').style.left = pctGoal + '%';
-      setText('heroProgressStart', `${fmtKgBare(startVal)} kg (Start)`);
-      setText('heroProgressTarget', `${fmtKgBare(target)} kg (Target)`);
+      setText('heroProgressStart', `시작 ${fmtKgBare(startVal)} kg`);
+      setText('heroProgressTarget', `목표 ${fmtKgBare(target)} kg`);
     }
 
     const rangeVal = s.rolling?.last7WeightRangeKg;
@@ -143,8 +140,8 @@
     const trend7 = trendWindows['7d']?.weeklyLossKg;
     const trend28 = trendWindows['28d']?.weeklyLossKg;
     // 표시 컨벤션: 체중 변화 방향 (감량 = −). weeklyLossKg는 양수 = 감량.
-    const trend7Text = Number.isFinite(trend7) ? `${trend7 > 0 ? '−' : '+'}${Math.abs(trend7).toFixed(2)}/w` : '–';
-    const trend28Text = Number.isFinite(trend28) ? `${trend28 > 0 ? '−' : '+'}${Math.abs(trend28).toFixed(2)}/w` : '–';
+    const trend7Text = Number.isFinite(trend7) ? `${trend7 > 0 ? '−' : '+'}${Math.abs(trend7).toFixed(2)}/주` : '–';
+    const trend28Text = Number.isFinite(trend28) ? `${trend28 > 0 ? '−' : '+'}${Math.abs(trend28).toFixed(2)}/주` : '–';
     const maeText = bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `${bt14.maeKg.toFixed(2)} kg` : '–';
     setText('summaryChange7d', trend7Text);
     setText('summaryChange28d', trend28Text);
@@ -199,8 +196,11 @@
       const n = vals.length;
       const toX = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - 2 * PAD);
       const toY = (v) => PAD + ((maxV - v) / range) * (H - 2 * PAD);
-      const points = vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-      svg.innerHTML = `<polyline points="${points}" stroke="${strokeColor}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.setAttribute('points', vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' '));
+      Object.entries({ stroke: strokeColor, 'stroke-width': '1.5', fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' })
+        .forEach(([k, v]) => line.setAttribute(k, v));
+      svg.replaceChildren(line);
     });
   }
 
@@ -217,7 +217,7 @@
       const score = confidence.score ?? '–';
       // 예측은 항상 운영 모델로 계산한다. selectedModel은 섀도 비교 결과일 뿐 예측에 쓰이지 않는다.
       const operating = diag.trend?.rateSource === 'cold_start_flat' ? '초기 평평 예측' : 'EWMA 혼합';
-      confEl.textContent = `${level.toUpperCase()} · ${score}점 · ${operating}`;
+      confEl.textContent = `${confidence.label || '낮음'} · ${score}점 · ${operating}`;
       confEl.className = `model-strip-main model-strip-main--${level}`;
       const shadow = diag.selectedModel?.name;
       if (shadow && shadow !== 'current') confEl.title = `섀도 후보 ${shadow} — 참고용 비교이며 예측에는 쓰지 않습니다.`;
@@ -228,17 +228,27 @@
     if (trendEl) {
       const parts = ['7d', '14d', '28d'].map((k) => {
         const v = trend[k]?.weeklyLossKg;
-        return Number.isFinite(v) ? `${k} ${v > 0 ? '−' : '+'}${Math.abs(v).toFixed(2)}/w` : `${k} –`;
+        const day = k.replace('d', '일');
+        return Number.isFinite(v) ? `${day}\u00a0${v > 0 ? '−' : '+'}${Math.abs(v).toFixed(2)}/주` : `${day}\u00a0–`;
       });
-      trendEl.textContent = parts.join('  ');
+      // 항목마다 줄바꿈하지 않는 span으로 넣고, 줄은 항목 사이에서만 바뀌게 한다.
+      const nodes = [];
+      parts.forEach((text, i) => {
+        if (i) nodes.push(document.createTextNode('  '));
+        const item = document.createElement('span');
+        item.style.whiteSpace = 'nowrap';
+        item.textContent = text;
+        nodes.push(item);
+      });
+      trendEl.replaceChildren(...nodes);
     }
 
     const valEl = el('modelValidate');
     if (valEl) {
       const mae = backtest['14d'];
       const maeText = mae?.status === 'ok' && Number.isFinite(mae.maeKg)
-        ? `14d MAE ${mae.maeKg.toFixed(2)}kg`
-        : '14d 표본 부족';
+        ? `14일 MAE ${mae.maeKg.toFixed(2)}kg`
+        : '14일 표본 부족';
       const cov = Number.isFinite(quality.recentCoveragePct)
         ? ` · 측정 ${quality.recentCoveragePct.toFixed(0)}%`
         : '';
@@ -250,12 +260,16 @@
     const host = el(id);
     if (!host) return;
     const todayIso = last30.length ? last30[last30.length - 1].date : null;
-    host.innerHTML = last30.map((p) => {
+    host.replaceChildren(...last30.map((p) => {
       const has = Number.isFinite(p.valueKg);
-      const cls = has ? (p.date === todayIso ? 'dot-cell has-today' : 'dot-cell has') : 'dot-cell';
-      const ariaLabel = `${p.date}${has ? ' · ' + p.valueKg.toFixed(1) + 'kg' : ' · 기록 없음'}`;
-      return `<span class="${cls}" role="img" aria-label="${ariaLabel}" title="${ariaLabel}"></span>`;
-    }).join('');
+      const dot = document.createElement('span');
+      dot.className = has ? (p.date === todayIso ? 'dot-cell has-today' : 'dot-cell has') : 'dot-cell';
+      const label = `${p.date}${has ? ' · ' + p.valueKg.toFixed(1) + 'kg' : ' · 기록 없음'}`;
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', label);
+      dot.title = label;
+      return dot;
+    }));
   }
 
   function buildCiBands(s, scenario) {
@@ -430,7 +444,7 @@
     });
   }
 
-  // 점 색은 내용을 다 만든 뒤에 정한다. 예전에는 색을 칠한 점을 innerHTML이 새 점으로 바꿔 색이 사라졌다.
+  // 점 색은 내용을 다 만든 뒤에 정한다. 예전에는 색을 칠한 점을 내용 교체가 새 점으로 바꿔 색이 사라졌다.
   function renderSyncPill({ text, cov = '', extra = '', tone = '', title = '' }) {
     const pill = el('lastSync');
     const host = pill?.querySelector('.sync-text');

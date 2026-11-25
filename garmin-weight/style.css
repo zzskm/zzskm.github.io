@@ -12,11 +12,16 @@
 
   --ink: #3C2F2F;
   --ink-soft: #5A4D4D;
-  --muted: #A89F99;
+  /* A1: 글자용 회색은 흰 바탕과 패널 바탕 모두에서 4.5:1 이상(#A89F99는 2.6:1이었다) */
+  --muted: #746E6A;
   --muted-2: #D3C9C4;
 
   --accent: #FF6F61;
   --accent-ink: #A0522D;
+  /* 강조색을 글자로 쓸 때(흰 바탕 5.0:1). 면과 선은 --accent를 그대로 쓴다. */
+  --accent-text: #B54F45;
+  /* 흰 글자를 올리는 강조 배경(4.96:1) */
+  --accent-strong: #C8402F;
   --accent-tint: rgba(255,111,97,0.12);
   --scenario-active-bg: #FF6F61;
   --scenario-active-ink: #fff;
@@ -72,8 +77,6 @@ body {
 }
 .app[data-state="ready"], .app[data-state="error"] { opacity: 1; transform: none; }
 
-.brutalist-border { border: 1px solid var(--ink); }
-.brutalist-border-thick { border: 3px solid var(--ink); }
 
 /* ====================== PANEL HEAD VARIANTS ====================== */
 .panel-head-bar {
@@ -205,10 +208,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .detail-row-accent {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .detail-row-accent .detail-row-value {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* ====================== DASHBOARD GRID (mobile-first) ====================== */
@@ -359,8 +362,8 @@ body {
 }
 .hero-badge--paused { background: var(--accent-ink); }
 .hero-badge--losing { background: var(--ink); color: #fff; }
-.hero-badge--gaining { background: var(--accent); color: #fff; }
-.hero-badge--neutral { background: var(--muted-2); color: #fff; }
+.hero-badge--gaining { background: var(--accent-strong); color: #fff; }
+.hero-badge--neutral { background: #756A64; color: #fff; }
 .hero-status-reason {
   font-size: 11px;
   font-weight: 800;
@@ -438,7 +441,7 @@ body {
   letter-spacing: 0.02em;
 }
 .stat-cell-sub:empty { display: none; }
-.stat-cell--confidence .stat-cell-value { color: var(--accent); }
+.stat-cell--confidence .stat-cell-value { color: var(--accent-text); }
 
 .hero-progress-strip {
   border-top: 2px solid var(--ink);
@@ -471,7 +474,7 @@ body {
   text-transform: uppercase;
   color: #fff;
   mix-blend-mode: difference;
-  z-index: 2;
+  z-index: 3;
 }
 .hero-progress-marker {
   position: absolute;
@@ -480,7 +483,7 @@ body {
   background: var(--accent);
   transform: translateX(-50%);
   transition: left 1.2s var(--ease);
-  z-index: 3;
+  z-index: 2;
 }
 
 /* ====================== INSIGHT STRIP ====================== */
@@ -642,15 +645,6 @@ body {
   color: var(--ink);
   text-transform: uppercase;
 }
-.panel-caption {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-variant-numeric: tabular-nums;
-}
 .panel-controls {
   display: flex;
   align-items: center;
@@ -804,7 +798,7 @@ body {
 .model-strip-body > div:last-child { border-bottom: 0; }
 .model-strip-cell--confidence .model-strip-main--high { color: var(--ink); }
 .model-strip-cell--confidence .model-strip-main--medium { color: var(--accent-ink); }
-.model-strip-cell--confidence .model-strip-main--low { color: var(--accent); }
+.model-strip-cell--confidence .model-strip-main--low { color: var(--accent-text); }
 .model-strip-cell--trend .model-strip-sub,
 .model-strip-cell--validate .model-strip-sub {
   font-family: var(--mono);
@@ -949,14 +943,6 @@ body {
 }
 .details-panel summary::-webkit-details-marker { display: none; }
 .details-panel[open] summary { border-bottom-color: var(--ink); }
-.details-summary {
-  margin: 0 0 16px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
 .details-body {
   display: grid;
   grid-template-columns: 1fr;
@@ -988,7 +974,7 @@ body {
 .model-audit {
   grid-column: 1 / -1;
   margin-top: 12px;
-  padding-top: 12px;
+  padding: 12px 12px 4px;
   border-top: 1px dashed var(--line);
 }
 .audit-table-wrap { margin-top: 8px; }

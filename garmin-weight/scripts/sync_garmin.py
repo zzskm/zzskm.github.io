@@ -901,7 +901,11 @@ def feature_flags(config: dict[str, Any]) -> dict[str, bool]:
     return {name: bool(configured.get(name, default)) for name, default in FEATURE_DEFAULTS.items()}
 
 
-def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
+# 화면의 모델 검증 표가 쓰는 필드. 진단 전체(RMSE, bias, 표본 수)는 model_audit.py가 detail=True로 받는다.
+MODEL_AUDIT_SCREEN_FIELDS = ("maeKg", "status")
+
+
+def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bool = False) -> dict[str, Any]:
     if not rows:
         # 데이터가 없어도 소비자(체중 페이지, 개인 대시보드)가 읽는 키는 모두 둔다.
         return {
@@ -950,8 +954,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "daysSinceLastMeasurement": None,
             },
             "series": {
-                "daily": [], "ma7": [], "ma14": [], "ewma": [], "prediction": [], "predictionCI": [],
-                "steps": [], "exerciseMinutes": [], "exerciseCaloriesDaily": [],
+                "daily": [], "ma14": [], "ewma": [], "prediction": [],
             },
         }
 
@@ -960,7 +963,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     ma7_by_date = {}
     ma14_by_date = {}
     daily_series = []
-    ma7_series = []
     ma14_series = []
     latest_weight_row = None
 
@@ -972,7 +974,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         ma14 = rolling_average(weights_by_date, all_dates, index, 14)
         ma7_by_date[day] = ma7
         ma14_by_date[day] = ma14
-        ma7_series.append({"date": day, "valueKg": ma7})
         ma14_series.append({"date": day, "valueKg": ma14})
         if weight is not None:
             latest_weight_row = row
@@ -1229,7 +1230,13 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     data_quality = data_quality_diagnostics(rows)
 
-    model_audit = {name: backtest_run["models"][name] for name in SHADOW_MODELS}
+    model_audit = {
+        name: backtest_run["models"][name] if detail else {
+            horizon: {key: stats.get(key) for key in MODEL_AUDIT_SCREEN_FIELDS}
+            for horizon, stats in backtest_run["models"][name].items()
+        }
+        for name in SHADOW_MODELS
+    }
     selection_gate = shadow_gate(backtest_run["models"])
     ci_calibration = replay_ci_hit_rate(backtest_run, rows[:ewma_days], ewma_series)
     prediction_ci["hitRate"] = ci_calibration["hitRate"]
@@ -1318,23 +1325,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         },
         "series": {
             "daily": daily_series,
-            "ma7": ma7_series,
+            # P9: 두 소비자(이 페이지, 개인 대시보드)가 읽는 계열만 남긴다. 7일 평균·걸음·운동 시계열과
+            # predictionCI.series의 중복 사본은 아무도 읽지 않아 뺐다(README의 소비자 목록 참고).
             "ma14": ma14_series,
             "ewma": ewma_series,
             "prediction": build_prediction_series(latest_date, current_ewma, base_effective_loss, target_weight=target_weight),
-            "predictionCI": prediction_ci["series"],
-            "steps": [
-                {"date": row["date"], "value": row.get("steps")}
-                for row in rows[-30:]
-            ],
-            "exerciseMinutes": [
-                {"date": row["date"], "value": row.get("exercise_minutes") or 0}
-                for row in rows[-30:]
-            ],
-            "exerciseCaloriesDaily": [
-                {"date": row["date"], "value": parse_float(row.get("exercise_calories")) or 0}
-                for row in rows[-30:]
-            ],
         },
     }
 

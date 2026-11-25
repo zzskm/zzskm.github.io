@@ -38,7 +38,6 @@
 
   const fmtKg = (v, d=1) => Number.isFinite(v) ? `${v.toFixed(d)} kg` : '–';
   const fmtKgBare = (v, d=1) => Number.isFinite(v) ? v.toFixed(d) : '–';
-  const fmtSteps = (v) => Number.isFinite(v) ? Math.round(v).toLocaleString('ko-KR') : '–';
   const fmtDate = (iso) => {
     if (!iso) return '–';
     const d = new Date(iso + 'T00:00:00');
@@ -71,12 +70,6 @@
     if (range.min === range.max) return `${range.min}일`;
     const maxWeeks = Math.round(range.max / 7);
     return `약 ${minWeeks}~${maxWeeks}주 범위`;
-  }
-  
-  function fmtMae(backtest) {
-    return backtest?.status === 'ok' && Number.isFinite(backtest.maeKg)
-      ? `MAE ${backtest.maeKg.toFixed(2)} kg`
-      : '표본 부족';
   }
   
   function firstValidDaily(points) {
@@ -123,40 +116,14 @@
     return new Date(Math.round(n) * DAY_MS).toISOString().slice(0, 10);
   }
 
-  // ---------- plateau card ----------
-  // Phase 4: 정체기 type에 따라 메시지/액션 분기
-  const PLATEAU_CONTENT = {
-    glycogen: {
-      tag: '글리코겐 정체기',
-      msg: '훈련 부하 급증으로 글리코겐·수분이 일시적으로 저장된 상태일 수 있어요. 진짜 정체기가 아닐 가능성이 높습니다.',
-      actions: [
-        '훈련 부하 안정화 후 2~3일 재측정',
-        '수분 섭취 충분히 유지',
-        '주간 부하를 갑자기 늘리지 않기',
-      ],
-    },
-    metabolic: {
-      tag: '대사 정체기 감지',
-      msg: '대사 적응 과정의 정상적인 현상입니다. 의지의 문제가 아니에요.',
-      actions: [
-        '운동 강도 또는 시간 10% 늘리기',
-        '탄수화물 비중 일시 조정 (재공급)',
-        '수면 7시간 이상 확보',
-      ],
-    },
-  };
-
   window.GWAppHelpers = {
     THEME,
-    PLATEAU_CONTENT,
     fmtKg,
     fmtKgBare,
-    fmtSteps,
     fmtDate,
     fmtDateShort,
     fmtEta,
     fmtEtaRange,
-    fmtMae,
     firstValidDaily,
     lastValidDaily,
     sliceByRange,
