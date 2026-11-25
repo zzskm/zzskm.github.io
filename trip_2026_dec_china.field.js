@@ -82,6 +82,8 @@
   };
 
   const expandedItems = new Set();
+  const openGuides = new Set(); // reference blocks left open, as "itemId:index", so a redraw keeps them open
+  let dayOverviewOpen = false;
   let mapDayFilter = "all";
   let mapCatFilter = "all";
   let hotelTypeFilter = "all";
@@ -142,6 +144,7 @@
       mode: "field",
       activeTab: "schedule",
       activeDay: 0,
+      scheduleView: "day",
       dashOpen: false,
       itemState: {},
       reservations,
@@ -172,6 +175,7 @@
       mode: saved.mode === "plan" ? "plan" : "field",
       activeTab: FIELD_TABS.includes(saved.activeTab) ? saved.activeTab : "schedule",
       activeDay: clampInt(saved.activeDay, 0, shanghai.itinerary.length - 1, 0),
+      scheduleView: saved.scheduleView === "all" ? "all" : "day",
       dashOpen: Boolean(saved.dashOpen),
       itemState: saved.itemState && typeof saved.itemState === "object" ? { ...saved.itemState } : {},
       reservations: { ...base.reservations },
@@ -367,8 +371,9 @@
     const idx = getTodayDayIndex();
     if (idx < 0 || idx === lastAutoDay) return false;
     lastAutoDay = idx;
-    if (state.activeDay === idx) return false;
+    if (state.activeDay === idx && state.scheduleView === "day") return false;
     state.activeDay = idx;
+    state.scheduleView = "day";
     saveFieldState();
     return true;
   }
@@ -479,6 +484,22 @@
       }
     });
 
+    // Keep opened reference blocks and the day overview open across redraws (toggle does not bubble).
+    dom.panels.schedule.addEventListener(
+      "toggle",
+      (e) => {
+        const el = e.target;
+        if (!(el instanceof HTMLDetailsElement)) return;
+        if (el.dataset.guideKey) {
+          if (el.open) openGuides.add(el.dataset.guideKey);
+          else openGuides.delete(el.dataset.guideKey);
+        } else if (el.classList.contains("day-overview")) {
+          dayOverviewOpen = el.open;
+        }
+      },
+      true
+    );
+
     // Delegated actions inside field-mode
     dom.fieldMode.addEventListener("click", handleFieldClick);
     dom.fieldMode.addEventListener("change", handleFieldChange);
@@ -563,10 +584,12 @@
       const dayPart = nn.phase === "during" && d.dayIndex === nn.todayIdx ? "" : `Day ${d.dayIndex + 1} ${d.date.slice(5).replace("-", "/")}(${d.weekday}) `;
       return `
         <button type="button" class="dash-now-line" data-jump-item="${esc(entry.item.id)}">
-          <span class="dash-next-badge ${badgeClass}">${esc(badge)}</span>
-          <span class="dash-now-time">${esc(dayPart)}${esc(entry.item.startTime)}</span>
-          <strong>${esc(entry.item.title)}</strong>
-          ${tail ? `<span class="dash-now-tail">${esc(tail)}</span>` : ""}
+          <span class="dash-now-top">
+            <span class="dash-next-badge ${badgeClass}">${esc(badge)}</span>
+            <span class="dash-now-time">${esc(dayPart)}${esc(entry.item.startTime)}</span>
+            ${tail ? `<span class="dash-now-tail">${esc(tail)}</span>` : ""}
+          </span>
+          <strong class="dash-now-title">${esc(entry.item.title)}</strong>
         </button>
       `;
     };
@@ -597,7 +620,7 @@
             <div class="dash-sub">${esc(TRIP_LABEL)} · ${shanghai.tripMeta.nights}박 ${shanghai.tripMeta.days}일 · ${shanghai.tripMeta.travelers}인</div>
             ${
               shanghai.tripMeta.flights
-                ? `<div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.out)}</div><div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.back)}</div>`
+                ? `<div class="dash-sub">${esc(shanghai.tripMeta.flights.out)}</div><div class="dash-sub">${esc(shanghai.tripMeta.flights.back)}</div>`
                 : ""
             }
           </div>
@@ -622,27 +645,37 @@
   }
 
   // ---------- Tab 1: Schedule ----------
+  function slashDate(d) {
+    return d.date.slice(5).replace("-", "/");
+  }
+
+  // "A숙소 · 진장 메트로폴로 클래식 YMCA (예약 완료 · …)" -> without the trailing note in brackets
+  function shortPlaceName(place) {
+    return place ? place.nameKo.replace(/\s*\([^)]*\)\s*$/, "") : "";
+  }
+
   function renderScheduleTab() {
-    const day = shanghai.itinerary[state.activeDay] || shanghai.itinerary[0];
-    const items = getOrderedDayItems(day.dayIndex);
-    const fxRate = getFxRate();
     const nn = getNowNext();
     renderedClockKey = clockKey(nn);
-    const nowId = nn.current ? nn.current.item.id : "";
-    const nextId = nn.next ? nn.next.item.id : "";
+    const showAll = state.scheduleView === "all";
+    const day = shanghai.itinerary[state.activeDay] || shanghai.itinerary[0];
 
     const dayTabsHtml = `
       <div class="day-tabs" role="tablist" aria-label="날짜 선택">
+        <button type="button" class="day-tab-btn ${showAll ? "is-active" : ""}" data-select-view="all" role="tab" aria-selected="${showAll}" aria-label="전체 일정 ${TRIP_DAYS}일">
+          <strong>전체</strong>
+          <small>${TRIP_DAYS}일</small>
+        </button>
         ${shanghai.itinerary
           .map((d) => {
             const dItems = getOrderedDayItems(d.dayIndex);
             const dDone = dItems.filter((it) => getItemState(it.id).done).length;
-            const active = d.dayIndex === day.dayIndex;
+            const active = !showAll && d.dayIndex === day.dayIndex;
             const isToday = d.dayIndex === nn.todayIdx;
             return `
-              <button type="button" class="day-tab-btn ${active ? "is-active" : ""} ${isToday ? "is-today" : ""}" data-select-day="${d.dayIndex}" role="tab" aria-selected="${active}" aria-label="Day ${d.dayIndex + 1} ${esc(d.date.slice(5).replace("-", "/"))} ${esc(d.weekday)}요일${isToday ? " 오늘" : ""} · ${dDone}/${dItems.length} 완료">
-                <strong>${esc(d.date.slice(5).replace("-", "/"))}</strong>
-                <small>${isToday ? "오늘" : `${esc(d.weekday)} · D${d.dayIndex + 1}`} · ${dDone}/${dItems.length}</small>
+              <button type="button" class="day-tab-btn ${active ? "is-active" : ""} ${isToday ? "is-today" : ""}" data-select-day="${d.dayIndex}" role="tab" aria-selected="${active}" aria-label="Day ${d.dayIndex + 1} ${esc(slashDate(d))} ${esc(d.weekday)}요일${isToday ? " 오늘" : ""} · ${dDone}/${dItems.length} 완료">
+                <strong>${esc(slashDate(d))}</strong>
+                <small>${isToday ? "오늘" : esc(d.weekday)} · ${dDone}/${dItems.length}</small>
               </button>
             `;
           })
@@ -650,42 +683,66 @@
       </div>
     `;
 
-    const bannerHtml = `
-      <details class="day-banner">
-        <summary>
-          <h2><span class="day-banner-day">Day ${day.dayIndex + 1} · ${esc(day.weekday)}</span> ${esc(day.title)}</h2>
-          <div class="day-highlight">${esc(day.highlight)}</div>
-          <span class="day-banner-more">개요 ▾</span>
-        </summary>
-        <p>${esc(day.summary)}</p>
-      </details>
+    dom.panels.schedule.innerHTML = dayTabsHtml + (showAll ? renderOverviewHtml(nn) : renderDayHtml(day, nn));
+  }
+
+  // One day as a timetable: time column, what to do, a done box. Memo and steps are readable without opening the row.
+  function renderDayHtml(day, nn) {
+    const items = getOrderedDayItems(day.dayIndex);
+    const fxRate = getFxRate();
+    const nowId = nn.current ? nn.current.item.id : "";
+    const nextId = nn.next ? nn.next.item.id : "";
+    const stay = day.stayPlaceId ? getPlace(day.stayPlaceId) : null;
+
+    const headHtml = `
+      <section class="sch-head">
+        <h2><span class="sch-head-day">Day ${day.dayIndex + 1} · ${esc(slashDate(day))} (${esc(day.weekday)})</span>${esc(day.title)}</h2>
+        <details class="day-overview" ${dayOverviewOpen ? "open" : ""}>
+          <summary><span class="day-highlight">${esc(day.highlight)}</span><span class="day-overview-more">하루 개요</span></summary>
+          <p>${esc(day.summary)}</p>
+        </details>
+        <div class="day-stay">
+          <span class="day-stay-label">오늘 밤</span>
+          ${
+            stay
+              ? `<span class="day-stay-name">${esc(shortPlaceName(stay))}</span>
+                 <button type="button" class="tl-foot-btn" data-taxi-place="${esc(stay.id)}">택시 카드</button>`
+              : `<span class="day-stay-name">숙박 없음 · 귀국일</span>`
+          }
+        </div>
+      </section>
     `;
 
-    const cardsHtml = items
+    const rowsHtml = items
       .map((item, idx) => {
         const st = getItemState(item.id);
         const usePlanB = Boolean(st.usePlanB && item.planB);
         const activeTitle = usePlanB ? item.planB.title : item.title;
-        const activePlaceId = usePlanB ? item.planB.placeId : item.placeId;
-        const place = getPlace(activePlaceId);
+        const place = getPlace(usePlanB ? item.planB.placeId : item.placeId);
         const expanded = expandedItems.has(item.id);
         const resRecord = item.reservationId ? state.reservations[item.reservationId] : null;
         const resStatusMeta = resRecord ? RES_STATUS[resRecord.status] : null;
         const estCostCNY = usePlanB ? item.planB.estCostCNY : item.estCostCNY;
         const actualCNY = st.actualCNY !== undefined && st.actualCNY !== "" ? Number(st.actualCNY) : null;
-        const displayNote = st.note !== undefined ? st.note : (usePlanB ? item.planB.memo : item.memo);
+        const displayNote = st.note !== undefined ? st.note : usePlanB ? item.planB.memo : item.memo;
+        const memoText = (displayNote || "").trim();
+        const isNow = item.id === nowId;
+        const isNext = item.id === nextId;
 
+        const transit = item.transitFromPrev;
         const transitHtml =
-          idx > 0 && item.transitFromPrev
+          idx > 0 && transit
             ? `
-              <div class="transit-connector">
-                <span>🚶 ${esc(item.transitFromPrev.from)} → <strong>${esc(item.transitFromPrev.mode)}</strong> (${item.transitFromPrev.durationMin}분) · ${esc(item.transitFromPrev.detail)}</span>
-                ${place ? `<a class="sh-btn is-sm" href="${esc(amapUrl(place))}" target="_blank" rel="noopener noreferrer">길찾기</a>` : ""}
+              <div class="tl-transit">
+                <span class="tl-transit-mark" aria-hidden="true">↓ 이동</span>
+                <span><strong>${esc(transit.mode)} ${transit.durationMin}분</strong> · ${esc(transit.from)}에서 · ${esc(transit.detail)}</span>
+                ${place ? `<a class="tl-transit-link" href="${esc(amapUrl(place))}" target="_blank" rel="noopener noreferrer">길찾기</a>` : ""}
               </div>
             `
             : "";
 
         // Step-by-step walkthrough (airport arrival, departure morning) belongs to the main plan only.
+        // Titles are always shown; the detail lines appear while the row is open or under way.
         const steps = !usePlanB && Array.isArray(item.steps) ? item.steps : [];
         const stepsHtml = steps.length
           ? `
@@ -695,7 +752,7 @@
                   (s) => `
                     <li>
                       <span class="tl-step-time">${esc(s.time)}</span>
-                      <div><strong>${esc(s.title)}</strong><span class="tl-step-detail">${esc(s.detail)}</span></div>
+                      <span class="tl-step-text"><strong>${esc(s.title)}</strong>${expanded || isNow ? `<span class="tl-step-detail">${esc(s.detail)}</span>` : ""}</span>
                     </li>
                   `
                 )
@@ -703,23 +760,33 @@
             </ol>
           `
           : "";
-        const guideHtml =
-          Array.isArray(item.guide) && item.guide.length
-            ? `
-              <div class="tl-guide">
-                ${item.guide
-                  .map(
-                    (g) => `
-                      <details class="tl-guide-block">
-                        <summary>${esc(g.title)}</summary>
-                        <ul>${(g.lines || []).map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
-                      </details>
-                    `
-                  )
-                  .join("")}
-              </div>
-            `
-            : "";
+        const guide = Array.isArray(item.guide) ? item.guide : [];
+        const guideHtml = guide.length
+          ? `
+            <div class="tl-guide">
+              ${guide
+                .map((g, gi) => {
+                  const key = `${item.id}:${gi}`;
+                  return `
+                    <details class="tl-guide-block" data-guide-key="${esc(key)}" ${openGuides.has(key) ? "open" : ""}>
+                      <summary>${esc(g.title)}</summary>
+                      <ul>${(g.lines || []).map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
+                    </details>
+                  `;
+                })
+                .join("")}
+            </div>
+          `
+          : "";
+
+        const metaHtml = [
+          isNow ? `<span class="tl-flag is-now">지금</span>` : "",
+          isNext ? `<span class="tl-flag">다음</span>` : "",
+          `<span class="tl-cat">${esc(CAT_LABELS[item.category] || item.category)}</span>`,
+          item.fixedTime ? `<span class="tl-fixed">시간 고정</span>` : "",
+          resStatusMeta ? `<span class="tl-res st-${esc(resRecord.status)}">${esc(resStatusMeta.label)}</span>` : "",
+          usePlanB ? `<span class="tl-fixed">Plan B 적용</span>` : "",
+        ].join("");
 
         const bodyHtml = expanded
           ? `
@@ -729,12 +796,11 @@
                   ? `
                     <div class="tl-addr-bar">
                       <div class="tl-addr-text">
-                        <strong>${esc(place.nameZh)}</strong>
-                        <span>${esc(place.addressZh)}</span>
+                        <strong lang="zh-CN">${esc(place.nameZh)}</strong>
+                        <span lang="zh-CN">${esc(place.addressZh)}</span>
                       </div>
                       <div class="tl-actions-row" style="margin:0">
                         <button type="button" class="sh-btn is-sm" data-copy-addr="${esc(place.id)}">주소 복사</button>
-                        <button type="button" class="sh-btn is-sm is-primary" data-taxi-place="${esc(place.id)}">택시 제시</button>
                         <a class="sh-btn is-sm" href="${esc(amapUrl(place))}" target="_blank" rel="noopener noreferrer">高德(Amap)</a>
                         <a class="sh-btn is-sm" href="${esc(baiduUrl(place))}" target="_blank" rel="noopener noreferrer">百度(Baidu)</a>
                       </div>
@@ -742,9 +808,6 @@
                   `
                   : ""
               }
-
-              ${stepsHtml}
-              ${guideHtml}
 
               <div class="tl-detail-grid">
                 <div class="tl-detail-box">
@@ -787,12 +850,12 @@
 
               <div class="tl-edit-grid">
                 <div>
-                  <label class="dash-label" for="actual-${esc(item.id)}">실제 지출 (위안 ¥ · 입력 시 비용 탭 자동 집계)</label>
+                  <label class="dash-label" for="actual-${esc(item.id)}">실제 지출 (위안 ¥ · 비용 탭에 합산)</label>
                   <input id="actual-${esc(item.id)}" class="sh-input" type="number" inputmode="numeric" min="0" step="1" placeholder="예: ${estCostCNY || 120}" value="${esc(st.actualCNY ?? "")}" data-item-actual="${esc(item.id)}" />
                 </div>
                 <div>
-                  <label class="dash-label" for="note-${esc(item.id)}">일정 메모 (자동 저장)</label>
-                  <input id="note-${esc(item.id)}" class="sh-input" type="text" value="${esc(displayNote || "")}" data-item-note="${esc(item.id)}" />
+                  <label class="dash-label" for="note-${esc(item.id)}">메모 고치기 (자동 저장)</label>
+                  <textarea id="note-${esc(item.id)}" class="sh-textarea" rows="3" data-item-note="${esc(item.id)}">${esc(displayNote || "")}</textarea>
                 </div>
               </div>
             </div>
@@ -801,28 +864,34 @@
 
         return `
           ${transitHtml}
-          <article class="tl-item ${st.done ? "is-done" : ""} ${item.category === "rx" ? "is-rx" : ""} ${item.id === nowId ? "is-now" : ""} ${item.id === nextId ? "is-next" : ""}" data-item-id="${esc(item.id)}">
-            <div class="tl-head">
-              <input type="checkbox" class="tl-check" aria-label="${esc(activeTitle)} 완료" ${st.done ? "checked" : ""} data-item-done="${esc(item.id)}" />
+          <article class="tl-item ${st.done ? "is-done" : ""} ${isNow ? "is-now" : ""} ${isNext ? "is-next" : ""} ${item.fixedTime ? "is-fixed" : ""}" data-item-id="${esc(item.id)}">
+            <div class="tl-row">
+              <div class="tl-timecol" data-toggle-item="${esc(item.id)}">
+                <span class="tl-start">${esc(item.startTime)}</span>
+                <span class="tl-end">${esc(item.endTime)}</span>
+              </div>
               <div class="tl-main" data-toggle-item="${esc(item.id)}">
-                <div class="tl-top-row">
-                  <span class="tl-time">${esc(item.startTime)}–${esc(item.endTime)}</span>
-                  ${item.id === nowId ? `<span class="tl-clock-badge is-now">지금</span>` : ""}
-                  ${item.id === nextId ? `<span class="tl-clock-badge">다음</span>` : ""}
-                  <span class="sh-badge cat-${esc(item.category)}">${esc(CAT_LABELS[item.category] || item.category)}</span>
-                  ${resStatusMeta ? `<span class="sh-status-pill st-${esc(resRecord.status)}">${esc(resStatusMeta.label)}</span>` : ""}
-                  ${usePlanB ? `<span class="sh-badge cat-hospital">Plan B 적용</span>` : ""}
-                  ${steps.length ? `<span class="sh-badge cat-transport">단계 ${steps.length}개 · 펼쳐 보기</span>` : ""}
-                </div>
+                <div class="tl-meta">${metaHtml}</div>
                 <h3 class="tl-title">${esc(activeTitle)}</h3>
                 <div class="tl-place">
-                  ${place ? `${esc(place.nameKo)} · <span>${esc(place.nameZh)}</span>` : ""}
+                  ${place ? `${esc(shortPlaceName(place))} · <span lang="zh-CN">${esc(place.nameZh)}</span>` : ""}
                   ${item.estCostLabel ? ` · ${esc(item.estCostLabel)}` : ""}
                 </div>
+                <p class="tl-memo ${expanded ? "" : "is-clamped"}" ${memoText ? "" : "hidden"}>${esc(memoText)}</p>
               </div>
-              <div class="tl-head-actions">
-                <button type="button" class="tl-icon-btn" title="상세 펼치기" aria-label="${esc(activeTitle)} 상세 ${expanded ? "접기" : "펼치기"}" aria-expanded="${expanded}" data-toggle-item="${esc(item.id)}">${expanded ? "▴" : "▾"}</button>
-              </div>
+              <label class="tl-checkwrap">
+                <input type="checkbox" class="tl-check" aria-label="${esc(activeTitle)} 완료" ${st.done ? "checked" : ""} data-item-done="${esc(item.id)}" />
+              </label>
+            </div>
+            ${stepsHtml || guideHtml ? `<div class="tl-extra">${stepsHtml}${guideHtml}</div>` : ""}
+            <div class="tl-foot">
+              ${
+                place
+                  ? `<button type="button" class="tl-foot-btn" data-taxi-place="${esc(place.id)}">택시 카드</button>
+                     <a class="tl-foot-btn" href="${esc(amapUrl(place))}" target="_blank" rel="noopener noreferrer">지도</a>`
+                  : ""
+              }
+              <button type="button" class="tl-foot-btn tl-more" aria-expanded="${expanded}" aria-label="${esc(activeTitle)} 상세 ${expanded ? "접기" : "펼치기"}" data-toggle-item="${esc(item.id)}">${expanded ? "접기 ▴" : "상세 ▾"}</button>
             </div>
             ${bodyHtml}
           </article>
@@ -830,7 +899,66 @@
       })
       .join("");
 
-    dom.panels.schedule.innerHTML = `${dayTabsHtml}${bannerHtml}<div class="tl-list">${cardsHtml}</div>`;
+    return `${headHtml}<div class="tl-list">${rowsHtml}</div>`;
+  }
+
+  // All days on one screen: one line per item. A line opens that item in its day; the same view prints on paper.
+  function renderOverviewHtml(nn) {
+    const nowId = nn.current ? nn.current.item.id : "";
+    const nextId = nn.next ? nn.next.item.id : "";
+
+    const daysHtml = shanghai.itinerary
+      .map((d) => {
+        const stay = d.stayPlaceId ? getPlace(d.stayPlaceId) : null;
+        const isToday = d.dayIndex === nn.todayIdx;
+        const rows = getOrderedDayItems(d.dayIndex)
+          .map((item) => {
+            const st = getItemState(item.id);
+            const usePlanB = Boolean(st.usePlanB && item.planB);
+            const title = usePlanB ? item.planB.title : item.title;
+            const place = getPlace(usePlanB ? item.planB.placeId : item.placeId);
+            const note = ((st.note !== undefined ? st.note : usePlanB ? item.planB.memo : item.memo) || "").trim();
+            const isNow = item.id === nowId;
+            const isNext = item.id === nextId;
+            return `
+              <li class="ov-row ${st.done ? "is-done" : ""} ${isNow ? "is-now" : ""}">
+                <button type="button" class="ov-row-btn" data-jump-item="${esc(item.id)}">
+                  <span class="ov-time">${esc(item.startTime)}<small>${esc(item.endTime)}</small></span>
+                  <span>
+                    <span class="ov-title">${isNow ? `<span class="tl-flag is-now">지금</span> ` : ""}${isNext ? `<span class="tl-flag">다음</span> ` : ""}${esc(title)}</span>
+                    <span class="ov-place">${place ? esc(shortPlaceName(place)) : ""}${item.fixedTime ? ` · <span class="tl-fixed">시간 고정</span>` : ""}</span>
+                  </span>
+                </button>
+                <div class="ov-print">
+                  ${place ? `<span lang="zh-CN">${esc(place.nameZh)} · ${esc(place.addressZh)}</span>` : ""}
+                  ${note ? `<div>${esc(note)}</div>` : ""}
+                </div>
+              </li>
+            `;
+          })
+          .join("");
+        return `
+          <section class="ov-day ${isToday ? "is-today" : ""}">
+            <button type="button" class="ov-day-head" data-select-day="${d.dayIndex}">
+              <span class="ov-day-date">Day ${d.dayIndex + 1} · ${esc(slashDate(d))} (${esc(d.weekday)})${isToday ? " · 오늘" : ""}</span>
+              <span class="ov-day-title">${esc(d.title)}</span>
+              <span class="ov-day-stay">숙소 · ${stay ? `${esc(shortPlaceName(stay))} ${esc(stay.nameZh)}` : "없음 · 귀국일"}</span>
+            </button>
+            <ol class="ov-rows">${rows}</ol>
+          </section>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="ov">
+        <div class="ov-head">
+          <h2>전체 일정 <span>${esc(TRIP_LABEL)}</span></h2>
+          <button type="button" class="sh-btn is-sm" data-print-page>인쇄 · PDF 저장</button>
+        </div>
+        ${daysHtml}
+      </div>
+    `;
   }
 
   // ---------- Tab 2: Map ----------
@@ -872,7 +1000,7 @@
                     </div>
                     <h3>${esc(d.name)}</h3>
                     <div class="place-addr">추천 메뉴: ${esc(d.signature)}</div>
-                    <div class="place-meta">🕒 ${esc(d.when)}</div>
+                    <div class="place-meta">${esc(d.when)}</div>
                     ${
                       p
                         ? `
@@ -925,7 +1053,7 @@
                 <h3>${esc(p.nameKo)}</h3>
                 <div class="place-zh">${esc(p.nameZh)}</div>
                 <div class="place-addr">${esc(p.addressZh)}</div>
-                <div class="place-meta">🕒 ${esc(p.hours || "-")} · ${esc(p.tip || "")}</div>
+                <div class="place-meta">${esc(p.hours || "-")} · ${esc(p.tip || "")}</div>
                 <div class="tl-actions-row" style="margin-top:auto">
                   <button type="button" class="sh-btn is-sm is-primary" data-taxi-place="${esc(p.id)}">택시 제시</button>
                   <button type="button" class="sh-btn is-sm" data-copy-addr="${esc(p.id)}">주소 복사</button>
@@ -1273,7 +1401,7 @@
           <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:4px">
             <strong>${esc(quote ? quote.stayNote : "A숙소 2박 + B숙소 2박")}</strong>
             <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0;max-width:100%">
-              <select class="sh-select" style="width:auto;max-width:100%;min-height:34px" aria-label="B숙소 선택" data-field-stayb="1">
+              <select class="sh-select" style="width:auto;max-width:100%" aria-label="B숙소 선택" data-field-stayb="1">
                 ${(shanghai.staysB || [])
                   .map((sb) => `<option value="${esc(sb.id)}" ${quote && quote.stayB && quote.stayB.id === sb.id ? "selected" : !quote?.stayB && sb.id === "none" ? "selected" : ""}>B숙소: ${esc(sb.short || sb.title)}</option>`)
                   .join("")}
@@ -1572,9 +1700,24 @@
       return;
     }
 
+    if (target.closest("[data-print-page]")) {
+      window.print();
+      return;
+    }
+
+    const selectViewBtn = target.closest("[data-select-view]");
+    if (selectViewBtn) {
+      state.scheduleView = "all";
+      saveFieldState();
+      renderScheduleTab();
+      if (dom.panels.schedule.getBoundingClientRect().top < 0) dom.panels.schedule.scrollIntoView({ block: "start" });
+      return;
+    }
+
     const selectDayBtn = target.closest("[data-select-day]");
     if (selectDayBtn) {
       state.activeDay = clampInt(selectDayBtn.dataset.selectDay, 0, shanghai.itinerary.length - 1, 0);
+      state.scheduleView = "day";
       saveFieldState();
       renderScheduleTab();
       // The day tabs stay pinned while scrolling; a newly picked day starts from its first card.
@@ -1588,6 +1731,7 @@
       const found = getAllItemsFlat().find(({ item }) => item.id === id);
       if (found) {
         state.activeDay = found.day.dayIndex;
+        state.scheduleView = "day";
         expandedItems.add(id);
         saveFieldState();
         renderDashboard();
@@ -1599,7 +1743,7 @@
     }
 
     const toggleItemEl = target.closest("[data-toggle-item]");
-    if (toggleItemEl && !target.closest("input, a")) {
+    if (toggleItemEl && !target.closest("input, a, label")) {
       const id = toggleItemEl.dataset.toggleItem;
       if (expandedItems.has(id)) expandedItems.delete(id);
       else expandedItems.add(id);
@@ -1788,6 +1932,12 @@
     if (target.matches("[data-item-note]")) {
       const id = target.dataset.itemNote;
       patchItemState(id, { note: target.value });
+      // Show the edited memo in the row without redrawing (a redraw would swallow the tap that ended the edit).
+      const memoEl = dom.panels.schedule.querySelector(`[data-item-id="${id}"] .tl-memo`);
+      if (memoEl) {
+        memoEl.textContent = target.value.trim();
+        memoEl.hidden = !target.value.trim();
+      }
       return;
     }
 

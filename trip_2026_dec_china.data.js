@@ -517,7 +517,7 @@
         { daysBefore: 5, text: "알리페이 설치 → 여권 실명 인증 → 해외 카드 2장 이상 등록 → 상하이 교통카드 QR·디디 미니프로그램 켜기 (카드 등록 문자 인증이 가장 자주 막힘 · 한국 번호 로밍 필요)" },
         { daysBefore: 4, text: "삼성월렛 머니 QR 설정: 앱 업데이트 → 전체 > 머니·포인트 > 삼성월렛 머니 가입 → 계좌 연결·사전 충전 → '해외 QR결제 등록하기' (QR은 중국 도착 뒤 켜짐) · 토스뱅크 체크카드는 외화통장 연결·해외 결제와 ATM 출금 차단 해제 · 호텔 보증금용 해외겸용 신용카드 1장" },
         { daysBefore: 4, text: "가오더 지도(高德地图)·다중뎬핑(大众点评)·메이퇀(美团) 설치 · 가고 싶은 곳을 한자 이름으로 가오더 지도에 저장하고 메모에 한국어 이름 적기" },
-        { daysBefore: 4, text: "로밍형 eSIM 구매·설치 (상품 설명에서 'VPN 없이 유튜브·카카오톡 가능' 확인 · 하루 1-3GB · 설치는 한국에서, 개통은 도착 후) — 통신사 로밍을 쓸 거면 출발 전날 신청" },
+        { daysBefore: 4, text: "통신사 로밍 확정 — 요금제 적용 기간(11/28–12/02)과 데이터 용량을 출발 전날 다시 확인 · 착륙 직후 데이터 로밍 ON" },
         { daysBefore: 3, text: "중국 전자 입국신고서 작성 (도착 72시간 전부터 · NIA 12367 앱이나 위챗·알리페이 미니프로그램 · 항공편 9C7050 · 주소 123 South Tibet Road, Huangpu District, Shanghai · 완료 QR은 화면 캡처로 저장 · 공항 키오스크·종이 카드도 가능)" },
         { daysBefore: 2, text: "A숙소 답이 '가능'이면 그대로, 아니면 무료 취소하고 예비 후보 예약(11/26 목까지) · B숙소(SSAW 이린)에 냉장 보관·오전 짐 보관 확인 · 출발 전날 A숙소에 사전 고지 메시지 한 번 더 · 두 호텔 중국어 주소·전화번호 복사해 두기" },
         { daysBefore: 2, text: "여행자보험 가입 · 춘추항공 온라인 체크인(위탁 수하물은 추가 완료) · 대한민국 임시정부청사 재개관·운영시간 확인" },
@@ -1380,7 +1380,7 @@
         flightId: "cjj_pvg",
         airportId: "pvg_taxi",
         parkingId: "cjj_p34",
-        dataId: "esim_roam",
+        dataId: "kr_roaming",
         clinicId: "taobao_cold",
         stayPreId: "same_hotel",
         roomConfigId: "occ2",
@@ -1819,6 +1819,7 @@
       itinerary: [
         {
           dayIndex: 0,
+          stayPlaceId: "main_hotel",
           date: "2026-11-28",
           weekday: "토",
           title: "청주 12:00 출발 · 푸둥 T2 입국 · A숙소 체크인 · ★ 택배 수령 · 와이탄",
@@ -1827,6 +1828,7 @@
           items: [
             {
               id: "d1_cjj_flight",
+              fixedTime: true,
               title: "청주공항 주차(09:30–10:00) → 9C7050 출발 (12:00 → 푸둥 T2 13:15)",
               category: "transport",
               startTime: "09:30",
@@ -1839,7 +1841,7 @@
               reservationId: "res_flight",
               bookingRequired: true,
               bookingLink: "https://kr.trip.com/",
-              memo: "토요일은 주차장이 붐비니 09:30–10:00에 제3·4주차장 입차(24h 6,000원) · 춘추항공은 기내 수하물 무게(기본 7kg)·크기를 엄격히 잼(위탁 수하물은 추가 완료) · 기내에서 입국신고 QR·호텔 예약서 캡처를 한 번 더 확인 · 문이 열리면 로밍형 eSIM 켜고 데이터 로밍 ON",
+              memo: "토요일은 주차장이 붐비니 09:30–10:00에 제3·4주차장 입차(24h 6,000원) · 춘추항공은 기내 수하물 무게(기본 7kg)·크기를 엄격히 잼(위탁 수하물은 추가 완료) · 기내에서 입국신고 QR·호텔 예약서 캡처를 한 번 더 확인 · 문이 열리면 데이터 로밍 ON",
               tags: ["항공", "청주출발"],
             },
             {
@@ -1859,7 +1861,7 @@
               memo: "입국신고 QR 캡처와 여권을 손에 들고 이동 · 비상 현금이 필요하면 T2 도착층 중국은행(BOC)·공상은행(ICBC) ATM — 반드시 현지 통화(CNY) 선택",
               tags: ["입국", "핵심"],
               steps: [
-                { time: "13:15–13:35", title: "착륙 · 본관 이동", detail: "문이 열리면 유심·eSIM 켜기 · 위성청사(S2)에 내리면 'Immigration / Terminal 2' 표지판을 따라 지하 셔틀 트레인(약 2분 30초)으로 T2 본관" },
+                { time: "13:15–13:35", title: "착륙 · 본관 이동", detail: "문이 열리면 데이터 로밍 켜기 · 위성청사(S2)에 내리면 'Immigration / Terminal 2' 표지판을 따라 지하 셔틀 트레인(약 2분 30초)으로 T2 본관" },
                 { time: "13:35–14:10", title: "지문 등록 · 입국심사", detail: "지문 등록 키오스크에서 여권 스캔·양손 지문 등록(OK 영수증 수령) → 'Foreigners' 줄에서 여권과 입국신고(NIA) QR 제시" },
                 { time: "14:10–14:25", title: "수하물 수령 · 세관", detail: "9C7050 벨트에서 짐을 찾고 녹색 통로로 통과" },
               ],
@@ -1942,6 +1944,7 @@
         },
         {
           dayIndex: 1,
+          stayPlaceId: "main_hotel",
           date: "2026-11-29",
           weekday: "일",
           title: "임시정부청사·신톈디 · 예원·동한춘당 · CHAR 야경 · ★ 털게 특식",
@@ -2018,6 +2021,7 @@
             },
             {
               id: "d2_crab_dinner",
+              fixedTime: true,
               title: "★ 특식 디너 · 청롱항 시에왕푸 (제철 상하이 털게 · 미쉐린 1★)",
               category: "food",
               startTime: "19:15",
@@ -2037,6 +2041,7 @@
         },
         {
           dayIndex: 2,
+          stayPlaceId: "hotel_b",
           date: "2026-11-30",
           weekday: "월",
           title: "숙소 이동(A → B) · 구 프랑스 조계 · 번방차이 디너",
@@ -2142,6 +2147,7 @@
             },
             {
               id: "d3_benbang_dinner",
+              fixedTime: true,
               title: "저녁 · 라오지스 주자(老吉士酒家) 상하이 정통 번방차이",
               category: "food",
               startTime: "17:30",
@@ -2184,6 +2190,7 @@
         },
         {
           dayIndex: 3,
+          stayPlaceId: "hotel_b",
           date: "2026-12-01",
           weekday: "화",
           title: "난징둥루 선물·키덜트 쇼핑 · 장위안 · 푸둥 석양 · 쉬자후이 간식",
@@ -2302,6 +2309,7 @@
         },
         {
           dayIndex: 4,
+          stayPlaceId: null,
           date: "2026-12-02",
           weekday: "수",
           title: "07:10 공항 이동 · 푸둥 T2 출국 · 11:00 9C7049 귀국 · 청주 14:05 도착",
@@ -2331,6 +2339,7 @@
             },
             {
               id: "d5_to_airport",
+              fixedTime: true,
               title: "디디로 푸둥 T2 출발층 (60–75분 · 약 48–50km)",
               category: "transport",
               startTime: "07:15",
@@ -2354,6 +2363,7 @@
             },
             {
               id: "d5_airport",
+              fixedTime: true,
               title: "푸둥 T2 체크인(카운터 10:10 마감) → 출국심사 → 게이트 · 아침",
               category: "transport",
               startTime: "08:30",
@@ -2396,6 +2406,7 @@
             },
             {
               id: "d5_return_flight",
+              fixedTime: true,
               title: "9C7049 탑승(10:20) → 푸둥 11:00 출발 → 청주 14:05 · 세관 · 출차",
               category: "transport",
               startTime: "10:20",
@@ -2429,12 +2440,12 @@
         {
           id: "res_hotel_inquiry",
           category: "숙소 문의",
-          title: "A숙소(진장 메트로폴로 YMCA)에 냉장 택배 수령 확인 · 무료 취소 기한 11/26(목)까지 답 받기",
+          title: "A숙소(진장 메트로폴로 YMCA)에 냉장 택배 수령 확인 (숙소는 확정)",
           defaultStatus: "need_booking",
           urgentD8: true,
           linkedItemId: "d1_checkin_rx",
           link: "",
-          note: "아래 문의 카드의 중문 메시지를 호텔에 전달하고 답을 기록 · 안 된다고 하거나 답이 없으면 11/26(목)까지 취소하고 예비 후보로 · 주문은 11/27(금) 밤",
+          note: "아래 문의 카드의 중문 메시지를 호텔에 전달하고 답을 기록 · 주문은 11/27(금) 밤 · 수령이 어렵다는 답이면 숙소는 그대로 두고 체크인 뒤 현지 주문이나 병원 백업으로",
         },
         {
           id: "res_hotel_a",
@@ -2481,12 +2492,13 @@
         {
           id: "res_esim",
           category: "인터넷",
-          title: "로밍형 여행 eSIM 구매·설치 (VPN 없이 유튜브·카톡·네이버 가능)",
-          defaultStatus: "need_booking",
-          urgentD8: true,
+          title: "인터넷 · 통신사 로밍 확정 (쓰던 번호 그대로)",
+          defaultStatus: "booked",
+          confirmed: true,
+          urgentD8: false,
           linkedItemId: "d1_cjj_flight",
           link: "",
-          note: "홍콩 로밍망 확인 · 한국에서 설치, 상하이 착륙 후 개통 · 5일 사용분",
+          note: "통신사 로밍 확정 · 푸둥 착륙 직후 데이터 로밍 켜기 · 로밍 요금제 적용 안내 문자 확인",
         },
         {
           id: "res_benbang",
@@ -2519,7 +2531,7 @@
           { id: "chk_samsung_qr", title: "삼성월렛 머니 QR 설정 (메인 결제 · 위챗페이 가맹점)", urgent: true, note: "앱 최신 업데이트 → 전체 > 머니·포인트 > 삼성월렛 머니 가입 → 계좌 연결(우리은행이면 추가 적립)·사전 충전 → '해외 QR결제 등록하기' · 한국에서는 QR이 안 보이고 중국 도착 뒤 GPS·데이터가 잡히면 빠른실행에 뜸 · 은행 점검 시간(한국 자정 전후)에 대비해 미리 충전" },
           { id: "chk_toss_card", title: "토스뱅크 체크카드 점검 (비상 ATM 출금 · 알리페이 등록용)", urgent: false, note: "마스터카드 로고 확인 · 해외 결제계좌를 토스뱅크 외화통장으로 연결 · 앱에서 해외 결제·ATM 출금 차단 해제 · 월 5회/$700까지 출금 수수료 면제" },
           { id: "chk_credit_card", title: "해외겸용 신용카드 1장 챙기기 (호텔 체크인 디포짓용)", urgent: false, note: "일부 호텔은 체크카드 보증금을 거절할 수 있음" },
-          { id: "chk_esim", title: "로밍형 여행 eSIM 구매·설치 (유튜브·네이버·카톡 가능 여부 확인)", urgent: true, note: "한국 유심은 문자 수신용 유지(데이터 로밍 OFF) · 2인이 통신망을 나눠 두면 한쪽이 막혀도 결제 가능(홍콩 로밍 eSIM/유심 + 다른 회선) · 결제 앱을 켤 때는 VPN 끄기" },
+          { id: "chk_esim", title: "통신사 로밍 확정 — 출발 전날 요금제·적용 기간(11/28–12/02) 다시 확인", note: "착륙 직후 데이터 로밍 켜기 · 2인이 통신망을 나눠 두면 한쪽이 막혀도 결제 가능 · 결제 앱을 켤 때는 VPN 끄기" },
           { id: "chk_e_arrival", title: "중국 온라인 입국신고서 작성 → QR 화면 캡처 저장 (도착 72시간 전부터 · NIA 12367)", urgent: false, note: "11/25(수) 13시 이후 작성 가능 · 공식 웹·앱 또는 알리페이 미니프로그램 · 항공편 9C7050 · 주소 123 South Tibet Road, Huangpu District, Shanghai · 공항 키오스크·종이 카드도 가능" },
           { id: "chk_offline_album", title: "오프라인 백업 앨범 만들기 (데이터가 안 될 때 보여 줄 캡처)", urgent: false, note: "호텔 예약서 2장 · 귀국 항공편 9C7049 · 숙소 중문 주소 2곳(西藏南路123号 / 徐汇区宜山路645号) · 입국신고 QR · 디디 기사 확인용 내 전화번호 뒷 4자리" },
           { id: "chk_maps", title: "가오더 지도(高德地图)·다중뎬핑(大众点评) 설치 & 장소 즐겨찾기", urgent: false, note: "구글맵은 위치 오차가 크므로 고덕/바이두 사용" },
@@ -2531,7 +2543,7 @@
         byDay: {
           0: [
             { id: "chk_d1_park", title: "09:30–10:00 청주공항 제3·4주차장 주차 → 12:00 9C7050 탑승 (기내 수하물 7kg)" },
-            { id: "chk_d1_esim", title: "푸둥 착륙(13:15) 직후 eSIM 데이터 로밍 ON (한국 회선 로밍 OFF)" },
+            { id: "chk_d1_esim", title: "푸둥 착륙(13:15) 직후 데이터 로밍 켜기 · 로밍 적용 안내 문자 확인" },
             { id: "chk_d1_immigration", title: "지문 등록 키오스크(OK 영수증) → Foreigners 줄에서 여권 + 입국신고 QR 제시" },
             { id: "chk_d1_didi", title: "T2 P2 지하 2층 网约车 주황 구역에서 디디 호출 → 기둥 번호 전달 · 전화번호 뒷 4자리 확인" },
             { id: "chk_d1_rx", title: "★ A숙소 체크인 & 냉장 택배 수령(봉인·냉기·동결·영수증 저장)" },
@@ -2623,7 +2635,7 @@
           "PIN은 4자리 + Enter — 6자리를 요구하면 4자리 + 00 · 5회 틀리면 잠김",
           "반드시 현지 통화(CNY) 선택 — 원화 결제(DCC)는 거절",
           "삼성월렛 QR은 한국에서는 보이지 않고 중국 도착 뒤 GPS·데이터가 잡히면 빠른실행에 뜸 · 충전은 은행 점검 시간(한국 자정 전후)을 피해 미리",
-          "2인이 통신망을 나눠 두고(홍콩 로밍 eSIM/유심 + 다른 회선) 보조배터리 지참 · 결제 앱을 켤 때 VPN 충돌 주의",
+          "2인 모두 통신사 로밍을 켜 두고 보조배터리 지참 · 결제 앱을 켤 때 VPN 충돌 주의",
         ],
       },
       emergencyContacts: [
