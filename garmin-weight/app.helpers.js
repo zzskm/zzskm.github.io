@@ -49,7 +49,10 @@
     return `${d.getMonth()+1}/${d.getDate()}`;
   };
   
+  // etaStatus: reached / date / beyond(2년 안에 닿지 않음) / no_loss / unknown (P7)
   function fmtEta(goal) {
+    if (goal?.etaStatus === 'beyond') return '2년 이후';
+    if (goal?.etaStatus === 'no_loss') return '감량 추세 아님';
     if (!goal || !Number.isFinite(goal.etaDays)) return '계산 불가';
     if (goal.etaDays <= 0) return '도달';
     const weeks = Math.floor(goal.etaDays / 7);
@@ -61,9 +64,11 @@
   
   function fmtEtaRange(goal) {
     const range = goal?.etaRangeDays;
-    if (!range || !Number.isFinite(range.min) || !Number.isFinite(range.max)) return null;
-    if (range.min === range.max) return `${range.min}일`;
+    if (!range || !Number.isFinite(range.min)) return null;
     const minWeeks = Math.round(range.min / 7);
+    if (range.maxBeyond) return `약 ${minWeeks}주~2년 이후 범위`;
+    if (!Number.isFinite(range.max)) return null;
+    if (range.min === range.max) return `${range.min}일`;
     const maxWeeks = Math.round(range.max / 7);
     return `약 ${minWeeks}~${maxWeeks}주 범위`;
   }
@@ -91,31 +96,31 @@
     return points.filter((p) => new Date(p.date + 'T00:00:00') >= cutoff);
   }
   
-  function buildPredictionFromScenario(summary, scenario) {
-    const baseSeries = summary.series?.prediction || [];
-    if (!baseSeries.length) return [];
-    const sc = summary.predictions?.scenarios?.[scenario];
-    const baseSc = summary.predictions?.scenarios?.base;
-    const scLoss = sc?.effectiveWeeklyLossKg;
-    const baseLoss = baseSc?.effectiveWeeklyLossKg;
-    // effectiveWeeklyLossKg 기반으로 시나리오별 예측선 스케일
-    if (Number.isFinite(scLoss) && Number.isFinite(baseLoss) && baseLoss !== 0) {
-      const ratio = scLoss / baseLoss;
-      const start = baseSeries[0].valueKg;
-      return baseSeries.map((p) => ({
-        date: p.date,
-        valueKg: +(start + (p.valueKg - start) * ratio).toFixed(2),
-      }));
-    }
-    // fallback: multiplier 방식 (base 시나리오이거나 새 필드 없을 때)
-    const mult = sc?.multiplier ?? 1;
-    const baseMult = baseSc?.multiplier ?? 0.8;
-    const start = baseSeries[0].valueKg;
-    const factor = baseMult > 0 ? mult / baseMult : 1;
-    return baseSeries.map((p) => ({
+  // M6: 백엔드가 시나리오마다 곡선(13점)과 80% 구간을 만든다. 그대로 쓰고, 없으면(예전 요약) 기준 예측선을 쓴다.
+  function scenarioSeries(summary, scenario) {
+    const series = summary?.predictions?.scenarios?.[scenario]?.series;
+    if (Array.isArray(series) && series.length) return series;
+    const ci = new Map((summary?.predictionCI?.series || []).map((p) => [p.date, p]));
+    return (summary?.series?.prediction || []).map((p) => ({
       date: p.date,
-      valueKg: start + (p.valueKg - start) * factor,
+      valueKg: p.valueKg,
+      lower80: ci.get(p.date)?.lower80 ?? p.valueKg,
+      upper80: ci.get(p.date)?.upper80 ?? p.valueKg,
     }));
+  }
+
+  function buildPredictionFromScenario(summary, scenario) {
+    return scenarioSeries(summary, scenario).map((p) => ({ date: p.date, valueKg: p.valueKg }));
+  }
+
+  // F3: 날짜를 일 단위 숫자로 바꿔 선형 축에 그린다(시간에 비례하는 가로축). UTC 자정 기준이라 시간대와 무관하다.
+  const DAY_MS = 86400000;
+  function dayNumber(iso) {
+    const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+    return Date.UTC(y, m - 1, d) / DAY_MS;
+  }
+  function dayIso(n) {
+    return new Date(Math.round(n) * DAY_MS).toISOString().slice(0, 10);
   }
 
   // ---------- plateau card ----------
@@ -156,5 +161,8 @@
     lastValidDaily,
     sliceByRange,
     buildPredictionFromScenario,
+    scenarioSeries,
+    dayNumber,
+    dayIso,
   };
 })();

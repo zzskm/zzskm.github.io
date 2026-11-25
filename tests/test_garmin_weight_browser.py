@@ -275,6 +275,51 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual("#ffffff", page.evaluate(stroke, "optimistic"))
         self.assertNotEqual("#ffffff", page.evaluate(stroke, "base"))
 
+    def test_time_axis_is_proportional(self) -> None:
+        """P7(F3): 60일 보기에서 과거와 미래의 하루당 픽셀 수가 같다(예측 13점이 실측 60점과 같은 간격이 아니다)."""
+        page = self.open_page("long")
+        facts = page.evaluate("""() => {
+          const chart = Chart.getChart(document.getElementById('weightChart'));
+          const x = chart.scales.x;
+          const pred = chart.data.datasets.find(d => d.label === '예측').data;
+          const daily = chart.data.datasets.find(d => d.label === '실제').data;
+          const perDay = (a, b) => (x.getPixelForValue(b.x) - x.getPixelForValue(a.x)) / (b.x - a.x);
+          return { type: x.type, past: perDay(daily[0], daily[daily.length - 1]), future: perDay(pred[0], pred[pred.length - 1]),
+                   predStep: pred[1].x - pred[0].x, span: x.max - x.min };
+        }""")
+        self.assertEqual("linear", facts["type"])
+        self.assertAlmostEqual(facts["past"], facts["future"], places=6)
+        self.assertEqual(7, facts["predStep"])
+        self.assertGreaterEqual(facts["span"], 60 + 84 - 1)
+
+    def test_scenarios_draw_their_own_curves(self) -> None:
+        """P7(M6, F6): 카드 값 = 차트 선의 끝 값, 시나리오를 바꾸면 선과 띠가 그 시나리오 시계열로 바뀐다."""
+        summary = self.summaries["long"]
+        scenarios = summary["predictions"]["scenarios"]
+        page = self.open_page("long")
+        line_end = "() => { const d = Chart.getChart(document.getElementById('weightChart')).data.datasets.find(d => d.label === '예측').data; return d[d.length - 1].y; }"
+        upper_end = "() => { const d = Chart.getChart(document.getElementById('weightChart')).data.datasets.find(d => d.label === 'ciUpper').data; return d[d.length - 1].y; }"
+        for key, card_id in (("base", "scenarioBase"), ("optimistic", "scenarioOpt"), ("conservative", "scenarioCon")):
+            with self.subTest(scenario=key):
+                page.click(f".scenario[data-scenario='{key}']")
+                card = scenarios[key]["threeMonthWeightKg"]
+                self.assertAlmostEqual(card, page.evaluate(line_end), delta=0.01)
+                self.assertEqual(f"{card:.1f}", page.text_content(f"#{card_id}").strip())
+                self.assertAlmostEqual(scenarios[key]["series"][-1]["upper80"], page.evaluate(upper_end), delta=0.01)
+        sparks = page.evaluate("() => ['optimistic','base','conservative'].map(k => document.querySelector(`.scenario-sparkline[data-spark='${k}'] polyline`).getAttribute('points'))")
+        self.assertEqual(3, len(set(sparks)), "each card draws its own curve")
+        self.assertEqual(13, len(sparks[0].split()))
+
+    def test_eta_beyond_two_years_is_labelled(self) -> None:
+        page = self.open_page("steady")
+        page.evaluate("""() => {
+          const goal = { etaStatus: 'beyond', etaDays: null, etaRangeDays: null };
+          document.getElementById('etaValue').textContent = window.GWAppHelpers.fmtEta(goal);
+        }""")
+        self.assertEqual("2년 이후", page.text_content("#etaValue"))
+        self.assertEqual("약 5주~2년 이후 범위", page.evaluate("() => window.GWAppHelpers.fmtEtaRange({ etaRangeDays: { min: 35, max: null, maxBeyond: true } })"))
+        self.assertEqual("감량 추세 아님", page.evaluate("() => window.GWAppHelpers.fmtEta({ etaStatus: 'no_loss' })"))
+
 
 if __name__ == "__main__":
     unittest.main()

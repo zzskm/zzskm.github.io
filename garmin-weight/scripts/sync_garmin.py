@@ -95,6 +95,12 @@ classify_prediction_confidence = _modeling.classify_prediction_confidence
 classify_loss_intensity = _modeling.classify_loss_intensity
 detect_plateau = _modeling.detect_plateau
 build_insight = _modeling.build_insight
+classify_trend_state = _modeling.classify_trend_state
+projected_eta = _modeling.projected_eta
+build_scenario_series = _modeling.build_scenario_series
+average_session_kcal = _modeling.average_session_kcal
+body_fat_tier_value = _modeling.body_fat_tier_value
+ETA_TOLERANCE_KG = _modeling.ETA_TOLERANCE_KG
 data_quality_diagnostics = _modeling.data_quality_diagnostics
 model_trend_exposure = _modeling.model_trend_exposure
 warming_up_trend_exposure = _modeling.warming_up_trend_exposure
@@ -1023,6 +1029,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             body_fat_pct = v
             break
     kcal_to_kg, kcal_source = kcal_per_kg(body_fat_pct, current_weight, height_cm, default=kcal_to_kg_default)
+    if kcal_source == "body_fat":
+        # M9: 체지방 티어는 측정 이력 전체에 ±0.5%p 이력 현상을 두고 정한다(경계 근처에서 오락가락하지 않게).
+        tiered = body_fat_tier_value([parse_float(r.get("body_fat_percent")) for r in rows])
+        if tiered is not None:
+            kcal_to_kg = tiered
 
     # EWMA slope 중심 + MA7 보조 감량률. 운동 kcal은 기본 예측에서 제외한다.
     trend_window = int(config.get("exerciseTrendWindow") or 28)
@@ -1084,6 +1095,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     # Phase 6: 활동 로그 기반 시나리오 — 운동 세션 평균 kcal로 구체화
     smart_scenarios = build_smart_scenarios(
         exercise_trend, opt_pct, con_pct, recent7_avg_kcal,
+        session_kcal=average_session_kcal(complete_rows, window=trend_window),
     )
 
     target_weight = parse_float(config.get("targetWeightKg"))
@@ -1119,19 +1131,22 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         one_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 4, target_weight), 2)
         three_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 12, target_weight), 2)
 
+    # M5: ETA는 예측 곡선(감쇠)이 목표 + ε 이하로 처음 내려가는 날이다. 최대 104주까지 보고 닿지 않으면 beyond다.
+    eta_tolerance = parse_float(config.get("etaToleranceKg"))
+    eta_tolerance = ETA_TOLERANCE_KG if eta_tolerance is None else eta_tolerance
+    base_day = datetime.strptime(latest_date, "%Y-%m-%d").date()
+
+    def _eta_date(days: int | None) -> str | None:
+        return (base_day + timedelta(days=days)).isoformat() if days is not None else None
+
     remaining_kg = None
-    eta_days = None
-    eta_date = None
+    eta_status, eta_days = "unknown", None
     eta_range_days = None
     eta_range_dates = None
     if target_weight is not None and prediction_start is not None:
         remaining_kg = round_or_none(prediction_start - target_weight, 2)
-        if remaining_kg <= 0:
-            eta_days = 0
-            eta_date = latest_date
-        elif base_effective_loss > 0:
-            eta_days = math.ceil((remaining_kg / base_effective_loss) * 7)
-            eta_date = (datetime.strptime(latest_date, "%Y-%m-%d").date() + timedelta(days=eta_days)).isoformat()
+        eta_status, eta_days = projected_eta(prediction_start, base_effective_loss, target_weight, eta_tolerance)
+    eta_date = _eta_date(eta_days)
 
     # P6: 모든 모델을 같은 기준 시점·같은 실측 매칭으로 한 번에 평가한다. CI·신뢰도·화면이 같은 결과를 쓴다.
     backtest_run = run_backtest(
@@ -1153,7 +1168,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         current_ewma,
     )
     plateau = detect_plateau(ewma_series, rows=rows if features["plateauLoadClassification"] else None)
-    insight = build_insight(current_weight, current_ewma, loss_intensity, plateau)
+    trend_state = classify_trend_state(ewma_series, weekly_loss_rate, plateau)
+    insight = build_insight(current_weight, current_ewma, loss_intensity, plateau, trend_state, weekly_loss_rate, remaining_kg)
 
     # rolling에 exerciseTrend 추가
     rolling["exerciseTrend"] = exercise_trend
@@ -1181,18 +1197,25 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     else:
         days_since = None
 
-    if remaining_kg is not None and remaining_kg > 0 and scenarios:
-        fast_loss = scenarios.get("optimistic", {}).get("effectiveWeeklyLossKg")
-        slow_loss = scenarios.get("conservative", {}).get("effectiveWeeklyLossKg")
-        if fast_loss and slow_loss and fast_loss > 0 and slow_loss > 0:
-            min_eta = math.ceil((remaining_kg / fast_loss) * 7)
-            max_eta = math.ceil((remaining_kg / slow_loss) * 7)
-            base_day = datetime.strptime(latest_date, "%Y-%m-%d").date()
-            eta_range_days = {"min": min_eta, "max": max_eta}
-            eta_range_dates = {
-                "min": (base_day + timedelta(days=min_eta)).isoformat(),
-                "max": (base_day + timedelta(days=max_eta)).isoformat(),
-            }
+    # ETA 범위는 시나리오 곡선에서 구한다(낙관 = 가장 이른 날, 보수 = 가장 늦은 날).
+    if eta_status == "date" and scenarios:
+        fast_status, fast_days = projected_eta(prediction_start, scenarios.get("optimistic", {}).get("effectiveWeeklyLossKg"), target_weight, eta_tolerance)
+        slow_status, slow_days = projected_eta(prediction_start, scenarios.get("conservative", {}).get("effectiveWeeklyLossKg"), target_weight, eta_tolerance)
+        if fast_status == "date":
+            eta_range_days = {"min": fast_days, "max": slow_days if slow_status == "date" else None, "maxBeyond": slow_status != "date"}
+            eta_range_dates = {"min": _eta_date(fast_days), "max": _eta_date(slow_days if slow_status == "date" else None)}
+
+    # M6: 시나리오마다 자기 곡선과 구간을 내보낸다(13점). 카드 값은 이 시계열의 마지막 점이다.
+    spreads_by_week = {
+        index: round(abs(point["upper80"] - point["central"]), 2)
+        for index, point in enumerate(prediction_ci.get("series") or [], start=1)
+    }
+    if prediction_start is not None:
+        for name, scenario in scenarios.items():
+            series = build_scenario_series(latest_date, prediction_start, scenario["effectiveWeeklyLossKg"] or 0.0,
+                                           target_weight, spreads_by_week)
+            scenario["series"] = series
+            scenario["threeMonthWeightKg"] = series[-1]["valueKg"]
 
     trend_windows = compute_trend_windows(ewma_series, model_latest_date)
 
@@ -1277,6 +1300,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "etaDate": eta_date,
             "etaRangeDays": eta_range_days,
             "etaRangeDates": eta_range_dates,
+            # reached / date / beyond(2년 안에 닿지 않음) / no_loss(감량 추세 아님) / unknown
+            "etaStatus": eta_status,
+            "etaToleranceKg": eta_tolerance,
         },
         "lossIntensity": loss_intensity,
         "plateau": plateau,
