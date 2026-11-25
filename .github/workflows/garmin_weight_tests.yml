@@ -14,7 +14,8 @@ on:
       - 'tests/test_garmin*'
       - 'tests/garmin_weight*.mjs'
       - 'requirements.txt'
-      - '.github/workflows/garmin_weight_tests.yml'
+      # 수집·probe 워크플로의 셸 스텝도 테스트가 본다(tests/test_garmin_workflows.py).
+      - '.github/workflows/garmin_weight_*.yml'
   pull_request:
     paths:
       - 'garmin-weight/scripts/**'
@@ -27,7 +28,7 @@ on:
       - 'tests/test_garmin*'
       - 'tests/garmin_weight*.mjs'
       - 'requirements.txt'
-      - '.github/workflows/garmin_weight_tests.yml'
+      - '.github/workflows/garmin_weight_*.yml'
   workflow_dispatch:
 
 concurrency:

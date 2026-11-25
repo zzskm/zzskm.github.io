@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       backfill_days:
-        description: Days to resync, ending on end_date (default today, KST). Over 3 days never empties an existing cell.
+        description: Days to resync (1-60), ending on end_date. 4 or more never empties, zeroes or lowers an existing cell.
         required: false
         default: "3"
       end_date:
-        description: Last day to resync (YYYY-MM-DD, KST). Empty means today. Use it to backfill in 30-day steps.
+        description: Last day to resync (YYYY-MM-DD, KST, not in the future). Empty means today. Use it to backfill in 30-day steps.
         required: false
         default: ""
   # 정각은 GitHub 예약 실행이 가장 밀리는 시각이라 분을 비킨다. 00:41, 09:41 KST.
@@ -113,22 +113,25 @@ jobs:
             echo "::warning::garmin token cache could not be decrypted; using password"
           fi
 
-      # 긴 backfill(4일 이상)은 --protect-existing으로 돈다. 성공했는데 빈 값이 와도 기존 값을 지우지 않는다.
+      # 입력 검증은 sync_garmin.py가 한다: 날 수 1~60, 실제로 있는 날짜, 미래 날짜 거절, CSV 첫 날짜 앞은 자름.
+      # 4일 이상이면 보호 병합으로 돈다(값이 있던 칸을 비우거나 0으로 만들지 않는다). 그것도 스크립트가 정한다.
+      # 여기서는 형태만 본다. 셸 산술은 08·099 같은 값을 8진수로 읽다 실패해 검사가 통째로 빠지므로 쓰지 않는다.
       - name: Sync Garmin aggregates
         run: |
           set -euo pipefail
-          if ! [[ "${BACKFILL_DAYS}" =~ ^[0-9]+$ ]] || (( BACKFILL_DAYS < 1 || BACKFILL_DAYS > 60 )); then
-            echo "::error::backfill_days must be 1-60 (got ${BACKFILL_DAYS})"
+          if ! [[ "${BACKFILL_DAYS}" =~ ^[1-9][0-9]?$ ]]; then
+            echo "::error::backfill_days must be a whole number from 1 to 60 without leading zeros"
             exit 1
           fi
-          end_date="${END_DATE:-$(TZ=Asia/Seoul date +%Y-%m-%d)}"
-          if ! [[ "${end_date}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-            echo "::error::end_date must be YYYY-MM-DD (got ${end_date})"
-            exit 1
+          args=(--backfill-days "${BACKFILL_DAYS}")
+          if [[ -n "${END_DATE}" ]]; then
+            if ! [[ "${END_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo "::error::end_date must be YYYY-MM-DD"
+              exit 1
+            fi
+            args+=(--date "${END_DATE}")
           fi
-          extra=()
-          if (( BACKFILL_DAYS > 3 )); then extra+=(--protect-existing); fi
-          python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}" --date "${end_date}" "${extra[@]}"
+          python garmin-weight/scripts/sync_garmin.py "${args[@]}"
         env:
           BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '3' }}
           END_DATE: ${{ github.event.inputs.end_date || '' }}
