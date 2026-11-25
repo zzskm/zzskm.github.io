@@ -3,6 +3,9 @@
 (() => {
   const SUMMARY_URL = './data/summary.json';
   const CONFIG_URL = './config.json';
+  // 예약 수집은 하루 2회이고 실행이 몇 시간씩 밀린다. 10월 이후 성공 간격의 최댓값이 23.3시간이었으므로
+  // 24시간이 넘으면 한 번 이상 수집에 실패한 것으로 본다.
+  const SYNC_LATE_HOURS = 24;
 
   const state = {
     summary: null,
@@ -502,20 +505,30 @@
       await waitForChart();
       renderChart();
 
-      const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
+      // 동기화 시각은 Garmin에서 마지막으로 받아 온 시각이다. 요약을 다시 만든 시각(generatedAt)은 sync 블록이 없던 요약에서만 쓴다.
+      const sync = state.summary.sync || null;
+      const syncStamp = sync?.lastSuccessAt || state.summary.generatedAt;
+      const syncAt = syncStamp ? new Date(syncStamp) : null;
+      const syncAgeHours = syncAt && Number.isFinite(syncAt.getTime()) ? (Date.now() - syncAt.getTime()) / 3600000 : null;
+      const syncLate = syncAgeHours != null && syncAgeHours > SYNC_LATE_HOURS;
+      const failedEndpoints = Array.isArray(sync?.failedEndpoints) ? sync.failedEndpoints : [];
       const cov = state.summary.coverage;
       const daysSince = cov?.daysSinceLastMeasurement;
       const stale = Number.isFinite(daysSince) && daysSince >= 3;
       const lowCoverage = cov && cov.last30Pct < 70;
-      const syncText = gen
-        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+      const syncText = syncAgeHours != null
+        ? `동기화 ${syncAt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
         : '데이터 로드됨';
+      const notes = [];
+      if (syncLate) notes.push(`마지막 수집 성공 후 ${Math.floor(syncAgeHours)}시간이 지났습니다. GitHub Actions의 garmin weight sync 실행 결과를 확인해 주세요.`);
+      if (failedEndpoints.length) notes.push(`지난 수집에서 일부 항목을 받지 못해 이전 값을 유지했습니다: ${failedEndpoints.join(', ')}`);
+      if (stale) notes.push(`마지막 체중 측정 후 ${Math.round(daysSince)}일째 새 측정이 없습니다. 체중계 동기화를 확인해 주세요.`);
       renderSyncPill({
         text: syncText,
         cov: cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '',
-        extra: stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : '',
-        tone: stale ? THEME.syncStale : (lowCoverage ? THEME.syncWarn : ''),
-        title: stale ? `Garmin 동기화 후 ${Math.round(daysSince)}일째 미갱신 — 체중계 동기화를 확인해 주세요.` : '',
+        extra: (syncLate ? ` · ${Math.floor(syncAgeHours)}시간째 수집 없음` : '') + (stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : ''),
+        tone: (syncLate || stale) ? THEME.syncStale : ((lowCoverage || failedEndpoints.length) ? THEME.syncWarn : ''),
+        title: notes.join(' '),
       });
       setText('statusLine', `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);
 

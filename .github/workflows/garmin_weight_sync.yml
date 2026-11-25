@@ -7,13 +7,15 @@ on:
         description: Days to resync, ending today
         required: false
         default: "3"
+  # 정각은 GitHub 예약 실행이 가장 밀리는 시각이라 분을 비킨다. 00:41, 09:41 KST.
   schedule:
-    - cron: "0 15 * * *"
-    - cron: "0 0 * * *"
+    - cron: "41 15 * * *"
+    - cron: "41 0 * * *"
 
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  # 실행 중인 수집을 끊지 않는다. 뒤 실행은 앞 실행이 끝날 때까지 기다린다.
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -25,18 +27,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          # rebase against origin/main on concurrent bot pushes 필요 — 전체 히스토리 받기
-          fetch-depth: 0
+          # 전체 이력은 필요 없다. 푸시가 밀리면 최신 main을 얕게 받아 데이터 파일만 다시 얹는다.
+          fetch-depth: 1
 
       - name: Set up Python
-        uses: actions/setup-python@v5.6.0
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
       - name: Cache pip dependencies
-        uses: actions/cache@v4.2.3
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'security-constraints.txt') }}-garmin-weight
@@ -75,54 +77,50 @@ jobs:
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
 
-      - name: Rebuild summary from CSV
-        if: always()
-        run: python garmin-weight/scripts/sync_garmin.py --skip-garmin
-
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: garmin-weight-data
           path: |
             garmin-weight/data/daily_metrics.csv
             garmin-weight/data/summary.json
           if-no-files-found: warn
+          # 같은 내용이 커밋되므로 오래 둘 필요가 없다. 실패한 실행의 결과를 볼 때만 쓴다.
+          retention-days: 7
 
-      # git-auto-commit-action@v5는 push 전에 pull/rebase를 하지 않아
-      # 다른 봇(parking_log 등)이 같은 시각에 main을 진전시키면 non-fast-forward로 실패.
-      # 직접 commit + push-with-rebase-retry 처리한다.
-      - name: Commit and push data (with rebase retry)
-        if: success()
+      # 수집이 전부 실패하면 sync 스크립트가 1로 끝나 이 스텝은 건너뛴다(직전 데이터 유지, 실패 알림).
+      # 데이터 파일은 이 워크플로만 쓴다. 푸시가 밀리면 최신 main 위에 같은 두 파일을 다시 얹어 커밋한다.
+      - name: Commit and push data
+        if: success() && github.ref == 'refs/heads/main'
         env:
           DATA_FILES: "garmin-weight/data/daily_metrics.csv garmin-weight/data/summary.json"
           MAX_ATTEMPTS: "5"
         run: |
-          set -e
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add $DATA_FILES
-          if git diff --staged --quiet; then
-            echo "No data changes to commit."
-            exit 0
-          fi
-          git commit -m "chore: update garmin weight data"
+          stash="$RUNNER_TEMP/garmin-data"
+          mkdir -p "$stash"
+          for f in $DATA_FILES; do cp "$f" "$stash/"; done
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            if git push; then
+            git add $DATA_FILES
+            if git diff --staged --quiet; then
+              echo "No data changes to commit."
+              exit 0
+            fi
+            git commit -q -m "chore: update garmin weight data"
+            if git push origin HEAD:main; then
               echo "Push succeeded on attempt $attempt."
               exit 0
             fi
-            echo "Push failed on attempt $attempt — fetching latest and rebasing."
-            git fetch origin main
-            # 데이터 파일은 자동 생성이라 충돌 시 항상 우리 새 결과를 우선
-            git rebase -X theirs origin/main || {
-              echo "Rebase failed, aborting"; git rebase --abort; exit 1;
-            }
-            # 짧은 백오프
+            echo "Push failed on attempt $attempt; re-applying data files on the latest main."
             sleep $((attempt * 2))
+            git fetch -q --depth=1 origin main
+            git reset -q --hard FETCH_HEAD
+            for f in $DATA_FILES; do cp "$stash/$(basename "$f")" "$f"; done
           done
 
-          echo "::error::Push still failing after $MAX_ATTEMPTS retries"
+          echo "::error::Push still failing after $MAX_ATTEMPTS attempts"
           exit 1

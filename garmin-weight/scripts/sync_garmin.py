@@ -10,7 +10,8 @@ import importlib.util
 import logging
 import math
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -91,7 +92,7 @@ apply_model_selection_gate = _modeling.apply_model_selection_gate
 compute_ci_calibration_replay = _modeling.compute_ci_calibration_replay
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="garmin-weight/config.json")
     parser.add_argument("--output-csv", default="garmin-weight/data/daily_metrics.csv")
@@ -99,8 +100,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backfill-days", type=int, default=int(os.getenv("BACKFILL_DAYS", "3")))
     parser.add_argument("--date", default=None, help="Override end date (YYYY-MM-DD)")
     parser.add_argument("--skip-garmin", action="store_true", help="Only rebuild summary from CSV.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Fetch from Garmin but write neither CSV nor summary; print call statistics as JSON.")
+    parser.add_argument("--stats-output", default=None, help="With --dry-run, write the JSON report here instead of stdout.")
+    parser.add_argument("--previous-summary", default="garmin-weight/data/summary.json",
+                        help="Summary whose sync block is carried over (--skip-garmin) or extended.")
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -211,24 +217,167 @@ def get_nested(data: Any, *keys: str) -> Any:
     return current
 
 
-def safe_call(client: Any, method_name: str, *args: Any, default: Any = None, **kwargs: Any) -> Any:
+# Garmin 호출 결과. "empty"는 호출은 성공했는데 내용이 없는 경우(HTTP 204 포함)다.
+CALL_OK, CALL_EMPTY, CALL_FAILED = "ok", "empty", "failed"
+CALL_STATUSES = (CALL_OK, CALL_EMPTY, CALL_FAILED)
+# 수집에 쓰는 garminconnect 메서드. CI가 고정한 버전에 모두 있는지 확인한다.
+GARMIN_METHODS = (
+    "get_stats", "get_heart_rates", "get_sleep_data", "get_body_composition", "get_activities_fordate",
+    "get_activities_by_date", "get_training_readiness", "get_training_status", "login",
+)
+
+
+def _http_status(exc: BaseException) -> int | None:
+    """예외(와 그 원인 사슬)에 붙은 HTTP 상태 코드. garminconnect는 `exc.response`에 응답을 단다."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        for candidate in (getattr(current, "status_code", None),
+                          getattr(getattr(current, "response", None), "status_code", None)):
+            if isinstance(candidate, int):
+                return candidate
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def describe_error(exc: BaseException) -> str:
+    """공개 로그에 남길 수 있는 오류 설명. 예외 메시지에는 표시 이름이 든 URL이 섞일 수 있어 클래스와 상태만 쓴다."""
+    status = _http_status(exc)
+    return type(exc).__name__ + (f" status={status}" if status is not None else "")
+
+
+def _is_empty_response(value: Any) -> bool:
+    return value is None or (isinstance(value, (dict, list, tuple, str)) and len(value) == 0)
+
+
+_SAFE_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_LONG_DIGITS = re.compile(r"\d{5,}")
+STRUCTURE_MAX_DEPTH = 8
+
+
+def _mask_key(key: Any) -> str:
+    text = str(key)
+    return text if _SAFE_KEY.match(text) and not _LONG_DIGITS.search(text) else "<id>"
+
+
+def _merge_shapes(a: Any, b: Any) -> Any:
+    if a is None:
+        return b
+    if b is None or a == b:
+        return a
+    if isinstance(a, str) and isinstance(b, str):
+        return "|".join(sorted(set(a.split("|")) | set(b.split("|"))))
+    if isinstance(a, dict) and isinstance(b, dict) and ("<list>" in a) == ("<list>" in b):
+        merged = dict(a)
+        for key, value in b.items():
+            if key == "<list>":
+                merged[key] = max(merged.get(key, 0), value)
+            elif key == "<null>":
+                merged[key] = True
+            else:
+                merged[key] = _merge_shapes(merged.get(key), value)
+        return merged
+    if isinstance(a, dict) and b == "null":
+        return {**a, "<null>": True}
+    if isinstance(b, dict) and a == "null":
+        return {**b, "<null>": True}
+    return {"<oneof>": [a, b]}
+
+
+def describe_structure(value: Any, depth: int = 0) -> Any:
+    """응답 구조만 남긴다. 값은 버리고 키·타입·리스트 길이만 둔다. 식별자처럼 보이는 키는 `<id>`로 가린다."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if depth >= STRUCTURE_MAX_DEPTH:
+        return "..."
+    if isinstance(value, (list, tuple)):
+        item: Any = None
+        for entry in value:
+            item = _merge_shapes(item, describe_structure(entry, depth + 1))
+        return {"<list>": len(value), "<item>": item} if value else {"<list>": 0}
+    if isinstance(value, dict):
+        shape: dict[str, Any] = {}
+        for key, entry in value.items():
+            masked = _mask_key(key)
+            shape[masked] = _merge_shapes(shape.get(masked), describe_structure(entry, depth + 1))
+        return shape
+    return type(value).__name__
+
+
+@dataclass
+class CallLog:
+    """엔드포인트별 호출 결과 집계. keep_structures면 응답 구조(값 없음)도 모은다."""
+
+    keep_structures: bool = False
+    endpoints: dict[str, dict[str, int]] = field(default_factory=dict)
+    errors: dict[str, dict[str, int]] = field(default_factory=dict)
+    structures: dict[str, Any] = field(default_factory=dict)
+
+    def record(self, endpoint: str, status: str, value: Any = None, error: str | None = None) -> None:
+        counts = self.endpoints.setdefault(endpoint, {s: 0 for s in CALL_STATUSES})
+        counts[status] += 1
+        if error:
+            per_endpoint = self.errors.setdefault(endpoint, {})
+            per_endpoint[error] = per_endpoint.get(error, 0) + 1
+        if self.keep_structures and status == CALL_OK:
+            self.structures[endpoint] = _merge_shapes(self.structures.get(endpoint), describe_structure(value))
+
+    def totals(self) -> dict[str, int]:
+        return {s: sum(c[s] for c in self.endpoints.values()) for s in CALL_STATUSES}
+
+    def failed_endpoints(self) -> list[str]:
+        return sorted(name for name, counts in self.endpoints.items() if counts[CALL_FAILED])
+
+    def status(self) -> str:
+        totals = self.totals()
+        if totals[CALL_FAILED] == 0:
+            return "ok"
+        return "partial" if totals[CALL_OK] + totals[CALL_EMPTY] else "failed"
+
+
+def safe_call(client: Any, method_name: str, *args: Any, log: CallLog | None = None, **kwargs: Any) -> tuple[Any, str]:
+    """(값, 상태)를 돌려준다. 상태는 ok/empty/failed. 실패는 예외 클래스와 HTTP 상태만 기록한다."""
     method = getattr(client, method_name, None)
     if not callable(method):
-        LOGGER.warning("%s not available on client", method_name)
-        return default
+        LOGGER.warning("garmin endpoint=%s unavailable on client", method_name)
+        if log is not None:
+            log.record(method_name, CALL_FAILED, error="MethodUnavailable")
+        return None, CALL_FAILED
     try:
-        return method(*args, **kwargs)
-    except Exception as exc:  # pragma: no cover
-        LOGGER.warning("%s failed for %s: %s", method_name, args[0] if args else "", exc)
-        return default
+        value = method(*args, **kwargs)
+    except Exception as exc:
+        error = describe_error(exc)
+        LOGGER.warning("garmin endpoint=%s day=%s failed error=%s", method_name, args[0] if args else "", error)
+        if log is not None:
+            log.record(method_name, CALL_FAILED, error=error)
+        return None, CALL_FAILED
+    status = CALL_EMPTY if _is_empty_response(value) else CALL_OK
+    if log is not None:
+        log.record(method_name, status, value=value)
+    return value, status
 
 
-def build_client() -> Any:
-    from garminconnect import Garmin, GarminConnectAuthenticationError
+class MissingCredentials(RuntimeError):
+    """자격 증명 시크릿이 없다. 메시지에 비밀 값이 없으므로 그대로 출력해도 된다."""
+
+
+def build_client() -> tuple[Any, str]:
+    """로그인한 클라이언트와 인증 방식("token"/"password")을 돌려준다."""
+    from garminconnect import Garmin
 
     is_cn = os.getenv("GARMIN_IS_CN", "").lower() in ("1", "true", "yes")
 
     # 1순위: GARMIN_TOKENS (garth.dumps() 출력 base64 문자열)
+    # garminconnect 0.3.x에는 garth가 없어 여기서 항상 AttributeError가 난다. P4에서 토큰 캐시로 바꾼다.
     token_b64 = os.getenv("GARMIN_TOKENS") or os.getenv("GARMIN_TOKENS_JSON")
     if token_b64:
         try:
@@ -236,40 +385,25 @@ def build_client() -> Any:
             client.garth.loads(token_b64)
             client.username  # 토큰 유효성 가벼운 검증
             LOGGER.info("auth: token reuse succeeded (garth.loads)")
-            return client
+            return client, "token"
         except Exception as exc:
-            LOGGER.warning("token reuse failed (%s), falling back to password login", exc)
+            LOGGER.warning("token reuse failed (%s), falling back to password login", describe_error(exc))
 
     # 2순위: 이메일 + 패스워드
     email = os.getenv("GARMIN_EMAIL")
     password = os.getenv("GARMIN_PASSWORD")
     if not email or not password:
-        raise RuntimeError(
-            "No valid auth: set GARMIN_TOKENS (preferred) or both GARMIN_EMAIL and GARMIN_PASSWORD"
-        )
+        raise MissingCredentials("No valid auth: set both GARMIN_EMAIL and GARMIN_PASSWORD")
 
     mfa_code = os.getenv("GARMIN_MFA_CODE")
     prompt_mfa = (lambda: mfa_code) if mfa_code else None
     client = Garmin(email, password, is_cn=is_cn, prompt_mfa=prompt_mfa)
-    try:
-        client.login()
-    except GarminConnectAuthenticationError as exc:
-        raise RuntimeError(f"Garmin login failed: {exc}") from exc
-
+    client.login()  # 실패하면 예외가 main까지 올라가 클래스와 상태만 기록된다.
     LOGGER.info("auth: password login succeeded")
-    try:
-        if hasattr(client, "garth") and hasattr(client.garth, "dumps"):
-            LOGGER.info("Login succeeded. Update GARMIN_TOKENS secret with: client.garth.dumps()")
-        else:
-            LOGGER.warning("garth.dumps() not available, set GARMIN_TOKENS manually")
-    except Exception as exc:
-        LOGGER.warning("Could not check garth: %s", exc)
-    return client
+    return client, "password"
 
 
-def fetch_activities_for_date(client: Any, day: str) -> list[dict[str, Any]]:
-    # python-garminconnect: get_activities_fordate (언더스코어 없음)
-    result = safe_call(client, "get_activities_fordate", day, default=None)
+def _activity_list(result: Any) -> list[Any] | None:
     if isinstance(result, dict):
         payload = result.get("ActivitiesForDay")
         if isinstance(payload, dict):
@@ -278,8 +412,22 @@ def fetch_activities_for_date(client: Any, day: str) -> list[dict[str, Any]]:
             return payload
     if isinstance(result, list):
         return result
-    fallback = safe_call(client, "get_activities_by_date", day, day, default=[])
-    return fallback if isinstance(fallback, list) else []
+    return None
+
+
+def fetch_activities_for_date(client: Any, day: str, log: CallLog | None = None) -> tuple[list[Any] | None, str]:
+    """(활동 목록, 상태). 두 경로가 모두 실패하면 목록은 None이다."""
+    # python-garminconnect: get_activities_fordate (언더스코어 없음)
+    result, status = safe_call(client, "get_activities_fordate", day, log=log)
+    activities = _activity_list(result)
+    if activities is not None:
+        return activities, CALL_OK if activities else CALL_EMPTY
+    fallback, fallback_status = safe_call(client, "get_activities_by_date", day, day, log=log)
+    if isinstance(fallback, list):
+        return fallback, CALL_OK if fallback else CALL_EMPTY
+    if CALL_FAILED in (status, fallback_status):
+        return None, CALL_FAILED
+    return [], CALL_EMPTY
 
 
 def _safe_metabolic_age(value: Any) -> int | None:
@@ -431,35 +579,76 @@ def extract_activity_totals(activities: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def fetch_day_row(client: Any, day: str) -> dict[str, Any]:
-    stats = safe_call(client, "get_stats", day, default={}) or {}
-    heart_rates = safe_call(client, "get_heart_rates", day, default={}) or {}
-    sleep = safe_call(client, "get_sleep_data", day, default={}) or {}
-    body = safe_call(client, "get_body_composition", day, default={}) or {}
-    activities = fetch_activities_for_date(client, day)
-    # V2 PR2: 컨텍스트 신호 — 엔드포인트가 없어도 sync는 계속 (safe_call이 default 반환)
-    training = (
-        safe_call(client, "get_training_readiness", day, default={})
-        or safe_call(client, "get_training_status", day, default={})
-        or {}
-    )
+BODY_FIELDS = frozenset({"weight_kg", "weight_measure_count", "visceral_fat", "metabolic_age", "body_fat_percent"})
+SLEEP_FIELDS = frozenset({"sleep_hours", "sleep_score"})
+ACTIVITY_FIELDS = frozenset({"activity_count", "exercise_minutes", "exercise_calories"})
+ROW_FIELDS = frozenset(CSV_HEADERS[1:])
+
+
+@dataclass
+class DayFetch:
+    """하루치 수집 결과. failed_fields는 원천 호출이 실패해 값을 알 수 없는 필드다(행에는 None)."""
+
+    row: dict[str, Any]
+    failed_fields: set[str]
+    sources: dict[str, str]
+
+
+def _combine_fallback(primary: str, fallback: str) -> str:
+    if fallback == CALL_OK:
+        return CALL_OK
+    return CALL_FAILED if CALL_FAILED in (primary, fallback) else CALL_EMPTY
+
+
+def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch:
+    stats, stats_status = safe_call(client, "get_stats", day, log=log)
+    heart_rates, hr_status = safe_call(client, "get_heart_rates", day, log=log)
+    sleep, sleep_status = safe_call(client, "get_sleep_data", day, log=log)
+    body, body_status = safe_call(client, "get_body_composition", day, log=log)
+    activities, activities_status = fetch_activities_for_date(client, day, log=log)
+    # V2 PR2: 컨텍스트 신호. 준비도가 비거나 실패하면 훈련 상태로 대신한다.
+    training, training_status = safe_call(client, "get_training_readiness", day, log=log)
+    if training_status != CALL_OK:
+        training, status_fallback = safe_call(client, "get_training_status", day, log=log)
+        training_status = _combine_fallback(training_status, status_fallback)
+
+    stats = stats if isinstance(stats, dict) else {}
+    failed: set[str] = set()
+    if body_status == CALL_FAILED:
+        failed |= BODY_FIELDS
+    if stats_status == CALL_FAILED:
+        failed.add("steps")
+    if sleep_status == CALL_FAILED:
+        failed |= SLEEP_FIELDS
 
     body_metrics = extract_body_metrics(body)
-    activity_totals = extract_activity_totals(activities)
 
-    # 활동(activities)이 비어 있으면 일일 요약(stats)의 강도별 분/활동 칼로리로 보강.
-    if not activity_totals["exercise_minutes"] and isinstance(stats, dict):
-        mod = parse_int(stats.get("moderateIntensityMinutes")) or 0
-        vig = parse_int(stats.get("vigorousIntensityMinutes")) or 0
-        intensity_minutes = mod + 2 * vig
-        if intensity_minutes > 0:
-            activity_totals["exercise_minutes"] = float(intensity_minutes)
-    if not activity_totals["exercise_calories"] and isinstance(stats, dict):
-        active_kcal = parse_int(stats.get("activeKilocalories"))
-        if active_kcal:
-            activity_totals["exercise_calories"] = float(active_kcal)
+    resting_hr = extract_resting_hr(stats, heart_rates, sleep)
+    if resting_hr is None and CALL_FAILED in (stats_status, hr_status, sleep_status):
+        failed.add("resting_hr")
 
-    return {
+    if activities_status == CALL_FAILED:
+        # 활동 값이 0보다 크면 일일 요약보다 우선하므로, 활동을 못 받은 날은 운동 값을 정할 수 없다.
+        failed |= ACTIVITY_FIELDS
+        activity_totals: dict[str, Any] = {name: None for name in ACTIVITY_FIELDS}
+    else:
+        activity_totals = extract_activity_totals(activities or [])
+        # 활동이 없으면 일일 요약(stats)의 강도별 분/활동 칼로리로 보강한다.
+        intensity_minutes = (parse_int(stats.get("moderateIntensityMinutes")) or 0) + 2 * (parse_int(stats.get("vigorousIntensityMinutes")) or 0)
+        stats_fallback = {"exercise_minutes": intensity_minutes, "exercise_calories": parse_int(stats.get("activeKilocalories")) or 0}
+        for name, fallback in stats_fallback.items():
+            if activity_totals[name]:
+                continue
+            if stats_status == CALL_FAILED:
+                failed.add(name)
+            elif fallback > 0:
+                activity_totals[name] = float(fallback)
+
+    training_load = extract_training_load(training)
+    if training_load is None and training_status == CALL_FAILED:
+        failed.add("training_load_acute")
+
+    row = {
         "date": day,
         "weight_kg": body_metrics["weight_kg"],
         "weight_measure_count": body_metrics["weight_measure_count"],
@@ -468,13 +657,20 @@ def fetch_day_row(client: Any, day: str) -> dict[str, Any]:
         "activity_count": activity_totals["activity_count"],
         "steps": extract_steps(stats),
         "sleep_hours": extract_sleep_hours(sleep),
-        "resting_hr": extract_resting_hr(stats, heart_rates, sleep),
+        "resting_hr": resting_hr,
         "visceral_fat": body_metrics["visceral_fat"],
         "metabolic_age": body_metrics["metabolic_age"],
         "body_fat_percent": body_metrics["body_fat_percent"],
         "sleep_score": extract_sleep_score(sleep),
-        "training_load_acute": extract_training_load(training),
+        "training_load_acute": training_load,
     }
+    for name in failed:
+        row[name] = None
+    sources = {
+        "stats": stats_status, "heart_rates": hr_status, "sleep": sleep_status, "body": body_status,
+        "activities": activities_status, "training": training_status,
+    }
+    return DayFetch(row=row, failed_fields=failed, sources=sources)
 
 
 def normalize_rows(rows: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -956,27 +1152,140 @@ def _row_is_empty(row: dict[str, Any]) -> bool:
     return all(row.get(f) in (None, 0) for f in key_fields)
 
 
-def sync_rows(args: argparse.Namespace, paths: Paths) -> list[dict[str, Any]]:
-    existing_rows = load_existing_rows(paths.csv)
-    if args.skip_garmin:
-        return normalize_rows(existing_rows)
+def merge_day_row(existing: dict[str, Any] | None, fetched: DayFetch) -> dict[str, Any]:
+    """필드 단위 병합. 원천 호출이 실패한 필드는 기존 값을 유지하고, 성공했는데 값이 없을 때만 비운다."""
+    row = dict(fetched.row)
+    if existing:
+        for name in fetched.failed_fields:
+            row[name] = existing.get(name)
+    return row
 
-    end_day = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else date.today()
-    client = build_client()
-    for day in daterange(end_day, args.backfill_days):
+
+@dataclass
+class SyncResult:
+    rows: dict[str, dict[str, Any]]
+    fetched: dict[str, DayFetch]
+    log: CallLog
+    kept_rows: list[str]
+
+
+def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, Any]], log: CallLog) -> SyncResult:
+    rows = dict(existing_rows)
+    fetched_by_day: dict[str, DayFetch] = {}
+    kept: list[str] = []
+    for day in days:
         LOGGER.info("syncing %s", day)
-        new_row = fetch_day_row(client, day)
-        if _row_is_empty(new_row) and day in existing_rows:
-            LOGGER.warning("all fields empty for %s, keeping existing data", day)
+        fetched = fetch_day_row(client, day, log=log)
+        fetched_by_day[day] = fetched
+        existing = existing_rows.get(day)
+        if existing is None and fetched.failed_fields >= ROW_FIELDS:
+            LOGGER.warning("garmin day=%s every call failed, no row created", day)
             continue
-        existing_rows[day] = new_row
+        merged = merge_day_row(existing, fetched)
+        if existing is not None and _row_is_empty(merged) and not _row_is_empty(existing):
+            # 모든 핵심 필드가 "성공했지만 비어 있음"인 날은 일시적인 빈 응답일 가능성이 커서 덮지 않는다.
+            LOGGER.warning("garmin day=%s every key field came back empty, keeping existing row", day)
+            kept.append(day)
+            continue
+        rows[day] = merged
+    return SyncResult(rows=rows, fetched=fetched_by_day, log=log, kept_rows=kept)
 
-    write_rows(paths.csv, existing_rows)
-    return normalize_rows(existing_rows)
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z"
 
 
-def main() -> int:
-    args = parse_args()
+def annotate(level: str, message: str) -> None:
+    """GitHub Actions 주석. 값이나 예외 메시지는 넣지 않는다."""
+    print(f"::{level}::{message}", flush=True)
+
+
+def report_calls(log: CallLog, auth: str) -> None:
+    totals = log.totals()
+    status = log.status()
+    annotate("notice", f"garmin auth={auth} status={status} ok={totals[CALL_OK]} empty={totals[CALL_EMPTY]} failed={totals[CALL_FAILED]}")
+    for endpoint in log.failed_endpoints():
+        annotate("warning", f"garmin endpoint={endpoint} failed={log.endpoints[endpoint][CALL_FAILED]}")
+    if status == "failed":
+        annotate("error", "garmin every call failed; data left unchanged")
+
+
+def load_previous_sync(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        previous = load_json(path).get("sync")
+    except (OSError, ValueError) as exc:
+        LOGGER.warning("previous summary unreadable (%s)", describe_error(exc))
+        return None
+    return previous if isinstance(previous, dict) else None
+
+
+def build_sync_block(log: CallLog, auth: str, days: list[str], previous: dict[str, Any] | None, now: str) -> dict[str, Any]:
+    status = log.status()
+    return {
+        "status": status,
+        "auth": auth,
+        "lastAttemptAt": now,
+        "lastSuccessAt": now if status != "failed" else (previous or {}).get("lastSuccessAt"),
+        "days": len(days),
+        "endDate": days[-1] if days else None,
+        "calls": log.totals(),
+        "failedEndpoints": log.failed_endpoints(),
+        "endpoints": {name: dict(counts) for name, counts in sorted(log.endpoints.items())},
+    }
+
+
+def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, Any]], auth: str, days: list[str]) -> dict[str, Any]:
+    """dry-run 보고서. 값은 넣지 않고 건수·상태·응답 구조만 넣는다."""
+    try:
+        from importlib.metadata import version
+        library = version("garminconnect")
+    except Exception:  # pragma: no cover - 로컬에는 garminconnect가 없을 수 있다
+        library = None
+
+    fields: dict[str, dict[str, int]] = {name: {"value": 0, "none": 0, "failed": 0} for name in CSV_HEADERS[1:]}
+    merge: dict[str, dict[str, int]] = {name: {"same": 0, "changed": 0, "filled": 0, "cleared": 0, "kept": 0} for name in CSV_HEADERS[1:]}
+    new_days = 0
+    for day, fetched in result.fetched.items():
+        for name in CSV_HEADERS[1:]:
+            bucket = "failed" if name in fetched.failed_fields else ("none" if fetched.row.get(name) is None else "value")
+            fields[name][bucket] += 1
+        existing = existing_rows.get(day)
+        if existing is None:
+            new_days += 1
+            continue
+        merged = result.rows.get(day, existing)
+        for name in CSV_HEADERS[1:]:
+            before, after = existing.get(name), merged.get(name)
+            if name in fetched.failed_fields or day in result.kept_rows:
+                merge[name]["kept"] += 1
+            elif before == after:
+                merge[name]["same"] += 1
+            elif before is None:
+                merge[name]["filled"] += 1
+            elif after is None:
+                merge[name]["cleared"] += 1
+            else:
+                merge[name]["changed"] += 1
+    return {
+        "generatedAt": utc_now_iso(),
+        "library": {"garminconnect": library},
+        "auth": auth,
+        "status": result.log.status(),
+        "days": len(days),
+        "endDate": days[-1] if days else None,
+        "calls": result.log.totals(),
+        "endpoints": {name: dict(counts) for name, counts in sorted(result.log.endpoints.items())},
+        "errors": result.log.errors,
+        "fields": fields,
+        "mergeVsCsv": {"newDays": new_days, "keptRows": len(result.kept_rows), "fields": merge},
+        "structures": result.log.structures,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
     paths = Paths(
         config=Path(args.config),
@@ -984,11 +1293,50 @@ def main() -> int:
         summary=Path(args.output_summary),
     )
     config = load_json(paths.config)
-    rows = sync_rows(args, paths)
+    previous_sync = load_previous_sync(Path(args.previous_summary))
+    existing_rows = load_existing_rows(paths.csv)
+
+    if args.skip_garmin:
+        rows = normalize_rows(existing_rows)
+        summary = build_summary(rows, config)
+        summary["sync"] = previous_sync  # 수집하지 않았으므로 직전 수집 기록을 그대로 둔다.
+        save_json(paths.summary, summary)
+        LOGGER.info("rebuilt %s from %s rows", paths.summary, len(rows))
+        return 0
+
+    end_day = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else date.today()
+    days = daterange(end_day, args.backfill_days)
+    try:
+        client, auth = build_client()
+    except MissingCredentials as exc:
+        annotate("error", str(exc))
+        return 1
+    except Exception as exc:
+        annotate("error", f"garmin login failed error={describe_error(exc)}")
+        return 1
+
+    log = CallLog(keep_structures=args.dry_run)
+    result = sync_days(client, days, existing_rows, log)
+    report_calls(log, auth)
+    failed = log.status() == "failed"
+
+    if args.dry_run:
+        report = json.dumps(build_probe_report(result, existing_rows, auth, days), ensure_ascii=False, indent=2)
+        if args.stats_output:
+            Path(args.stats_output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.stats_output).write_text(report + "\n", encoding="utf-8")
+        else:
+            print(report)
+        return 1 if failed else 0
+
+    write_rows(paths.csv, result.rows)
+    rows = normalize_rows(result.rows)
     summary = build_summary(rows, config)
+    summary["sync"] = build_sync_block(log, auth, days, previous_sync, summary["generatedAt"])
     save_json(paths.summary, summary)
     LOGGER.info("wrote %s rows and refreshed %s", len(rows), paths.summary)
-    return 0
+    # 전부 실패하면 작업을 실패시킨다. 커밋 스텝이 건너뛰어지고 GitHub가 실패를 알린다.
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

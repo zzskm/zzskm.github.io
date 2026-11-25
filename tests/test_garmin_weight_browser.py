@@ -13,7 +13,7 @@ import shutil
 import sys
 import threading
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from math import sin
 from pathlib import Path
 
@@ -57,6 +57,13 @@ def warming_up_summary() -> dict:
     return sync_garmin.build_summary([_row(start + timedelta(days=i), 84.0 - i * 0.05) for i in range(9)], {"targetWeightKg": TARGET_KG})
 
 
+def with_sync(summary: dict, hours_ago: float, failed: tuple[str, ...] = ()) -> dict:
+    """마지막 수집 성공 시각을 hours_ago시간 전으로 둔다. generatedAt은 그대로(방금)다."""
+    stamp = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).replace(microsecond=0, tzinfo=None).isoformat() + "Z"
+    sync = {"status": "partial" if failed else "ok", "lastAttemptAt": stamp, "lastSuccessAt": stamp, "failedEndpoints": list(failed)}
+    return {**summary, "sync": sync}
+
+
 NORMALIZE_COLOR_JS = """(c) => { const d = document.createElement('div'); d.style.color = c; document.body.appendChild(d);
   const v = getComputedStyle(d).color; d.remove(); return v; }"""
 
@@ -86,7 +93,14 @@ class GarminWeightBrowserTests(unittest.TestCase):
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(QuietHandler, directory=str(ROOT)))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
-        cls.summaries = {"steady": steady_summary(), "stale": steady_summary(unmeasured_tail_days=5), "warming": warming_up_summary()}
+        steady = steady_summary()
+        cls.summaries = {
+            "steady": with_sync(steady, 2),
+            "late": with_sync(steady, 30),
+            "partial": with_sync(steady, 2, ("get_body_composition",)),
+            "stale": steady_summary(unmeasured_tail_days=5),  # sync 블록이 없는 예전 요약: generatedAt을 쓴다
+            "warming": warming_up_summary(),
+        }
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -176,6 +190,33 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual(expected, dot)
         self.assertIn("마지막 측정 5일 전", page.locator("#lastSync .sync-text").text_content())
         self.assertEqual("5일 전", page.locator("#lastEntry").text_content())
+
+    def sync_pill(self, page) -> dict:
+        return page.evaluate(f"""() => ({{
+          text: document.querySelector('#lastSync .sync-text').textContent,
+          dot: ({NORMALIZE_COLOR_JS})(getComputedStyle(document.querySelector('#lastSync .sync-dot')).backgroundColor),
+          title: document.getElementById('lastSync').getAttribute('title'),
+          stale: ({NORMALIZE_COLOR_JS})('#A0522D'),
+          warn: ({NORMALIZE_COLOR_JS})('#8B6F5E'),
+        }})""")
+
+    def test_sync_time_follows_last_successful_collection(self) -> None:
+        fresh = self.sync_pill(self.open_page("steady"))
+        self.assertNotIn("수집 없음", fresh["text"])
+        self.assertNotIn(fresh["dot"], (fresh["stale"], fresh["warn"]))
+        self.assertIsNone(fresh["title"])
+
+        # 요약은 방금 만들었어도(generatedAt) 마지막 수집 성공이 30시간 전이면 경고한다.
+        late = self.sync_pill(self.open_page("late"))
+        self.assertIn("30시간째 수집 없음", late["text"])
+        self.assertEqual(late["stale"], late["dot"])
+        self.assertIn("마지막 수집 성공 후 30시간", late["title"])
+
+    def test_partial_collection_is_marked(self) -> None:
+        pill = self.sync_pill(self.open_page("partial"))
+        self.assertEqual(pill["warn"], pill["dot"])
+        self.assertIn("get_body_composition", pill["title"])
+        self.assertNotIn("수집 없음", pill["text"])
 
     def test_shortcuts_ignore_modifier_keys(self) -> None:
         page = self.open_page("steady")

@@ -10,6 +10,7 @@ on:
       - 'garmin-weight/*.html'
       - 'garmin-weight/*.css'
       - 'tests/test_garmin*'
+      - 'requirements.txt'
       - '.github/workflows/garmin_weight_tests.yml'
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - 'garmin-weight/*.html'
       - 'garmin-weight/*.css'
       - 'tests/test_garmin*'
+      - 'requirements.txt'
       - '.github/workflows/garmin_weight_tests.yml'
   workflow_dispatch:
 
@@ -52,6 +54,30 @@ jobs:
           for f in garmin-weight/app.js garmin-weight/app.helpers.js garmin-weight/enhancements.js garmin-weight/sw.js; do
             node --check "$f"
           done
+
+  # 수집 코드가 부르는 메서드가 고정한 garminconnect 버전에 모두 있는지 본다. 로그인은 하지 않는다.
+  library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install pinned dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Garmin client has every method the sync calls
+        run: |
+          python -c "
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('sync_garmin', 'garmin-weight/scripts/sync_garmin.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          from garminconnect import Garmin
+          missing = [m for m in module.GARMIN_METHODS if not callable(getattr(Garmin, m, None))]
+          assert not missing, f'missing on Garmin: {missing}'
+          print('garminconnect methods ok:', len(module.GARMIN_METHODS))
+          "
 
   browser:
     runs-on: ubuntu-latest
