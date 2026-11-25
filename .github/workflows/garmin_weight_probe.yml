@@ -3,7 +3,7 @@ name: garmin weight probe
 # Garmin 호출을 바꿨을 때 main에 합치기 전에 러너에서 실제로 로그인해 받아 본다.
 # --dry-run이라 CSV와 요약은 쓰지 않는다. 결과에는 값이 없다: 호출 결과 건수, 예외 클래스와 HTTP 상태,
 # 필드별 채움 건수, 응답 구조(키·타입·리스트 길이, 식별자 키는 <id>), 월별 활동 수만 남는다.
-# 결과는 실행 화면 주석과, garmin-probe/** 브랜치에서는 그 브랜치의 probe-results/에 커밋된다. 확인 후 브랜치를 지운다.
+# P4부터는 토큰 캐시(probe 전용 접두사)도 확인한다. 결과는 실행 화면 주석과, garmin-probe/** 브랜치에서는 그 브랜치의 probe-results/에 커밋된다. 확인 후 브랜치를 지운다.
 on:
   push:
     branches: ['garmin-probe/**']
@@ -14,9 +14,9 @@ on:
         required: false
         default: "3"
       activities_since:
-        description: Count activities per month from this date (one range query)
+        description: Count activities per month from this date (one range query); empty skips it
         required: false
-        default: "2026-03-01"
+        default: ""
 
 permissions:
   contents: write
@@ -45,7 +45,49 @@ jobs:
       - name: Check Brotli runtime
         run: python scripts/check-brotli-runtime.py --require-curl
 
-      # 토큰 시크릿은 넘기지 않는다(P4 전까지 비밀번호 로그인만 확인한다).
+      # 토큰 캐시는 본 수집과 같은 방식이지만 접두사가 다르다(garmin-tokens-probe-v1-). main의 캐시를 쓰면
+      # probe에서 갱신된 리프레시 토큰 때문에 main이 가진 토큰이 무효가 될 수 있다. 캐시는 브랜치 범위라서
+      # 같은 probe 브랜치에 커밋을 더 푸시하면 앞 실행이 저장한 토큰을 받는다(password → token 순환 확인).
+      # 커밋 메시지에 [probe-bad-key]가 있으면 일부러 틀린 키로 복호화해 비밀번호 대체 경로를 확인한다.
+      - name: Restore probe token cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/garmin-token-cache
+          key: garmin-tokens-probe-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: garmin-tokens-probe-v1-
+
+      - name: Decrypt token cache
+        env:
+          GARMIN_TOKEN_KEY: ${{ secrets.GARMIN_TOKENS }}
+          BAD_KEY: ${{ contains(github.event.head_commit.message, '[probe-bad-key]') }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${GARMIN_TOKEN_KEY}" ]]; then
+            echo "::warning::GARMIN_TOKENS secret (token cache key) is empty; password only."
+            exit 0
+          fi
+          dir="$RUNNER_TEMP/garmin-tokens"
+          enc="$RUNNER_TEMP/garmin-token-cache/garmin_tokens.json.enc"
+          mkdir -p "$dir"
+          echo "GARMIN_TOKEN_DIR=$dir" >> "$GITHUB_ENV"
+          if [[ ! -f "$enc" ]]; then
+            echo "::notice::probe token cache empty"
+            exit 0
+          fi
+          key="$GARMIN_TOKEN_KEY"
+          if [[ "$BAD_KEY" == "true" ]]; then
+            key="${key}-wrong"
+            echo "::notice::probe decrypting with a wrong key on purpose"
+          fi
+          if KEY="$key" openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass env:KEY               -in "$enc" -out "$dir/garmin_tokens.json" 2>/dev/null; then
+            sha256sum "$dir/garmin_tokens.json" | cut -d' ' -f1 > "$RUNNER_TEMP/garmin-tokens.sha"
+            echo "::notice::probe token cache restored"
+          else
+            rm -f "$dir/garmin_tokens.json"
+            echo "::warning::garmin token cache could not be decrypted; using password"
+          fi
+
       - name: Probe Garmin endpoints (dry run)
         run: >-
           python garmin-weight/scripts/sync_garmin.py --dry-run
@@ -54,10 +96,44 @@ jobs:
           --probe-activities-since "$ACTIVITIES_SINCE"
         env:
           PROBE_DAYS: ${{ inputs.days || '3' }}
-          # 월별 활동 수만 센다(D1: 2026-05-15 이후 activity_count가 0인 원인 판정). CSV에도 공개된 수준의 정보다.
-          ACTIVITIES_SINCE: ${{ inputs.activities_since || '2026-03-01' }}
+          # 월별 활동 수만 센다(D1 판정용). 비우면 건너뛴다.
+          ACTIVITIES_SINCE: ${{ inputs.activities_since || '' }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+
+      - name: Encrypt tokens for the probe cache
+        id: token-encrypt
+        if: always() && env.GARMIN_TOKEN_DIR != ''
+        env:
+          GARMIN_TOKEN_KEY: ${{ secrets.GARMIN_TOKENS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token="$GARMIN_TOKEN_DIR/garmin_tokens.json"
+          if [[ ! -f "$token" ]] || ! jq -e '.di_token and .di_refresh_token' "$token" >/dev/null 2>&1; then
+            echo "::notice::probe has no usable tokens to save"
+            exit 0
+          fi
+          if [[ "$(cat "$RUNNER_TEMP/garmin-tokens.sha" 2>/dev/null || true)" == "$(sha256sum "$token" | cut -d' ' -f1)" ]]; then
+            echo "::notice::probe tokens unchanged"
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/garmin-token-cache"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY             -in "$token" -out "$RUNNER_TEMP/garmin-token-cache/garmin_tokens.json.enc"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::probe tokens saved"
+
+      - name: Save probe token cache
+        if: always() && steps.token-encrypt.outputs.save == 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/garmin-token-cache
+          key: garmin-tokens-probe-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # 평문 토큰 파일이 probe-results 커밋에 섞이지 않게 커밋 전에 지운다(저장소 밖 RUNNER_TEMP에 있지만 확실히 한다).
+      - name: Remove plaintext tokens
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/garmin-tokens" "$RUNNER_TEMP/garmin-tokens.sha"
 
       - name: Commit results to the probe branch
         if: always() && startsWith(github.ref, 'refs/heads/garmin-probe/')

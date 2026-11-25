@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import importlib.util
@@ -107,6 +108,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="With --dry-run, count activities per month from this date (one range query, no values).")
     parser.add_argument("--previous-summary", default="garmin-weight/data/summary.json",
                         help="Summary whose sync block is carried over (--skip-garmin) or extended.")
+    parser.add_argument("--token-dir", default=os.getenv("GARMIN_TOKEN_DIR") or None,
+                        help="Directory holding garminconnect tokens; read first, rewritten after a password login.")
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
     return parser.parse_args(argv)
 
@@ -372,36 +375,69 @@ class MissingCredentials(RuntimeError):
     """자격 증명 시크릿이 없다. 메시지에 비밀 값이 없으므로 그대로 출력해도 된다."""
 
 
-def build_client() -> tuple[Any, str]:
-    """로그인한 클라이언트와 인증 방식("token"/"password")을 돌려준다."""
-    from garminconnect import Garmin
+# garminconnect 0.3.x는 토큰 디렉터리 안의 이 파일 하나에 DI 토큰(액세스·리프레시·client id)을 쓴다.
+# login(디렉터리)는 이 파일을 읽고, 만료가 가까우면 갱신해 같은 파일에 다시 쓰며, 비밀번호 로그인 뒤에도 여기에 쓴다.
+TOKEN_FILE_NAME = "garmin_tokens.json"
+
+
+def token_file_state(token_dir: str | None) -> str:
+    """토큰 파일 상태: missing / unusable / usable. 값은 읽기만 하고 어디에도 내보내지 않는다."""
+    if not token_dir:
+        return "missing"
+    path = Path(token_dir) / TOKEN_FILE_NAME
+    if not path.is_file():
+        return "missing"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "unusable"
+    if isinstance(data, dict) and data.get("di_token") and data.get("di_refresh_token"):
+        return "usable"
+    return "unusable"
+
+
+def build_client(token_dir: str | None = None, garmin_cls: Any = None) -> tuple[Any, str]:
+    """로그인한 클라이언트와 인증 방식("token"/"password")을 돌려준다.
+
+    token_dir가 있으면 그 안의 토큰으로 먼저 로그인하고, 안 되면 비밀번호로 로그인해 새 토큰을 그 디렉터리에 쓴다.
+    토큰 디렉터리는 워크플로가 암호화 캐시에서 풀어 준다. 시크릿 값 자체는 이 스크립트에 들어오지 않는다.
+    """
+    if garmin_cls is None:
+        from garminconnect import Garmin as garmin_cls
 
     is_cn = os.getenv("GARMIN_IS_CN", "").lower() in ("1", "true", "yes")
 
-    # 1순위: GARMIN_TOKENS (garth.dumps() 출력 base64 문자열)
-    # garminconnect 0.3.x에는 garth가 없어 여기서 항상 AttributeError가 난다. P4에서 토큰 캐시로 바꾼다.
-    token_b64 = os.getenv("GARMIN_TOKENS") or os.getenv("GARMIN_TOKENS_JSON")
-    if token_b64:
+    state = token_file_state(token_dir)
+    if state == "usable":
         try:
-            client = Garmin(is_cn=is_cn)
-            client.garth.loads(token_b64)
-            client.username  # 토큰 유효성 가벼운 검증
-            LOGGER.info("auth: token reuse succeeded (garth.loads)")
+            # 자격 증명 없이 만든다. 토큰이 거부되면 라이브러리가 몰래 비밀번호로 넘어가지 않고 예외를 내므로
+            # 인증 방식을 정확히 알 수 있다.
+            client = garmin_cls(is_cn=is_cn)
+            client.login(token_dir)
+            annotate("notice", "garmin token_cache=loaded")
             return client, "token"
         except Exception as exc:
-            LOGGER.warning("token reuse failed (%s), falling back to password login", describe_error(exc))
+            annotate("warning", f"garmin token login failed error={describe_error(exc)}; using password")
+    elif state == "unusable":
+        annotate("warning", "garmin token file unusable; using password")
 
-    # 2순위: 이메일 + 패스워드
     email = os.getenv("GARMIN_EMAIL")
     password = os.getenv("GARMIN_PASSWORD")
     if not email or not password:
         raise MissingCredentials("No valid auth: set both GARMIN_EMAIL and GARMIN_PASSWORD")
 
-    mfa_code = os.getenv("GARMIN_MFA_CODE")
-    prompt_mfa = (lambda: mfa_code) if mfa_code else None
-    client = Garmin(email, password, is_cn=is_cn, prompt_mfa=prompt_mfa)
-    client.login()  # 실패하면 예외가 main까지 올라가 클래스와 상태만 기록된다.
-    LOGGER.info("auth: password login succeeded")
+    if token_dir:
+        # 실패한 토큰 파일을 남기면 라이브러리가 그것을 다시 읽는다. 지우면 비밀번호 로그인 뒤 새 토큰을 쓴다.
+        with contextlib.suppress(OSError):
+            (Path(token_dir) / TOKEN_FILE_NAME).unlink()
+    # MFA는 쓰지 않는다. 켜면 무인 실행이 불가능하다(README 참고).
+    client = garmin_cls(email, password, is_cn=is_cn)
+    if token_dir:
+        client.login(token_dir)  # 실패하면 예외가 main까지 올라가 클래스와 상태만 기록된다.
+        saved = token_file_state(token_dir) == "usable"
+        annotate("notice", f"garmin token_cache={'saved' if saved else 'unsaved'}")
+    else:
+        client.login()
     return client, "password"
 
 
@@ -1309,6 +1345,8 @@ def probe_activity_history(client: Any, since: str, until: str) -> dict[str, Any
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
+    # 라이브러리는 로그인 경고에 예외 문자열을 싣는다(질의 값만 가린다). 공개 로그에는 클래스와 상태만 남긴다.
+    logging.getLogger("garminconnect").setLevel(logging.ERROR)
     paths = Paths(
         config=Path(args.config),
         csv=Path(args.output_csv),
@@ -1329,7 +1367,7 @@ def main(argv: list[str] | None = None) -> int:
     end_day = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else date.today()
     days = daterange(end_day, args.backfill_days)
     try:
-        client, auth = build_client()
+        client, auth = build_client(args.token_dir)
     except MissingCredentials as exc:
         annotate("error", str(exc))
         return 1
