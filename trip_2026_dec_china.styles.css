@@ -1,119 +1,121 @@
 /* trip_2026_dec_china.styles.css - Shanghai trip page (itinerary + quote mode).
 
-   Flat look: white ground, hairlines, ink text, one signal colour (vermilion) that is kept for
-   "now", "today" and things still open. No gradients, shadows, pill shapes or emoji icons.
+   Flat surfaces: a light grey page with white blocks on it, so blocks are told apart by tone
+   instead of frames. Lines are kept for controls (inputs, check boxes, choice cards) and for
+   dividers inside a list. Three colours carry meaning and nothing else is coloured:
+     accent (blue)  - where you are, what is on now, the main action
+     up (orange)    - cost going up, things still open
+     down (teal)    - cost going down, things done or confirmed
+   plus an amber note for cautions. No gradients, drop shadows, blur or emoji icons.
 
    trip_2026_dec.styles.css is shared with the Japan page and is not edited. Its palette is
    re-declared on this page's body below, so the quote mode follows the same colours. */
 
 .shanghai-shell {
-  --bg: #ffffff;
+  /* Names used by the shared sheet */
+  --bg: #f5f6f8;
   --panel: #ffffff;
-  --line: #cfd3d9;
-  --line-soft: #e6e8ec;
-  --text: #14171c;
-  --body: #262b33;
-  --muted: #5a616d;
-  --accent: #14171c;
-  --accent-soft: #eceef1;
-  --accent-tint: #f6f7f8;
-  --active: #14171c;
-  --active-text: #14171c;
-  --big: #14171c;
-  --link: #1a4fb8;
-  --band: #f3f4f6;
+  --line: rgba(15, 23, 42, 0.14);
+  --line-soft: rgba(15, 23, 42, 0.08);
+  --text: #0f172a;
+  --body: #334155;
+  --muted: #586174;
+  --accent: #2563eb;
+  --accent-soft: #eff6ff;
+  --accent-tint: #f8fafc;
+  --active: #2563eb;
+  --active-text: #1d4ed8;
+  --big: #0f172a;
+  --link: #1d4ed8;
+  --band: #eef0f4;
+  --badge-bg: #fff4ed;
+  --badge-text: #c2410c;
+  --warn-bg: #fffbeb;
+  --warn-text: #92400e;
+  --info-bg: #eff6ff;
+  --info-text: #1e40af;
+  --up-bg: #fff4ed;
+  --up-text: #c2410c;
   --shadow: none;
 
-  --signal: #cf2e1a;
-  --signal-soft: #fdeeeb;
-  --ok: #1f7a4d;
-  --caution: #a15c07;
-  --r: 6px;
-  --r-tag: 3px;
-  --sh-green-bg: #e8f3ec;
-  --sh-green-text: #1f7a4d;
-  --sh-amber-bg: #fbf1df;
-  --sh-amber-text: #8a4e06;
-  --sh-red-bg: #fdeeeb;
-  --sh-red-text: #b3261a;
+  /* Names used by this sheet */
+  --line-ctl: #8a94a6;
+  --down-bg: #e7f5f3;
+  --down-text: #0f766e;
+  --signal: #c2410c;
+  --signal-soft: #fff4ed;
+  --ok: #0f766e;
+  --caution: #92400e;
+  --r-card: 14px;
+  --r: 8px;
+  --r-tag: 6px;
+  --tap-min: 44px;
+  --sh-green-bg: #e7f5f3;
+  --sh-green-text: #0f766e;
+  --sh-amber-bg: #fffbeb;
+  --sh-amber-text: #92400e;
+  --sh-red-bg: #fff4ed;
+  --sh-red-text: #c2410c;
   --sh-bottom-nav-h: 60px;
   --tl-time-w: 56px;
 
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   background: var(--bg);
+  /* Amounts, rates and times line up in columns. */
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Header ---------- */
+/* ---------- Header: title and status on one line, trip facts below, then the mode switch ---------- */
 .sh-topbar {
   max-width: 1240px;
   margin: 0 auto;
-  padding: 14px 20px 10px;
+  padding: 14px 20px 12px;
 }
 
 .mode-field .sh-topbar {
   max-width: 1120px;
 }
 
-.sh-topbar-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+/* The quote mode's two panels are wider; the header lines up with their left edge. */
+.mode-plan .sh-topbar {
+  max-width: 1480px;
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
-.sh-topbar-title {
-  flex: 1 1 360px;
-  min-width: 0;
+.sh-topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .sh-topbar h1 {
+  min-width: 0;
   font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
-.sh-h1-dates {
-  margin-left: 6px;
-  font-size: 0.66em;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.sh-topbar-sub {
-  margin: 6px 0 0;
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
-/* The itinerary keeps the header to a title and a status line; the intro belongs to the quote mode. */
-.mode-field .sh-topbar-sub,
-.mode-field .sh-mode-back {
-  display: none;
-}
-
-/* Status line: plain text items, no capsules */
 .sh-pill-row {
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px 14px;
-  margin-top: 4px;
+  gap: 6px;
 }
 
 .sh-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: var(--r-tag);
+  background: var(--panel);
+  color: var(--body);
+  font-size: 0.76rem;
   font-weight: 600;
-  color: var(--muted);
-}
-
-.sh-pill.is-accent {
-  color: var(--text);
+  white-space: nowrap;
 }
 
 .sh-pill.is-online::before,
@@ -126,67 +128,104 @@
 }
 
 .sh-pill.is-offline {
-  color: var(--caution);
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
 
 .sh-pill.is-offline::before {
-  background: var(--caution);
+  background: var(--warn-text);
 }
 
-.sh-topbar-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+/* Dates, party, flights: secondary text */
+.sh-topbar-meta {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
-/* ---------- Footer: mode switch and the link to the other trip ---------- */
-.sh-footer {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 16px 20px 32px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid var(--line);
+.sh-topbar-meta span {
+  white-space: nowrap;
+}
+
+.sh-topbar-sub {
+  margin: 10px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* The intro belongs to the quote mode. */
+.mode-field .sh-topbar-sub {
+  display: none;
+}
+
+/* ---------- Segmented controls: the mode switch, and bookings / prep ---------- */
+.mode-switch,
+.sub-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #e4e7ec;
 }
 
 .mode-switch {
-  display: inline-grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--text);
-  border-radius: var(--r);
-  overflow: hidden;
+  max-width: 380px;
+  margin-top: 10px;
 }
 
-.mode-btn {
-  min-height: 44px;
-  padding: 6px 16px;
+.sub-seg {
+  max-width: 440px;
+  margin-bottom: 12px;
+}
+
+.mode-btn,
+.sub-seg-btn {
+  min-height: 38px;
+  padding: 4px 10px;
   border: 0;
-  background: var(--panel);
-  color: var(--text);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  line-height: 1.15;
 }
 
-.mode-btn small {
-  font-size: 0.72rem;
-  font-weight: 500;
-  opacity: 0.8;
+.mode-btn.is-active,
+.sub-seg-btn.is-active {
+  background: var(--panel);
+  color: var(--active-text);
+  font-weight: 800;
 }
 
-.mode-btn.is-active {
-  background: var(--text);
-  color: #fff;
+.mode-btn:focus-visible,
+.sub-seg-btn:focus-visible,
+.field-nav-btn:focus-visible,
+.field-mnav-btn:focus-visible,
+.day-tab-btn:focus-visible,
+.sh-btn:focus-visible,
+.sh-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sub-seg-count {
+  margin-left: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* ---------- Footer: the link to the other trip ---------- */
+.sh-footer {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 8px 20px 32px;
 }
 
 /* ---------- Grade tags (shared with the quote mode stay cards) ---------- */
@@ -194,7 +233,6 @@
   display: inline-block;
   margin-left: 6px;
   padding: 0 6px;
-  border: 1px solid currentColor;
   border-radius: var(--r-tag);
   font-size: 0.72rem;
   font-weight: 700;
@@ -202,14 +240,17 @@
 }
 
 .grade-pill.is-grade-A {
+  background: var(--sh-green-bg);
   color: var(--sh-green-text);
 }
 
 .grade-pill.is-grade-B {
+  background: var(--sh-amber-bg);
   color: var(--sh-amber-text);
 }
 
 .grade-pill.is-grade-excluded {
+  background: var(--sh-red-bg);
   color: var(--sh-red-text);
 }
 
@@ -224,32 +265,27 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-/* Open reservations: one tappable line */
+/* Open reservations: one tappable caution line */
 .dash-urgent {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--signal);
-  border-left-width: 4px;
-  border-radius: var(--r);
-  background: var(--panel);
-  color: var(--text);
+  min-height: var(--tap-min);
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--r-card);
+  background: var(--warn-bg);
+  color: var(--warn-text);
   font: inherit;
   font-size: 0.86rem;
   line-height: 1.3;
   text-align: left;
   cursor: pointer;
-}
-
-.dash-urgent strong {
-  color: var(--signal);
 }
 
 .dash-urgent-go {
@@ -258,10 +294,10 @@
   white-space: nowrap;
 }
 
-/* Now / next: a two-row table, each row tappable */
+/* Now / next: two tappable rows on one white block */
 .dash-now {
-  border: 1px solid var(--text);
-  border-radius: var(--r);
+  border-radius: var(--r-card);
+  background: var(--panel);
   overflow: hidden;
 }
 
@@ -269,9 +305,9 @@
   display: block;
   width: 100%;
   min-height: 48px;
-  padding: 7px 12px;
+  padding: 7px 14px;
   border: 0;
-  background: var(--panel);
+  background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 0.92rem;
@@ -280,7 +316,7 @@
 }
 
 .dash-now-line + .dash-now-line {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-soft);
 }
 
 button.dash-now-line {
@@ -309,7 +345,6 @@ button.dash-now-line {
 
 .dash-now-time {
   font-weight: 800;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -324,9 +359,9 @@ button.dash-now-line {
   display: inline-block;
   min-width: 3.2em;
   padding: 1px 6px;
-  border: 1px solid var(--text);
   border-radius: var(--r-tag);
-  color: var(--text);
+  background: var(--band);
+  color: var(--body);
   font-size: 0.74rem;
   font-weight: 800;
   text-align: center;
@@ -334,8 +369,7 @@ button.dash-now-line {
 }
 
 .dash-next-badge.is-now {
-  border-color: var(--signal);
-  background: var(--signal);
+  background: var(--accent);
   color: #fff;
 }
 
@@ -344,9 +378,8 @@ button.dash-now-line {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: var(--tap-min);
   padding: 4px 2px;
-  border-bottom: 1px solid var(--line);
   font-size: 0.84rem;
   color: var(--muted);
   cursor: pointer;
@@ -366,7 +399,6 @@ button.dash-now-line {
 
 .dash-fold-item strong {
   color: var(--text);
-  font-variant-numeric: tabular-nums;
 }
 
 .dash-fold-arrow {
@@ -378,7 +410,7 @@ button.dash-now-line {
 }
 
 .dash-fold[open] > summary {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .dash-grid {
@@ -388,9 +420,9 @@ button.dash-now-line {
 }
 
 .dash-card {
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  padding: 10px 12px;
+  border-radius: var(--r-card);
+  background: var(--panel);
+  padding: 12px 16px;
   min-width: 0;
 }
 
@@ -422,24 +454,26 @@ button.dash-now-line {
 .dash-progress {
   height: 4px;
   margin-top: 8px;
-  background: var(--line-soft);
+  border-radius: 2px;
+  background: var(--band);
+  overflow: hidden;
 }
 
 .dash-progress-bar {
   height: 100%;
-  background: var(--text);
+  background: var(--accent);
 }
 
 /* ---------- Section tabs: underlined on desktop, bottom bar on phones ---------- */
 .field-nav-desktop {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
 
 .field-nav-btn {
-  min-height: 44px;
+  min-height: var(--tap-min);
   margin-bottom: -1px;
   border: 0;
   border-bottom: 3px solid transparent;
@@ -456,8 +490,8 @@ button.dash-now-line {
 }
 
 .field-nav-btn.is-active {
-  border-bottom-color: var(--text);
-  color: var(--text);
+  border-bottom-color: var(--accent);
+  color: var(--active-text);
 }
 
 .field-nav-mobile {
@@ -477,10 +511,9 @@ button.dash-now-line {
 
 /* ---------- Common components ---------- */
 .sh-card {
-  border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-card);
   background: var(--panel);
-  padding: 14px 16px;
+  padding: 18px 20px;
   margin-bottom: 12px;
 }
 
@@ -506,7 +539,7 @@ button.dash-now-line {
   gap: 5px;
   min-height: 40px;
   padding: 6px 12px;
-  border: 1px solid #9aa1ab;
+  border: 1px solid var(--line);
   border-radius: var(--r);
   background: var(--panel);
   color: var(--text);
@@ -518,12 +551,12 @@ button.dash-now-line {
 }
 
 .sh-btn:hover {
-  border-color: var(--text);
+  border-color: var(--line-ctl);
 }
 
 .sh-btn.is-primary {
-  border-color: var(--text);
-  background: var(--text);
+  border-color: var(--accent);
+  background: var(--accent);
   color: #fff;
 }
 
@@ -534,7 +567,8 @@ button.dash-now-line {
 }
 
 .sh-btn.is-danger {
-  border-color: var(--signal);
+  border-color: transparent;
+  background: var(--signal-soft);
   color: var(--signal);
 }
 
@@ -548,10 +582,10 @@ button.dash-now-line {
 .sh-chip {
   min-height: 36px;
   padding: 4px 12px;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--r);
-  background: var(--panel);
-  color: var(--muted);
+  background: var(--band);
+  color: var(--body);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
@@ -559,26 +593,26 @@ button.dash-now-line {
 }
 
 .sh-chip.is-active {
-  border-color: var(--text);
-  background: var(--text);
+  background: var(--accent);
   color: #fff;
 }
 
-/* Category and status are text tags with a hairline frame. Colour is kept for meaning only. */
+/* Category and status tags: a soft block of tone, coloured only when the state matters. */
 .sh-badge,
 .sh-status-pill {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  border: 1px solid var(--line);
+  padding: 1px 7px;
   border-radius: var(--r-tag);
+  background: var(--band);
   color: var(--body);
   font-size: 0.74rem;
   font-weight: 700;
 }
 
-.sh-badge.cat-hospital {
-  border-color: var(--signal);
+.sh-badge.cat-hospital,
+.sh-status-pill.st-need_booking {
+  background: var(--signal-soft);
   color: var(--signal);
 }
 
@@ -586,18 +620,14 @@ button.dash-now-line {
   color: var(--muted);
 }
 
-.sh-status-pill.st-need_booking {
-  border-color: var(--signal);
-  color: var(--signal);
-}
-
 .sh-status-pill.st-booked {
-  border-color: var(--text);
-  color: var(--text);
+  background: var(--accent-soft);
+  color: var(--active-text);
 }
 
 .sh-status-pill.st-used {
-  color: var(--ok);
+  background: var(--down-bg);
+  color: var(--down-text);
 }
 
 .sh-input,
@@ -606,7 +636,7 @@ button.dash-now-line {
   width: 100%;
   min-height: 40px;
   padding: 7px 10px;
-  border: 1px solid #9aa1ab;
+  border: 1px solid var(--line-ctl);
   border-radius: var(--r);
   background: var(--panel);
   color: var(--text);
@@ -623,7 +653,7 @@ button.dash-now-line {
 .sh-input:focus-visible,
 .sh-select:focus-visible,
 .sh-textarea:focus-visible {
-  outline: 2px solid var(--text);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -635,19 +665,20 @@ button.dash-now-line {
   width: 24px;
   height: 24px;
   margin: 0;
-  border: 2px solid var(--text);
+  border: 2px solid var(--line-ctl);
   border-radius: var(--r-tag);
   background: var(--panel) center / 18px 18px no-repeat;
   cursor: pointer;
 }
 
 #field-mode input[type="checkbox"]:checked {
-  background-color: var(--text);
+  border-color: var(--accent);
+  background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E");
 }
 
 #field-mode input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--signal);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -660,7 +691,7 @@ button.dash-now-line {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   background: var(--bg);
-  border-bottom: 1px solid var(--text);
+  border-bottom: 1px solid var(--line);
 }
 
 .day-tab-btn {
@@ -668,7 +699,7 @@ button.dash-now-line {
   min-width: 0;
   padding: 4px 2px 3px;
   border: 0;
-  border-bottom: 4px solid transparent;
+  border-bottom: 3px solid transparent;
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -683,7 +714,6 @@ button.dash-now-line {
 
 .day-tab-btn strong {
   font-size: 0.95rem;
-  font-variant-numeric: tabular-nums;
 }
 
 .day-tab-btn small {
@@ -692,18 +722,18 @@ button.dash-now-line {
 }
 
 .day-tab-btn.is-active {
-  border-bottom-color: var(--text);
+  border-bottom-color: var(--accent);
   color: var(--text);
 }
 
 .day-tab-btn.is-today small {
-  color: var(--signal);
+  color: var(--active-text);
   font-weight: 800;
 }
 
 /* ---------- Schedule: day header ---------- */
 .sch-head {
-  padding: 12px 0 2px;
+  padding: 14px 0 10px;
 }
 
 .sch-head h2 {
@@ -722,13 +752,11 @@ button.dash-now-line {
 
 /* The key line of the day; tapping it opens the full overview. */
 .day-overview {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .day-overview > summary {
   display: block;
-  padding-left: 10px;
-  border-left: 3px solid var(--text);
   cursor: pointer;
   list-style: none;
 }
@@ -740,7 +768,6 @@ button.dash-now-line {
 .day-highlight {
   display: block;
   font-size: 0.9rem;
-  font-weight: 600;
   line-height: 1.45;
   color: var(--body);
 }
@@ -750,9 +777,7 @@ button.dash-now-line {
   margin-top: 2px;
   font-size: 0.78rem;
   font-weight: 700;
-  color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--link);
 }
 
 .day-overview-more::after {
@@ -765,7 +790,6 @@ button.dash-now-line {
 
 .day-overview p {
   margin: 8px 0 0;
-  padding-left: 13px;
   font-size: 0.88rem;
   line-height: 1.55;
   color: var(--body);
@@ -775,7 +799,7 @@ button.dash-now-line {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 0.86rem;
 }
 
@@ -792,15 +816,21 @@ button.dash-now-line {
   font-weight: 700;
 }
 
-/* ---------- Schedule: timetable ---------- */
+/* ---------- Schedule: timetable (one white block, rows divided by a hairline) ---------- */
 .tl-list {
-  border-top: 2px solid var(--text);
+  border-radius: var(--r-card);
+  background: var(--panel);
+  overflow: hidden;
 }
 
 .tl-item {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-soft);
   /* A row scrolled to must clear the pinned day tabs. */
   scroll-margin-top: 58px;
+}
+
+.tl-item:last-child {
+  border-bottom: 0;
 }
 
 .tl-row {
@@ -808,16 +838,12 @@ button.dash-now-line {
   grid-template-columns: var(--tl-time-w) minmax(0, 1fr) 44px;
   gap: 0 10px;
   align-items: start;
-  padding: 12px 0 2px 8px;
+  padding: 14px 6px 2px 16px;
 }
 
 .tl-timecol,
 .tl-main {
   cursor: pointer;
-}
-
-.tl-timecol {
-  font-variant-numeric: tabular-nums;
 }
 
 .tl-start {
@@ -846,15 +872,14 @@ button.dash-now-line {
 
 .tl-flag {
   padding: 0 6px;
-  border: 1px solid var(--text);
   border-radius: var(--r-tag);
-  color: var(--text);
+  background: var(--band);
+  color: var(--body);
   font-weight: 800;
 }
 
 .tl-flag.is-now {
-  border-color: var(--signal);
-  background: var(--signal);
+  background: var(--accent);
   color: #fff;
 }
 
@@ -898,7 +923,7 @@ button.dash-now-line {
   justify-content: center;
   width: 44px;
   height: 44px;
-  margin-top: -6px;
+  margin-top: -8px;
   cursor: pointer;
 }
 
@@ -915,46 +940,51 @@ button.dash-now-line {
   display: none;
 }
 
+/* What is on now: a tint and an accent bar on the left edge */
 .tl-item.is-now {
-  background: var(--signal-soft);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .tl-item.is-now .tl-start {
-  color: var(--signal);
+  color: var(--active-text);
 }
 
 /* Steps and reference notes sit under the text column */
 .tl-extra,
 .tl-foot {
-  margin-left: calc(var(--tl-time-w) + 18px);
+  margin-left: calc(var(--tl-time-w) + 26px);
 }
 
 .tl-extra {
-  padding: 6px 8px 0 0;
+  padding: 6px 16px 0 0;
 }
 
 .tl-steps {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border-left: 2px solid var(--text);
+  border-radius: var(--r);
+  background: var(--bg);
+}
+
+.tl-item.is-now .tl-steps {
+  background: var(--panel);
 }
 
 .tl-steps li {
   display: grid;
   grid-template-columns: 5.8em minmax(0, 1fr);
   gap: 8px;
-  padding-left: 8px;
   font-size: 0.86rem;
   line-height: 1.45;
 }
 
 .tl-step-time {
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -979,7 +1009,7 @@ button.dash-now-line {
 .tl-guide-block summary {
   display: flex;
   align-items: center;
-  min-height: 44px;
+  min-height: var(--tap-min);
   font-weight: 700;
   cursor: pointer;
 }
@@ -1005,29 +1035,27 @@ button.dash-now-line {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding-right: 8px;
+  padding-right: 16px;
 }
 
 .tl-foot-btn {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: var(--tap-min);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text);
+  color: var(--link);
   font: inherit;
   font-size: 0.84rem;
   font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
   cursor: pointer;
 }
 
 .tl-more {
   margin-left: auto;
   color: var(--muted);
-  text-decoration: none;
 }
 
 /* How to get from the previous item: a grey band between two rows */
@@ -1036,9 +1064,9 @@ button.dash-now-line {
   grid-template-columns: var(--tl-time-w) minmax(0, 1fr) auto;
   gap: 0 10px;
   align-items: center;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--band);
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--accent-tint);
   font-size: 0.8rem;
   line-height: 1.45;
   color: var(--body);
@@ -1052,17 +1080,16 @@ button.dash-now-line {
 .tl-transit-link {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  color: var(--text);
+  min-height: var(--tap-min);
+  color: var(--link);
   font-weight: 700;
   text-underline-offset: 3px;
 }
 
-/* Expanded part of a row */
+/* Expanded part of a row: grey ground, white boxes */
 .tl-body {
-  padding: 4px 8px 14px;
-  border-top: 1px dashed var(--line);
-  background: var(--accent-tint);
+  padding: 6px 16px 16px;
+  background: var(--bg);
 }
 
 .tl-addr-bar {
@@ -1072,8 +1099,7 @@ button.dash-now-line {
   justify-content: space-between;
   gap: 8px;
   margin: 8px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 12px 14px;
   border-radius: var(--r);
   background: var(--panel);
 }
@@ -1108,11 +1134,15 @@ button.dash-now-line {
   font-size: 0.86rem;
 }
 
+/* A box inside a white block is grey; inside the grey expanded row it is white. */
 .tl-detail-box {
-  border: 1px solid var(--line-soft);
   border-radius: var(--r);
+  background: var(--bg);
+  padding: 10px 12px;
+}
+
+.tl-body .tl-detail-box {
   background: var(--panel);
-  padding: 8px 10px;
 }
 
 .tl-detail-box small {
@@ -1132,8 +1162,9 @@ button.dash-now-line {
 .planb-box {
   margin-top: 8px;
   padding: 10px 12px;
-  border-left: 3px solid var(--text);
-  background: var(--panel);
+  border-radius: var(--r);
+  background: var(--warn-bg);
+  color: var(--body);
   font-size: 0.86rem;
 }
 
@@ -1167,18 +1198,20 @@ button.dash-now-line {
 }
 
 .ov-day {
-  margin-bottom: 18px;
-  border-top: 2px solid var(--text);
+  margin-bottom: 12px;
+  border-radius: var(--r-card);
+  background: var(--panel);
+  overflow: hidden;
 }
 
 .ov-day-head {
   display: grid;
   gap: 1px;
   width: 100%;
-  padding: 8px;
+  padding: 12px 16px 10px;
   border: 0;
-  border-bottom: 1px solid var(--line);
-  background: var(--band);
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
   color: var(--text);
   font: inherit;
   text-align: left;
@@ -1188,10 +1221,11 @@ button.dash-now-line {
 .ov-day-date {
   font-size: 0.84rem;
   font-weight: 800;
+  color: var(--muted);
 }
 
 .ov-day.is-today .ov-day-date {
-  color: var(--signal);
+  color: var(--active-text);
 }
 
 .ov-day-title {
@@ -1215,14 +1249,18 @@ button.dash-now-line {
   border-bottom: 1px solid var(--line-soft);
 }
 
+.ov-row:last-child {
+  border-bottom: 0;
+}
+
 .ov-row-btn {
   display: grid;
   grid-template-columns: var(--tl-time-w) minmax(0, 1fr);
   gap: 0 10px;
   align-items: start;
   width: 100%;
-  min-height: 44px;
-  padding: 6px 8px;
+  min-height: var(--tap-min);
+  padding: 7px 16px;
   border: 0;
   background: none;
   color: var(--text);
@@ -1233,7 +1271,6 @@ button.dash-now-line {
 
 .ov-time {
   font-weight: 800;
-  font-variant-numeric: tabular-nums;
 }
 
 .ov-time small {
@@ -1265,11 +1302,12 @@ button.dash-now-line {
 }
 
 .ov-row.is-now {
-  background: var(--signal-soft);
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .ov-row.is-now .ov-time {
-  color: var(--signal);
+  color: var(--active-text);
 }
 
 /* Chinese address and memo: on paper only */
@@ -1285,13 +1323,17 @@ button.dash-now-line {
 }
 
 .place-card {
-  border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-card);
   background: var(--panel);
-  padding: 12px 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.sh-card .place-card {
+  border-radius: var(--r);
+  background: var(--bg);
 }
 
 .place-card h3 {
@@ -1319,7 +1361,6 @@ button.dash-now-line {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--line);
 }
 
 .check-row {
@@ -1330,9 +1371,13 @@ button.dash-now-line {
   border-bottom: 1px solid var(--line-soft);
 }
 
+.check-row:last-child {
+  border-bottom: 0;
+}
+
 .check-row.is-urgent {
   box-shadow: inset 3px 0 0 var(--signal);
-  padding-left: 10px;
+  padding-left: 12px;
 }
 
 .check-row.is-done {
@@ -1362,10 +1407,9 @@ button.dash-now-line {
 
 .template-box {
   margin-bottom: 8px;
-  padding: 12px;
-  border: 1px solid var(--line);
+  padding: 12px 14px;
   border-radius: var(--r);
-  background: var(--accent-tint);
+  background: var(--bg);
   font-size: 0.9rem;
   line-height: 1.55;
 }
@@ -1378,14 +1422,13 @@ button.dash-now-line {
 }
 
 .res-card {
-  border: 1px solid var(--line);
   border-radius: var(--r);
-  background: var(--panel);
+  background: var(--bg);
   padding: 12px 14px;
 }
 
 .res-card.is-urgent {
-  border-left: 4px solid var(--signal);
+  box-shadow: inset 3px 0 0 var(--signal);
 }
 
 .res-head {
@@ -1411,9 +1454,9 @@ button.dash-now-line {
 }
 
 .hotel-card {
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--r);
-  background: var(--panel);
+  background: var(--bg);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -1421,7 +1464,8 @@ button.dash-now-line {
 }
 
 .hotel-card.is-selected {
-  border: 2px solid var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .verify-grid {
@@ -1474,13 +1518,17 @@ button.dash-now-line {
 }
 
 .sh-table th {
-  border-bottom-color: var(--text);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.sh-table tr:last-child td {
+  border-bottom: 0;
 }
 
 .sh-table th.num,
 .sh-table td.num {
   text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .expense-form {
@@ -1492,9 +1540,8 @@ button.dash-now-line {
 
 .expense-list {
   list-style: none;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   padding: 0;
-  border-top: 1px solid var(--line);
 }
 
 .expense-row {
@@ -1504,7 +1551,7 @@ button.dash-now-line {
   justify-content: space-between;
   gap: 8px;
   padding: 9px 2px;
-  border-bottom: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line-soft);
   font-size: 0.88rem;
 }
 
@@ -1526,8 +1573,8 @@ button.dash-now-line {
 
 .contact-item {
   padding: 10px 12px;
-  border: 1px solid var(--line-soft);
   border-radius: var(--r);
+  background: var(--bg);
   font-size: 0.86rem;
 }
 
@@ -1542,13 +1589,12 @@ button.dash-now-line {
 
 .inq-row {
   padding: 10px 12px;
-  border: 1px solid var(--line-soft);
   border-radius: var(--r);
+  background: var(--bg);
 }
 
 .inq-row.is-yes {
-  border-color: var(--ok);
-  border-left-width: 4px;
+  box-shadow: inset 3px 0 0 var(--ok);
 }
 
 .inq-row.is-no {
@@ -1562,16 +1608,32 @@ button.dash-now-line {
   margin-top: 6px;
 }
 
-/* ---------- Taxi card (shown to the driver) ---------- */
-.shanghai-shell .modal-card {
-  border: 1px solid var(--text);
-  border-radius: var(--r);
-  box-shadow: none;
+/* ---------- Dialogs ---------- */
+/* The page behind an open dialog does not scroll. */
+.shanghai-shell:has(.modal:not(.hidden)) {
+  overflow: hidden;
 }
 
+/* Above the pinned day tabs and the bottom bar. */
+.shanghai-shell .modal {
+  z-index: 300;
+  overscroll-behavior: contain;
+}
+
+.shanghai-shell .modal-card {
+  max-height: 85vh;
+  max-height: 85dvh;
+  border-radius: var(--r-card);
+  background: #ffffff;
+  box-shadow: none;
+  overscroll-behavior: contain;
+}
+
+/* Taxi card: shown to the driver, outdoors. White ground, large black characters. */
 .taxi-card {
   max-width: 560px;
   padding: 20px;
+  color: #111111;
   text-align: center;
 }
 
@@ -1580,27 +1642,40 @@ button.dash-now-line {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .taxi-prompt {
-  font-size: 0.94rem;
+  font-size: 1rem;
   font-weight: 700;
+  text-align: left;
+}
+
+/* Simplified Chinese in one typeface, not a mix of fallbacks. */
+.taxi-prompt,
+.taxi-zh-name,
+.taxi-zh-addr,
+.taxi-actions .sh-btn {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "Pretendard", "Malgun Gothic", sans-serif;
 }
 
 .taxi-zh-name {
-  margin: 6px 0 10px;
-  font-size: clamp(1.7rem, 6vw, 2.5rem);
+  margin: 0 0 12px;
+  font-size: clamp(1.75rem, 8vw, 2.25rem);
+  font-weight: 800;
   line-height: 1.25;
+  color: #111111;
 }
 
 .taxi-zh-addr {
-  margin: 0 0 10px;
-  padding: 12px;
-  border-top: 2px solid var(--text);
-  border-bottom: 2px solid var(--text);
-  font-size: clamp(1.1rem, 4vw, 1.45rem);
+  margin: 0 0 12px;
+  padding: 14px 0;
+  border-top: 2px solid #111111;
+  border-bottom: 2px solid #111111;
+  font-size: clamp(1.2rem, 5vw, 1.5rem);
   font-weight: 700;
+  line-height: 1.4;
+  color: #111111;
 }
 
 .taxi-ko-sub {
@@ -1609,11 +1684,27 @@ button.dash-now-line {
   color: var(--muted);
 }
 
+/* Three equal actions along the bottom edge of the card */
 .taxi-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.taxi-actions .sh-btn {
+  min-height: 52px;
+  padding: 6px 4px;
+  flex-direction: column;
+  gap: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.taxi-actions .sh-btn small {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
 }
 
 /* ---------- Toast ---------- */
@@ -1633,22 +1724,195 @@ button.dash-now-line {
   text-align: center;
 }
 
-/* ---------- Quote mode and shared pieces: same flat surface as the itinerary ---------- */
+/* ---------- Quote mode and shared pieces: same surfaces as the itinerary ---------- */
 #plan-mode * {
   box-shadow: none;
 }
 
-.shanghai-shell .page-switch a,
-.shanghai-shell :is(.mini-btn, .qty-btn, .toggle-btn, .stat, .result-cond, .warn, .card-btn, .fold, .fold > summary, .day, .evidence-btn, .mobile-bar-btn, .toast, .panel, .category-toggle, .quote-input, .close-btn) {
-  border-radius: var(--r);
+.shanghai-shell .panel {
+  border: 0;
+  border-radius: var(--r-card);
 }
 
 .shanghai-shell .result-head {
-  border-radius: var(--r) var(--r) 0 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  background: var(--panel);
+}
+
+.shanghai-shell .page-switch a,
+.shanghai-shell :is(.mini-btn, .qty-btn, .toggle-btn, .stat, .result-cond, .warn, .card-btn, .fold, .fold > summary, .day, .evidence-btn, .mobile-bar-btn, .toast, .category-toggle, .quote-input, .close-btn) {
+  border-radius: var(--r);
 }
 
 .shanghai-shell :is(.meta-chip, .tab-badge, .delta, .delta-flash, .badge, .act-tag, .fold-count, .day-tag, .day-night, .warn-tag) {
   border-radius: var(--r-tag);
+}
+
+.shanghai-shell .card-btn:hover {
+  transform: none;
+}
+
+/* Cost going down is teal, going up is orange. */
+.shanghai-shell :is(.delta, .delta-flash).is-down {
+  background: var(--down-bg);
+  color: var(--down-text);
+}
+
+/* Step headings: clear air above, a quiet band, the number as plain figures */
+.shanghai-shell .step-title {
+  margin-top: 28px;
+  border: 0;
+  background: var(--band);
+  color: var(--text);
+}
+
+.shanghai-shell .step-num {
+  display: inline;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  color: var(--active-text);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.shanghai-shell .category {
+  border-top: 1px solid var(--line-soft);
+}
+
+.shanghai-shell .step-title + .category,
+.shanghai-shell .step-title + .category[hidden] + .category {
+  border-top: 0;
+}
+
+/* The shared sheet lays this body out by id, which keeps it shown when its section is folded. */
+.shanghai-shell .category:not(.is-open) #cat-schedule {
+  display: none;
+}
+
+/* Section header: what is picked, what it costs, and whether that price is a confirmed one.
+   A folded section shows it in full strength, an open one quietly (the cards say it already). */
+.shanghai-shell .category-title {
+  flex: 0 0 auto;
+  max-width: 64%;
+}
+
+.shanghai-shell .category-summary {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  max-width: none;
+  margin-left: 8px;
+  overflow: visible;
+  font-size: 0.8rem;
+}
+
+.shanghai-shell .category:not(.is-open) .category-summary {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sum-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sum-amt {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sum-lock {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--r-tag);
+  background: var(--down-bg);
+  color: var(--down-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* The figure that matters is at least twice the size of its range. */
+.shanghai-shell .big-number {
+  font-size: clamp(1.9rem, 3vw, 2.3rem);
+}
+
+.shanghai-shell .result-band {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.shanghai-shell .result-head h2 {
+  color: var(--muted);
+}
+
+.shanghai-shell .stat {
+  border: 0;
+  background: var(--bg);
+}
+
+.shanghai-shell .result-block {
+  border-top: 1px solid var(--line-soft);
+}
+
+.shanghai-shell .tab-panel > .result-block:first-child,
+.shanghai-shell .tab-panel > .result-block[hidden] + .result-block {
+  border-top: 0;
+}
+
+/* A changed total blinks once, so the effect of a pick is seen without reading the number. */
+@keyframes value-pulse {
+  0% {
+    background-color: #bfdbfe;
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.price-updated {
+  border-radius: 4px;
+  animation: value-pulse 450ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .price-updated {
+    animation: none;
+  }
+}
+
+/* Cards on the left, the total and its tabs pinned on the right. */
+@media (min-width: 1024px) {
+  .shanghai-shell .layout {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .shanghai-shell .panel-right {
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+  }
+
+  .shanghai-shell .panel-left {
+    padding: 20px;
+  }
+
+  .shanghai-shell .panel-left .step-title {
+    margin-left: -20px;
+    margin-right: -20px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
 }
 
 /* ---------- Narrow screens ---------- */
@@ -1676,28 +1940,40 @@ button.dash-now-line {
 
 @media (max-width: 768px) {
   .sh-topbar {
-    padding: 10px 14px 8px;
+    padding: 10px 12px 10px;
   }
 
   .sh-topbar h1 {
     font-size: 1.15rem;
   }
 
-  .mode-field .sh-pill.is-detail {
+  .mode-plan .sh-topbar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* One line of facts: the flights are in the timetable, what is booked is in the bookings tab. */
+  .sh-meta-flights,
+  .sh-meta-wide {
     display: none;
   }
 
-  .mode-plan .sh-topbar-actions {
-    width: 100%;
-    align-items: stretch;
+  .mode-switch,
+  .sub-seg {
+    max-width: none;
   }
 
-  .mode-switch {
-    width: 100%;
+  .mode-btn,
+  .sub-seg-btn {
+    min-height: var(--tap-min);
   }
 
   .field-shell {
     padding: 0 12px 20px;
+  }
+
+  .sh-card {
+    padding: 16px;
   }
 
   /* Every control a thumb has to hit is at least 44px tall. */
@@ -1706,14 +1982,14 @@ button.dash-now-line {
   .sh-chip,
   .sh-input,
   .sh-select {
-    min-height: 44px;
+    min-height: var(--tap-min);
   }
 
   #field-mode .link-btn,
   #field-mode a[href^="tel:"] {
     display: inline-flex;
     align-items: center;
-    min-height: 44px;
+    min-height: var(--tap-min);
   }
 
   .field-nav-desktop {
@@ -1727,10 +2003,10 @@ button.dash-now-line {
     bottom: 0;
     z-index: 160;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    border-top: 1px solid var(--text);
-    background: var(--bg);
+    border-top: 1px solid var(--line);
+    background: var(--panel);
   }
 
   .field-mnav-btn {
@@ -1741,7 +2017,7 @@ button.dash-now-line {
     background: transparent;
     color: var(--muted);
     font: inherit;
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     font-weight: 700;
     display: flex;
     flex-direction: column;
@@ -1752,13 +2028,13 @@ button.dash-now-line {
   }
 
   .field-mnav-btn.is-active {
-    border-top-color: var(--text);
-    color: var(--text);
+    border-top-color: var(--accent);
+    color: var(--active-text);
   }
 
   /* Room for the fixed bottom bar of each mode. */
   .sh-footer {
-    padding: 14px 12px calc(var(--sh-bottom-nav-h) + env(safe-area-inset-bottom, 0px) + 20px);
+    padding: 8px 12px calc(var(--sh-bottom-nav-h) + env(safe-area-inset-bottom, 0px) + 20px);
   }
 
   .mode-plan .sh-footer {
@@ -1772,16 +2048,16 @@ button.dash-now-line {
     margin-right: -12px;
   }
 
+  .tl-list {
+    border-radius: 0;
+  }
+
   .tl-row {
     padding-left: 12px;
     padding-right: 4px;
   }
 
-  .tl-transit {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
+  .tl-transit,
   .tl-body {
     padding-left: 12px;
     padding-right: 12px;
@@ -1798,6 +2074,32 @@ button.dash-now-line {
   .inq-controls {
     grid-template-columns: 1fr;
   }
+
+  .ov-day-head,
+  .ov-row-btn {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Dialogs come up from the bottom edge, within reach of the thumb. */
+  .shanghai-shell .modal-card {
+    max-height: 88vh;
+    max-height: 88dvh;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .taxi-card {
+    min-height: 62vh;
+    min-height: 62dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .taxi-actions {
+    margin-top: auto;
+  }
 }
 
 /* ---------- Paper ---------- */
@@ -1808,7 +2110,8 @@ button.dash-now-line {
 
   .skip-link,
   .sh-pill-row,
-  .sh-topbar-actions,
+  .mode-switch,
+  .sub-seg,
   #field-dashboard,
   .field-nav-desktop,
   .field-nav-mobile,
@@ -1836,6 +2139,11 @@ button.dash-now-line {
     margin-right: 0;
   }
 
+  .ov-day {
+    border-top: 2px solid #000;
+    border-radius: 0;
+  }
+
   .tl-memo.is-clamped {
     display: block;
     overflow: visible;
@@ -1843,7 +2151,7 @@ button.dash-now-line {
 
   .ov-print {
     display: block;
-    margin: 0 8px 6px calc(var(--tl-time-w) + 18px);
+    margin: 0 8px 6px calc(var(--tl-time-w) + 26px);
     font-size: 0.8rem;
     line-height: 1.45;
     color: #333;

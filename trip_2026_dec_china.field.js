@@ -7,6 +7,8 @@
 
   const FIELD_KEY = "trip_2026_dec_china.field.v1";
   const FIELD_TABS = ["schedule", "map", "prep", "bookings", "budget", "notes"];
+  // Bookings and prep share one entry of the nav; a two-part switch at the top of both panels moves between them.
+  const NAV_OF = { prep: "bookings" };
   const RES_STATUS = {
     review: { label: "검토", next: "need_booking" },
     need_booking: { label: "예약 필요", next: "booked" },
@@ -93,6 +95,7 @@
   let offlineReady = false; // true once the service worker that keeps an offline copy controls this page
   let lastAutoDay = null; // trip day the schedule was last moved to automatically
   let renderedClockKey = ""; // now/next pair the schedule tab was last drawn with
+  let lastQuoteMean = null; // per-person total the quote mode last showed, in units of 10,000 won
 
   let state = loadFieldState();
 
@@ -100,7 +103,9 @@
 
   function init() {
     if (dom.weatherPill && shanghai.tripMeta && shanghai.tripMeta.weather) {
-      dom.weatherPill.textContent = `${shanghai.tripMeta.weather.tempC} · 경량 패딩`;
+      const w = shanghai.tripMeta.weather;
+      dom.weatherPill.textContent = w.tempC.replace(/°C\s*~\s*/, "–");
+      dom.weatherPill.title = [w.rainNote, w.clothing].filter(Boolean).join(" · ");
     }
     updateOnlineStatus();
     window.addEventListener("online", updateOnlineStatus);
@@ -110,6 +115,7 @@
     applyMode();
     autoSelectToday();
     renderAll();
+    decorateQuote(getShanghaiQuoteResult(), false);
     registerOfflineCache();
 
     // Keep "지금 / 다음" in step with the clock, and follow the date when the page is reopened.
@@ -118,7 +124,8 @@
       if (!document.hidden) refreshClock();
     });
 
-    window.addEventListener("trip:rendered", () => {
+    window.addEventListener("trip:rendered", (e) => {
+      decorateQuote(e.detail && e.detail.result, true);
       if (state.mode === "field") {
         renderDashboard();
         if (state.activeTab === "prep") renderPrepTab();
@@ -143,6 +150,7 @@
       version: 1,
       mode: "field",
       activeTab: "schedule",
+      bookSub: "bookings",
       activeDay: 0,
       scheduleView: "day",
       dashOpen: false,
@@ -174,6 +182,7 @@
       ...base,
       mode: saved.mode === "plan" ? "plan" : "field",
       activeTab: FIELD_TABS.includes(saved.activeTab) ? saved.activeTab : "schedule",
+      bookSub: saved.bookSub === "prep" || saved.activeTab === "prep" ? "prep" : "bookings",
       activeDay: clampInt(saved.activeDay, 0, shanghai.itinerary.length - 1, 0),
       scheduleView: saved.scheduleView === "all" ? "all" : "day",
       dashOpen: Boolean(saved.dashOpen),
@@ -438,7 +447,7 @@
         saveFieldState();
         applyMode();
         if (nextMode === "field") renderAll();
-        // The switch sits at the bottom of the page; the other mode starts at its top.
+        // The other mode starts at its top.
         window.scrollTo({ top: 0 });
       });
     });
@@ -459,7 +468,7 @@
       btn.addEventListener("click", () => {
         const tab = btn.dataset.ftab;
         if (!FIELD_TABS.includes(tab)) return;
-        selectFieldTab(tab);
+        selectFieldTab(tab === "bookings" ? state.bookSub : tab);
       });
     });
 
@@ -522,9 +531,11 @@
 
   function selectFieldTab(tab, opts = {}) {
     state.activeTab = tab;
+    if (tab === "bookings" || tab === "prep") state.bookSub = tab;
     saveFieldState();
+    const navTab = NAV_OF[tab] || tab;
     dom.navButtons.forEach((btn) => {
-      const active = btn.dataset.ftab === tab;
+      const active = btn.dataset.ftab === navTab;
       btn.classList.toggle("is-active", active);
       btn.setAttribute("aria-pressed", String(active));
     });
@@ -554,9 +565,18 @@
   function updateOnlineStatus() {
     if (!dom.offlinePill) return;
     const online = navigator.onLine !== false;
-    const onlineText = offlineReady ? "온라인 · 오프라인 저장됨" : "온라인";
-    const offlineText = offlineReady ? "오프라인 · 저장본으로 표시 중" : "오프라인";
-    dom.offlinePill.textContent = online ? onlineText : offlineText;
+    const short = online ? (offlineReady ? "온라인 · 저장됨" : "온라인") : offlineReady ? "오프라인 · 저장본" : "오프라인";
+    const full = online
+      ? offlineReady
+        ? "온라인 · 오프라인에서도 열리도록 저장됨"
+        : "온라인"
+      : offlineReady
+        ? "오프라인 · 저장본으로 표시 중"
+        : "오프라인";
+    dom.offlinePill.textContent = short;
+    dom.offlinePill.title = full;
+    dom.offlinePill.setAttribute("aria-label", full);
+    dom.offlinePill.dataset.offlineReady = String(offlineReady);
     dom.offlinePill.className = `sh-pill ${online ? "is-online" : "is-offline"}`;
   }
 
@@ -642,6 +662,71 @@
         </div>
       </details>
     `;
+  }
+
+  // Two-part switch shown at the top of the bookings and the prep panels.
+  function bookSubHtml(activeTab) {
+    const stats = getProgressStats();
+    const btn = (tab, label, count) => `
+      <button type="button" class="sub-seg-btn ${activeTab === tab ? "is-active" : ""}" aria-pressed="${activeTab === tab}" data-jump-tab="${tab}">
+        ${label}<span class="sub-seg-count">${count}</span>
+      </button>`;
+    return `
+      <div class="sub-seg" role="group" aria-label="예약과 준비 전환">
+        ${btn("bookings", "예약 · 숙소", `${stats.doneRes}/${stats.totalRes}`)}
+        ${btn("prep", "준비 · 관세", `${stats.doneChecks}/${stats.totalChecks}`)}
+      </div>
+    `;
+  }
+
+  // ---------- Quote mode: section summaries and the changed-total blink ----------
+  // The shared script writes the picked option into each section header. Here the amount is added,
+  // and a "확정" tag when the amount is a price the traveller typed in rather than an estimate.
+  function decorateQuote(result, mayPulse) {
+    if (!result || !result.breakdown) return;
+    const people = Number(result.people) || 1;
+    const bridge = window.TRIP_APP_BRIDGE;
+    const cityState = bridge && bridge.getState().cities ? bridge.getState().cities[result.cityId] : null;
+    const quotes = (cityState && cityState.quotes) || {};
+    const mid = (range) => (Array.isArray(range) ? (Number(range[0]) + Number(range[1])) / 2 : null);
+    const quoted = (field) => {
+      const locked = Boolean(result.quoteStatus && result.quoteStatus[field] === "applied" && quotes[field]);
+      return { locked, krw: locked ? Number(quotes[field].krw) : mid(result.estimates && result.estimates[field]) };
+    };
+    const perPerson = (line) => (line && line.mean > 0 ? line.mean / people : null);
+    const rows = {
+      "summary-flight": { ...quoted("flight"), prefix: "1인 " },
+      "summary-stayPre": { ...quoted("stayPre"), prefix: "" },
+      "summary-stayA": { ...quoted("stayA"), prefix: "" },
+      "summary-stayB": { ...quoted("stayB"), prefix: "" },
+      "summary-airport": { krw: perPerson(result.breakdown.airport), prefix: "1인 " },
+      "summary-data": { krw: perPerson(result.breakdown.data), prefix: "1인 " },
+      "summary-meal": { krw: perPerson(result.breakdown.meal), prefix: "1인 " },
+      "summary-transport": { krw: perPerson(result.breakdown.transport), prefix: "1인 " },
+      "summary-activities": { krw: perPerson(result.breakdown.activities), prefix: "1인 " },
+    };
+    document.querySelectorAll("#plan-mode .category-summary").forEach((node) => {
+      const text = node.textContent.trim();
+      if (!text || node.querySelector(".sum-text")) return;
+      const row = rows[node.id] || {};
+      const amount = row.krw && Math.round(row.krw / 10000) > 0 ? `${row.prefix}${formatManwon(row.krw)}` : "";
+      node.innerHTML = `<span class="sum-text">${esc(text)}</span>${amount ? `<span class="sum-amt">${esc(amount)}</span>` : ""}${
+        row.locked ? `<span class="sum-lock">확정</span>` : ""
+      }`;
+      node.title = [text, amount, row.locked ? "확정가" : ""].filter(Boolean).join(" · ");
+    });
+
+    // Blink the total once when a pick changes it.
+    const mean = Math.round(result.perPerson.mean / 10000);
+    if (mayPulse && lastQuoteMean !== null && mean !== lastQuoteMean) {
+      [byId("per-person-total"), byId("mobile-bar-total")].forEach((node) => {
+        if (!node) return;
+        node.classList.remove("price-updated");
+        void node.offsetWidth; // restart the animation
+        node.classList.add("price-updated");
+      });
+    }
+    lastQuoteMean = mean;
   }
 
   // ---------- Tab 1: Schedule ----------
@@ -993,7 +1078,7 @@
               .map((d) => {
                 const p = getPlace(d.placeId);
                 return `
-                  <article class="place-card" style="background:#fff">
+                  <article class="place-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
                       <span class="sh-badge cat-food">${esc(d.theme)}</span>
                       <strong style="font-size:0.82rem;color:var(--big)">${esc(d.budget2pax)}</strong>
@@ -1114,6 +1199,7 @@
         : "";
 
     dom.panels.prep.innerHTML = `
+      ${bookSubHtml("prep")}
       <div class="sh-card">
         <div class="sh-card-head">
           <h2>체크리스트 (출발 전 필수 &amp; 날짜별 할 일)</h2>
@@ -1382,6 +1468,7 @@
     }
 
     dom.panels.bookings.innerHTML = `
+      ${bookSubHtml("bookings")}
       ${inquiryHtml}
       <div class="sh-card">
         <div class="sh-card-head">

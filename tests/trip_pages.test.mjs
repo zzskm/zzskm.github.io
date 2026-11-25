@@ -40,25 +40,34 @@ test('standalone China page includes dual-mode shell and required scripts/styles
     'id="taxi-modal"',
     'data-ftab="schedule"',
     'data-ftab="map"',
-    'data-ftab="prep"',
     'data-ftab="bookings"',
     'data-ftab="budget"',
     'data-ftab="notes"',
+    'data-fpanel="prep"',
+    'data-fpanel="bookings"',
   ]) {
     assert.ok(html.includes(token), `Missing expected token in trip_2026_dec_china.html: ${token}`);
   }
 });
 
-test('Shanghai itinerary shell: mode switch at the bottom, no manual reorder, offline worker covers the page files', () => {
+test('Shanghai itinerary shell: mode switch in the header, five nav entries, no manual reorder, offline worker covers the page files', () => {
   const html = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.html'), 'utf8');
   const field = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.field.js'), 'utf8');
   const sw = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.sw.js'), 'utf8');
 
-  // The quote mode switch sits in the footer, below both mode shells; the header keeps only a way back.
-  const footerAt = html.indexOf('class="sh-footer"');
-  assert.ok(footerAt > html.indexOf('id="plan-mode"'), 'footer must come after the plan-mode shell');
-  assert.ok(html.indexOf('id="mode-btn-plan"') > footerAt, 'mode switch must be inside the footer');
-  assert.ok(html.includes('class="sh-btn is-primary sh-mode-back" data-mode="field"'), 'plan mode needs a way back to the itinerary');
+  // The two-part mode switch sits in the header, above both mode shells, and is the only mode control.
+  const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
+  assert.ok(header.includes('id="mode-btn-field"') && header.includes('id="mode-btn-plan"'), 'mode switch must be inside the header');
+  assert.equal((html.match(/data-mode="/g) || []).length, 2, 'exactly one pair of mode buttons');
+  assert.ok(html.indexOf('</header>') < html.indexOf('id="field-mode"'), 'header must come before the mode shells');
+
+  // Bookings and prep share one nav entry: five entries in each nav, and a switch between the two panels.
+  for (const cls of ['field-nav-btn', 'field-mnav-btn']) {
+    assert.equal((html.match(new RegExp(`class="${cls}[ "]`, 'g')) || []).length, 5, `${cls}: five entries`);
+  }
+  assert.equal(html.includes('data-ftab="prep"'), false, 'prep has no nav entry of its own');
+  assert.ok(field.includes('const NAV_OF = { prep: "bookings" }'));
+  assert.ok(field.includes('data-jump-tab="${tab}"') && field.includes('class="sub-seg"'), 'bookings/prep switch');
 
   // Items follow the data's time order: the reorder buttons and the saved order are gone.
   assert.equal(field.includes('data-move-item'), false, 'reorder buttons must not be rendered');
@@ -76,7 +85,7 @@ test('Shanghai itinerary shell: mode switch at the bottom, no manual reorder, of
   assert.ok(field.includes('register("trip_2026_dec_china.sw.js", { scope: "./trip_2026_dec_china" })'));
 });
 
-test('Shanghai page keeps the flat look: no gradients, pill shapes, drop shadows or emoji icons', () => {
+test('Shanghai page keeps the flat look: tone-layered surfaces, no gradients, pill shapes, drop shadows or emoji icons', () => {
   const css = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const html = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.html'), 'utf8');
   const field = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.field.js'), 'utf8');
@@ -88,8 +97,18 @@ test('Shanghai page keeps the flat look: no gradients, pill shapes, drop shadows
   for (const [, value] of css.matchAll(/box-shadow:\s*([^;]+);/g)) {
     assert.ok(value === 'none' || value.startsWith('inset '), `Unexpected box-shadow: ${value}`);
   }
-  // The shared palette is re-declared for this page so the gradient background of the shared sheet is replaced.
-  assert.match(css, /\.shanghai-shell\s*\{[^}]*--bg:\s*#ffffff;[^}]*background:\s*var\(--bg\);/);
+  // The shared palette is re-declared for this page so the gradient background of the shared sheet is replaced:
+  // a light grey page with white blocks on it.
+  assert.match(css, /\.shanghai-shell\s*\{[^}]*--bg:\s*#f5f6f8;[^}]*--panel:\s*#ffffff;[^}]*background:\s*var\(--bg\);/);
+  // Figures line up, the page fits the visible viewport, dialogs do not scroll the page behind them.
+  assert.match(css, /\.shanghai-shell\s*\{[^}]*min-height:\s*100dvh;[^}]*font-variant-numeric:\s*tabular-nums;/);
+  assert.ok(css.includes('overscroll-behavior: contain'), 'dialogs contain their scroll');
+  assert.ok(css.includes('env(safe-area-inset-bottom'), 'bottom bar clears the home indicator');
+  // Quote mode: summaries with amount and confirmed tag, and a blink on a changed total.
+  for (const token of ['class="sum-amt"', 'class="sum-lock"', 'price-updated']) {
+    assert.ok(field.includes(token), `Missing in field.js: ${token}`);
+  }
+  assert.ok(css.includes('@keyframes value-pulse'), 'changed-total blink');
 
   const pictographs = /\p{Extended_Pictographic}/gu;
   const allowed = new Set(['↗', '▾', '▴', '★', '©', '®', '™', '↔', '↓', '↑']);
