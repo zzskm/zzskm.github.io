@@ -26,6 +26,10 @@
   --predict: #FF6F61;
   --predict-fill: rgba(255,111,97,0.10);
   --grid: #E8E2DE;
+  /* 차트 선 색 — app.helpers.js의 THEME과 같은 값을 쓴다 */
+  --ma7: #3C2F2F;
+  --ma14: #A89F99;
+  --target: #A0522D;
 
   --sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -34,6 +38,16 @@
 }
 
 * { border-radius: 0 !important; box-sizing: border-box; }
+
+/* display를 지정한 컴포넌트(.prediction-guard, .insight-strip 등)에서도 hidden 속성이 이기도록 한다. */
+[hidden] { display: none !important; }
+
+/* 키보드 포커스 표시 — 칩은 입력 요소가 0×0이라 라벨에 표시한다. */
+:where(button, summary, a):focus-visible,
+.chip:has(input:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
 
 html, body { min-height: 100%; }
 
@@ -109,13 +123,10 @@ body {
   background: var(--ink);
   display: inline-block;
 }
-.panel-head-legend-swatch--accent { background: var(--accent); }
-.panel-head-legend-swatch--line {
-  width: 14px;
-  height: 0;
-  border-top: 2px dashed var(--muted-2);
-  background: none;
-}
+/* 범례 견본은 차트 데이터셋의 모양·색과 같아야 한다(app.js renderChart). 모바일 범례는 .chart-legend-swatch 아래에 같은 규칙이 있다. */
+.panel-head-legend-swatch--trend { width: 14px; height: 0; border-top: 2px solid var(--ma7); background: none; }
+.panel-head-legend-swatch--forecast { width: 14px; height: 0; border-top: 2px dashed var(--predict); background: none; }
+.panel-head-legend-swatch--target { width: 14px; height: 0; border-top: 2px dashed var(--target); background: none; }
 .eyebrow-tight {
   margin: 0 0 4px;
 }
@@ -702,7 +713,8 @@ body {
 .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 .chart-legend-mobile {
   display: none;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   margin-top: 10px;
   font-size: 10px;
   font-weight: 800;
@@ -712,8 +724,9 @@ body {
 }
 .chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .chart-legend-swatch { width: 10px; height: 10px; background: var(--ink); display: inline-block; }
-.chart-legend-swatch--trend { background: var(--accent); }
-.chart-legend-swatch--target { width: 14px; height: 0; border-top: 2px dashed var(--muted-2); background: none; }
+.chart-legend-swatch--trend { width: 14px; height: 0; border-top: 2px solid var(--ma7); background: none; }
+.chart-legend-swatch--forecast { width: 14px; height: 0; border-top: 2px dashed var(--predict); background: none; }
+.chart-legend-swatch--target { width: 14px; height: 0; border-top: 2px dashed var(--target); background: none; }
 
 /* ====================== SCENARIOS ====================== */
 .scenarios {
@@ -1068,6 +1081,8 @@ body {
   padding-top: 12px;
   border-top: 2px solid var(--ink);
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   justify-content: space-between;
   align-items: center;
   color: var(--muted);
@@ -1142,6 +1157,17 @@ body {
 @media (pointer: coarse) {
   .seg-btn { padding: 14px 18px; }
   .chip { padding: 12px 14px; }
+}
+
+/* 키보드가 없는 터치 기기에는 단축키 안내가 쓸모없다. */
+@media (hover: none) {
+  .kbd-hint-shortcuts { display: none; }
+}
+
+/* 좁은 화면(≤360px): 시나리오 3칸이 가용 폭을 넘지 않게 한다. */
+@media (max-width: 360px) {
+  .scenarios-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .scenario { padding: 20px 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
