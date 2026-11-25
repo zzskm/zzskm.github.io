@@ -44,7 +44,8 @@ test('weight chart shows only the first 2 of 12 forecast weeks without changing 
   };
   const chart = M.weightChart(s,30,true);
   assert.deepEqual(chart.prediction.map(p => p.date),['2026-10-31','2026-11-07','2026-11-14']);
-  assert.deepEqual(chart.band.map(p => p.date),['2026-11-14']);
+  // The band starts at the forecast's first point with zero width; the published interval has no week-0 point.
+  assert.deepEqual(chart.band,[{date:'2026-10-31',lower:84,upper:84},{date:'2026-11-14',lower:82.2,upper:84.2}]);
   assert.equal(s.predictions.threeMonthWeightKg,82);
   assert.deepEqual(M.weightChart(s,30,false).prediction,[]);
 });

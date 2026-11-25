@@ -6,11 +6,11 @@
   <title>체중 대시보드</title>
   <!-- 공개 저장소·Pages라 누구나 볼 수 있다. 검색 노출만 막는다(2026-11-25 사용자 결정). -->
   <meta name="robots" content="noindex" />
-  <link rel="icon" href="./icons/icon.svg?v=20261126a" type="image/svg+xml" />
-  <link rel="icon" href="./icons/icon-192.png?v=20261126a" type="image/png" sizes="192x192" />
+  <link rel="icon" href="./icons/icon.svg?v=20261126b" type="image/svg+xml" />
+  <link rel="icon" href="./icons/icon-192.png?v=20261126b" type="image/png" sizes="192x192" />
   <!-- iOS 홈 화면 아이콘은 PNG만 쓴다(W5). -->
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261126a" sizes="180x180" />
-  <link rel="manifest" href="./manifest.webmanifest?v=20261126a" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261126b" sizes="180x180" />
+  <link rel="manifest" href="./manifest.webmanifest?v=20261126b" />
   <meta name="theme-color" content="#F5F2F0" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -24,7 +24,7 @@
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" rel="stylesheet" media="print" onload="this.media='all'" integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0" crossorigin="anonymous" />
   <!-- 고정폭 글꼴은 700 굵기만 쓴다. Google Fonts CSS는 브라우저마다 달라 SRI를 걸 수 없다. -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./style.css?v=20261126a" />
+  <link rel="stylesheet" href="./style.css?v=20261126b" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -180,7 +180,7 @@
         <div class="panel-head">
           <div class="panel-head-bar">
             <div class="panel-head-badge-sm">M</div>
-            <h4 class="panel-head-title-sm">모델 진단</h4>
+            <h2 class="panel-head-title-sm">모델 진단</h2>
           </div>
         </div>
         <div class="coverage-block">
@@ -241,7 +241,7 @@
             <div class="panel-head-badge">S</div>
             <div>
               <p class="eyebrow eyebrow-tight">3개월 뒤 예상 체중</p>
-              <h3 class="panel-head-title">시나리오</h3>
+              <h2 class="panel-head-title">시나리오</h2>
             </div>
           </div>
           <p class="scenarios-hint" id="scenariosHint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
@@ -279,7 +279,7 @@
             <div class="panel-head-icon">B</div>
             <div>
               <p class="eyebrow eyebrow-tight">최신 측정 · 최근 7일</p>
-              <h3 class="panel-head-title">몸 · 활동</h3>
+              <h2 class="panel-head-title">몸 · 활동</h2>
             </div>
           </div>
         </div>
@@ -359,9 +359,9 @@
   <!-- W1: async라 CDN이 늦거나 막혀도 페이지를 막지 않는다. app.js는 숫자를 먼저 보여 주고 차트는 이 스크립트가 오면 그린다.
        못 받으면 표시를 남긴다(onerror). app.js가 그 표시를 보고, 다시 불러올 때 같은 주소로 새 태그를 넣어 다시 받는다. -->
   <script async id="chartLib" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js" integrity="sha384-tgbB5AKnszdcfwcZtTfuhR3Ko1XZdlDfsLtkxiiAZiVkkXCkFmp+FQFh+V/UTo54" crossorigin="anonymous" onerror="this.dataset.failed='true'"></script>
-  <script defer src="./app.helpers.js?v=20261126a"></script>
-  <script defer src="./app.js?v=20261126a"></script>
-  <script defer src="./enhancements.js?v=20261126a"></script>
+  <script defer src="./app.helpers.js?v=20261126b"></script>
+  <script defer src="./app.js?v=20261126b"></script>
+  <script defer src="./enhancements.js?v=20261126b"></script>
   <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>

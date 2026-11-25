@@ -376,6 +376,8 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        // 움직임을 줄이라는 설정이면 차트도 따른다. CSS만 따르고 차트는 1초 동안 움직였다(재검토 FE9).
+        ...(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? { animation: false } : {}),
         // 가로 위치에서 가장 가까운 날짜의 점을 모은다. 예전의 'x' 모드는 점 바로 위에서만 툴팁이 떠서,
         // 점이 주 단위로 놓인 예측 구간에서는 거의 뜨지 않았다(재검토 FE1).
         interaction: { mode: 'nearest', axis: 'x', intersect: false },
@@ -479,6 +481,15 @@
     state.chart.options.scales.x.min = first;
     state.chart.options.scales.x.max = last;
     state.chart.data.datasets = datasets;
+    // 차트의 내용을 글로도 적는다. 고정 문구만으로는 화면 낭독기가 값을 알 수 없다(재검토 FE9).
+    const summaryParts = [`체중 추세 차트, ${state.range === 'all' ? '전체 기간' : `최근 ${state.range}일`}`];
+    if (Number.isFinite(s.current?.weightEwmaKg)) summaryParts.push(`추세 ${s.current.weightEwmaKg.toFixed(1)}kg`);
+    const forecastEnd = forecast.points[forecast.points.length - 1];
+    if (state.visible.prediction && forecast.weeks && Number.isFinite(forecastEnd?.valueKg)) {
+      summaryParts.push(`${forecast.weeks}주 뒤 예측 ${forecastEnd.valueKg.toFixed(1)}kg`);
+    }
+    if (Number.isFinite(target)) summaryParts.push(`목표 ${target.toFixed(1)}kg`);
+    state.chart.canvas.setAttribute('aria-label', summaryParts.join(', '));
     state.chart.update(mode);
   }
 
@@ -508,7 +519,8 @@
     document.addEventListener('keydown', (e) => {
       // Ctrl+R(브라우저 새로고침), Ctrl+1(탭 전환) 같은 조합은 브라우저에 맡긴다.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+      // 글자를 넣는 곳에서는 단축키를 쓰지 않는다. 칩(체크박스)에 포커스가 있을 때는 쓴다(재검토 FE9).
+      if (e.target.closest?.('textarea, select, [contenteditable], input:not([type="checkbox"]):not([type="radio"])')) return;
       if (e.key === 'r' || e.key === 'R') {
         if (!appRoot.dataset.busy) load();
         return;

@@ -77,13 +77,19 @@ def step_condition(workflow: str, step_name: str) -> str | None:
     return None
 
 
-def run_bash(script: str, env: dict[str, str] | None = None, *extra_args: str) -> subprocess.CompletedProcess:
+def run_bash(script: str, env: dict[str, str] | None = None, *extra_args: str,
+             cwd: Path | None = None) -> subprocess.CompletedProcess:
     assert BASH is not None
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "step.sh"
         path.write_text(script, encoding="utf-8", newline="\n")
-        return subprocess.run([BASH, *extra_args, str(path)], env={**os.environ, **(env or {})},
-                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+        return subprocess.run([BASH, *extra_args, str(path)], env={**os.environ, **(env or {})}, cwd=cwd,
+                              capture_output=True, text=True, encoding="utf-8", timeout=120)
+
+
+def posix(path: Path) -> str:
+    """bash와 Windows용 openssl·git이 모두 읽는 경로(C:/…)."""
+    return str(path).replace("\\", "/")
 
 
 @unittest.skipUnless(BASH or os.environ.get("CI"), "bash not found")
@@ -196,6 +202,237 @@ class StepSyntaxTests(unittest.TestCase):
                               "Commit and push data", "Check auth secrets"}, set(step_scripts(SYNC_WORKFLOW)))
         self.assertLessEqual({"Decrypt token cache", "Encrypt tokens for the probe cache",
                               "Commit results to the probe branch"}, set(step_scripts(PROBE_WORKFLOW)))
+
+
+@unittest.skipUnless(BASH or os.environ.get("CI"), "bash not found")
+class TokenStepTests(unittest.TestCase):
+    """토큰 캐시 스텝(재검토 TD1). 암호화와 복호화가 서로 맞는지, 키가 없거나 틀릴 때, 토큰이 그대로일 때를 본다.
+
+    스텝 본문을 그대로 돌린다. 로컬(Git Bash)에 jq가 없으면 같은 검사를 하는 셸 함수로 대신한다. CI는 실제 jq를 쓴다.
+    """
+
+    JQ_STUB = (
+        "command -v jq >/dev/null 2>&1 || "
+        "jq() { grep -q '\"di_token\"' \"$3\" && grep -q '\"di_refresh_token\"' \"$3\"; }\n"
+    )
+    TOKENS = '{"di_token": "access-1", "di_refresh_token": "refresh-1", "di_client_id": "client"}\n'
+    STEPS = ((SYNC_WORKFLOW, "Encrypt tokens for the cache"), (PROBE_WORKFLOW, "Encrypt tokens for the probe cache"))
+
+    def run_step(self, workflow: str, name: str, runner_temp: Path, **env: str) -> subprocess.CompletedProcess:
+        script = self.JQ_STUB + step_scripts(workflow)[name]
+        return run_bash(script, {"RUNNER_TEMP": posix(runner_temp), "GITHUB_ENV": posix(runner_temp / "github_env"),
+                                 "GITHUB_OUTPUT": posix(runner_temp / "github_output"), "BAD_KEY": "false", **env})
+
+    @staticmethod
+    def read(path: Path) -> str:
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    def encrypt(self, workflow: str, step: str, runner_temp: Path, key: str = "key-1") -> subprocess.CompletedProcess:
+        return self.run_step(workflow, step, runner_temp, GARMIN_TOKEN_KEY=key,
+                             GARMIN_TOKEN_DIR=posix(runner_temp / "garmin-tokens"))
+
+    def test_saved_tokens_come_back_on_the_next_run(self) -> None:
+        for workflow, encrypt_step in self.STEPS:
+            with self.subTest(workflow=workflow), tempfile.TemporaryDirectory() as tmp:
+                first, second = Path(tmp) / "run1", Path(tmp) / "run2"
+                (first / "garmin-tokens").mkdir(parents=True)
+                second.mkdir()
+                (first / "garmin-tokens" / "garmin_tokens.json").write_text(self.TOKENS, encoding="utf-8", newline="\n")
+
+                done = self.encrypt(workflow, encrypt_step, first)
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                encrypted = first / "garmin-token-cache" / "garmin_tokens.json.enc"
+                self.assertTrue(encrypted.is_file())
+                self.assertNotIn(b"refresh-1", encrypted.read_bytes())
+                self.assertIn("save=true", self.read(first / "github_output"))
+
+                # 다음 실행의 러너에는 캐시만 있다.
+                shutil.copytree(first / "garmin-token-cache", second / "garmin-token-cache")
+                done = self.run_step(workflow, "Decrypt token cache", second, GARMIN_TOKEN_KEY="key-1")
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                restored = second / "garmin-tokens" / "garmin_tokens.json"
+                self.assertEqual(self.TOKENS, self.read(restored))
+                self.assertEqual(f"GARMIN_TOKEN_DIR={posix(second)}/garmin-tokens\n", self.read(second / "github_env"))
+
+                # 토큰이 그대로면 다시 저장하지 않는다. 바뀌었으면 저장한다.
+                done = self.encrypt(workflow, encrypt_step, second)
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertNotIn("save=true", self.read(second / "github_output"))
+                restored.write_text(self.TOKENS.replace("access-1", "access-2"), encoding="utf-8", newline="\n")
+                done = self.encrypt(workflow, encrypt_step, second)
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertIn("save=true", self.read(second / "github_output"))
+
+    def test_a_wrong_key_falls_back_without_a_token_file(self) -> None:
+        for workflow, encrypt_step in self.STEPS:
+            with self.subTest(workflow=workflow), tempfile.TemporaryDirectory() as tmp:
+                first, second = Path(tmp) / "run1", Path(tmp) / "run2"
+                (first / "garmin-tokens").mkdir(parents=True)
+                second.mkdir()
+                (first / "garmin-tokens" / "garmin_tokens.json").write_text(self.TOKENS, encoding="utf-8", newline="\n")
+                self.assertEqual(0, self.encrypt(workflow, encrypt_step, first).returncode)
+                shutil.copytree(first / "garmin-token-cache", second / "garmin-token-cache")
+
+                done = self.run_step(workflow, "Decrypt token cache", second, GARMIN_TOKEN_KEY="another-key")
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                restored = second / "garmin-tokens" / "garmin_tokens.json"
+                # 틀린 키는 거의 항상 복호화 오류다. 256번에 한 번쯤은 채움 검사를 지나 쓰레기 값이 나온다.
+                # 어느 쪽이든 평문 토큰이 복원되면 안 된다.
+                self.assertNotEqual(self.TOKENS, self.read(restored))
+                if not restored.exists():
+                    self.assertIn("::warning::garmin token cache could not be decrypted; using password", done.stdout)
+                # 로그인은 비밀번호로 하고, 새 토큰은 이 디렉터리에 쓴다.
+                self.assertIn("GARMIN_TOKEN_DIR=", self.read(second / "github_env"))
+
+    def test_probe_can_decrypt_with_a_wrong_key_on_purpose(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first, second = Path(tmp) / "run1", Path(tmp) / "run2"
+            (first / "garmin-tokens").mkdir(parents=True)
+            second.mkdir()
+            (first / "garmin-tokens" / "garmin_tokens.json").write_text(self.TOKENS, encoding="utf-8", newline="\n")
+            self.assertEqual(0, self.encrypt(PROBE_WORKFLOW, "Encrypt tokens for the probe cache", first).returncode)
+            shutil.copytree(first / "garmin-token-cache", second / "garmin-token-cache")
+            done = self.run_step(PROBE_WORKFLOW, "Decrypt token cache", second, GARMIN_TOKEN_KEY="key-1", BAD_KEY="true")
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            self.assertIn("::notice::probe decrypting with a wrong key on purpose", done.stdout)
+            self.assertNotEqual(self.TOKENS, self.read(second / "garmin-tokens" / "garmin_tokens.json"))
+
+    def test_without_a_key_or_a_cache_the_step_does_nothing(self) -> None:
+        for workflow, _ in self.STEPS:
+            with self.subTest(workflow=workflow), tempfile.TemporaryDirectory() as tmp:
+                runner_temp = Path(tmp)
+                done = self.run_step(workflow, "Decrypt token cache", runner_temp, GARMIN_TOKEN_KEY="")
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertEqual("", self.read(runner_temp / "github_env"))
+                self.assertFalse((runner_temp / "garmin-tokens").exists())
+                # 키는 있지만 캐시가 아직 없다(첫 실행): 토큰 디렉터리만 정해 둔다.
+                done = self.run_step(workflow, "Decrypt token cache", runner_temp, GARMIN_TOKEN_KEY="key-1")
+                self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                self.assertIn("GARMIN_TOKEN_DIR=", self.read(runner_temp / "github_env"))
+                self.assertFalse((runner_temp / "garmin-tokens" / "garmin_tokens.json").exists())
+
+    def test_incomplete_tokens_are_not_saved(self) -> None:
+        for workflow, encrypt_step in self.STEPS:
+            with self.subTest(workflow=workflow), tempfile.TemporaryDirectory() as tmp:
+                runner_temp = Path(tmp)
+                (runner_temp / "garmin-tokens").mkdir()
+                # 로그인 도중에 끊겨 리프레시 토큰이 없는 파일, 그리고 파일이 아예 없는 경우.
+                for content in ('{"di_token": "access-1"}\n', None):
+                    target = runner_temp / "garmin-tokens" / "garmin_tokens.json"
+                    if content is None:
+                        target.unlink()
+                    else:
+                        target.write_text(content, encoding="utf-8", newline="\n")
+                    done = self.encrypt(workflow, encrypt_step, runner_temp)
+                    self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+                    self.assertFalse((runner_temp / "garmin-token-cache").exists())
+                    self.assertNotIn("save=true", self.read(runner_temp / "github_output"))
+
+
+@unittest.skipUnless((BASH and shutil.which("git")) or os.environ.get("CI"), "bash and git are required")
+class CommitStepTests(unittest.TestCase):
+    """데이터 커밋 스텝(재검토 TD1). 임시 저장소 둘(원격과 작업 폴더)을 만들어 스텝 본문을 그대로 돌린다."""
+
+    FILES = ("garmin-weight/data/daily_metrics.csv", "garmin-weight/data/summary.json")
+    # 사용자의 git 설정(서명, 훅 등)이 섞이지 않게 한다.
+    GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+    # 테스트가 저장소를 준비할 때만 쓰는 이름. 스텝에는 넘기지 않는다(스텝은 git config로 봇의 이름을 정한다).
+    IDENTITY = {"GIT_AUTHOR_NAME": "tester", "GIT_AUTHOR_EMAIL": "tester@example.invalid",
+                "GIT_COMMITTER_NAME": "tester", "GIT_COMMITTER_EMAIL": "tester@example.invalid"}
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.origin = self.tmp / "origin.git"
+        self.git(self.tmp, "init", "-q", "--bare", "-b", "main", str(self.origin))
+        seed = self.clone("seed", fresh=True)
+        self.write_data(seed, "v1")
+        self.git(seed, "add", "-A")
+        self.git(seed, "commit", "-q", "-m", "seed")
+        self.git(seed, "push", "-q", "origin", "HEAD:main")
+        self.work = self.clone("work")
+        self.script = "sleep() { :; }\n" + step_scripts(SYNC_WORKFLOW)["Commit and push data"]
+
+    def git(self, cwd: Path, *args: str) -> str:
+        done = subprocess.run(["git", *args], cwd=cwd, env={**os.environ, **self.GIT_ENV, **self.IDENTITY}, capture_output=True, text=True,
+                              encoding="utf-8", timeout=60)
+        self.assertEqual(0, done.returncode, f"git {' '.join(args)}: {done.stderr}")
+        return done.stdout.strip()
+
+    def clone(self, name: str, fresh: bool = False) -> Path:
+        target = self.tmp / name
+        if fresh:
+            self.git(self.tmp, "init", "-q", "-b", "main", str(target))
+            self.git(target, "remote", "add", "origin", posix(self.origin))
+        else:
+            self.git(self.tmp, "clone", "-q", posix(self.origin), str(target))
+        return target
+
+    def write_data(self, repo: Path, marker: str) -> None:
+        for name in self.FILES:
+            target = repo / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"{marker} {Path(name).name}\n", encoding="utf-8", newline="\n")
+
+    def run_step(self, attempts: str = "5") -> subprocess.CompletedProcess:
+        runner_temp = self.tmp / "runner"
+        runner_temp.mkdir(exist_ok=True)
+        return run_bash(self.script, {**self.GIT_ENV, "RUNNER_TEMP": posix(runner_temp), "DATA_FILES": " ".join(self.FILES),
+                                      "MAX_ATTEMPTS": attempts}, cwd=self.work)
+
+    def origin_file(self, name: str) -> str:
+        return self.git(self.origin, "show", f"main:{name}")
+
+    def test_nothing_to_commit(self) -> None:
+        before = self.git(self.origin, "rev-parse", "main")
+        done = self.run_step()
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("No data changes to commit.", done.stdout)
+        self.assertEqual(before, self.git(self.origin, "rev-parse", "main"))
+
+    def test_changed_data_is_committed_by_the_bot(self) -> None:
+        self.write_data(self.work, "v2")
+        done = self.run_step()
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("Push succeeded on attempt 1.", done.stdout)
+        self.assertEqual("v2 summary.json", self.origin_file(self.FILES[1]))
+        self.assertEqual("chore: update garmin weight data|github-actions[bot]",
+                         self.git(self.origin, "log", "-1", "--format=%s|%an", "main"))
+        self.assertEqual(sorted(self.FILES), sorted(self.git(self.origin, "show", "--name-only", "--format=", "main").splitlines()))
+
+    def test_push_is_retried_on_top_of_a_main_that_moved(self) -> None:
+        # 수집하는 사이에 다른 커밋(버스 봇 등)이 main에 올라갔다. 같은 데이터 파일을 건드린 커밋도 있다.
+        other = self.clone("other")
+        (other / "bus.txt").write_text("bus\n", encoding="utf-8")
+        self.write_data(other, "stale")
+        self.git(other, "add", "-A")
+        self.git(other, "commit", "-q", "-m", "someone else")
+        self.git(other, "push", "-q", "origin", "HEAD:main")
+
+        self.write_data(self.work, "v2")
+        done = self.run_step()
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("Push failed on attempt 1; re-applying data files on the latest main.", done.stdout)
+        self.assertIn("Push succeeded on attempt 2.", done.stdout)
+        # 남의 커밋은 그대로 있고, 데이터 파일은 방금 받은 것이다.
+        self.assertEqual("bus", self.origin_file("bus.txt"))
+        self.assertEqual(["v2 daily_metrics.csv", "v2 summary.json"], [self.origin_file(name) for name in self.FILES])
+        self.assertEqual(["chore: update garmin weight data", "someone else", "seed"],
+                         self.git(self.origin, "log", "--format=%s", "main").splitlines())
+
+    def test_gives_up_after_the_last_attempt(self) -> None:
+        hook = self.origin / "hooks" / "pre-receive"
+        hook.parent.mkdir(exist_ok=True)
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8", newline="\n")
+        hook.chmod(0o755)
+        before = self.git(self.origin, "rev-parse", "main")
+        self.write_data(self.work, "v2")
+        done = self.run_step(attempts="2")
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn("Push failed on attempt 2", done.stdout)
+        self.assertIn("::error::Push still failing after 2 attempts", done.stdout)
+        self.assertEqual(before, self.git(self.origin, "rev-parse", "main"))
 
 
 if __name__ == "__main__":

@@ -267,6 +267,46 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(note).not_to_have_class(re.compile(r'\bis-caution\b'))
         self.assertEqual(errors,[])
 
+    def test_weight_card_edges(self):
+        """garmin-weight 재검토 FE10: 내부 코드가 그대로 나오던 보류 사유, "−0.0 kg", 없던 수집 지연 표시, 검색 노출."""
+        import re
+        from playwright.sync_api import expect
+        page,errors=self.open_page()
+        expect(page.locator('meta[name="robots"]')).to_have_attribute('content','noindex')
+        expect(page.locator('#weight-status')).to_contain_text('자료 생성')  # sync 블록이 없는 예전 요약
+
+        def serve(**changes):
+            payload={'generatedAt':T.isoformat(),'current':{'weightKg':84.26,'weightDate':'2026-10-28'},
+                     'rolling':{'lossRateDetail':{'blended':-0.004},'exerciseTrend':{'deltaPct':-0.0004}},
+                     'series':{'daily':[{'date':'2026-10-01','valueKg':84.3},{'date':'2026-10-28','valueKg':84.26}]},
+                     'predictions':{'oneMonthWeightKg':84.2,'threeMonthWeightKg':84.1},
+                     'modelDiagnostics':{'confidence':{'level':'high','reasons':[]},'trend':{'predictionEnabled':True}},**changes}
+            page.route('**/garmin-weight/data/summary.json',lambda r:r.fulfill(json=payload))
+            page.locator('#weight-refresh').click()
+
+        # 반올림하면 0인 값에는 부호가 없다.
+        serve()
+        expect(page.locator('#weight-change')).to_have_text('0.0 kg')
+        expect(page.locator('#weight-trend')).to_have_text('0.00 kg/주')
+        expect(page.locator('#weight-activity-trend')).to_contain_text('운동 칼로리 0.0%')
+
+        # 보류 사유는 내부 코드가 아니라 문장으로 나온다.
+        serve(modelDiagnostics={'trend':{'predictionEnabled':False,'disabledReason':'insufficient_data'}})
+        expect(page.locator('#weight-prediction-note')).to_have_text('예측 보류 · 예측에 필요한 자료가 부족합니다.')
+        serve(modelDiagnostics={'trend':{'predictionEnabled':False,'disabledReason':'some_new_code'}})
+        expect(page.locator('#weight-prediction-note')).to_have_text('예측 보류 · 예측에 필요한 자료가 부족합니다.')
+
+        # 마지막 수집 성공이 24시간을 넘으면 알린다. 요약을 만든 시각이 아니라 수집 시각을 본다.
+        status=page.locator('#weight-status')
+        serve(sync={'lastSuccessAt':(T-dt.timedelta(hours=2)).isoformat()})
+        expect(status).to_contain_text('동기화')
+        expect(status).not_to_contain_text('수집 없음')
+        expect(status).not_to_have_class(re.compile(r'\bis-caution\b'))
+        serve(sync={'lastSuccessAt':(T-dt.timedelta(hours=30)).isoformat()})
+        expect(status).to_contain_text('30시간째 수집 없음')
+        expect(status).to_have_class(re.compile(r'\bis-caution\b'))
+        self.assertEqual(errors,[])
+
     def test_responsive_controls_navigation_and_expanded_forms(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(width=320)

@@ -260,38 +260,50 @@ class GarminWeightTests(unittest.TestCase):
             })
         summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
         diag = summary["modelDiagnostics"]
-        self.assertIn("calibration", diag)
-        self.assertIn("kcalPerKg", diag)
         self.assertIn(diag["kcalPerKgSource"], ("body_fat", "bmi", "default"))
-        self.assertIn("exerciseEfficiency", diag["calibration"])
+        # 요약의 값은 같은 입력(완료된 날, 혼합 감량률, kcal/kg)으로 계산한 값이다. 예전 테스트는 키가 있는지만 봤다.
+        loss = summary["rolling"]["lossRateDetail"]["blended"]
+        expected = sync_garmin.compute_calibration(rows[:-1], loss, diag["kcalPerKg"])
+        self.assertEqual(expected, diag["calibration"])
+        self.assertIsNotNone(diag["calibration"]["exerciseEfficiency"])
 
-    def test_backtest_uses_exp_decay_model(self) -> None:
-        """Phase 3 회귀: backtest 결과의 predicted가 지수 감쇠 외삽과 일치해야 한다."""
-        # 충분히 긴 history + 목표 체중 가까이 — 지수 감쇠가 선형보다 분명히 보수적인 예측을 함
-        rows = []
-        # P6: 모든 기간에 표본 20개 이상이 필요하다(28일 기간은 28일 학습 + 28일 대기 + 20개 시점).
-        for day in range(90):
-            rows.append({
-                "date": (sync_garmin.date(2030, 1, 1) + sync_garmin.timedelta(days=day)).isoformat(),
-                "weight_kg": round(85.0 - day * 0.04, 2),
-                "weight_measure_count": 1,
-                "exercise_minutes": 30,
-                "exercise_calories": 250,
-                "activity_count": 1,
-                "steps": 8000,
-                "sleep_hours": 7,
-                "resting_hr": 60,
-                "visceral_fat": None,
-                "metabolic_age": None,
-            })
-        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
-        bt = summary["modelDiagnostics"]["backtest"]
-        # backtest는 모든 기간에서 ok 상태여야 하고 maeKg이 합리적 범위
-        for horizon in ("7d", "14d", "28d"):
+    def test_exercise_efficiency_is_observed_loss_over_expected_loss(self) -> None:
+        calibrate = sync_garmin.compute_calibration
+        # 하루 550kcal이면 7700kcal/kg 기준으로 주 0.5kg을 기대한다.
+        rows = [{"date": f"2030-03-{day:02d}", "exercise_calories": 550} for day in range(1, 29)]
+        for observed, efficiency in ((0.5, 1.0), (0.25, 0.5), (0.6, 1.2), (1.0, 1.5), (0.1, 0.3)):  # 0.3~1.5로 묶는다
+            with self.subTest(observed=observed):
+                self.assertEqual(efficiency, calibrate(rows, observed, 7700.0)["exerciseEfficiency"])
+        self.assertEqual(28, calibrate(rows, 0.5, 7700.0)["samples"])
+        # 감량이 아니거나, 운동한 날이 14일에 못 미치면 보정하지 않는다.
+        self.assertIsNone(calibrate(rows, 0.0, 7700.0)["exerciseEfficiency"])
+        self.assertIsNone(calibrate(rows, None, 7700.0)["exerciseEfficiency"])
+        sparse = [{"date": row["date"], "exercise_calories": 550 if index < 13 else 0} for index, row in enumerate(rows)]
+        self.assertEqual((None, 13), (calibrate(sparse, 0.5, 7700.0)["exerciseEfficiency"], calibrate(sparse, 0.5, 7700.0)["samples"]))
+
+    def test_backtest_scores_the_decay_curve_not_a_straight_line(self) -> None:
+        """P3: 백테스트의 운영 예측은 감쇠 곡선이다. 예전 테스트는 MAE가 1kg 미만인지만 봐서 직선 외삽도 통과했다."""
+        modeling = sync_garmin._modeling
+        # 주 0.28kg씩 빠져 목표(80kg)에 가까워지는 90일. 목표가 가까우면 곡선이 직선보다 뚜렷이 완만하다.
+        rows = _series_rows([round(85.0 - day * 0.04, 2) for day in range(90)])
+        ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(rows, modeling.compute_ewma([r["weight_kg"] for r in rows]))]
+        run = modeling.run_backtest(rows, ewma, target_weight=80.0, horizons=(7, 14, 28))
+        for horizon in (7, 14, 28):
+            samples = run["samples"][horizon]
+            self.assertGreaterEqual(len(samples), 20)
+            gaps = []
+            for sample in samples:
+                detail = modeling.compute_weekly_loss_rate(ewma[:sample["index"]], rows[sample["index"] - 1]["date"])
+                level, rate = ewma[sample["index"] - 1]["valueKg"], detail["blended"]
+                curve = modeling._projected_weight(level, rate, horizon / 7, 80.0)
+                self.assertAlmostEqual(curve, sample["predictions"]["current"], places=9)
+                gaps.append(curve - (level - rate * horizon / 7))  # 직선 외삽보다 얼마나 위인가
             with self.subTest(horizon=horizon):
-                entry = bt.get(horizon) or {}
-                self.assertEqual("ok", entry.get("status"))
-                self.assertLess(entry["maeKg"], 1.0)
+                self.assertTrue(all(gap > 0 for gap in gaps))
+        self.assertGreater(min(gaps), 0.05)  # 28일에서는 차이가 0.05kg을 넘는다
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 80})
+        for horizon in ("7d", "14d", "28d"):
+            self.assertEqual(run["models"]["current"][horizon], summary["modelDiagnostics"]["backtest"][horizon])
 
     def test_phase2a_body_fat_takes_priority_over_bmi(self) -> None:
         """Phase 2A 회귀: body_fat_percent가 있으면 BMI보다 우선해 kcalPerKgSource를 결정."""
@@ -904,8 +916,7 @@ class IntervalShapeTests(unittest.TestCase):
         modeling = sync_garmin._modeling
         usable = rows  # 마지막 행에 체중이 있다
         ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(usable, modeling.compute_ewma([r["weight_kg"] for r in usable]))]
-        ma7 = {p["date"]: p["valueKg"] for p in summary["series"]["daily"]}
-        run = modeling.run_backtest(usable, ewma, ma7, target_weight=78.0, horizons=modeling.CI_HORIZONS)
+        run = modeling.run_backtest(usable, ewma, target_weight=78.0, horizons=modeling.CI_HORIZONS)
         expected = []
         for week in range(1, 13):
             errors = sorted(abs(s["actual"] - s["predictions"]["current"]) for s in run["samples"][7 * week])
@@ -987,7 +998,7 @@ class LongRangeRateTests(unittest.TestCase):
         def detail(days: int) -> dict:
             rows = self._steady_then_drop()[:days]
             ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(rows, modeling.compute_ewma([r["weight_kg"] for r in rows]))]
-            return modeling.compute_weekly_loss_rate(ewma, {}, rows, rows[-1]["date"])
+            return modeling.compute_weekly_loss_rate(ewma, rows[-1]["date"])
 
         full = detail(120)
         slopes = full["longRangeSlopes"]
@@ -1100,21 +1111,135 @@ class LongRangeRateTests(unittest.TestCase):
         modeling = sync_garmin._modeling
         rows = self._steady_then_drop(drop_days=5)
         ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(rows, modeling.compute_ewma([r["weight_kg"] for r in rows]))]
-        run = modeling.run_backtest(rows, ewma, {}, target_weight=78.0, horizons=(28, 56, 84))
+        run = modeling.run_backtest(rows, ewma, target_weight=78.0, horizons=(28, 56, 84))
         checked = 0
         for horizon in (28, 56, 84):
             for sample in run["samples"][horizon][-3:]:
                 index = sample["index"]
-                detail = modeling.compute_weekly_loss_rate(ewma[:index], {}, rows[:index], rows[index - 1]["date"])
+                detail = modeling.compute_weekly_loss_rate(ewma[:index], rows[index - 1]["date"])
                 expected = modeling.forecast_weight(ewma[index - 1]["valueKg"], detail["blended"], horizon / 7, 78.0, detail["longRangeRate"])
                 self.assertAlmostEqual(expected, sample["predictions"]["current"], places=9)
                 checked += 1
         self.assertEqual(9, checked)
-        single = modeling.run_backtest(rows, ewma, {}, target_weight=78.0, horizons=(84,), use_long_rate=False)
+        single = modeling.run_backtest(rows, ewma, target_weight=78.0, horizons=(84,), use_long_rate=False)
         sample = single["samples"][84][-1]
-        detail = modeling.compute_weekly_loss_rate(ewma[:sample["index"]], {}, rows[:sample["index"]], rows[sample["index"] - 1]["date"])
+        detail = modeling.compute_weekly_loss_rate(ewma[:sample["index"]], rows[sample["index"] - 1]["date"])
         self.assertAlmostEqual(modeling._projected_weight(ewma[sample["index"] - 1]["valueKg"], detail["blended"], 12, 78.0),
                                sample["predictions"]["current"], places=9)
+
+
+class ModelEdgeTests(unittest.TestCase):
+    """재검토 MD9의 나머지: 목표를 지난 뒤의 곡선, 초기의 도달일, 문구와 설정의 경계, 오늘 행이 없는 CSV."""
+
+    def test_curve_holds_at_or_below_the_target(self) -> None:
+        curve = sync_garmin._projected_weight
+        # 예전에는 주 0.4kg 감량일 때 시작 78.01이면 12주 뒤 78.00, 시작 78.00이면 73.20이었다.
+        self.assertAlmostEqual(78.0, curve(78.01, 0.4, 12, 78.0), places=2)
+        self.assertEqual(78.0, curve(78.0, 0.4, 12, 78.0))
+        self.assertEqual(77.5, curve(77.5, 0.4, 12, 78.0))
+        # 증량과 유지는 그대로 직선이다. 목표가 없으면 감량도 직선이다.
+        self.assertAlmostEqual(77.5 + 0.2 * 12, curve(77.5, -0.2, 12, 78.0))
+        self.assertEqual(77.5, curve(77.5, 0.0, 12, 78.0))
+        self.assertAlmostEqual(78.0 - 0.4 * 12, curve(78.0, 0.4, 12, None))
+        # 목표 아래에서 감량 중인 요약: 세 시나리오 모두 지금 체중을 유지한다.
+        rows = _series_rows([round(77.6 - 0.03 * i / 7, 2) for i in range(70)])
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        start = summary["series"]["prediction"][0]["valueKg"]
+        self.assertLess(start, 78.0)
+        self.assertEqual({start}, {point["valueKg"] for point in summary["series"]["prediction"]})
+        self.assertEqual("reached", summary["goal"]["etaStatus"])
+
+    def test_eta_is_unknown_while_the_rate_is_unknown(self) -> None:
+        # 처음 13일은 감량률을 정할 수 없다. 배지는 "추세 판단 중"인데 도달일은 "감량 추세 아님"이었다.
+        rows = _series_rows([round(84.0 - 0.05 * i, 2) for i in range(9)])
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        self.assertIsNone(summary["rolling"]["lossRateDetail"]["blended"])
+        self.assertEqual("cold_start_flat", summary["rolling"]["lossRateDetail"]["rateSource"])
+        self.assertEqual(("unknown", None), (summary["goal"]["etaStatus"], summary["goal"]["etaDays"]))
+        # 감량률을 아는 상태에서 감량이 아니면 예전대로다.
+        flat = sync_garmin.build_summary(_series_rows([84.0 + (0.1 if i % 2 else -0.1) for i in range(60)]), {"targetWeightKg": 78})
+        self.assertIn(flat["goal"]["etaStatus"], ("no_loss", "beyond"))
+
+    def test_eta_tolerance_must_be_positive(self) -> None:
+        # 감쇠 곡선은 목표에 닿지 않는다. 여유가 0 이하면 감량 중에도 도달일이 늘 "2년 이후"였다.
+        default = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80})
+        self.assertEqual("date", default["goal"]["etaStatus"])
+        for bad in (0, -0.5):
+            with self.subTest(tolerance=bad):
+                with self.assertLogs(sync_garmin.LOGGER, "WARNING"):
+                    summary = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80, "etaToleranceKg": bad})
+                self.assertEqual(sync_garmin.ETA_TOLERANCE_KG, summary["goal"]["etaToleranceKg"])
+                self.assertEqual(default["goal"]["etaDays"], summary["goal"]["etaDays"])
+
+    def test_gaining_below_the_target_is_not_moving_away_from_it(self) -> None:
+        insight = sync_garmin._modeling.build_insight
+        below = insight(77.0, 77.0, None, None, {"state": "gaining"}, weekly_loss_rate=-0.2, remaining_kg=-1.0)
+        self.assertEqual(["최근 추세가 주 0.20kg씩 늘고 있습니다. 지금은 목표보다 1.0kg 낮습니다."], below["lines"])
+        above = insight(84.0, 84.0, None, None, {"state": "gaining"}, weekly_loss_rate=-0.2, remaining_kg=6.0)
+        self.assertIn("목표에서 멀어지는 중", above["lines"][0])
+
+    def test_a_missing_today_row_does_not_drop_yesterday(self) -> None:
+        # 오늘 호출이 모두 실패하면 오늘 행이 없다. 마지막 행을 오늘로 보면 완료된 어제가 집계에서 빠진다.
+        rows = [_daily_row((sync_garmin.date(2030, 7, 1) + sync_garmin.timedelta(days=d)).isoformat(), 84.0, steps=1000 * (d + 1))
+                for d in range(40)]
+        last = rows[-1]["date"]  # 2030-08-09
+        today = "2030-08-10"
+        assumed = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        told = sync_garmin.build_summary(rows, {"targetWeightKg": 78}, today=today)
+        self.assertEqual(sum(1000 * (d + 1) for d in range(32, 39)), assumed["rolling"]["last7StepsTotal"])  # 어제(40번째 행)가 빠졌다
+        self.assertEqual(sum(1000 * (d + 1) for d in range(33, 40)), told["rolling"]["last7StepsTotal"])
+        self.assertEqual(last, told["coverage"]["windowEnd"])
+        self.assertEqual(1, told["coverage"]["daysSinceLastMeasurement"])
+        self.assertEqual(0, assumed["coverage"]["daysSinceLastMeasurement"])
+        # 오늘 행이 있으면 두 방법이 같다.
+        with_today = rows + [_daily_row(today, None, steps=5)]
+        self.assertEqual(sync_garmin.build_summary(with_today, {"targetWeightKg": 78})["rolling"],
+                         sync_garmin.build_summary(with_today, {"targetWeightKg": 78}, today=today)["rolling"])
+        # 인사이트의 "오늘"은 실제 오늘에 잰 체중에만 붙는다.
+        spike = [dict(row) for row in rows]
+        spike[-1]["weight_kg"] = 85.0
+        self.assertIn("오늘 85.0kg", sync_garmin.build_summary(spike, {"targetWeightKg": 78})["insight"]["lines"][0])
+        self.assertIn("최근 측정(8/9) 85.0kg", sync_garmin.build_summary(spike, {"targetWeightKg": 78}, today=today)["insight"]["lines"][0])
+
+    def test_shadow_gate_tolerates_a_hair_of_bias(self) -> None:
+        gate = sync_garmin._modeling.shadow_gate
+
+        def stats(mae: float, bias: float) -> dict:
+            return {"status": "ok", "sampleCount": 50, "maeKg": mae, "biasKg": bias}
+
+        horizons = ("7d", "14d", "28d", "84d")
+        models = {name: {h: stats(0.5, -0.10) for h in horizons} for name in ("current", *sync_garmin.SHADOW_MODELS)}
+        # ma7: 두 기간에서 MAE가 뚜렷이 낮고, |bias|는 0.005kg 크다. 허용 오차가 없을 때는 탈락했다.
+        models["ma7"] = {"7d": stats(0.5, -0.105), "14d": stats(0.5, -0.105), "28d": stats(0.40, -0.10), "84d": stats(0.35, -0.10)}
+        result = gate(models)
+        self.assertEqual(("shadow_leader", "ma7"), (result["status"], result["name"]))
+        self.assertEqual([], result["candidates"]["ma7"]["blocked"])
+        # 허용 오차(0.02kg)를 넘는 bias는 여전히 막는다.
+        models["ma7"]["7d"] = stats(0.5, -0.13)
+        result = gate(models)
+        self.assertEqual("no_change", result["status"])
+        self.assertEqual(["7d_bias_worse"], result["candidates"]["ma7"]["blocked"])
+        self.assertFalse(result["affectsPrediction"])
+
+    def test_summary_keeps_only_what_is_read(self) -> None:
+        summary = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80})
+        detail = summary["rolling"]["lossRateDetail"]
+        for legacy in ("ewmaSlope", "ma7Slope", "kcalRate"):
+            self.assertNotIn(legacy, detail)
+        self.assertEqual(["windows"], list(detail["weights"]))
+        for scenario in summary["predictions"]["scenarios"].values():
+            self.assertEqual({"threeMonthWeightKg", "weeklyKcalDelta", "effectiveWeeklyLossKg", "longRangeWeeklyLossKg",
+                              "label", "description", "series"}, set(scenario))
+        self.assertNotIn("etaRangeDates", summary["goal"])
+        self.assertNotIn("notes", summary["modelDiagnostics"])
+        self.assertEqual({"name", "status", "reason", "affectsPrediction"}, set(summary["modelDiagnostics"]["selectedModel"]))
+        audit = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80}, detail=True)["modelDiagnostics"]["selectedModel"]
+        self.assertLessEqual({"candidates", "gate"}, set(audit))
+        # 화면의 7/14/28일 추세는 감량률을 구할 때 낸 기울기와 같은 값이다.
+        windows = summary["modelDiagnostics"]["trendWindows"]
+        self.assertEqual(["7d", "14d", "28d"], list(windows))
+        for key, window in windows.items():
+            self.assertEqual((detail["windowSlopes"][key], detail["windowPoints"][key]), (window["weeklyLossKg"], window["points"]))
 
 
 class SummarySlimTests(unittest.TestCase):
@@ -1167,6 +1292,20 @@ class PageHygieneTests(unittest.TestCase):
         self.assertGreaterEqual(_contrast("#FFFFFF", "#756A64"), 4.5)
         self.assertIn(".hero-badge--neutral { background: #756A64; color: #fff; }", css)
         self.assertNotIn("color: var(--accent);", css)  # 강조색을 글자로 쓸 때는 --accent-text
+        # 재검토 FE9: 밝은 바탕 밖의 세 곳. 예전 테스트는 밝은 바탕의 글자만 봐서 이 셋을 놓쳤다.
+        # 선택된 시나리오 카드(바탕 --ink)의 보조 문구
+        self.assertGreaterEqual(_contrast(tokens["muted-2"], tokens["ink"]), 4.5)
+        self.assertLess(_contrast(tokens["muted"], tokens["ink"]), 3.0)  # 기본 글자색은 그 바탕에서 읽기 어렵다
+        self.assertIn(".scenario.is-active .scenario-sub { color: var(--muted-2); }", css)
+        # 안내 띠의 "!" 아이콘: 흰 글자를 올리는 바탕
+        self.assertRegex(css, r"\.prediction-guard-icon \{[^}]*background: var\(--accent-strong\);")
+        self.assertLess(_contrast("#FFFFFF", tokens["accent"]), 3.0)
+        # 포커스 링: 글자가 아니므로 밝은 바탕과 3:1 이상이면 된다
+        self.assertRegex(css, r"focus-visible\) \{\s*outline: 3px solid var\(--accent-strong\);")
+        for bg_name, bg in backgrounds.items():
+            with self.subTest(focus_ring_on=bg_name):
+                self.assertGreaterEqual(_contrast(tokens["accent-strong"], bg), 3.0)
+                self.assertLess(_contrast(tokens["accent"], bg), 3.0)
 
     def test_markup_and_scripts(self) -> None:
         import re
@@ -1299,6 +1438,85 @@ class SummaryConsumerContractTests(unittest.TestCase):
     def test_contract_while_warming_up(self) -> None:
         rows = [_daily_row(f"2030-08-{d:02d}", 84.0) for d in range(1, 6)]
         self._assert_contract(sync_garmin.build_summary(rows, {"targetWeightKg": 78}))
+
+    # 자료가 있든 없든 요약의 모양은 같아야 한다. 빈 요약에는 키 17개가 없었다(재검토 MD9).
+    # 날짜나 기간이 키인 곳(시나리오, 백테스트 기간, 섀도 후보)은 비교하지 않는다.
+    SAME_SHAPE_PATHS = (
+        "", "current", "rolling", "rolling.exerciseTrend", "rolling.lossRateDetail", "rolling.lossRateDetail.weights",
+        "predictions", "goal", "plateau", "predictionCI", "predictionCI.calibration",
+        "modelDiagnostics", "modelDiagnostics.confidence", "modelDiagnostics.coverage", "modelDiagnostics.dataQuality",
+        "modelDiagnostics.longRange", "modelDiagnostics.trend", "modelDiagnostics.selectedModel",
+        "modelDiagnostics.ciCalibration", "modelDiagnostics.calibration", "insight", "coverage", "series",
+    )
+
+    def test_empty_summary_has_the_same_shape(self) -> None:
+        rows = [_daily_row((sync_garmin.date(2030, 7, 1) + sync_garmin.timedelta(days=d)).isoformat(),
+                           round(84.0 - d * 0.03, 2) if d % 3 else None, body_fat_percent=29.0) for d in range(120)]
+        for detail in (False, True):
+            full = sync_garmin.build_summary(rows, {"targetWeightKg": 78}, detail=detail)
+            empty = sync_garmin.build_summary([], {"targetWeightKg": 78}, detail=detail)
+            for path in self.SAME_SHAPE_PATHS:
+                with self.subTest(path=path or "(top)", detail=detail):
+                    with_data = _lookup(full, path) if path else full
+                    without = _lookup(empty, path) if path else empty
+                    self.assertIsInstance(with_data, dict)
+                    self.assertIsInstance(without, dict, f"{path} is missing from the empty summary")
+                    self.assertEqual(sorted(with_data), sorted(without))
+        self.assertEqual(("unknown", None), (empty["goal"]["etaStatus"], empty["insight"]["state"]))
+        self.assertEqual("no_change", empty["modelDiagnostics"]["selectedModel"]["status"])
+
+    # 화면 코드가 요약의 블록을 담아 두는 변수 이름 → 요약 안의 경로(파일마다 다르다).
+    PAGE_ALIASES = {
+        "app.js": {"s": "", "state.summary": "", "diagnostics": "modelDiagnostics", "diag": "modelDiagnostics",
+                   "rolling": "rolling", "current": "current", "topCoverage": "coverage", "cov": "coverage",
+                   "confidence": "modelDiagnostics.confidence", "quality": "modelDiagnostics.dataQuality"},
+        "enhancements.js": {"s": "", "summary": "", "diagnostics": "modelDiagnostics", "dq": "modelDiagnostics.dataQuality",
+                            "gate": "modelDiagnostics.selectedModel", "calib": "modelDiagnostics.calibration",
+                            "longRange": "modelDiagnostics.longRange"},
+        "app.helpers.js": {"summary": "", "coverage": "coverage", "goal": "goal"},
+    }
+    # 경로 끝에 붙은 것이 요약의 키가 아니라 값의 메서드·속성인 경우.
+    NOT_FIELDS = {"toFixed", "length", "map", "filter", "some", "json", "join", "slice", "includes", "forEach", "find"}
+    # main()이 요약에 덧붙이는 블록이라 build_summary의 결과에는 없다(수집 테스트가 따로 본다).
+    OPTIONAL_BLOCKS = ("sync",)
+
+    def _paths_read_by_the_page(self) -> dict[str, set[str]]:
+        import re
+        found: dict[str, set[str]] = {}
+        for name, aliases in self.PAGE_ALIASES.items():
+            source = (MODULE_PATH.parents[1] / name).read_text(encoding="utf-8")
+            names = "|".join(re.escape(alias) for alias in sorted(aliases, key=len, reverse=True))
+            for match in re.finditer(r"(?<![\w.$])(" + names + r")((?:\??\.[A-Za-z_][A-Za-z0-9_]*)+)", source):
+                keys = [key for key in match.group(2).replace("?", "").split(".") if key]
+                while keys and keys[-1] in self.NOT_FIELDS:
+                    keys.pop()
+                if keys:
+                    found.setdefault(".".join(filter(None, [aliases[match.group(1)], *keys])), set()).add(name)
+        return found
+
+    def test_every_field_the_page_reads_is_in_the_summary(self) -> None:
+        """재검토 TD1: 화면이 읽는 필드와 요약이 내는 필드를 맞춰 보는 테스트가 없어 uiLabel 같은 어긋남이 남았다.
+
+        화면 코드에서 요약의 경로를 뽑아, 자료가 있을 때·처음 며칠·자료가 없을 때의 요약에 모두 있는지 본다.
+        """
+        paths = self._paths_read_by_the_page()
+        self.assertGreaterEqual(len(paths), 60, "the extraction found too little; check PAGE_ALIASES")
+        for expected in ("current.weightKg", "goal.etaStatus", "modelDiagnostics.dataQuality.limitedDates",
+                         "rolling.lossRateDetail.longRangeApplied", "coverage.daysSinceLastMeasurement", "predictionCI.hitRate"):
+            self.assertIn(expected, paths)
+        rows = [_daily_row((sync_garmin.date(2030, 7, 1) + sync_garmin.timedelta(days=d)).isoformat(),
+                           round(84.0 - d * 0.03, 2) if d % 3 else None, body_fat_percent=29.0) for d in range(120)]
+        summaries = {
+            "with data": sync_garmin.build_summary(rows, {"targetWeightKg": 78}),
+            "warming up": sync_garmin.build_summary(rows[:6], {"targetWeightKg": 78}),
+            "without data": sync_garmin.build_summary([], {"targetWeightKg": 78}),
+        }
+        for path, files in sorted(paths.items()):
+            if path.split(".")[0] in self.OPTIONAL_BLOCKS:
+                continue
+            for kind, summary in summaries.items():
+                with self.subTest(path=path, summary=kind, read_by=",".join(sorted(files))):
+                    self.assertIsNot(_MISSING, _lookup(summary, path))
 
     def test_contract_without_data(self) -> None:
         summary = sync_garmin.build_summary([], {"targetWeightKg": 78})

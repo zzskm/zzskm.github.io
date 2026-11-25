@@ -40,10 +40,11 @@
 /* display를 지정한 컴포넌트(.prediction-guard, .insight-strip 등)에서도 hidden 속성이 이기도록 한다. */
 [hidden] { display: none !important; }
 
-/* 키보드 포커스 표시 — 칩은 입력 요소가 0×0이라 라벨에 표시한다. */
+/* 키보드 포커스 표시 — 칩은 입력 요소가 0×0이라 라벨에 표시한다.
+   밝은 바탕과 3:1 이상이어야 하므로 --accent(2.5~2.7:1)가 아니라 --accent-strong을 쓴다(재검토 FE9). */
 :where(button, summary, a):focus-visible,
 .chip:has(input:focus-visible) {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--accent-strong);
   outline-offset: 2px;
 }
 
@@ -161,7 +162,8 @@ body {
 .prediction-guard-icon {
   width: 40px;
   height: 40px;
-  background: var(--accent);
+  /* 흰 "!"를 올리므로 --accent(2.7:1)가 아니라 --accent-strong(5.0:1)이다. */
+  background: var(--accent-strong);
   color: #fff;
   display: grid;
   place-items: center;
@@ -329,6 +331,7 @@ body {
 }
 .icon-button {
   width: 48px; height: 48px;
+  flex: none; /* 좁은 화면에서 36px로 눌리지 않게 한다 */
   border: 1px solid var(--ink);
   background: var(--bg);
   color: var(--ink);
@@ -881,6 +884,8 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+/* 선택된 카드는 바탕이 --ink다. 기본 글자색(--muted)은 그 위에서 2.6:1이라 밝은 회색으로 바꾼다(재검토 FE9). */
+.scenario.is-active .scenario-sub { color: var(--muted-2); }
 .scenario-sparkline { 
   width: 100%; 
   height: 24px; 

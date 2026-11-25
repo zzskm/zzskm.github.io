@@ -187,7 +187,8 @@ class GarminWeightBrowserTests(unittest.TestCase):
 
     def open_page(self, fixture: str = "steady", width: int = 1440, block_cdn: bool = False, console: list | None = None,
                   fixed_time: str | None = None, summary_status: int = 200, expect_state: str = "ready",
-                  intercept: list | None = None, wait_until: str = "load", expect_chart: bool = True):
+                  intercept: list | None = None, wait_until: str = "load", expect_chart: bool = True,
+                  reduced_motion: str | None = None):
         """fixture 요약으로 페이지를 연다. summary_status가 200이 아니면 요약 요청이 그 상태로 실패한다.
 
         intercept는 (주소 패턴, 처리 함수) 목록이다. 처리 함수가 요청을 끝내지 않고 돌아가면 그 요청은 응답 없이
@@ -198,7 +199,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
         server["requests"]는 요약 요청 수다.
         """
         context = self.browser.new_context(viewport={"width": width, "height": 1000}, service_workers="block",
-                                           timezone_id="Asia/Seoul", color_scheme="light")
+                                           timezone_id="Asia/Seoul", color_scheme="light", reduced_motion=reduced_motion)
         self.addCleanup(context.close)
         page = context.new_page()
         errors: list[str] = []
@@ -421,15 +422,32 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertAlmostEqual(scenarios["conservative"]["series"][4]["valueKg"], page.evaluate(line_end), delta=0.01)
         self.assertAlmostEqual(scenarios["conservative"]["series"][4]["upper80"], page.evaluate(upper_end), delta=0.01)
 
-    def test_eta_beyond_two_years_is_labelled(self) -> None:
+    def test_eta_statuses_are_labelled(self) -> None:
+        """도달일의 상태마다 화면에 나오는 글자. 예전 테스트는 헬퍼의 결과를 DOM에 넣고 다시 읽어서 화면을 거치지 않았다."""
         page = self.open_page("steady")
-        page.evaluate("""() => {
-          const goal = { etaStatus: 'beyond', etaDays: null, etaRangeDays: null };
-          document.getElementById('etaValue').textContent = window.GWAppHelpers.fmtEta(goal);
-        }""")
-        self.assertEqual("2년 이후", page.text_content("#etaValue"))
-        self.assertEqual("약 5주~2년 이후 범위", page.evaluate("() => window.GWAppHelpers.fmtEtaRange({ etaRangeDays: { min: 35, max: null, maxBeyond: true } })"))
-        self.assertEqual("감량 추세 아님", page.evaluate("() => window.GWAppHelpers.fmtEta({ etaStatus: 'no_loss' })"))
+
+        def show(**goal) -> tuple[str, str]:
+            payload = json.loads(json.dumps(self.summaries["steady"]))
+            payload["goal"].update({"etaDays": None, "etaDate": None, "etaRangeDays": None, **goal})
+            payload["rolling"]["lossRateDetail"].update({"longRangeApplied": False, "blended": 0.2})
+            payload["modelDiagnostics"]["longRange"] = {"horizon": "84d", "status": "ok"}
+            payload["marker"] = json.dumps(goal, sort_keys=True)
+            page.server["payload"] = payload
+            before = page.server["requests"]
+            page.click("#reloadBtn")
+            page.wait_for_function("(count) => !document.querySelector('.app').dataset.busy", arg=before, timeout=10000)
+            self.assertEqual(before + 1, page.server["requests"])
+            return page.text_content("#etaValue"), page.text_content("#etaSub")
+
+        self.assertEqual(("2년 이후", "–"), show(etaStatus="beyond"))
+        self.assertEqual(("감량 추세 아님", "–"), show(etaStatus="no_loss"))
+        self.assertEqual(("계산 불가", "–"), show(etaStatus="unknown"))
+        self.assertEqual(("도달", "–"), show(etaStatus="reached", etaDays=0))
+        self.assertEqual(("5주 2일", "4/7"), show(etaStatus="date", etaDays=37, etaDate="2030-04-07"))
+        self.assertEqual(("5주", "4/5 · 약 4~7주 범위"),
+                         show(etaStatus="date", etaDays=35, etaDate="2030-04-05", etaRangeDays={"min": 28, "max": 49, "maxBeyond": False}))
+        self.assertEqual(("5주", "4/5 · 약 5주~2년 이후 범위"),
+                         show(etaStatus="date", etaDays=35, etaDate="2030-04-05", etaRangeDays={"min": 35, "max": None, "maxBeyond": True}))
 
     def test_page_works_without_the_chart_cdn(self) -> None:
         """P8(W1): CDN이 막혀도 5초 안에 숫자를 보여 주고, 차트 자리에 안내를 띄우며, 새로고침 버튼이 살아 있다."""
@@ -900,6 +918,66 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual(first + 2, cdn["requests"])
         self.assertEqual(summary_requests, page.server["requests"])
         self.assertEqual(1, page.evaluate("document.querySelectorAll('#chartLib').length"))
+
+    # --- 재검토 Q8: 접근성(FE9) -----------------------------------------------------------
+
+    def test_contrast_outside_the_light_backgrounds(self) -> None:
+        """재검토 FE9: 포커스 링, 안내 띠의 "!" 아이콘, 선택된 시나리오 카드의 보조 문구가 대비 기준에 못 미쳤다."""
+        page = self.open_page("warming")  # 안내 띠가 보이는 요약
+        facts = page.evaluate(f"""() => {{
+          const norm = {NORMALIZE_COLOR_JS};
+          const root = getComputedStyle(document.documentElement);
+          const token = (name) => norm(root.getPropertyValue(name).trim());
+          return {{
+            strong: token('--accent-strong'), light: token('--muted-2'), ink: token('--ink'),
+            guardIcon: norm(getComputedStyle(document.querySelector('.prediction-guard-icon')).backgroundColor),
+            activeCard: norm(getComputedStyle(document.querySelector('.scenario.is-active')).backgroundColor),
+            activeSub: norm(getComputedStyle(document.querySelector('.scenario.is-active .scenario-sub')).color),
+            otherSub: norm(getComputedStyle(document.querySelector('.scenario:not(.is-active) .scenario-sub')).color),
+          }};
+        }}""")
+        self.assertEqual(facts["strong"], facts["guardIcon"])
+        self.assertEqual((facts["ink"], facts["light"]), (facts["activeCard"], facts["activeSub"]))
+        self.assertNotEqual(facts["light"], facts["otherSub"])
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(400)  # 버튼의 transition(0.2초)이 끝난 뒤의 색을 읽는다
+        ring = page.evaluate(f"""() => {{
+          const norm = {NORMALIZE_COLOR_JS};
+          const style = getComputedStyle(document.activeElement);
+          return [document.activeElement.tagName, norm(style.outlineColor), style.outlineWidth, style.outlineStyle];
+        }}""")
+        self.assertEqual(["BUTTON", facts["strong"], "3px", "solid"], ring)
+
+    def test_headings_shortcuts_and_reload_button(self) -> None:
+        """재검토 FE9: 제목이 H1 → H2 → H4 → H3 순서였고, 칩에 포커스가 있으면 단축키가 듣지 않았고, 좁은 화면에서 새로고침 버튼이 눌렸다."""
+        page = self.open_page("steady", width=390)
+        headings = page.evaluate("[...document.querySelectorAll('h1, h2, h3, h4, h5, h6')].map((h) => h.tagName)")
+        self.assertEqual("H1", headings[0])
+        self.assertEqual(["H2"] * (len(headings) - 1), headings[1:])
+        self.assertGreaterEqual(len(headings), 5)
+        box = page.evaluate("(() => { const r = document.getElementById('reloadBtn').getBoundingClientRect(); return [r.width, r.height]; })()")
+        self.assertEqual([48, 48], box)
+        # 칩(체크박스)에 포커스가 있어도 숫자 단축키로 보기 범위를 바꾼다. 칩의 상태는 그대로다.
+        active = "document.querySelector('.seg-btn.is-active').dataset.range"
+        page.evaluate("document.querySelector('.chip[data-series=ma14] input').focus()")
+        self.assertEqual("INPUT", page.evaluate("document.activeElement.tagName"))
+        page.keyboard.press("1")
+        self.assertEqual("30", page.evaluate(active))
+        self.assertIs(False, page.evaluate("document.querySelector('.chip[data-series=ma14] input').checked"))
+
+    def test_chart_describes_itself_and_respects_reduced_motion(self) -> None:
+        """재검토 FE9: 캔버스의 설명이 고정 문구였고, 차트는 "움직임 줄이기" 설정을 따르지 않았다."""
+        page = self.open_page("steady")
+        label = "document.getElementById('weightChart').getAttribute('aria-label')"
+        self.assertRegex(page.evaluate(label), r"^체중 추세 차트, 최근 60일, 추세 \d+\.\dkg, 4주 뒤 예측 \d+\.\dkg, 목표 78\.0kg$")
+        page.click(".seg-btn[data-range='all']")
+        self.assertRegex(page.evaluate(label), r"^체중 추세 차트, 전체 기간, 추세 ")
+        page.evaluate("document.querySelector('.chip[data-series=prediction] input').click()")
+        self.assertNotIn("예측", page.evaluate(label))
+        animation = "Chart.getChart(document.getElementById('weightChart')).options.animation"
+        self.assertIsNot(False, page.evaluate(animation))
+        still = self.open_page("steady", reduced_motion="reduce")
+        self.assertIs(False, still.evaluate(animation))
 
     # --- 재검토 Q7: 장기 예측 -------------------------------------------------------------
 

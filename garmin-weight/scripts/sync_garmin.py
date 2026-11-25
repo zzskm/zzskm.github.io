@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 LOGGER = logging.getLogger("garmin_weight")
-EWMA_LAMBDA = 0.1
 
 # 날짜는 모두 KST 기준이다(CSV의 하루, 워크플로의 end_date).
 KST = timezone(timedelta(hours=9))
@@ -99,7 +98,6 @@ ewma_with_limits = _modeling.ewma_with_limits
 BACKTEST_HORIZONS = _modeling.BACKTEST_HORIZONS
 CI_HORIZONS = _modeling.CI_HORIZONS
 compute_prediction_ci = _modeling.compute_prediction_ci
-compute_trend_windows = _modeling.compute_trend_windows
 run_backtest = _modeling.run_backtest
 shadow_gate = _modeling.shadow_gate
 long_range_assessment = _modeling.long_range_assessment
@@ -1127,61 +1125,121 @@ def feature_flags(config: dict[str, Any]) -> dict[str, bool]:
 MODEL_AUDIT_SCREEN_FIELDS = ("maeKg", "status")
 
 
-def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bool = False) -> dict[str, Any]:
+MODEL_NAME = "multi_window_ewma_blend + exp_decay + dynamic_kcal_per_kg + exercise_efficiency"
+
+
+def _eta_tolerance(config: dict[str, Any]) -> float:
+    """목표 도달 판정의 여유(kg). 감쇠 곡선은 목표에 닿지 않으므로 0 이하는 쓸 수 없다."""
+    tolerance = parse_float(config.get("etaToleranceKg"))
+    if tolerance is None:
+        return ETA_TOLERANCE_KG
+    if tolerance <= 0:
+        # 여유가 0 이하면 감량 중에도 도달일이 항상 "2년 이후"가 된다(재검토 MD9).
+        LOGGER.warning("etaToleranceKg must be above 0; using %s", ETA_TOLERANCE_KG)
+        return ETA_TOLERANCE_KG
+    return tolerance
+
+
+def _screen_gate(gate: dict[str, Any], detail: bool) -> dict[str, Any]:
+    """섀도 게이트 결과. 화면은 결과만 쓴다. 후보별 판정과 기준은 model_audit.py가 detail=True로 받는다."""
+    return gate if detail else {key: value for key, value in gate.items() if key not in ("candidates", "gate")}
+
+
+def _empty_summary(config: dict[str, Any], detail: bool) -> dict[str, Any]:
+    """행이 하나도 없을 때의 요약. 자료가 있을 때와 키가 같다(값만 비어 있다).
+
+    예전에는 키 17개가 없었다(재검토 MD9). 테스트가 두 요약의 키를 맞춰 본다.
+    """
+    kcal_to_kg = parse_float(config.get("kcalToKgFactor")) or 7700.0
+    trend_window = int(config.get("exerciseTrendWindow") or 28)
+    loss_rate_detail = compute_weekly_loss_rate([], "1970-01-01")
+    loss_rate_detail.update({"rateSource": None, "longRangeApplied": False})
+    ci_calibration = replay_ci_hit_rate({"samples": {}, "horizons": ()}, [], [])
+    data_quality = data_quality_diagnostics([])
+    data_quality["implausibleWeights"] = 0
+    trend = model_trend_exposure(None, None)
+    trend["rateSource"] = None
+    return {
+        "generatedAt": datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z",
+        "current": {
+            "weightKg": None, "weightDate": None, "weightMa7Kg": None, "weightMa14Kg": None, "weightEwmaKg": None,
+            "bodyFatPercent": None, "bodyFatDelta30d": None, "visceralFat": None,
+        },
+        "rolling": {
+            "weeklyLossRateKg": None,
+            "last7ExerciseMinutes": 0,
+            "last7ExerciseCalories": 0,
+            "last7StepsTotal": 0,
+            "last7StepsAvg": None,
+            "last7ActiveDays": 0,
+            "last7WeightRangeKg": None,
+            "last7SleepHoursAvg": None,
+            "last7RestingHrAvg": None,
+            "exerciseTrend": build_exercise_trend([]),
+            "lossRateDetail": loss_rate_detail,
+        },
+        "predictions": {"oneMonthWeightKg": None, "threeMonthWeightKg": None, "scenarios": {}},
+        "goal": {
+            "targetWeightKg": parse_float(config.get("targetWeightKg")),
+            "remainingKg": None,
+            "etaDays": None,
+            "etaDate": None,
+            "etaRangeDays": None,
+            "etaStatus": "unknown",
+            "etaToleranceKg": _eta_tolerance(config),
+        },
+        "lossIntensity": None,
+        "plateau": {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None, "type": None},
+        "predictionCI": {
+            "stdResidual": None,
+            "series": [],
+            "hitRate": {},
+            "calibration": {"status": ci_calibration["status"], "targetHitRate": ci_calibration["targetHitRate"],
+                            "method": ci_calibration["method"], "notes": []},
+        },
+        "modelDiagnostics": {
+            "model": MODEL_NAME,
+            "confidence": {"level": "low", "label": "낮음", "score": 0, "reasons": ["데이터 없음"]},
+            "coverage": {"measuredDays": 0, "totalDays": 0, "pct": 0},
+            "dataQuality": data_quality,
+            "trend": trend,
+            "selectedModel": _screen_gate(shadow_gate({}), detail),
+            "longRange": long_range_assessment({}),
+            "trendWindows": {},
+            "residualStdKg": None,
+            "backtest": {},
+            "backtestSampleCounts": {},
+            "modelAudit": {},
+            "kcalPerKg": round(kcal_to_kg, 0),
+            "kcalPerKgSource": "default",
+            "calibration": compute_calibration([], None, kcal_to_kg, window=trend_window),
+            "ciCalibration": ci_calibration,
+            **({"regimes": regime_split({})} if detail else {}),
+        },
+        "insight": {"headline": None, "lines": [], "state": None},
+        "coverage": {
+            "last30Measured": 0,
+            "last30Total": 0,
+            "last30Pct": 0,
+            "windowStart": None,
+            "windowEnd": None,
+            "lastMeasurementAt": None,
+            "daysSinceLastMeasurement": None,
+        },
+        "series": {"daily": [], "ma14": [], "ewma": [], "prediction": []},
+    }
+
+
+def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bool = False,
+                  today: str | None = None) -> dict[str, Any]:
+    """CSV 행으로 요약을 만든다. detail이면 진단 전체를 담는다(model_audit.py).
+
+    today(YYYY-MM-DD, KST)는 아직 끝나지 않은 날이다. 그 날의 행은 7일 집계와 측정률에서 뺀다.
+    주지 않으면 마지막 행을 오늘로 본다. 오늘 행이 없는 CSV(오늘 호출이 모두 실패한 실행 등)에서는 그 가정이
+    완료된 어제를 집계에서 뺐다(재검토 MD9). 수집과 요약 다시 만들기는 오늘 날짜를 넘긴다.
+    """
     if not rows:
-        # 데이터가 없어도 소비자(체중 페이지, 개인 대시보드)가 읽는 키는 모두 둔다.
-        return {
-            "generatedAt": datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z",
-            "current": {
-                "weightKg": None, "weightDate": None, "weightMa7Kg": None, "weightMa14Kg": None, "weightEwmaKg": None,
-                "bodyFatPercent": None, "bodyFatDelta30d": None, "visceralFat": None,
-            },
-            "rolling": {
-                "weeklyLossRateKg": None,
-                "last7ExerciseMinutes": 0,
-                "last7ExerciseCalories": 0,
-                "last7StepsTotal": 0,
-                "last7StepsAvg": None,
-                "last7ActiveDays": 0,
-                "last7WeightRangeKg": None,
-                "last7SleepHoursAvg": None,
-                "last7RestingHrAvg": None,
-                "exerciseTrend": build_exercise_trend([]),
-                "lossRateDetail": {"blended": None, "rateSource": None, "model": "multi_window_ewma_blend"},
-            },
-            "predictions": {"oneMonthWeightKg": None, "threeMonthWeightKg": None, "scenarios": {}},
-            "goal": {
-                "targetWeightKg": config.get("targetWeightKg"),
-                "remainingKg": None,
-                "etaDays": None,
-                "etaDate": None,
-            },
-            "lossIntensity": None,
-            "plateau": {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None, "type": None},
-            "predictionCI": {"stdResidual": None, "series": []},
-            "modelDiagnostics": {
-                "confidence": {"level": "low", "label": "낮음", "score": 0, "reasons": ["데이터 없음"]},
-                "coverage": {"measuredDays": 0, "totalDays": 0, "pct": 0},
-                "dataQuality": data_quality_diagnostics([]),
-                "longRange": long_range_assessment({}),
-                "trend": model_trend_exposure(None, None),
-                "trendWindows": {},
-                "backtest": {},
-            },
-            "insight": {"headline": None, "lines": []},
-            "coverage": {
-                "last30Measured": 0,
-                "last30Total": 0,
-                "last30Pct": 0,
-                "windowStart": None,
-                "windowEnd": None,
-                "lastMeasurementAt": None,
-                "daysSinceLastMeasurement": None,
-            },
-            "series": {
-                "daily": [], "ma14": [], "ewma": [], "prediction": [],
-            },
-        }
+        return _empty_summary(config, detail)
 
     # CSV를 손으로 고쳐 들어온 터무니없는 체중(예: 841)은 모델에 넣지 않는다. CSV의 값은 건드리지 않는다.
     implausible_weights = sum(1 for row in rows if row.get("weight_kg") is not None and plausible_weight(row.get("weight_kg")) is None)
@@ -1268,13 +1326,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         if tiered is not None:
             kcal_to_kg = tiered
 
-    # EWMA slope 중심 + MA7 보조 감량률. 운동 kcal은 기본 예측에서 제외한다.
+    # 감량률은 EWMA 기울기만으로 정한다. exerciseTrendWindow는 운동 추세, 보정, 백테스트의 학습 창에만 쓴다.
     trend_window = int(config.get("exerciseTrendWindow") or 28)
-    model_latest_date = ewma_series[-1]["date"]
-    loss_rate_detail = compute_weekly_loss_rate(
-        ewma_series, ma7_by_date, rows[:ewma_days], model_latest_date,
-        window=trend_window, kcal_to_kg=kcal_to_kg,
-    )
+    loss_rate_detail = compute_weekly_loss_rate(ewma_series, ewma_series[-1]["date"])
     weekly_loss_rate = loss_rate_detail["blended"]
     # 첫 측정 후 28일 창의 EWMA 점이 모자라면(대략 처음 13일) 감량률을 판단할 수 없다.
     # 이때는 예측을 숨기지 않고 현재 EWMA 수준을 그대로 잇는다(감량률 0으로 계산되는 평평한 예측).
@@ -1290,7 +1344,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         loss_rate_detail["rateSource"] = "multi_window_blend" if weekly_loss_rate is not None else None
 
     # D4: 활동 집계는 완료된 날(오늘 행 제외)만 쓴다. 이력이 하루뿐이면 그 하루를 쓴다.
-    complete_rows = rows[:-1] if len(rows) > 1 else rows
+    as_of = today or rows[-1]["date"]
+    complete_rows = [row for row in rows if row["date"] < as_of] or rows
     last7 = complete_rows[-7:]
     weight_values = [row.get("weight_kg") for row in last7 if row.get("weight_kg") is not None]
     steps_values = [row.get("steps") for row in last7 if row.get("steps") is not None]
@@ -1312,7 +1367,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         "last7RestingHrAvg": round_or_none(mean(rhr_values), 1) if rhr_values else None,
     }
 
-    trend_window = int(config.get("exerciseTrendWindow") or 28)
     exercise_trend = build_exercise_trend(complete_rows, window=trend_window)
     pct_deltas = config.get("scenarioExercisePctDelta") or {}
     opt_pct = parse_float(pct_deltas.get("optimistic")) or 0.30
@@ -1337,7 +1391,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
 
     target_weight = parse_float(config.get("targetWeightKg"))
     scenarios: dict[str, Any] = {}
-    prediction_start = current_ewma if current_ewma is not None else current_ma7
+    prediction_start = current_ewma  # 체중이 하나라도 있으면 EWMA가 있다
     if prediction_start is not None:
         for name, sdef in smart_scenarios.items():
             extra_weekly_kcal = sdef["extra_weekly_kcal"]
@@ -1345,15 +1399,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             extra_weekly_loss_kg = (extra_weekly_kcal / kcal_to_kg) * efficiency
             effective_loss = base_trend_loss + extra_weekly_loss_kg
             long_loss = long_range_rate + extra_weekly_loss_kg if long_range_rate is not None else None
-            assumed_daily = round_or_none(recent7_avg_kcal + extra_weekly_kcal / 7.0, 1)
             # 시나리오의 3개월 값도 운영 예측과 같은 함수로 낸다(12주는 느린 감량률의 감쇠 곡선).
             three_month_proj = forecast_weight(prediction_start, effective_loss, 12, target_weight, long_loss)
             scenarios[name] = {
-                "multiplier": round(effective_loss / base_trend_loss, 2) if base_trend_loss > 0 else 1.0,
                 "threeMonthWeightKg": round_or_none(three_month_proj, 2),
-                "assumedDailyKcal": assumed_daily,
                 "weeklyKcalDelta": round_or_none(extra_weekly_kcal, 1),
-                "extraWeeklyLossKg": round_or_none(extra_weekly_loss_kg, 4),
                 "effectiveWeeklyLossKg": round_or_none(effective_loss, 4),
                 "longRangeWeeklyLossKg": round_or_none(long_loss, 4),
                 "label": sdef["label"],
@@ -1372,27 +1422,24 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         three_month_weight = round_or_none(forecast_weight(prediction_start, base_effective_loss, 12, target_weight, base_long_range_loss), 2)
 
     # M5: ETA는 예측 곡선(감쇠)이 목표 + ε 이하로 처음 내려가는 날이다. 최대 104주까지 보고 닿지 않으면 beyond다.
-    eta_tolerance = parse_float(config.get("etaToleranceKg"))
-    eta_tolerance = ETA_TOLERANCE_KG if eta_tolerance is None else eta_tolerance
-    base_day = datetime.strptime(latest_date, "%Y-%m-%d").date()
-
-    def _eta_date(days: int | None) -> str | None:
-        return (base_day + timedelta(days=days)).isoformat() if days is not None else None
+    eta_tolerance = _eta_tolerance(config)
 
     remaining_kg = None
     eta_status, eta_days = "unknown", None
     eta_range_days = None
-    eta_range_dates = None
     if target_weight is not None and prediction_start is not None:
         remaining_kg = round_or_none(prediction_start - target_weight, 2)
         eta_status, eta_days = projected_eta(prediction_start, base_effective_loss, target_weight, eta_tolerance,
                                              long_weekly_loss=base_long_range_loss)
-    eta_date = _eta_date(eta_days)
+        if warming_up and eta_status == "no_loss":
+            # 감량률을 아직 정할 수 없는 초기다. "감량 추세 아님"이 아니라 모르는 것이다(배지는 "추세 판단 중").
+            eta_status = "unknown"
+    eta_date = (date.fromisoformat(latest_date) + timedelta(days=eta_days)).isoformat() if eta_days is not None else None
 
     # P6: 모든 모델을 같은 기준 시점·같은 실측 매칭으로 한 번에 평가한다. CI·신뢰도·화면이 같은 결과를 쓴다.
     # 80% 구간은 1~12주를 모두 평가한 오차로 만든다(재검토 MD3). 비교 표·게이트·신뢰도는 그중 네 기간만 쓴다.
     backtest_run = run_backtest(
-        rows[:ewma_days], ewma_series, ma7_by_date,
+        rows[:ewma_days], ewma_series,
         target_weight=target_weight,
         train_window=trend_window,
         horizons=CI_HORIZONS,
@@ -1416,7 +1463,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     plateau = detect_plateau(ewma_series, rows=rows if features["plateauLoadClassification"] else None)
     trend_state = classify_trend_state(ewma_series, weekly_loss_rate, plateau)
     insight = build_insight(current_weight, current_ewma, loss_intensity, plateau, trend_state, weekly_loss_rate, remaining_kg,
-                            weight_date=weight_date, latest_date=latest_date)
+                            weight_date=weight_date, latest_date=as_of)
 
     # rolling에 exerciseTrend 추가
     rolling["exerciseTrend"] = exercise_trend
@@ -1427,22 +1474,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     measured_count = sum(1 for r in last30 if r.get("weight_kg") is not None)
     coverage_pct = round(measured_count / len(last30) * 100, 0) if last30 else 0
 
-    # 마지막 측정일과 경과 일수
-    # latest_date(CSV의 최신 일자)를 기준으로 계산해 UTC/KST 경계의 음수 결과를 방지한다.
-    last_measurement_date: str | None = None
-    for r in reversed(rows):
-        if r.get("weight_kg") is not None:
-            last_measurement_date = r["date"]
-            break
-    if last_measurement_date and latest_date:
-        try:
-            last_dt = date.fromisoformat(last_measurement_date)
-            ref_dt = date.fromisoformat(latest_date)
-            days_since = max((ref_dt - last_dt).days, 0)
-        except Exception:
-            days_since = None
-    else:
-        days_since = None
+    # 마지막 측정일과 그 뒤로 지난 날 수(오늘 기준).
+    last_measurement_date = weight_date
+    days_since = None
+    if last_measurement_date:
+        days_since = max((date.fromisoformat(as_of) - date.fromisoformat(last_measurement_date)).days, 0)
 
     # ETA 범위는 시나리오 곡선에서 구한다(낙관 = 가장 이른 날, 보수 = 가장 늦은 날).
     if eta_status == "date" and scenarios:
@@ -1455,7 +1491,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         slow_status, slow_days = _scenario_eta("conservative")
         if fast_status == "date":
             eta_range_days = {"min": fast_days, "max": slow_days if slow_status == "date" else None, "maxBeyond": slow_status != "date"}
-            eta_range_dates = {"min": _eta_date(fast_days), "max": _eta_date(slow_days if slow_status == "date" else None)}
 
     # M6: 시나리오마다 자기 곡선과 구간을 내보낸다(13점). 카드 값은 이 시계열의 마지막 점이다.
     spreads_by_week = {
@@ -1470,7 +1505,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             scenario["series"] = series
             scenario["threeMonthWeightKg"] = series[-1]["valueKg"]
 
-    trend_windows = compute_trend_windows(ewma_series, model_latest_date)
+    # 화면의 7/14/28일 추세. 감량률을 구할 때 낸 기울기를 그대로 쓴다(예전에는 같은 값을 따로 한 번 더 계산했다).
+    trend_windows = {
+        key: {"weeklyLossKg": loss_rate_detail["windowSlopes"].get(key), "points": loss_rate_detail["windowPoints"].get(key, 0)}
+        for key in ("7d", "14d", "28d")
+    }
 
     confidence = classify_prediction_confidence(
         coverage_pct=coverage_pct,
@@ -1493,7 +1532,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         }
         for name in SHADOW_MODELS
     }
-    selection_gate = shadow_gate(backtest_run["models"])
+    selection_gate = _screen_gate(shadow_gate(backtest_run["models"]), detail)
     ci_calibration = replay_ci_hit_rate(backtest_run, rows[:ewma_days], ewma_series)
     # 화면은 네 기간의 적중률만 쓴다. 12주 전체는 ciCalibration에 있다.
     prediction_ci["hitRate"] = {horizon: ci_calibration["hitRate"].get(horizon) for horizon in display_horizons}
@@ -1512,7 +1551,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         trend_display["rateSource"] = loss_rate_detail["rateSource"]
 
     model_diagnostics = {
-        "model": "multi_window_ewma_blend + exp_decay + dynamic_kcal_per_kg + exercise_efficiency",
+        "model": MODEL_NAME,
         "confidence": confidence,
         "coverage": {
             "measuredDays": measured_count,
@@ -1536,11 +1575,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         "ciCalibration": ci_calibration,
         # 추세별 성적(재검토 MD4). 요약 파일에는 넣지 않고 model_audit.py(detail=True)만 받는다.
         **({"regimes": regime_split(backtest_run["samples"])} if detail else {}),
-        "notes": [
-            "기본 예측은 체중 추세 기반입니다.",
-            "시나리오는 운동 효율 계수(NEAT·보상 섭취 보정)와 동적 kcal/kg 사용.",
-            "28일 이상 예측은 장기 추정으로 취급합니다.",
-        ],
     }
 
     return {
@@ -1567,7 +1601,6 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             "etaDays": eta_days,
             "etaDate": eta_date,
             "etaRangeDays": eta_range_days,
-            "etaRangeDates": eta_range_dates,
             # reached / date / beyond(2년 안에 닿지 않음) / no_loss(감량 추세 아님) / unknown
             "etaStatus": eta_status,
             "etaToleranceKg": eta_tolerance,
@@ -1939,7 +1972,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.skip_garmin:
         rows = normalize_rows(existing_rows)
-        summary = build_summary(rows, config)
+        summary = build_summary(rows, config, today=today_kst().isoformat())
         summary["sync"] = previous_sync  # 수집하지 않았으므로 직전 수집 기록을 그대로 둔다.
         save_json(paths.summary, summary)
         LOGGER.info("rebuilt %s from %s rows", paths.summary, len(rows))
@@ -2022,7 +2055,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         write_rows(paths.csv, result.rows)
         rows = normalize_rows(result.rows)
-    summary = build_summary(rows, config)
+    summary = build_summary(rows, config, today=today.isoformat())
     summary["sync"] = build_sync_block(log, auth, days, previous_sync, summary["generatedAt"],
                                        kept_days=[] if failed else result.kept_rows, today=today)
     save_json(paths.summary, summary)
