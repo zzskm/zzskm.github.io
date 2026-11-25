@@ -594,6 +594,53 @@ class ForecastCurveTests(unittest.TestCase):
         self.assertIsNone(tier([None, 0.0]))
 
 
+class PwaAssetTests(unittest.TestCase):
+    """P8(W3, W5): 자산 버전은 sw.js 한 곳에서 정하고, index.html·manifest가 같은 값을 쓴다."""
+
+    APP = MODULE_PATH.parents[1]
+
+    def _version(self) -> str:
+        import re
+        match = re.search(r"const ASSET_VERSION = '([0-9a-z]+)';", (self.APP / "sw.js").read_text(encoding="utf-8"))
+        self.assertIsNotNone(match)
+        return match.group(1)
+
+    def test_versions_match_the_service_worker(self) -> None:
+        import json
+        import re
+        version = self._version()
+        html = (self.APP / "index.html").read_text(encoding="utf-8")
+        manifest = json.loads((self.APP / "manifest.webmanifest").read_text(encoding="utf-8"))
+        sw = (self.APP / "sw.js").read_text(encoding="utf-8")
+        local = re.findall(r'(?:href|src)="\./([^"?]+)\?v=([0-9a-z]+)"', html)
+        self.assertGreaterEqual(len(local), 8)
+        for path, used in local:
+            with self.subTest(path=path):
+                self.assertEqual(version, used)
+                self.assertIn(f"`./{path}?v=${{ASSET_VERSION}}`", sw)
+        for icon in manifest["icons"]:
+            path, used = icon["src"].removeprefix("./").split("?v=")
+            with self.subTest(icon=path):
+                self.assertEqual(version, used)
+                self.assertIn(f"`./{path}?v=${{ASSET_VERSION}}`", sw)
+                self.assertTrue((self.APP / path).is_file())
+        self.assertEqual(manifest["theme_color"], re.search(r'name="theme-color" content="([^"]+)"', html).group(1))
+        self.assertNotIn("apple-mobile-web-app-capable", html)
+        self.assertTrue(any(i["type"] == "image/png" and i["sizes"] == "512x512" for i in manifest["icons"]))
+
+    def test_cdn_assets_carry_integrity(self) -> None:
+        import re
+        html = (self.APP / "index.html").read_text(encoding="utf-8")
+        for tag in re.findall(r"<(?:script|link)[^>]+cdn\.jsdelivr\.net[^>]*>", html):
+            with self.subTest(tag=tag[:80]):
+                self.assertRegex(tag, r'integrity="sha384-[A-Za-z0-9+/=]+"')
+                self.assertIn('crossorigin="anonymous"', tag)
+                self.assertNotIn(".min.", tag)  # jsDelivr가 즉석에서 만드는 .min 파일은 SRI를 걸 수 없다
+        self.assertNotIn("pretendardvariable.min.css", html)
+        self.assertIn("dynamic-subset", html)
+        self.assertIn("JetBrains+Mono:wght@700&", html)
+
+
 _MISSING = object()
 
 # 개인 대시보드(dashboard.js, dashboard-model.js)가 summary.json에서 읽는 경로.

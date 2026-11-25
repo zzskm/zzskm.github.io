@@ -4,18 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>체중 대시보드</title>
-  <link rel="icon" href="./icons/icon.svg?v=4" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="./icons/icon.svg?v=4" />
-  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon.svg?v=20261125e" type="image/svg+xml" />
+  <link rel="icon" href="./icons/icon-192.png?v=20261125e" type="image/png" sizes="192x192" />
+  <!-- iOS 홈 화면 아이콘은 PNG만 쓴다(W5). -->
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125e" sizes="180x180" />
+  <link rel="manifest" href="./manifest.webmanifest?v=20261125e" />
   <meta name="theme-color" content="#F5F2F0" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="체중" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20261125b" />
+  <!-- W4: 쓰는 글자 범위만 받는 dynamic-subset(전체 2MB 대신). W3: integrity + crossorigin이면 서비스 워커가 저장할 수 있다.
+       jsDelivr가 즉석에서 만드는 .min 파일은 내용이 바뀔 수 있어 SRI를 걸 수 없으므로 원본 파일을 쓴다. -->
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" rel="stylesheet" integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0" crossorigin="anonymous" />
+  <!-- 고정폭 글꼴은 700 굵기만 쓴다. Google Fonts CSS는 브라우저마다 달라 SRI를 걸 수 없다. -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" crossorigin="anonymous" />
+  <link rel="stylesheet" href="./style.css?v=20261125e" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -155,6 +160,7 @@
 
       <div class="chart-wrap">
         <canvas id="weightChart" aria-label="체중 추세 차트" role="img"></canvas>
+        <p class="chart-notice" id="chartNotice" role="status" hidden></p>
       </div>
       <div class="chart-legend-mobile" aria-hidden="true">
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--actual"></span>Actual</span>
@@ -345,10 +351,11 @@
     </footer>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script defer src="./app.helpers.js?v=20261125b"></script>
-  <script defer src="./app.js?v=20261125d"></script>
-  <script defer src="./enhancements.js?v=20261125b"></script>
+  <!-- W1: async라 CDN이 늦거나 막혀도 페이지를 막지 않는다. app.js가 최대 5초 기다린 뒤 차트 없이 나머지를 그린다. -->
+  <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js" integrity="sha384-tgbB5AKnszdcfwcZtTfuhR3Ko1XZdlDfsLtkxiiAZiVkkXCkFmp+FQFh+V/UTo54" crossorigin="anonymous"></script>
+  <script defer src="./app.helpers.js?v=20261125e"></script>
+  <script defer src="./app.js?v=20261125e"></script>
+  <script defer src="./enhancements.js?v=20261125e"></script>
   <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>
