@@ -69,14 +69,13 @@ jobs:
       - name: Garmin client has every method the sync calls
         run: |
           python -c "
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('sync_garmin', 'garmin-weight/scripts/sync_garmin.py')
-          module = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(module)
+          import sys
+          sys.path.insert(0, 'garmin-weight/scripts')
+          import sync_garmin
           from garminconnect import Garmin
-          missing = [m for m in module.GARMIN_METHODS if not callable(getattr(Garmin, m, None))]
+          missing = [m for m in sync_garmin.GARMIN_METHODS if not callable(getattr(Garmin, m, None))]
           assert not missing, f'missing on Garmin: {missing}'
-          print('garminconnect methods ok:', len(module.GARMIN_METHODS))
+          print('garminconnect methods ok:', len(sync_garmin.GARMIN_METHODS))
           "
 
   browser:
