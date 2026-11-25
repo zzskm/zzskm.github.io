@@ -233,6 +233,40 @@ class DashboardBrowserTests(unittest.TestCase):
         expect(page.locator('.chart-dot')).to_have_count(1)
         self.assertEqual(errors,[])
 
+    def test_three_month_value_is_marked_as_a_long_range_estimate(self):
+        """체중 요약의 longRange가 ok가 아니면 신뢰도 등급이 높아도 3개월 값이 장기 추정이라고 적는다(garmin-weight 재검토 MD5)."""
+        import re
+        from playwright.sync_api import expect
+        page,errors=self.open_page()
+        note=page.locator('#weight-prediction-note')
+        expect(note).to_contain_text('최근 측정과 2주 예측 신뢰도 낮음')
+        expect(note).not_to_contain_text('장기 추정')  # longRange가 없는 예전 요약
+
+        def summary(status):
+            return {'generatedAt':T.isoformat(),'current':{'weightKg':84,'weightDate':'2026-10-28'},
+                    'series':{'daily':[{'date':'2026-10-27','valueKg':84.2},{'date':'2026-10-28','valueKg':84}]},
+                    'predictions':{'oneMonthWeightKg':83.5,'threeMonthWeightKg':82.0},
+                    'modelDiagnostics':{'confidence':{'level':'high','reasons':[]},'trend':{'predictionEnabled':True},
+                                        'longRange':{'horizon':'84d','status':status}}}
+
+        def serve(status):
+            payload=summary(status)
+            page.route('**/garmin-weight/data/summary.json',lambda r:r.fulfill(json=payload))
+            page.locator('#weight-refresh').click()
+
+        for status,phrase in (('worse_than_flat',"84일 검증에서 '변화 없음' 가정보다 오차가 큼"),('unverified','84일 검증 표본 부족')):
+            with self.subTest(status=status):
+                serve(status)
+                expect(note).to_contain_text('신뢰도 높음')
+                expect(note).to_contain_text(f'3개월 값은 장기 추정입니다({phrase})')
+                expect(note).to_have_class(re.compile(r'\bis-caution\b'))
+                expect(page.locator('#weight-quarter')).to_have_text('82.0 kg')
+        serve('ok')
+        expect(note).to_contain_text('신뢰도 높음')
+        expect(note).not_to_contain_text('장기 추정')
+        expect(note).not_to_have_class(re.compile(r'\bis-caution\b'))
+        self.assertEqual(errors,[])
+
     def test_responsive_controls_navigation_and_expanded_forms(self):
         from playwright.sync_api import expect
         page,errors=self.open_page(width=320)

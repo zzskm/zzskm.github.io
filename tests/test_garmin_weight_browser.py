@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import http.server
 import importlib.util
+import json
 import os
 import shutil
 import sys
@@ -72,6 +73,30 @@ def with_sync(summary: dict, hours_ago: float, failed: tuple[str, ...] = ()) -> 
     return {**summary, "sync": sync}
 
 
+def reached_summary() -> dict:
+    """목표(78kg) 아래에서 시작해 계속 그 아래에 있다. "목표까지"가 음수가 되는 경우다."""
+    start = date(2030, 1, 1)
+    rows = [_row(start + timedelta(days=i), round(77.6 - 0.005 * i + 0.1 * sin(i * 1.3), 2)) for i in range(70)]
+    return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
+
+
+def patched(summary: dict, *, scenario_values: float | None = None, long_range: str | None = None,
+            eta: tuple[int, str] | None = None, blended: float | None = None) -> dict:
+    """요약의 사본에서 화면이 읽는 값 몇 개만 바꾼다(백엔드로는 만들기 번거로운 상태를 그리기 위한 것)."""
+    copy = json.loads(json.dumps(summary))
+    if scenario_values is not None:
+        for scenario in copy["predictions"]["scenarios"].values():
+            scenario["threeMonthWeightKg"] = scenario_values
+    if long_range is not None:
+        copy["modelDiagnostics"]["longRange"] = {"horizon": "84d", "status": long_range, "maeKg": 1.49, "flatMaeKg": 1.19,
+                                                 "sampleCount": 149}
+    if eta is not None:
+        copy["goal"].update({"etaStatus": "date", "etaDays": eta[0], "etaDate": eta[1], "etaRangeDays": None})
+    if blended is not None:
+        copy["rolling"]["lossRateDetail"]["blended"] = blended
+    return copy
+
+
 NORMALIZE_COLOR_JS = """(c) => { const d = document.createElement('div'); d.style.color = c; document.body.appendChild(d);
   const v = getComputedStyle(d).color; d.remove(); return v; }"""
 
@@ -110,6 +135,17 @@ class GarminWeightBrowserTests(unittest.TestCase):
             "warming": warming_up_summary(),
             "long": with_sync(long_summary(), 2),
         }
+        long = cls.summaries["long"]
+        cls.summaries.update({
+            "empty": sync_garmin.build_summary([], {"targetWeightKg": TARGET_KG}),
+            "reached": with_sync(reached_summary(), 2),
+            "equal": patched(long, scenario_values=78.0, long_range="ok"),
+            "longworse": patched(long, long_range="worse_than_flat", eta=(400, "2031-07-05")),
+            "zero": patched(cls.summaries["steady"], blended=0.001),
+            # 문구가 가장 길어지는 경우: 수집이 늦고, 일부 항목이 실패했고, 측정이 며칠 없고, 3개월 값이 장기 추정이다.
+            "busy": with_sync(patched(steady_summary(unmeasured_tail_days=5), long_range="worse_than_flat"), 30,
+                              ("get_body_composition", "get_sleep_data", "get_stats", "get_activities_fordate")),
+        })
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -119,23 +155,41 @@ class GarminWeightBrowserTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def open_page(self, fixture: str = "steady", width: int = 1440, block_cdn: bool = False, console: list | None = None):
+    def open_page(self, fixture: str = "steady", width: int = 1440, block_cdn: bool = False, console: list | None = None,
+                  fixed_time: str | None = None, summary_status: int = 200, expect_state: str = "ready"):
+        """fixture 요약으로 페이지를 연다. summary_status가 200이 아니면 요약 요청이 그 상태로 실패한다.
+
+        돌려주는 page에는 server가 붙는다: server["status"]와 server["payload"]를 바꾸면 다음 요청부터 응답이 바뀌고,
+        server["requests"]는 요약 요청 수다.
+        """
         context = self.browser.new_context(viewport={"width": width, "height": 1000}, service_workers="block",
                                            timezone_id="Asia/Seoul", color_scheme="light")
         self.addCleanup(context.close)
         page = context.new_page()
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        summary = self.summaries[fixture]
-        page.route("**/garmin-weight/data/summary.json*", lambda r: r.fulfill(json=summary))
+        server = {"status": summary_status, "payload": self.summaries[fixture], "requests": 0}
+        page.server = server
+
+        def serve_summary(route) -> None:
+            server["requests"] += 1
+            if server["status"] == 200:
+                route.fulfill(json=server["payload"])
+            else:
+                route.fulfill(status=server["status"], body="unavailable")
+
+        page.route("**/garmin-weight/data/summary.json*", serve_summary)
         page.route("**/garmin-weight/config.json*", lambda r: r.fulfill(json={"targetWeightKg": TARGET_KG}))
         if block_cdn:
             page.route("https://cdn.jsdelivr.net/**", lambda r: r.abort())
         if console is not None:
             page.on("console", lambda m: console.append(f"{m.type}: {m.text}"))
+        if fixed_time is not None:
+            page.clock.set_fixed_time(fixed_time)
         page.goto(f"http://127.0.0.1:{self.server.server_port}{PAGE}")
-        page.wait_for_function("document.querySelector('.app')?.dataset.state === 'ready'", timeout=20000)
-        if not block_cdn:
+        page.wait_for_function("(state) => document.querySelector('.app')?.dataset.state === state", arg=expect_state, timeout=20000)
+        has_weights = any(point.get("valueKg") is not None for point in server["payload"]["series"]["daily"])
+        if not block_cdn and expect_state == "ready" and has_weights:
             page.wait_for_function("window.Chart && Chart.getChart(document.getElementById('weightChart'))", timeout=20000)
         self.addCleanup(lambda: self.assertEqual([], errors, "page errors"))
         return page
@@ -184,11 +238,14 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertNotIn("14일 평균", facts["ds"], "14-day average is off by default, matching the HTML chip")
 
     def test_no_horizontal_overflow(self) -> None:
-        for width in (320, 344, 360, 390, 1440):
-            with self.subTest(width=width):
-                page = self.open_page("steady", width=width)
-                overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
-                self.assertLessEqual(overflow, 0)
+        # busy는 동기화 표시와 시나리오 안내 문구가 가장 길어지는 요약이다.
+        for fixture in ("steady", "busy"):
+            for width in (320, 344, 360, 390, 1440):
+                with self.subTest(fixture=fixture, width=width):
+                    page = self.open_page(fixture, width=width)
+                    page.evaluate("document.querySelector('.details-panel').open = true")
+                    overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+                    self.assertLessEqual(overflow, 0)
 
     def test_insight_is_not_repeated(self) -> None:
         lines = self.summaries["steady"]["insight"]["lines"]
@@ -231,6 +288,10 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual(pill["warn"], pill["dot"])
         self.assertIn("get_body_composition", pill["title"])
         self.assertNotIn("수집 없음", pill["text"])
+        # 재검토 FE4: 점 색만으로는 거의 보이지 않고 터치 기기에는 툴팁이 없다. 글자로도 적는다.
+        self.assertIn("일부 수집 실패(체성분)", pill["text"])
+        self.assertNotIn("get_body_composition", pill["text"])
+        self.assertNotIn("수집 실패", self.sync_pill(self.open_page("steady"))["text"])
 
     def test_model_audit_is_one_table_with_shared_samples(self) -> None:
         """P6(M1): 운영·섀도·Kalman·변화 없음이 같은 n으로 한 표에 나오고, '우세' 같은 서로 다른 판정 줄이 없다."""
@@ -355,6 +416,168 @@ class GarminWeightBrowserTests(unittest.TestCase):
         page.wait_for_function("!document.querySelector('.app').dataset.busy && window.__states.length > 0")
         states = page.evaluate("window.__states")
         self.assertTrue(all(not s.endswith("/loading") for s in states), states)
+
+    # --- 재검토 Q3: 화면 일관성 -----------------------------------------------------------
+
+    def scenario_hint(self, page) -> dict:
+        return page.evaluate("""() => {
+          const hint = document.getElementById('scenariosHint');
+          return { text: hint.textContent, caution: hint.classList.contains('is-caution'),
+                   muted: document.querySelector('.scenarios').classList.contains('is-muted') };
+        }""")
+
+    def test_scenario_hint_follows_the_summary(self) -> None:
+        """재검토 FE3: 안내 문구는 패널 머리에 있다. 예전에는 .scenarios 안에서 찾아 문구가 한 번도 바뀌지 않았다."""
+        self.assertEqual("ok", self.summaries["long"]["modelDiagnostics"]["longRange"]["status"])
+        cases = {
+            "long": ("선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다", False, False),
+            "warming": ("예측 신뢰도가 낮아 시나리오는 참고용입니다", True, True),
+            "equal": ("시나리오 간 3개월 차이가 0.2kg 미만입니다", True, True),
+            "longworse": ("3개월 값은 장기 추정입니다 · 84일 검증 오차 1.49kg, 변화 없음 가정 1.19kg", True, False),
+            "steady": ("3개월 값은 장기 추정입니다 · 84일 검증 표본이 아직 모자랍니다", True, False),
+            "empty": ("체중 기록이 쌓이면 시나리오를 보여 줍니다", True, True),
+        }
+        for fixture, (text, caution, muted) in cases.items():
+            with self.subTest(fixture=fixture):
+                hint = self.scenario_hint(self.open_page(fixture))
+                self.assertEqual((text, caution, muted), (hint["text"], hint["caution"], hint["muted"]))
+
+    def test_long_range_marker_sits_next_to_the_eta(self) -> None:
+        """재검토 MD5: 신뢰도 등급이 높아도 3개월 값이 "변화 없음"보다 나쁘면 목표 도달일 옆에 표시한다."""
+        marked = self.open_page("longworse")
+        self.assertEqual("7/5 · 장기 추정", marked.text_content("#etaSub"))
+        self.assertIn("84일 예측 오차", marked.text_content("#detailMae"))
+        plain = self.open_page("long")
+        self.assertNotIn("장기 추정", plain.text_content("#etaSub"))
+
+    def test_small_labels_and_filled_bars(self) -> None:
+        """재검토 FE7: 이름표가 값보다 크게 나오던 것, 비어 있던 품질 막대, 열어도 +이던 표식."""
+        page = self.open_page("long")
+        facts = page.evaluate("""() => {
+          const px = (sel) => parseFloat(getComputedStyle(document.querySelector(sel)).fontSize);
+          const toggle = () => getComputedStyle(document.querySelector('.details-summary-toggle'), '::before').content;
+          const closed = toggle();
+          document.querySelector('.details-panel').open = true;
+          const fill = document.querySelector('.quality-bar-fill--accent');
+          const track = fill.parentElement;
+          return {
+            eyebrow: px('.eyebrow'), title: px('.panel-title'), stripLabel: px('.model-strip-cell .label'),
+            stripValue: px('#modelConfidence'), closed, open: toggle(),
+            fillWidth: fill.getBoundingClientRect().width, trackWidth: track.clientWidth,
+            titles: [...document.querySelectorAll('.panel-head')].map((head) => [
+              head.querySelector('.eyebrow')?.textContent.trim(), head.querySelector('h2, h3, h4')?.textContent.trim()]),
+            stepsUnit: document.querySelector('#stepsAvg').parentElement.querySelector('.tile-unit').textContent,
+            fatDelta: document.getElementById('bodyFatDelta').textContent,
+          };
+        }""")
+        self.assertLessEqual(facts["eyebrow"], 11)
+        self.assertLess(facts["eyebrow"], facts["title"])
+        self.assertLess(facts["stripLabel"], facts["stripValue"])
+        self.assertEqual(('"+"', '"−"'), (facts["closed"], facts["open"]))
+        pct = self.summaries["long"]["modelDiagnostics"]["dataQuality"]["recentCoveragePct"]
+        self.assertAlmostEqual(pct / 100, facts["fillWidth"] / facts["trackWidth"], delta=0.02)
+        for eyebrow, title in facts["titles"]:
+            self.assertNotEqual(eyebrow, title)
+        self.assertEqual("천 보 · 7일", facts["stepsUnit"])
+        self.assertNotIn("30d", facts["fatDelta"])
+
+    def test_coverage_dots_match_the_count(self) -> None:
+        """재검토 MD6: 측정률 숫자와 점, 모델 줄의 측정률이 같은 창(완료된 날 30일)을 센다."""
+        summary = self.summaries["stale"]  # 마지막 닷새는 측정이 없다
+        coverage = summary["coverage"]
+        self.assertEqual(30, coverage["last30Total"])
+        page = self.open_page("stale")
+        facts = page.evaluate("""() => ({
+          dots: document.querySelectorAll('#summaryDots .dot-cell').length,
+          filled: document.querySelectorAll('#summaryDots .dot-cell.has, #summaryDots .dot-cell.has-today').length,
+          text: document.getElementById('summaryCoverageText').textContent,
+          strip: document.getElementById('modelValidate').textContent,
+          first: document.querySelector('#summaryDots .dot-cell').title,
+        })""")
+        self.assertEqual((30, coverage["last30Measured"]), (facts["dots"], facts["filled"]))
+        self.assertEqual(f"{coverage['last30Measured']}/30", facts["text"])
+        self.assertIn(f"측정 {coverage['last30Pct']:.0f}%", facts["strip"])
+        self.assertTrue(facts["first"].startswith(coverage["windowStart"]))
+
+    def test_weekly_change_near_zero_has_no_sign(self) -> None:
+        page = self.open_page("zero")
+        self.assertEqual("±0.00 kg/주", page.text_content("#heroWeeklyChange"))
+        self.assertEqual(["−0.11", "+0.03", "±0.00", "±0.00", "–"],
+                         page.evaluate("() => [0.11, -0.03, 0.004, -0.004, null].map((v) => window.GWAppHelpers.fmtWeekly(v))"))
+
+    def test_empty_summary_says_there_are_no_records(self) -> None:
+        """재검토 FE8: 자료가 0건이면 배지 "유지"와 0~1.0 눈금의 빈 차트가 나왔다."""
+        page = self.open_page("empty")
+        facts = page.evaluate("""() => ({
+          badge: document.getElementById('statusBadge').textContent,
+          reason: document.getElementById('statusReason').textContent,
+          guard: document.querySelector('.prediction-guard-title').textContent,
+          guardVisible: !document.getElementById('predictionGuard').hidden,
+          notice: document.getElementById('chartNotice').hidden ? null : document.getElementById('chartNotice').textContent,
+          chart: !!(window.Chart && Chart.getChart(document.getElementById('weightChart'))),
+        })""")
+        self.assertEqual(("기록 없음", "체중 기록이 아직 없습니다", "기록 없음", True),
+                         (facts["badge"], facts["reason"], facts["guard"], facts["guardVisible"]))
+        self.assertEqual("표시할 체중 기록이 아직 없습니다.", facts["notice"])
+        self.assertFalse(facts["chart"])
+
+    def test_goal_already_reached(self) -> None:
+        summary = self.summaries["reached"]
+        self.assertLess(summary["goal"]["remainingKg"], 0)
+        page = self.open_page("reached")
+        self.assertEqual(("도달", "100%", "도달"),
+                         (page.text_content("#toTarget"), page.text_content("#goalProgressBig"), page.text_content("#etaValue")))
+
+    def test_first_load_failure_names_the_cause(self) -> None:
+        """재검토 FE8: 첫 로드가 실패하면 "예측 보류"와 "최근 30일"(HTML 기본값)이 남고 푸터에 오류 원문이 나왔다."""
+        page = self.open_page("steady", summary_status=503, expect_state="error")
+        facts = page.evaluate("""() => ({
+          badge: document.getElementById('statusBadge').textContent,
+          reason: document.getElementById('statusReason').textContent,
+          foot: document.getElementById('statusLine').textContent,
+          pill: document.querySelector('#lastSync .sync-text').textContent,
+        })""")
+        self.assertEqual("불러오지 못함", facts["badge"])
+        self.assertEqual("서버 응답 503 · 다시 불러오기를 눌러 주세요", facts["reason"])
+        self.assertEqual("데이터를 불러오지 못했습니다(서버 응답 503).", facts["foot"])
+        self.assertEqual("로드 실패", facts["pill"])
+
+        # 네트워크가 돌아오면(online 이벤트) 스스로 다시 받는다.
+        page.server["status"] = 200
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        page.wait_for_function("document.querySelector('.app').dataset.state === 'ready'", timeout=20000)
+        self.assertEqual("유지", page.text_content("#statusBadge").strip())
+
+    def test_failed_reload_keeps_the_content(self) -> None:
+        page = self.open_page("steady")
+        weight = page.text_content("#currentWeight")
+        page.server["status"] = 500
+        page.click("#reloadBtn")
+        page.wait_for_function("document.querySelector('#lastSync .sync-text').textContent.includes('새로고침 실패')", timeout=10000)
+        self.assertEqual("새로고침 실패(서버 응답 500) · 이전 자료 표시 중", page.text_content("#lastSync .sync-text"))
+        self.assertEqual(("ready", weight), (page.evaluate("document.querySelector('.app').dataset.state"), page.text_content("#currentWeight")))
+
+    def test_measurement_age_uses_the_real_date(self) -> None:
+        """재검토 FE8: 수집이 멈추면 요약의 마지막 날이 오늘이 아니다. 며칠 전 측정이 "오늘 측정"으로 남으면 안 된다."""
+        summary = self.summaries["steady"]
+        self.assertEqual(("2030-02-28", 1), (summary["coverage"]["lastMeasurementAt"], summary["coverage"]["daysSinceLastMeasurement"]))
+        on_time = self.open_page("steady", fixed_time="2030-03-01T09:00:00+09:00")
+        self.assertEqual("1일 전", on_time.text_content("#lastEntry"))
+        late = self.open_page("steady", fixed_time="2030-03-06T09:00:00+09:00")  # 요약은 3월 1일에 멈춰 있다
+        self.assertEqual("6일 전", late.text_content("#lastEntry"))
+        self.assertIn("마지막 측정 6일 전", late.text_content("#lastSync .sync-text"))
+
+    def test_page_left_open_refreshes_when_it_is_shown_again(self) -> None:
+        """재검토 FE8: 열어 둔 화면은 스스로 갱신되지 않았다. 10분이 지나 다시 보이면 요약을 다시 받는다."""
+        page = self.open_page("steady", fixed_time="2030-03-01T09:00:00+09:00")
+        self.assertEqual(1, page.server["requests"])
+        page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        page.wait_for_timeout(300)
+        self.assertEqual(1, page.server["requests"], "a fresh page does not reload")
+        page.clock.set_fixed_time("2030-03-01T09:11:00+09:00")
+        page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        page.wait_for_function("!document.querySelector('.app').dataset.busy", timeout=10000)
+        self.assertEqual(2, page.server["requests"])
 
     def test_no_console_warnings(self) -> None:
         """P8(W5): 콘솔 경고가 없다(Playwright가 서비스 워커를 막는다는 안내는 테스트 환경 탓이라 뺀다)."""

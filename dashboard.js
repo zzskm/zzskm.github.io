@@ -184,8 +184,11 @@
     const confidence = diag.confidence || {};
     const confidenceLabel = {low:'낮음',medium:'보통',high:'높음'}[confidence.level] || '미확인';
     const reasons = Array.isArray(confidence.reasons) ? confidence.reasons.filter(r => typeof r === 'string').join(' · ') : '';
-    set('weight-prediction-note', available ? `현재 운동량 유지 기준 · 신뢰도 ${confidenceLabel}${reasons ? ` — ${reasons}` : ''}. 자료 생성 시점의 참고용 예측입니다.` : `예측 보류 · ${diag.trend?.disabledReason || '예측에 필요한 자료가 부족합니다.'}`);
-    $('weight-prediction-note').classList.toggle('is-caution', !available || confidence.level !== 'high');
+    // 신뢰도 등급은 최근 측정과 2주 예측 오차로 매긴다. 3개월 값이 "변화 없음" 가정보다 나은지는 요약의 longRange가 따로 알려 준다.
+    // 등급이 높아도 3개월 값이 장기 추정이면 그렇게 적고 주의 색을 유지한다(garmin-weight 재검토 MD5).
+    const longRange = {worse_than_flat:"3개월 값은 장기 추정입니다(84일 검증에서 '변화 없음' 가정보다 오차가 큼).", unverified:'3개월 값은 장기 추정입니다(84일 검증 표본 부족).'}[diag.longRange?.status] || '';
+    set('weight-prediction-note', available ? `현재 운동량 유지 기준 · 최근 측정과 2주 예측 신뢰도 ${confidenceLabel}${reasons ? ` — ${reasons}` : ''}.${longRange ? ` ${longRange}` : ''} 자료 생성 시점의 참고용 예측입니다.` : `예측 보류 · ${diag.trend?.disabledReason || '예측에 필요한 자료가 부족합니다.'}`);
+    $('weight-prediction-note').classList.toggle('is-caution', !available || confidence.level !== 'high' || Boolean(longRange));
     const activity = summary.rolling?.exerciseTrend;
     set('weight-activity-trend', Number.isFinite(activity?.deltaPct) ? `운동 칼로리 ${activity.deltaPct > 0 ? '+' : activity.deltaPct < 0 ? '−' : ''}${fmt(Math.abs(activity.deltaPct * 100),1)}% · 최근 7일 평균 / 이전 21일 평균` : '운동량 비교 자료가 아직 없습니다.');
   }

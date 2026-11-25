@@ -96,6 +96,7 @@ compute_prediction_ci = _modeling.compute_prediction_ci
 compute_trend_windows = _modeling.compute_trend_windows
 run_backtest = _modeling.run_backtest
 shadow_gate = _modeling.shadow_gate
+long_range_assessment = _modeling.long_range_assessment
 replay_ci_hit_rate = _modeling.replay_ci_hit_rate
 SHADOW_MODELS = _modeling.SHADOW_MODELS
 classify_prediction_confidence = _modeling.classify_prediction_confidence
@@ -1115,6 +1116,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
                 "confidence": {"level": "low", "label": "낮음", "score": 0, "reasons": ["데이터 없음"]},
                 "coverage": {"measuredDays": 0, "totalDays": 0, "pct": 0},
                 "dataQuality": data_quality_diagnostics([]),
+                "longRange": long_range_assessment({}),
                 "trend": model_trend_exposure(None, None),
                 "trendWindows": {},
                 "backtest": {},
@@ -1124,6 +1126,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
                 "last30Measured": 0,
                 "last30Total": 0,
                 "last30Pct": 0,
+                "windowStart": None,
+                "windowEnd": None,
                 "lastMeasurementAt": None,
                 "daysSinceLastMeasurement": None,
             },
@@ -1344,7 +1348,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     )
     plateau = detect_plateau(ewma_series, rows=rows if features["plateauLoadClassification"] else None)
     trend_state = classify_trend_state(ewma_series, weekly_loss_rate, plateau)
-    insight = build_insight(current_weight, current_ewma, loss_intensity, plateau, trend_state, weekly_loss_rate, remaining_kg)
+    insight = build_insight(current_weight, current_ewma, loss_intensity, plateau, trend_state, weekly_loss_rate, remaining_kg,
+                            weight_date=weight_date, latest_date=latest_date)
 
     # rolling에 exerciseTrend 추가
     rolling["exerciseTrend"] = exercise_trend
@@ -1402,7 +1407,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         warming_up=warming_up,
     )
 
-    data_quality = data_quality_diagnostics(rows)
+    # 요약의 측정률(coverage)과 같은 창을 센다: 완료된 날만, 오늘 행 제외(재검토 MD6).
+    data_quality = data_quality_diagnostics(complete_rows)
 
     model_audit = {
         name: backtest_run["models"][name] if detail else {
@@ -1440,6 +1446,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         "trend": trend_display,
         # 섀도 비교 결과. 예측은 항상 운영 모델(current)로 계산한다(affectsPrediction=false).
         "selectedModel": selection_gate,
+        # 3개월 값에 "장기 추정" 표시를 붙일지. 신뢰도 등급(confidence)과는 따로 본다.
+        "longRange": long_range_assessment(backtest_run["models"]),
         "trendWindows": trend_windows,
         "residualStdKg": prediction_ci.get("stdResidual"),
         "backtest": backtest,
@@ -1494,6 +1502,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             "last30Measured": measured_count,
             "last30Total": len(last30),
             "last30Pct": coverage_pct,
+            # 위 숫자를 센 창의 첫날과 마지막 날. 화면의 측정 점이 같은 날짜를 그린다(재검토 MD6).
+            "windowStart": last30[0]["date"] if last30 else None,
+            "windowEnd": last30[-1]["date"] if last30 else None,
             "lastMeasurementAt": last_measurement_date,
             "daysSinceLastMeasurement": days_since,
         },

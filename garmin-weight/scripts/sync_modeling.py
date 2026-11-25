@@ -629,6 +629,24 @@ def compute_trend_windows(
     return out
 
 
+# 측정 점수의 맨 윗단(3점)은 최근 30일 중 이만큼 잰 경우에만 준다. 이력이 짧으면 측정률이 높아도 2점까지다.
+FULL_COVERAGE_DAYS = 24
+# 측정률(%)과 측정 점수. 한 단계씩 오른다. 30일 창에서는 20일·22일·24일이 경계다.
+COVERAGE_STEPS = ((80.0, 3), (72.5, 2), (65.0, 1))
+
+
+def coverage_points(coverage_pct: float, measured_days: int) -> int:
+    """측정률로 주는 점수(0~3).
+
+    예전에는 측정률 80%에 2점, 측정일 24일에 1점을 따로 줬다. 30일 창에서는 둘이 같은 조건이라 23일은 1점, 24일은 3점이
+    되어 측정 한 번에 등급이 두 단계 뛰었다(재검토 MD5). 양 끝의 점수(65% 1점, 80%·24일 3점)는 그대로 두고 사이에 한 단을 넣었다.
+    """
+    for threshold, points in COVERAGE_STEPS:
+        if coverage_pct >= threshold and (points < 3 or measured_days >= FULL_COVERAGE_DAYS):
+            return points
+    return 0
+
+
 def classify_prediction_confidence(
     coverage_pct: float,
     measured_days: int,
@@ -636,19 +654,15 @@ def classify_prediction_confidence(
     backtests: dict[str, Any],
     warming_up: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
-    """warming_up=(현재 점 수, 필요한 점 수)이면 추세를 아직 판단할 수 없는 초기 구간이므로 신뢰도를 낮음으로 고정한다."""
-    score = 0
-    reasons = []
-    if coverage_pct >= 80:
-        score += 2
-    elif coverage_pct >= 65:
-        score += 1
-    else:
-        reasons.append("최근 측정률이 낮음")
+    """최근 측정과 2주 예측 오차로 매기는 등급(0~6점). 3개월 값의 품질은 long_range_assessment가 따로 본다.
 
-    if measured_days >= 24:
-        score += 1
-    else:
+    warming_up=(현재 점 수, 필요한 점 수)이면 추세를 아직 판단할 수 없는 초기 구간이므로 신뢰도를 낮음으로 고정한다.
+    """
+    score = coverage_points(coverage_pct, measured_days)
+    reasons = []
+    if coverage_pct < 65:
+        reasons.append("최근 측정률이 낮음")
+    if measured_days < FULL_COVERAGE_DAYS:
         reasons.append("최근 측정일 수 부족")
 
     if std_residual is not None and std_residual <= 0.45:
@@ -716,13 +730,32 @@ def _weekly_change(points: list[dict[str, Any]]) -> float | None:
     return (points[0]["valueKg"] - points[-1]["valueKg"]) / (days / 7) if days > 0 else None
 
 
+RECENT_SLOPE_DAYS = 7
+RECENT_SLOPE_MIN_POINTS = 5
+
+
+def _is_flat_window(points: list[dict[str, Any]], ewma_map: dict[str, float | None], threshold_kg_per_week: float) -> bool:
+    """창이 평평한가: 양 끝의 변화가 주 threshold 미만이고, 창 끝의 최근 7일 기울기도 주 threshold 미만이다.
+
+    양 끝만 보면 창 안에서 내려갔다 올라온 V자(또는 그 반대)도 평평이 된다(재검토 MD1). 그런 창은 최근 기울기가 0이 아니다.
+    두 번째 조건은 추세 배지가 '유지'가 되는 조건과 같은 값이다(compute_weekly_loss_rate의 windowSlopes['7d']와
+    model_trend_exposure의 임계값). 그래서 "N일째 평평" 문구와 "감량 중"·"증량 중" 배지가 함께 나오지 않는다.
+    """
+    change = _weekly_change(points)
+    if change is None or abs(change) >= threshold_kg_per_week:
+        return False
+    raw, _ = _slope_over_window(ewma_map, date.fromisoformat(points[-1]["date"]), RECENT_SLOPE_DAYS,
+                                min_points=RECENT_SLOPE_MIN_POINTS)
+    return raw is not None and abs(round(-raw * 7, 4)) < threshold_kg_per_week
+
+
 def detect_plateau(
     ewma_series: list[dict[str, Any]],
     threshold_kg_per_week: float = 0.05,
     min_days: int = 14,
     rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """EWMA의 14일 변화가 주 threshold 미만이면 정체다.
+    """EWMA가 14일 동안 평평하면(_is_flat_window) 정체다.
 
     durationDays는 실제로 이어진 정체 길이다: 끝에서부터 14일 창을 하루씩 뒤로 옮기며 모두 기준 안인 구간의 처음부터 센다(M7).
     예전에는 고정 창 양 끝의 차이라서 항상 13이었다.
@@ -736,13 +769,11 @@ def detect_plateau(
     latest_change = _weekly_change(points[-min_days:])
     if latest_change is None:
         return empty
-    detected = abs(latest_change) < threshold_kg_per_week
+    ewma_map = {p["date"]: p["valueKg"] for p in points}
+    detected = _is_flat_window(points[-min_days:], ewma_map, threshold_kg_per_week)
     start_index = len(points) - min_days
     if detected:
-        while start_index > 0:
-            change = _weekly_change(points[start_index - 1:start_index - 1 + min_days])
-            if change is None or abs(change) >= threshold_kg_per_week:
-                break
+        while start_index > 0 and _is_flat_window(points[start_index - 1:start_index - 1 + min_days], ewma_map, threshold_kg_per_week):
             start_index -= 1
 
     plateau_type: str | None = None
@@ -803,14 +834,27 @@ def build_insight(
     trend: dict[str, Any] | None = None,
     weekly_loss_rate: float | None = None,
     remaining_kg: float | None = None,
+    weight_date: str | None = None,
+    latest_date: str | None = None,
 ) -> dict[str, Any]:
-    """상태별 안내 문구. 프런트는 그대로 보여 준다(M7)."""
+    """상태별 안내 문구. 프런트는 그대로 보여 준다(M7).
+
+    current_kg는 가장 최근 측정값이고 weight_date는 그 날짜다. latest_date(요약의 마지막 날)와 같을 때만 "오늘"이라고 쓴다.
+    아침 수집은 오늘 체중이 들어오기 전에 돌므로 대부분 어제나 그 전의 값이다(재검토 MD7).
+    """
     lines: list[str] = []
     if ewma_kg is not None and current_kg is not None:
         diff = round(current_kg - ewma_kg, 2)
         if abs(diff) >= 0.3:
             direction = "수분 증가로 일시적 상승" if diff > 0 else "수분 감소로 일시적 하락"
-            lines.append(f"오늘 {current_kg}kg이지만 추세는 {ewma_kg}kg, {direction}일 수 있어요.")
+            if weight_date is not None and weight_date == latest_date:
+                when = "오늘"
+            elif weight_date is not None:
+                measured = date.fromisoformat(weight_date)
+                when = f"최근 측정({measured.month}/{measured.day})"
+            else:
+                when = "최근 측정"
+            lines.append(f"{when} {current_kg}kg이지만 추세는 {ewma_kg}kg, {direction}일 수 있어요.")
 
     state = (trend or {}).get("state")
     days = (plateau or {}).get("durationDays", 0)
@@ -841,8 +885,17 @@ def build_insight(
     return {"headline": lines[0] if lines else None, "lines": lines, "state": state}
 
 
-def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, outlier_delta_kg: float = 1.5, streak_penalty_days: int = 5, coverage_penalty_pct: float = 70.0) -> dict[str, Any]:
-    """Phase 1 — data quality diagnostics for the candidate model pipeline."""
+OUTLIER_WINDOW_DAYS = 60
+
+
+def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, outlier_delta_kg: float = 1.5,
+                             streak_penalty_days: int = 5, coverage_penalty_pct: float = 70.0,
+                             outlier_window_days: int = OUTLIER_WINDOW_DAYS) -> dict[str, Any]:
+    """자료 품질 진단. rows는 완료된 날만 준다(오늘 행 제외). 요약의 측정률과 같은 창을 세기 위해서다(재검토 MD6).
+
+    outlierCandidates는 최근 outlier_window_days일 안에서 직전 측정과 크게 벌어진 측정 수다. 전체 이력에서 세면
+    지난 일이 계속 남아 값이 늘기만 한다(재검토 MD9).
+    """
     if not rows:
         return {
             "totalDays": 0,
@@ -853,6 +906,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
             "recentCoveragePct": 0.0,
             "longestMissingStreak": 0,
             "outlierCandidates": 0,
+            "outlierWindowDays": outlier_window_days,
             "usableForRegression": False,
             "recentMeasurementCadence": None,
             "confidencePenalties": ["no_data"],
@@ -890,7 +944,8 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
         std_diff = variance ** 0.5
         adaptive_delta = max(outlier_delta_kg, std_diff * 2)
 
-    for row in rows:
+    outlier_from = max(0, len(rows) - outlier_window_days)
+    for index, row in enumerate(rows):
         weight = row.get("weight_kg")
         if weight is None:
             current_streak += 1
@@ -898,7 +953,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
         else:
             current_streak = 0
             measured_dates += 1
-            if previous_weight is not None and abs(weight - previous_weight) >= adaptive_delta:
+            if index >= outlier_from and previous_weight is not None and abs(weight - previous_weight) >= adaptive_delta:
                 outlier_candidates += 1
             previous_weight = weight
 
@@ -917,7 +972,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
         penalties.append("missing_streak_long")
     if measured_days < 14:
         penalties.append("measured_days_insufficient")
-    if outlier_candidates > total_days * 0.2:
+    if outlier_candidates > min(total_days, outlier_window_days) * 0.2:
         penalties.append("outliers_high")
     if not penalties:
         penalties.append("no_penalty")
@@ -931,6 +986,7 @@ def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, 
         "recentCoveragePct": recent_coverage_pct,
         "longestMissingStreak": longest_missing,
         "outlierCandidates": outlier_candidates,
+        "outlierWindowDays": outlier_window_days,
         "usableForRegression": usable_for_regression,
         "recentMeasurementCadence": cadence,
         "confidencePenalties": penalties,
@@ -952,7 +1008,10 @@ def model_trend_exposure(weekly_change_kg: float | None, weekly_loss_rate_kg: fl
     weekly_change_kg = round(weekly_change_kg, 4)
     if weekly_change_kg >= flat_threshold:
         direction = "losing"
-        weekly_loss_rate_kg = round(weekly_loss_rate_kg or weekly_change_kg, 4)
+        # 방향은 7일 기울기로 정한다(사용자 결정, 재검토 MD1). 혼합 감량률이 음수면 그 값을 감량률로 내보내지 않는다.
+        # 예전에는 direction이 losing인데 weeklyLossRateKg가 음수인 블록이 나왔다.
+        blended_loss = weekly_loss_rate_kg if weekly_loss_rate_kg is not None and weekly_loss_rate_kg > 0 else None
+        weekly_loss_rate_kg = round(blended_loss if blended_loss is not None else weekly_change_kg, 4)
         weekly_change_kg_display = weekly_loss_rate_kg
     elif weekly_change_kg <= -flat_threshold:
         direction = "gaining"
@@ -1218,6 +1277,34 @@ def run_backtest(
         "samples": samples,
         "horizons": horizons,
         "minSamples": min_samples,
+    }
+
+
+LONG_RANGE_HORIZON = "84d"
+FLAT_MODEL = "ewma_flat"
+
+
+def long_range_assessment(models: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """3개월(84일) 예측을 믿을 근거가 있는지. 화면이 3개월 값과 목표 도달일에 "장기 추정" 표시를 붙일지 정한다.
+
+    신뢰도 등급은 최근 측정과 2주 예측 오차만 본다. 그 등급이 높아도 3개월 예측은 "변화 없음"보다 나쁠 수 있다
+    (재검토 MD5, 사용자 결정: 등급은 그대로 두고 3개월 값에 따로 표시한다).
+    status: ok(변화 없음보다 낫거나 같다) / worse_than_flat / unverified(표본이 모자라 비교할 수 없다).
+    """
+    current = (models.get(OPERATIONAL_MODEL) or {}).get(LONG_RANGE_HORIZON) or {}
+    flat = (models.get(FLAT_MODEL) or {}).get(LONG_RANGE_HORIZON) or {}
+    if current.get("status") != "ok" or flat.get("status") != "ok":
+        status = "unverified"
+    elif current["maeKg"] > flat["maeKg"]:
+        status = "worse_than_flat"
+    else:
+        status = "ok"
+    return {
+        "horizon": LONG_RANGE_HORIZON,
+        "status": status,
+        "maeKg": current.get("maeKg"),
+        "flatMaeKg": flat.get("maeKg"),
+        "sampleCount": current.get("sampleCount", 0),
     }
 
 
