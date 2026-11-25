@@ -19,31 +19,19 @@
   <header class="topbar sh-topbar">
     <div class="sh-topbar-row">
       <div class="sh-topbar-title">
+        <h1>상하이 4박 5일 <span class="sh-h1-dates">11/28(토)–12/02(수)</span></h1>
         <div class="sh-pill-row">
-          <span class="sh-pill is-accent">청주 출발 · 11/28(토)–12/02(수) · 항공 확정</span>
-          <span class="sh-pill">4박 5일 · 2인</span>
-          <span class="sh-pill">9C7050 12:00 → 13:15 · 9C7049 11:00 → 14:05</span>
-          <span id="sh-weather-pill" class="sh-pill is-soft">5–15°C · 경량 패딩</span>
           <span id="sh-offline-pill" class="sh-pill is-online" aria-live="polite">온라인</span>
+          <span id="sh-weather-pill" class="sh-pill is-soft">5–15°C · 경량 패딩</span>
+          <span class="sh-pill is-detail is-accent">청주 출발 · 2인 · 항공 확정</span>
+          <span class="sh-pill is-detail">9C7050 12:00 → 13:15 · 9C7049 11:00 → 14:05</span>
         </div>
-        <h1>상하이 처방 여행 · 일정 &amp; 견적</h1>
         <p class="sh-topbar-sub">
-          현지에서는 <strong>실행 모드</strong>로 타임라인·지도·식당·예약·지출을 관리하고, 출발 전 주차·eSIM·숙소 분할(A 2박 + B 2박)·견적 비교는 <strong>준비·견적 모드</strong>에서 확인합니다. 기준일 <strong id="head-asof">-</strong>.
+          출발 전 주차·eSIM·숙소 분할(A 2박 + B 2박)·견적을 비교하는 <strong>준비·견적 모드</strong>입니다. 기준일 <strong id="head-asof">-</strong>.
         </p>
       </div>
       <div class="sh-topbar-actions">
-        <div class="mode-switch" role="tablist" aria-label="화면 모드 전환">
-          <button type="button" id="mode-btn-field" class="mode-btn is-active" role="tab" aria-selected="true" data-mode="field">
-            실행 모드 <small>일정 · 현지</small>
-          </button>
-          <button type="button" id="mode-btn-plan" class="mode-btn" role="tab" aria-selected="false" data-mode="plan">
-            준비 · 견적 <small>카드 · 계산기</small>
-          </button>
-        </div>
-        <nav class="page-switch" aria-label="다른 나라 일정">
-          <span class="page-switch-label">다른 일정</span>
-          <a href="trip_2026_dec_japan.html">일본 · 후쿠오카 / 오사카 / 도쿄 / 쓰시마 →</a>
-        </nav>
+        <button type="button" class="sh-btn is-primary sh-mode-back" data-mode="field">← 일정표로</button>
       </div>
     </div>
   </header>
@@ -434,6 +422,21 @@
     <button id="mobile-bar-jump" class="mobile-bar-btn" type="button">카드 고르기 ↓</button>
   </div>
   </div>
+
+  <footer class="sh-footer">
+    <div class="mode-switch" role="group" aria-label="화면 모드 전환">
+      <button type="button" id="mode-btn-field" class="mode-btn is-active" aria-pressed="true" data-mode="field">
+        일정표 <small>현지 실행</small>
+      </button>
+      <button type="button" id="mode-btn-plan" class="mode-btn" aria-pressed="false" data-mode="plan">
+        준비 · 견적 <small>카드 · 계산기</small>
+      </button>
+    </div>
+    <nav class="page-switch" aria-label="다른 나라 일정">
+      <span class="page-switch-label">다른 일정</span>
+      <a href="trip_2026_dec_japan.html">일본 · 후쿠오카 / 오사카 / 도쿄 / 쓰시마 →</a>
+    </nav>
+  </footer>
 
   <div id="taxi-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="taxi-modal-title">
     <div class="modal-card taxi-card">

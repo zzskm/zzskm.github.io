@@ -49,6 +49,33 @@ test('standalone China page includes dual-mode shell and required scripts/styles
   }
 });
 
+test('Shanghai itinerary shell: mode switch at the bottom, no manual reorder, offline worker covers the page files', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.html'), 'utf8');
+  const field = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.field.js'), 'utf8');
+  const sw = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.sw.js'), 'utf8');
+
+  // The quote mode switch sits in the footer, below both mode shells; the header keeps only a way back.
+  const footerAt = html.indexOf('class="sh-footer"');
+  assert.ok(footerAt > html.indexOf('id="plan-mode"'), 'footer must come after the plan-mode shell');
+  assert.ok(html.indexOf('id="mode-btn-plan"') > footerAt, 'mode switch must be inside the footer');
+  assert.ok(html.includes('class="sh-btn is-primary sh-mode-back" data-mode="field"'), 'plan mode needs a way back to the itinerary');
+
+  // Items follow the data's time order: the reorder buttons and the saved order are gone.
+  assert.equal(field.includes('data-move-item'), false, 'reorder buttons must not be rendered');
+  assert.equal(field.includes('itemOrder'), false, 'saved manual order must not be used');
+
+  // Every script, stylesheet and icon the page loads is in the worker's asset list, and so is the page.
+  const loaded = new Set(Array.from(html.matchAll(/(?:src|href)="([^":]+\.(?:js|css|svg))"/g), (m) => m[1]));
+  assert.ok(loaded.size >= 6, 'expected the page to load its scripts and styles');
+  for (const file of [...loaded, 'trip_2026_dec_china.html']) {
+    assert.ok(sw.includes(`"${file}"`), `Offline worker does not cache ${file}`);
+    assert.ok(fs.existsSync(path.join(ROOT, file)), `Missing file ${file}`);
+  }
+  // Network first (revalidating), registered with a scope that matches this page only.
+  assert.ok(sw.includes('cache: "no-cache"'), 'worker must revalidate with the network first');
+  assert.ok(field.includes('register("trip_2026_dec_china.sw.js", { scope: "./trip_2026_dec_china" })'));
+});
+
 test('Shanghai master data integrates Cheongju flight, downtown stays, customs, and dining guide', () => {
   const data = loadTripData('trip_2026_dec_china.data.js');
   assert.equal(data.cityOrder[0], 'shanghai');
