@@ -76,6 +76,35 @@ test('Shanghai itinerary shell: mode switch at the bottom, no manual reorder, of
   assert.ok(field.includes('register("trip_2026_dec_china.sw.js", { scope: "./trip_2026_dec_china" })'));
 });
 
+test('Shanghai page keeps the flat look: no gradients, pill shapes, drop shadows or emoji icons', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const html = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.html'), 'utf8');
+  const field = fs.readFileSync(path.join(ROOT, 'trip_2026_dec_china.field.js'), 'utf8');
+
+  assert.equal(/gradient\(/.test(css), false, 'no gradients');
+  assert.equal(/999px/.test(css), false, 'no pill radius');
+  assert.equal(/backdrop-filter/.test(css), false, 'no blur');
+  // The only shadows allowed are "none" and a flat inset bar.
+  for (const [, value] of css.matchAll(/box-shadow:\s*([^;]+);/g)) {
+    assert.ok(value === 'none' || value.startsWith('inset '), `Unexpected box-shadow: ${value}`);
+  }
+  // The shared palette is re-declared for this page so the gradient background of the shared sheet is replaced.
+  assert.match(css, /\.shanghai-shell\s*\{[^}]*--bg:\s*#ffffff;[^}]*background:\s*var\(--bg\);/);
+
+  const pictographs = /\p{Extended_Pictographic}/gu;
+  const allowed = new Set(['↗', '▾', '▴', '★', '©', '®', '™', '↔', '↓', '↑']);
+  for (const [name, text] of [['html', html], ['field.js', field]]) {
+    const found = (text.match(pictographs) || []).filter((ch) => !allowed.has(ch));
+    assert.deepEqual(found, [], `Emoji icons found in ${name}`);
+  }
+
+  // Stage 2 and 3 pieces: all-days view, print, tonight's stay, fixed-time markers.
+  for (const token of ['data-select-view="all"', 'data-print-page', 'class="day-stay"', 'class="tl-fixed"', 'class="tl-checkwrap"']) {
+    assert.ok(field.includes(token), `Missing in field.js: ${token}`);
+  }
+  assert.ok(css.includes('@media print'), 'print styles');
+});
+
 test('Shanghai master data integrates Cheongju flight, downtown stays, customs, and dining guide', () => {
   const data = loadTripData('trip_2026_dec_china.data.js');
   assert.equal(data.cityOrder[0], 'shanghai');
@@ -174,6 +203,26 @@ test('Shanghai master data integrates Cheongju flight, downtown stays, customs, 
   assert.ok(sh.airportTransfers.some((a) => a.id === sh.defaults.airportId), 'default airport transfer must exist');
   assert.ok(sh.paymentGuide.methods.length >= 5 && sh.paymentGuide.atmTips.length >= 3);
   assert.equal(JSON.stringify(sh).includes('07:30 디디'), false, 'stale 07:30 departure text');
+
+  // Items that cannot slip are marked, and every day says where the night is spent (none on the return day).
+  for (const id of ['d1_cjj_flight', 'd2_crab_dinner', 'd3_benbang_dinner', 'd5_to_airport', 'd5_airport', 'd5_return_flight']) {
+    assert.equal(itemById(id).fixedTime, true, `${id} must be marked fixedTime`);
+  }
+  assert.deepEqual(
+    Array.from(sh.itinerary, (d) => d.stayPlaceId),
+    ['main_hotel', 'main_hotel', 'hotel_b', 'hotel_b', null],
+  );
+  for (const d of sh.itinerary) {
+    if (d.stayPlaceId) assert.ok(sh.places[d.stayPlaceId], `Unknown stayPlaceId on day ${d.dayIndex + 1}`);
+  }
+
+  // Flights, both stays and roaming are settled (2026-11-25): none of them is an open reservation.
+  for (const id of ['res_flight', 'res_hotel_a', 'res_hotel_b', 'res_esim']) {
+    const r = sh.reservations.find((x) => x.id === id);
+    assert.equal(r.confirmed, true, `${id} must be confirmed`);
+    assert.equal(r.defaultStatus, 'booked');
+    assert.equal(Boolean(r.urgentD8), false);
+  }
 
   // Dining guide
   assert.ok(Array.isArray(sh.diningGuide) && sh.diningGuide.length >= 6);
