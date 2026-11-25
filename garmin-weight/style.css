@@ -123,6 +123,8 @@ body {
 .panel-head-legend-swatch--trend { width: 14px; height: 0; border-top: 2px solid var(--ma7); background: none; }
 .panel-head-legend-swatch--forecast { width: 14px; height: 0; border-top: 2px dashed var(--predict); background: none; }
 .panel-head-legend-swatch--target { width: 14px; height: 0; border-top: 2px dashed var(--target); background: none; }
+/* 추세에 일부만 반영한 측정: 차트의 속이 빈 점과 같은 모양이다. 전역 규칙(* { border-radius: 0 })을 이 견본에서만 푼다. */
+.panel-head-legend-swatch--limited, .chart-legend-swatch--limited { width: 9px; height: 9px; border: 2px solid var(--predict); border-radius: 50% !important; background: #fff; }
 /* 패널 제목 위의 작은 글. 규칙이 없으면 본문 크기(16px)로 나와 옆의 제목과 값보다 커진다. */
 .eyebrow {
   margin: 0 0 6px;
