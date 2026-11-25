@@ -223,6 +223,8 @@ test('Shanghai master data integrates Cheongju flight, downtown stays, customs, 
     assert.equal(r.defaultStatus, 'booked');
     assert.equal(Boolean(r.urgentD8), false);
   }
+  // Internet is carrier roaming, and the quote counts that option by default.
+  assert.equal(sh.defaults.dataId, 'kr_roaming');
 
   // Dining guide
   assert.ok(Array.isArray(sh.diningGuide) && sh.diningGuide.length >= 6);
