@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#f5f6f8" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <title>상하이 처방 여행 · 청주 출발 (11/28–12/02)</title>
   <meta name="description" content="청주공항에서 춘추항공으로 떠나는 2026년 11/28-12/2 상하이 4박 5일 여행. 현지 일정표·지도·예약·관세 체크·숙소 택배 수령 문의·상하이 미식 가이드 및 주차비 포함 견적" />
@@ -19,22 +19,23 @@
   <a class="skip-link" href="#field-main">본문으로 건너뛰기</a>
   <header class="topbar sh-topbar">
     <div class="sh-topbar-row">
-      <div class="sh-topbar-title">
-        <h1>상하이 4박 5일 <span class="sh-h1-dates">11/28(토)–12/02(수)</span></h1>
-        <div class="sh-pill-row">
-          <span id="sh-offline-pill" class="sh-pill is-online" aria-live="polite">온라인</span>
-          <span id="sh-weather-pill" class="sh-pill is-soft">5–15°C · 경량 패딩</span>
-          <span class="sh-pill is-detail is-accent">청주 출발 · 2인 · 항공·숙소·통신사 로밍 확정</span>
-          <span class="sh-pill is-detail">9C7050 12:00 → 13:15 · 9C7049 11:00 → 14:05</span>
-        </div>
-        <p class="sh-topbar-sub">
-          출발 전 주차·로밍·숙소 분할(A 2박 + B 2박)·견적을 비교하는 <strong>준비·견적 모드</strong>입니다. 기준일 <strong id="head-asof">-</strong>.
-        </p>
-      </div>
-      <div class="sh-topbar-actions">
-        <button type="button" class="sh-btn is-primary sh-mode-back" data-mode="field">← 일정표로</button>
+      <h1>상하이 4박 5일</h1>
+      <div class="sh-pill-row">
+        <span id="sh-offline-pill" class="sh-pill is-online" aria-live="polite">온라인</span>
+        <span id="sh-weather-pill" class="sh-pill">5–15°C</span>
       </div>
     </div>
+    <p class="sh-topbar-meta">
+      <span>11/28(토)–12/02(수)</span> · <span>청주 출발 2인</span> · <span>예약 확정</span><span class="sh-meta-wide"> (항공·숙소·통신사 로밍)</span>
+      <span class="sh-meta-flights">· 9C7050 12:00 → 13:15 · 9C7049 11:00 → 14:05</span>
+    </p>
+    <div class="mode-switch" role="group" aria-label="화면 모드 전환">
+      <button type="button" id="mode-btn-field" class="mode-btn is-active" aria-pressed="true" data-mode="field">일정표</button>
+      <button type="button" id="mode-btn-plan" class="mode-btn" aria-pressed="false" data-mode="plan">준비 · 견적</button>
+    </div>
+    <p class="sh-topbar-sub">
+      출발 전 주차·로밍·숙소 분할(A 2박 + B 2박)·견적을 비교하는 <strong>준비·견적 모드</strong>입니다. 기준일 <strong id="head-asof">-</strong>.
+    </p>
   </header>
 
   <div id="field-mode" class="field-shell">
@@ -43,8 +44,7 @@
     <nav class="field-nav-desktop" aria-label="상하이 실행 메뉴">
       <button type="button" class="field-nav-btn is-active" data-ftab="schedule" aria-pressed="true">일정</button>
       <button type="button" class="field-nav-btn" data-ftab="map" aria-pressed="false">지도 · 식당</button>
-      <button type="button" class="field-nav-btn" data-ftab="prep" aria-pressed="false">준비 · 관세</button>
-      <button type="button" class="field-nav-btn" data-ftab="bookings" aria-pressed="false">예약 · 숙소</button>
+      <button type="button" class="field-nav-btn" data-ftab="bookings" aria-pressed="false">예약 · 준비</button>
       <button type="button" class="field-nav-btn" data-ftab="budget" aria-pressed="false">비용</button>
       <button type="button" class="field-nav-btn" data-ftab="notes" aria-pressed="false">메모</button>
     </nav>
@@ -61,8 +61,7 @@
     <nav class="field-nav-mobile" aria-label="모바일 하단 메뉴">
       <button type="button" class="field-mnav-btn is-active" data-ftab="schedule" aria-pressed="true"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><span>일정</span></button>
       <button type="button" class="field-mnav-btn" data-ftab="map" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg></span><span>지도</span></button>
-      <button type="button" class="field-mnav-btn" data-ftab="prep" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M8 12.5l3 3 5-6"/></svg></span><span>준비</span></button>
-      <button type="button" class="field-mnav-btn" data-ftab="bookings" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2.5a1.5 1.5 0 0 0 0 3V16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2.5a1.5 1.5 0 0 0 0-3z"/><path d="M14 7.5v9" stroke-dasharray="2 2"/></svg></span><span>예약</span></button>
+      <button type="button" class="field-mnav-btn" data-ftab="bookings" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M8 12.5l3 3 5-6"/></svg></span><span>예약·준비</span></button>
       <button type="button" class="field-mnav-btn" data-ftab="budget" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9 7.5l3 4.5 3-4.5M12 12v5M9.5 13h5M9.5 15.5h5"/></svg></span><span>비용</span></button>
       <button type="button" class="field-mnav-btn" data-ftab="notes" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h9l3.5 3.5v13.5H6z"/><path d="M9 11h6M9 14.5h6M9 8h3"/></svg></span><span>메모</span></button>
     </nav>
@@ -80,7 +79,7 @@
       </div>
       <p class="field-note panel-hint">카드를 고르면 일정과 금액이 바로 바뀝니다. <span class="delta is-up">+금액</span> <span class="delta is-down">−금액</span>은 그 카드로 바꿀 때 1인 비용이 달라지는 폭입니다.</p>
 
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">1</span>일정 · 인원</h3>
+      <h3 class="step-title"><span class="step-num" aria-hidden="true">01</span> 일정 · 인원</h3>
 
       <div class="category is-open" data-section="city">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-city">
@@ -137,7 +136,7 @@
         </div>
       </div>
 
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">2</span>마운자로 처방</h3>
+      <h3 class="step-title"><span class="step-num" aria-hidden="true">02</span> 마운자로 처방</h3>
 
       <div class="category is-open" data-section="rx">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-rx">
@@ -173,7 +172,7 @@
         </div>
       </div>
 
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">3</span>이동 · 숙소</h3>
+      <h3 class="step-title"><span class="step-num" aria-hidden="true">03</span> 이동 · 숙소</h3>
 
       <div class="category is-open" data-section="flight">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-flight">
@@ -266,7 +265,7 @@
         </div>
       </div>
 
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">4</span>식사 · 관광</h3>
+      <h3 class="step-title"><span class="step-num" aria-hidden="true">04</span> 식사 · 관광</h3>
 
       <div class="category is-open" data-section="meal">
         <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-meal">
@@ -425,14 +424,6 @@
   </div>
 
   <footer class="sh-footer">
-    <div class="mode-switch" role="group" aria-label="화면 모드 전환">
-      <button type="button" id="mode-btn-field" class="mode-btn is-active" aria-pressed="true" data-mode="field">
-        일정표 <small>현지 실행</small>
-      </button>
-      <button type="button" id="mode-btn-plan" class="mode-btn" aria-pressed="false" data-mode="plan">
-        준비 · 견적 <small>카드 · 계산기</small>
-      </button>
-    </div>
     <nav class="page-switch" aria-label="다른 나라 일정">
       <span class="page-switch-label">다른 일정</span>
       <a href="trip_2026_dec_japan.html">일본 · 후쿠오카 / 오사카 / 도쿄 / 쓰시마 →</a>
@@ -450,8 +441,8 @@
       <p id="taxi-modal-ko" class="taxi-ko-sub">-</p>
       <div class="taxi-actions">
         <button id="taxi-copy-btn" class="sh-btn is-primary" type="button">중문 주소 복사</button>
-        <a id="taxi-amap-link" class="sh-btn" href="#" target="_blank" rel="noopener noreferrer">高德地图(Amap)</a>
-        <a id="taxi-baidu-link" class="sh-btn" href="#" target="_blank" rel="noopener noreferrer">百度地图(Baidu)</a>
+        <a id="taxi-amap-link" class="sh-btn" href="#" target="_blank" rel="noopener noreferrer">高德地图<small>Amap</small></a>
+        <a id="taxi-baidu-link" class="sh-btn" href="#" target="_blank" rel="noopener noreferrer">百度地图<small>Baidu</small></a>
       </div>
     </div>
   </div>
