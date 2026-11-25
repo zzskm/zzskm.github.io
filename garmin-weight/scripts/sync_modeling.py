@@ -458,8 +458,9 @@ def compute_prediction_ci(
     prediction_weeks: int = 12,
     target_weight: float | None = None,
     backtest: dict[str, Any] | None = None,
+    start_date: str | None = None,
 ) -> dict[str, Any]:
-    """예측 구간 (80% 밴드).
+    """예측 구간 (80% 밴드). start_date가 있으면 그 날부터 주 단위로 점을 찍는다(예측선과 날짜를 맞춘다).
 
     P3: central은 지수 감쇠 외삽과 일치.
     P4: 잔차 std × √t 와 horizon별 backtest RMSE 중 더 큰 값 사용 (CI 저평가 방지).
@@ -477,7 +478,7 @@ def compute_prediction_ci(
         return {"stdResidual": None, "series": []}
 
     start = last_valid["valueKg"]
-    last_date = date.fromisoformat(last_valid["date"])
+    last_date = date.fromisoformat(start_date or last_valid["date"])
 
     # P4: backtest RMSE를 주(week) 단위 키로 사전 인덱싱. 키는 7d/14d/28d → 1/2/4주.
     bt_rmse_by_week: dict[int, float] = {}
@@ -540,68 +541,6 @@ def compute_trend_windows(
         out[f"{window}d"] = {
             "weeklyLossKg": round_or_none(-raw * 7, 4) if raw is not None else None,
             "points": len(pts),
-        }
-    return out
-
-
-def backtest_predictions(
-    rows: list[dict[str, Any]],
-    ewma_series: list[dict[str, Any]],
-    ma7_by_date: dict[str, float | None],
-    horizons: tuple[int, ...] = (7, 14, 28),
-    train_window: int = 28,
-    min_samples: int = 3,
-    target_weight: float | None = None,
-) -> dict[str, Any]:
-    """과거 prefix 기준 단순 백테스트. 실제 측정값은 목표일 ±3일 내 가장 가까운 값."""
-    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
-    out: dict[str, Any] = {}
-    for horizon in horizons:
-        errors: list[float] = []
-        for idx in range(train_window, len(rows) - horizon):
-            latest = rows[idx - 1]["date"]
-            current_ewma = ewma_by_date.get(latest)
-            if current_ewma is None:
-                continue
-            detail = compute_weekly_loss_rate(
-                ewma_series[:idx],
-                ma7_by_date,
-                rows[:idx],
-                latest,
-                window=train_window,
-            )
-            rate = detail.get("blended")
-            if rate is None or rate <= 0:
-                continue
-            target_day = date.fromisoformat(latest) + timedelta(days=horizon)
-            candidates = []
-            for row in rows[idx:]:
-                actual = row.get("weight_kg")
-                if actual is None:
-                    continue
-                distance = abs((date.fromisoformat(row["date"]) - target_day).days)
-                if distance <= 3:
-                    candidates.append((distance, actual))
-            if not candidates:
-                continue
-            actual = min(candidates, key=lambda item: item[0])[1]
-            # P3: 본 예측과 동일한 지수 감쇠 모델 사용 — CI에 들어가는 RMSE 비대칭 제거.
-            predicted = _projected_weight(current_ewma, rate, horizon / 7, target_weight)
-            errors.append(predicted - actual)
-
-        key = f"{horizon}d"
-        if len(errors) < min_samples:
-            out[key] = {"sampleCount": len(errors), "status": "insufficient"}
-            continue
-        mae = sum(abs(e) for e in errors) / len(errors)
-        bias = sum(errors) / len(errors)
-        rmse = (sum(e * e for e in errors) / len(errors)) ** 0.5
-        out[key] = {
-            "sampleCount": len(errors),
-            "biasKg": round(bias, 3),
-            "maeKg": round(mae, 3),
-            "rmseKg": round(rmse, 3),
-            "status": "ok",
         }
     return out
 
@@ -916,344 +855,329 @@ def warming_up_trend_exposure(points: int, required: int) -> dict[str, Any]:
     }
 
 
-def nearest_actual_for_backtest(rows: list[dict[str, Any]], target_day: date, start_idx: int, tolerance_days: int = 3) -> float | None:
-    """Find the closest actual measurement to a target horizon day within tolerance."""
-    candidates: list[tuple[int, float]] = []
-    for point in rows[start_idx:]:
-        weight = point.get("weight_kg") if isinstance(point, dict) else None
-        if weight is None:
-            continue
-        distance = abs((date.fromisoformat(point["date"]) - target_day).days)
-        if distance <= tolerance_days:
-            candidates.append((distance, weight))
-    return min(candidates, key=lambda item: item[0])[1] if candidates else None
+# ---------------------------------------------------------------------------
+# P6: 통합 백테스트
+#
+# 모든 모델(운영, 섀도 후보, Kalman, 변화 없음)을 같은 기준 시점 집합과 같은 실측 매칭으로 평가한다.
+# 부호 규칙은 하나다: 모델은 (기준 수준 kg, 하루 체중 변화 kg)를 내고 감량은 음수다.
+# 운영 모델만 감쇠 곡선(_projected_weight)을 쓰고, 그 함수가 받는 감량률(양수=감량)은 경계에서 바꾼다.
+# ---------------------------------------------------------------------------
+
+BACKTEST_HORIZONS = (7, 14, 28, 84)
+BACKTEST_MIN_SAMPLES = 20
+BACKTEST_TOLERANCE_DAYS = 3
+OPERATIONAL_MODEL = "current"
+# 섀도 후보. 예측에는 쓰지 않고 운영 모델과 비교만 한다.
+SHADOW_MODELS = (
+    "ewma_flat",            # 변화 없음: 기준 시점 EWMA를 그대로 잇는다
+    "ma7",                  # 최근 측정 7회의 평균을 그대로 잇는다
+    "linreg_28d",
+    "linreg_56d",
+    "linreg_84d",
+    "weighted_linreg_56d",  # 최근일수록 큰 가중
+    "robust_56d",           # Theil–Sen(쌍별 기울기의 중앙값)
+    "kalman",               # [체중, 속도] 상태. 증량 속도도 운영 모델처럼 그대로 쓴다
+)
+_REGRESSIONS = {
+    "linreg_28d": (28, "ols"),
+    "linreg_56d": (56, "ols"),
+    "linreg_84d": (84, "ols"),
+    "weighted_linreg_56d": (56, "weighted"),
+    "robust_56d": (56, "theil_sen"),
+}
+SHADOW_GATE = {
+    "minSampleCount": BACKTEST_MIN_SAMPLES,
+    "minImprovementKg": 0.05,
+    "minImprovementPct": 0.08,
+    "minHorizonWins": 2,
+}
 
 
-def summarize_backtest_errors(errors: list[float], min_samples: int = 20) -> dict[str, Any]:
+def summarize_backtest_errors(errors: list[float], min_samples: int = BACKTEST_MIN_SAMPLES) -> dict[str, Any]:
+    """오차(예측 − 실측) 목록의 표본 수·MAE·RMSE·bias. 표본이 min_samples 미만이면 status가 insufficient다."""
     if not errors:
         return {"sampleCount": 0, "maeKg": None, "rmseKg": None, "biasKg": None, "status": "insufficient"}
     mae = sum(abs(e) for e in errors) / len(errors)
     bias = sum(errors) / len(errors)
     rmse = math.sqrt(sum(e * e for e in errors) / len(errors))
-    status = "ok" if len(errors) >= min_samples else "insufficient"
     return {
         "sampleCount": len(errors),
         "maeKg": round(mae, 3),
         "rmseKg": round(rmse, 3),
         "biasKg": round(bias, 3),
-        "status": status,
+        "status": "ok" if len(errors) >= min_samples else "insufficient",
     }
 
 
-def run_regression_slope(dates: list[str], values: list[float | None], window_days: int) -> tuple[float | None, int]:
-    start = max(0, len(dates) - window_days)
-    pts: list[tuple[float, float]] = []
-    for i in range(start, len(dates)):
-        v = values[i]
-        if v is not None:
-            pts.append((float(i - start), v))
-    if len(pts) < 3:
-        return None, len(pts)
-    xs = [p[0] for p in pts]
-    ys = [p[1] for p in pts]
-    xm = sum(xs) / len(xs)
-    ym = sum(ys) / len(ys)
-    num = sum((x - xm) * (y - ym) for x, y in zip(xs, ys))
-    den = sum((x - xm) ** 2 for x in xs)
-    slope = num / den if den != 0 else 0.0
-    return slope, len(pts)
+def ols_fit(points: list[tuple[float, float]], weights: list[float] | None = None) -> tuple[float, float] | None:
+    """(x, y) 점의 (가중) 최소제곱 직선 (기울기, x=0에서의 값). 점이 3개 미만이거나 x가 모두 같으면 None."""
+    if len(points) < 3:
+        return None
+    ws = weights if weights is not None else [1.0] * len(points)
+    total = sum(ws)
+    if total <= 0:
+        return None
+    xm = sum(w * x for (x, _), w in zip(points, ws)) / total
+    ym = sum(w * y for (_, y), w in zip(points, ws)) / total
+    den = sum(w * (x - xm) ** 2 for (x, _), w in zip(points, ws))
+    if den == 0:
+        return None
+    slope = sum(w * (x - xm) * (y - ym) for (x, y), w in zip(points, ws)) / den
+    return slope, ym - slope * xm
 
 
-def candidate_weighted_regression(dates: list[str], values: list[float | None], window_days: int = 56) -> tuple[float | None, int]:
-    """Weighted linear regression with linear recency weights."""
-    start = max(0, len(dates) - window_days)
-    pts: list[tuple[float, float, float]] = []
-    for i in range(start, len(dates)):
-        v = values[i]
-        if v is None:
-            continue
-        weight = float(i - start + 1)
-        pts.append((float(i - start), v, weight))
-    if len(pts) < 3:
-        return None, len(pts)
-    xs = [p[0] for p in pts]
-    ys = [p[1] for p in pts]
-    ws = [p[2] for p in pts]
-    wsum = sum(ws)
-    if wsum <= 0:
-        return None, len(pts)
-    xm = sum(x * w for x, w in zip(xs, ws)) / wsum
-    ym = sum(y * w for y, w in zip(ys, ws)) / wsum
-    num = sum(w * (x - xm) * (y - ym) for x, y, w in zip(xs, ys, ws))
-    den = sum(w * (x - xm) ** 2 for x, w in zip(xs, ws))
-    return num / den if den != 0 else 0.0, len(pts)
-
-
-def candidate_robust_regression(dates: list[str], values: list[float | None], window_days: int = 56, delta_kg: float = 1.5) -> tuple[float | None, int]:
-    """Robust-ish slope estimator: trim one-sided outliers larger than delta_kg before OLS."""
-    start = max(0, len(dates) - window_days)
-    pts: list[tuple[float, float]] = []
-    previous: float | None = None
-    for i in range(start, len(dates)):
-        v = values[i]
-        if v is None:
-            continue
-        if previous is not None and abs(v - previous) >= delta_kg:
-            pts.append((float(i - start), v * 1.01))
-            previous = v
-            continue
-        pts.append((float(i - start), v))
-        previous = v
-    if len(pts) < 3:
-        return None, len(pts)
-    xs = [p[0] for p in pts]
-    ys = [p[1] for p in pts]
-    xm = sum(xs) / len(xs)
-    ym = sum(ys) / len(ys)
-    num = sum((x - xm) * (y - ym) for x, y in zip(xs, ys))
-    den = sum((x - xm) ** 2 for x in xs)
-    return num / den if den != 0 else 0.0, len(pts)
-
-
-def candidate_linreg(dates: list[str], values: list[float | None], window_days: int = 28) -> tuple[float | None, int]:
-    return run_regression_slope(dates, values, window_days)
-
-
-def compute_candidate_prediction(candidate_name: str, cutoff_dates: list[str], cutoff_values: list[float | None], rolling_ewma: float | None, rolling_ma7: float | None, train_window: int = 56) -> tuple[float | None, float | None, str | None]:
-    """Return predicted_weight at cutoff, weekly_change, or reason unavailable."""
-    if candidate_name == "flat_baseline":
-        if rolling_ewma is None:
-            return None, None, "no_ewma"
-        predicted = rolling_ewma
-        weekly_change = 0.0
-        return predicted, weekly_change, None
-    if candidate_name == "ma7_baseline":
-        if cutoff_values[-1] is None:
-            return None, None, "no_measurement"
-        ma7_values = [v for v in cutoff_values[-7:] if v is not None]
-        if len(ma7_values) < 3:
-            return None, None, "insufficient_ma7"
-        predicted = sum(ma7_values) / len(ma7_values)
-        weekly_change = 0.0
-        return predicted, weekly_change, None
-    if candidate_name == "ewma_baseline":
-        if rolling_ewma is None:
-            return None, None, "no_ewma"
-        predicted = rolling_ewma
-        weekly_change = 0.0
-        return predicted, weekly_change, None
-    if candidate_name == "current_multi_window_ewma_blend":
-        return None, None, "uses_separate_multi_window_slope_blend"
-    if candidate_name == "linear_regression_28d":
-        slope, n = candidate_linreg(cutoff_dates, cutoff_values, 28)
-        if slope is None:
-            return None, None, "insufficient_points"
-        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
-        weekly_change = -slope * 7
-        return predicted, weekly_change, None
-    if candidate_name == "linear_regression_56d":
-        slope, n = candidate_linreg(cutoff_dates, cutoff_values, 56)
-        if slope is None:
-            return None, None, "insufficient_points"
-        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
-        weekly_change = -slope * 7
-        return predicted, weekly_change, None
-    if candidate_name == "linear_regression_84d":
-        slope, n = candidate_linreg(cutoff_dates, cutoff_values, 84)
-        if slope is None:
-            return None, None, "insufficient_points"
-        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
-        weekly_change = -slope * 7
-        return predicted, weekly_change, None
-    if candidate_name == "weighted_linear_regression_56d":
-        slope, n = candidate_weighted_regression(cutoff_dates, cutoff_values, 56)
-        if slope is None:
-            return None, None, "insufficient_points"
-        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
-        weekly_change = -slope * 7
-        return predicted, weekly_change, None
-    if candidate_name == "robust_regression_56d":
-        slope, n = candidate_robust_regression(cutoff_dates, cutoff_values, 56)
-        if slope is None:
-            return None, None, "insufficient_points"
-        predicted = rolling_ewma if rolling_ewma is not None else cutoff_values[-1]
-        weekly_change = -slope * 7
-        return predicted, weekly_change, None
-    if candidate_name == "kalman":
-        return None, None, "kalman_requires_separate_filter"
-    return None, None, "unknown_candidate"
-
-
-def run_generalized_backtest(rows: list[dict[str, Any]], ewma_series: list[dict[str, Any]], candidate_names: list[str] | None = None, train_window: int = 28, horizon_days: tuple[int, ...] = (7, 14, 28), tolerance_days: int = 3) -> dict[str, Any]:
-    """Phase 3 — rolling backtest over candidate models. Trains only on prefix before each cutoff."""
-    default_candidates = [
-        "flat_baseline",
-        "ma7_baseline",
-        "ewma_baseline",
-        "current_multi_window_ewma_blend",
-        "linear_regression_28d",
-        "linear_regression_56d",
-        "linear_regression_84d",
-        "weighted_linear_regression_56d",
-        "robust_regression_56d",
-        "kalman",
+def theil_sen_fit(points: list[tuple[float, float]]) -> tuple[float, float] | None:
+    """Theil–Sen 직선 (기울기, x=0에서의 값). 기울기는 쌍별 기울기의 중앙값, 절편은 y − 기울기·x의 중앙값이다.
+    이상치 한 점이 직선을 거의 움직이지 못한다. 점이 3개 미만이면 None."""
+    if len(points) < 3:
+        return None
+    slopes = [
+        (y2 - y1) / (x2 - x1)
+        for i, (x1, y1) in enumerate(points)
+        for (x2, y2) in points[i + 1:]
+        if x2 != x1
     ]
-    candidate_names = [name for name in (candidate_names or default_candidates) if name in default_candidates]
-    dates = [row["date"] for row in rows]
-    values = [row.get("weight_kg") for row in rows]
-    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
-    latest_ewma = next((p["valueKg"] for p in reversed(ewma_series) if p.get("valueKg") is not None), None)
-    out: dict[str, Any] = {}
-    for candidate in candidate_names:
-        candidate_out: dict[str, Any] = {}
-        for horizon in horizon_days:
-            errors: list[float] = []
-            for idx in range(train_window, len(rows) - horizon):
-                cutoff_date = rows[idx - 1]["date"]
-                cutoff_ewma = ewma_by_date.get(cutoff_date)
-                cutoff_dates_prefix = dates[:idx]
-                cutoff_values_prefix = values[:idx]
-                predicted, weekly_change, reason = compute_candidate_prediction(
-                    candidate,
-                    cutoff_dates_prefix,
-                    cutoff_values_prefix,
-                    cutoff_ewma,
-                    values[idx - 1],
-                    train_window=train_window,
-                )
-                if reason:
-                    continue
-                target_day = date.fromisoformat(cutoff_date) + timedelta(days=horizon)
-                actual = nearest_actual_for_backtest(rows, target_day, idx, tolerance_days=tolerance_days)
-                if actual is None:
-                    continue
-                if weekly_change is None:
-                    continue
-                if candidate == "current_multi_window_ewma_blend":
-                    continue
-                if predicted is None:
-                    continue
-                try:
-                    week_fraction = max(horizon / 7, 1.0)
-                    prediction = predicted + weekly_change * week_fraction
-                except Exception:
-                    continue
-                errors.append(round(prediction - actual, 4))
-            candidate_out[f"{horizon}d"] = summarize_backtest_errors(errors)
-        out[candidate] = candidate_out
-    kalman_out: dict[str, Any] = {}
-    try:
-        import importlib.util as _ilu
-        _spec = _ilu.spec_from_file_location("kalman_predictor", Path(__file__).resolve().parent / "kalman_predictor.py")
-        if _spec is not None and _spec.loader is not None:
-            _mod = _ilu.module_from_spec(_spec)
-            _spec.loader.exec_module(_mod)
-            kalman_rows = [{"date": r["date"], "weight_kg": r.get("weight_kg")} for r in rows]
-            kalman_out = _mod.kalman_backtest(kalman_rows, horizons=horizon_days, train_window=train_window)
-    except Exception as exc:
-        kalman_out = {"error": str(exc)}
-    if "kalman" in candidate_names:
-        out["kalman"] = kalman_out
+    if not slopes:
+        return None
+    slope = statistics.median(slopes)
+    return slope, statistics.median(y - slope * x for x, y in points)
+
+
+def _kalman_filter_fn():
+    """kalman_predictor.kalman_filter. 실행 방식과 무관하게 같은 폴더에서 읽는다."""
+    import importlib.util
+
+    module_path = Path(__file__).resolve().parent / "kalman_predictor.py"
+    spec = importlib.util.spec_from_file_location("garmin_kalman_predictor", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("kalman_predictor module not found")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.kalman_filter
+
+
+def shadow_predictors(
+    prefix: list[tuple[int, float]],
+    cutoff_ordinal: int,
+    level: float,
+    kalman_state: tuple[float, float] | None,
+) -> dict[str, tuple[float, float]]:
+    """기준 시점까지의 측정(서수일, kg)으로 섀도 모델마다 (기준 수준, 하루 변화)를 만든다. 정할 수 없는 모델은 뺀다.
+
+    회귀 후보는 측정에서 기울기만 얻고, 출발점은 운영 모델과 같은 기준 시점 EWMA다. 수준이 아니라 추세 추정 방법을
+    비교하려는 것이다(직선의 x=0 값에서 출발하면 실제 이력에서 7/14/28일 MAE가 0.03~0.18kg 나빠졌다).
+    """
+    out: dict[str, tuple[float, float]] = {"ewma_flat": (level, 0.0)}
+    recent = [weight for _, weight in prefix[-7:]]
+    if len(recent) >= 3:
+        out["ma7"] = (sum(recent) / len(recent), 0.0)
+    for name, (window, method) in _REGRESSIONS.items():
+        points = [(float(day - cutoff_ordinal), weight) for day, weight in prefix if day > cutoff_ordinal - window]
+        if method == "theil_sen":
+            fit = theil_sen_fit(points)
+        elif method == "weighted":
+            fit = ols_fit(points, [window + x for x, _ in points])
+        else:
+            fit = ols_fit(points)
+        if fit is not None:
+            out[name] = (level, fit[0])
+    if kalman_state is not None:
+        out["kalman"] = (kalman_state[0], kalman_state[1])
     return out
 
 
-def apply_model_selection_gate(audit: dict[str, Any], current_metrics: dict[str, Any], gate: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Phase 4 — conservative model selection gate."""
-    current_backtest = current_metrics or {}
-    gate = {
-        "minSampleCount": 20,
-        "minImprovementKg": 0.05,
-        "minImprovementPct": 0.08,
-        "minHorizonWins": 2,
-    } | (gate or {})
-    min_samples = int(gate["minSampleCount"])
-    min_improve_abs = float(gate["minImprovementKg"])
-    min_improve_pct = float(gate["minImprovementPct"])
-    min_horizon_wins = int(gate["minHorizonWins"])
+def _nearest_actual(
+    meas_ord: list[int], meas_w: list[float], meas_row: list[int],
+    first_row: int, target: int, tolerance_days: int,
+) -> tuple[float | None, int | None]:
+    """기준 시점 뒤(first_row 이후 행)의 측정 중 target에 가장 가까운 것. 같은 거리면 이른 날."""
+    import bisect
 
-    best_candidate = "current"
-    best_reason = "no_candidate"
-    wins: dict[str, Any] = {}
-    for candidate, horizons in audit.items():
-        if candidate == "current_multi_window_ewma_blend":
+    lo = bisect.bisect_left(meas_ord, target - tolerance_days)
+    hi = bisect.bisect_right(meas_ord, target + tolerance_days)
+    best: tuple[int, int] | None = None
+    for k in range(lo, hi):
+        if meas_row[k] < first_row:
             continue
-        candidate_wins = 0
-        passes = True
-        reasons: list[str] = []
-        for horizon_key, stats in horizons.items():
-            if not isinstance(stats, dict):
-                continue
-            current_h = current_backtest.get(horizon_key) or {}
-            if stats.get("status") != "ok" or current_h.get("status") != "ok":
-                passes = False
-                reasons.append(f"{horizon_key}_not_ok")
-                continue
-            if stats.get("sampleCount", 0) < min_samples:
-                passes = False
-                reasons.append(f"{horizon_key}_sample_count_low")
-                continue
-            current_mae = current_h.get("maeKg")
-            candidate_mae = stats.get("maeKg")
-            if current_mae is None or candidate_mae is None:
-                passes = False
-                reasons.append(f"{horizon_key}_missing_mae")
-                continue
-            improve_abs = float(current_mae) - float(candidate_mae)
-            improve_pct = improve_abs / float(current_mae) if current_mae else 0.0
-            if improve_abs >= min_improve_abs or improve_pct >= min_improve_pct:
-                candidate_wins += 1
-            if candidate_wins >= min_horizon_wins and passes:
-                best_candidate = candidate
-                best_reason = "beat_current_on_selection_gate"
-                break
-        if best_candidate == candidate and passes:
-            break
+        distance = abs(meas_ord[k] - target)
+        if best is None or distance < best[0]:
+            best = (distance, k)
+    if best is None:
+        return None, None
+    return meas_w[best[1]], meas_ord[best[1]]
 
-    status = "kept_current" if best_candidate == "current" else "adopted_new"
-    if best_candidate != "current":
-        best_reason = f"adopted_{best_candidate}"
+
+def run_backtest(
+    rows: list[dict[str, Any]],
+    ewma_series: list[dict[str, Any]],
+    ma7_by_date: dict[str, float | None],
+    target_weight: float | None = None,
+    train_window: int = 28,
+    horizons: tuple[int, ...] = BACKTEST_HORIZONS,
+    tolerance_days: int = BACKTEST_TOLERANCE_DAYS,
+    min_samples: int = BACKTEST_MIN_SAMPLES,
+) -> dict[str, Any]:
+    """기준 시점마다 앞부분(rows[:idx])만으로 모든 모델의 예측을 만들고 같은 실측과 비교한다.
+
+    기준 시점은 학습 창(train_window) 뒤의 모든 날이다(감량기만 고르지 않는다, M3).
+    한 기준 시점은 모든 모델이 예측을 낼 수 있고 실측이 ±tolerance_days 안에 있을 때만 표본이 된다(같은 표본).
+    운영 모델은 본 예측과 같은 감량률과 감쇠 곡선을 쓰고, 감량률을 정할 수 없는 초기에는 평평하게 잇는다.
+    """
+    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    ordinals = [date.fromisoformat(row["date"]).toordinal() for row in rows]
+    weights = [row.get("weight_kg") for row in rows]
+    meas_row = [i for i, weight in enumerate(weights) if weight is not None]
+    meas_ord = [ordinals[i] for i in meas_row]
+    meas_w = [float(weights[i]) for i in meas_row]
+    kalman_states = _kalman_filter_fn()(weights) if meas_row else []
+
+    import bisect
+
+    cutoffs: list[dict[str, Any]] = []
+    for idx in range(train_window, len(rows)):
+        cutoff_date = rows[idx - 1]["date"]
+        level = ewma_by_date.get(cutoff_date)
+        if level is None:
+            continue
+        rate = compute_weekly_loss_rate(ewma_series[:idx], ma7_by_date, rows[:idx], cutoff_date, window=train_window)["blended"]
+        k = bisect.bisect_left(meas_row, idx)
+        prefix = list(zip(meas_ord[:k], meas_w[:k]))
+        state = kalman_states[idx - 1] if kalman_states else None
+        shadow = shadow_predictors(prefix, ordinals[idx - 1], level, state)
+        if any(name not in shadow for name in SHADOW_MODELS):
+            continue  # 같은 표본: 한 모델이라도 예측을 못 내면 이 기준 시점은 모두에게서 뺀다
+        cutoffs.append({"index": idx, "ordinal": ordinals[idx - 1], "level": level, "rate": rate, "shadow": shadow})
+
+    samples: dict[int, list[dict[str, Any]]] = {h: [] for h in horizons}
+    for cutoff in cutoffs:
+        for horizon in horizons:
+            actual, actual_ord = _nearest_actual(meas_ord, meas_w, meas_row, cutoff["index"], cutoff["ordinal"] + horizon, tolerance_days)
+            if actual is None:
+                continue
+            rate = cutoff["rate"] if cutoff["rate"] is not None else 0.0
+            predictions = {OPERATIONAL_MODEL: _projected_weight(cutoff["level"], rate, horizon / 7, target_weight)}
+            for name, (base, slope_per_day) in cutoff["shadow"].items():
+                predictions[name] = base + slope_per_day * horizon
+            samples[horizon].append({
+                "index": cutoff["index"],
+                "cutoff": cutoff["ordinal"],
+                "actualOrdinal": actual_ord,
+                "actual": actual,
+                "predictions": predictions,
+            })
+
+    models = {
+        name: {
+            f"{h}d": summarize_backtest_errors([s["predictions"][name] - s["actual"] for s in samples[h]], min_samples)
+            for h in horizons
+        }
+        for name in (OPERATIONAL_MODEL, *SHADOW_MODELS)
+    }
     return {
-        "name": best_candidate if status == "adopted_new" else "current",
-        "status": status,
-        "reason": best_reason,
-        "gate": gate,
+        "models": models,
+        "sampleCounts": {f"{h}d": len(samples[h]) for h in horizons},
+        "samples": samples,
+        "horizons": horizons,
+        "minSamples": min_samples,
     }
 
 
-def compute_ci_calibration_replay(rows: list[dict[str, Any]], ewma_series: list[dict[str, Any]], central_fn, spread_fn, train_window: int = 28, tolerance_days: int = 3) -> dict[str, Any]:
-    """Phase 6 — replay selected-model CI bands against historical actuals.
+def shadow_gate(models: dict[str, dict[str, Any]], horizons: tuple[int, ...] = BACKTEST_HORIZONS,
+                gate: dict[str, Any] | None = None) -> dict[str, Any]:
+    """섀도 후보가 운영 모델보다 나은지 본다. 결과는 진단용이며 예측을 바꾸지 않는다.
 
-    central_fn(horizon_days, cutoff_ewma, cutoff_values_prefix) -> central_prediction
-    spread_fn(horizon_days) -> upper-lower half-width
+    통과 조건(모두): 모든 기간에서 표본이 충분하다, 어느 기간에서도 |bias|가 운영 모델보다 크지 않다,
+    minHorizonWins개 이상의 기간에서 MAE가 minImprovementKg 또는 minImprovementPct만큼 낮다.
+    통과한 후보가 있으면 MAE 비율 평균이 가장 낮은 후보가 shadow_leader다. 없으면 no_change다.
     """
-    dates = [row["date"] for row in rows]
-    values = [row.get("weight_kg") for row in rows]
-    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
-    out: dict[str, Any] = {}
-    for horizon in (7, 14, 28):
-        hits = 0
-        total = 0
-        for idx in range(train_window, len(rows) - horizon):
-            cutoff_date = rows[idx - 1]["date"]
-            cutoff_ewma = ewma_by_date.get(cutoff_date)
-            cutoff_dates = dates[:idx]
-            cutoff_values = values[:idx]
-            central = central_fn(horizon, cutoff_ewma, cutoff_values)
-            spread = spread_fn(horizon)
-            if central is None or spread is None:
+    gate = SHADOW_GATE | (gate or {})
+    current = models.get(OPERATIONAL_MODEL) or {}
+    evaluated: dict[str, Any] = {}
+    passing: list[tuple[float, str]] = []
+    for name in SHADOW_MODELS:
+        stats = models.get(name) or {}
+        wins: list[str] = []
+        blocked: list[str] = []
+        ratios: list[float] = []
+        for horizon in horizons:
+            key = f"{horizon}d"
+            base, cand = current.get(key) or {}, stats.get(key) or {}
+            if base.get("status") != "ok" or cand.get("status") != "ok" or cand.get("sampleCount", 0) < gate["minSampleCount"]:
+                blocked.append(f"{key}_insufficient")
                 continue
-            target_day = date.fromisoformat(cutoff_date) + timedelta(days=horizon)
-            actual = nearest_actual_for_backtest(rows, target_day, idx, tolerance_days=tolerance_days)
-            if actual is None:
-                continue
-            total += 1
-            if abs(actual - central) <= spread:
-                hits += 1
-        out[f"{horizon}d"] = round(hits / total, 3) if total else None
-    hit_rate = {k: v for k, v in out.items()}
-    status = "ok" if any(v is not None for v in hit_rate.values()) else "insufficient"
+            if abs(cand["biasKg"]) > abs(base["biasKg"]):
+                blocked.append(f"{key}_bias_worse")
+            improvement = base["maeKg"] - cand["maeKg"]
+            if improvement >= gate["minImprovementKg"] or (base["maeKg"] > 0 and improvement / base["maeKg"] >= gate["minImprovementPct"]):
+                wins.append(key)
+            if base["maeKg"] > 0:
+                ratios.append(cand["maeKg"] / base["maeKg"])
+        evaluated[name] = {"wins": wins, "blocked": blocked}
+        if not blocked and len(wins) >= gate["minHorizonWins"] and ratios:
+            passing.append((sum(ratios) / len(ratios), name))
+    if passing:
+        _, leader = min(passing)
+        status, reason = "shadow_leader", f"{leader} beat current on {','.join(evaluated[leader]['wins'])}"
+    else:
+        leader, status, reason = None, "no_change", "no shadow candidate passed the gate"
     return {
-        "hitRate": {"7d": hit_rate["7d"], "14d": hit_rate["14d"], "28d": hit_rate["28d"]},
+        "name": leader or OPERATIONAL_MODEL,
         "status": status,
-        "samples": sum(1 for v in hit_rate.values() if v is not None),
+        "reason": reason,
+        "candidates": evaluated,
+        "gate": gate,
+        "affectsPrediction": False,
+    }
+
+
+def replay_ci_hit_rate(
+    backtest: dict[str, Any],
+    rows: list[dict[str, Any]],
+    ewma_series: list[dict[str, Any]],
+    min_samples: int = BACKTEST_MIN_SAMPLES,
+) -> dict[str, Any]:
+    """운영 모델의 80% 구간을 기준 시점마다 그때의 자료로 다시 만들어 실측 포함률을 잰다(M4).
+
+    구간 반폭은 compute_prediction_ci와 같다: max(1.28 × 잔차 표준편차 × √주, 같은 기간 백테스트 RMSE).
+    잔차 표준편차는 기준 시점까지 마지막 30행의 (체중 − EWMA)로, RMSE는 기준 시점까지 실측이 나온 오차만으로 구한다.
+    추세 방향과 무관하게 모든 표본에서 잰다.
+    """
+    ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
+    residuals: list[float | None] = []
+    for row in rows:
+        weight, level = row.get("weight_kg"), ewma_by_date.get(row["date"])
+        residuals.append(weight - level if weight is not None and level is not None else None)
+
+    hit_rate: dict[str, float | None] = {}
+    counts: dict[str, int] = {}
+    for horizon in backtest.get("horizons", ()):
+        samples = sorted(backtest["samples"][horizon], key=lambda s: s["cutoff"])
+        known = sorted(
+            ((s["actualOrdinal"], s["predictions"][OPERATIONAL_MODEL] - s["actual"]) for s in samples),
+            key=lambda item: item[0],
+        )
+        week = max(1, round(horizon / 7))
+        pointer, sum_sq, known_count = 0, 0.0, 0
+        hits = total = 0
+        for sample in samples:
+            while pointer < len(known) and known[pointer][0] <= sample["cutoff"]:
+                sum_sq += known[pointer][1] ** 2
+                known_count += 1
+                pointer += 1
+            window = [r for r in residuals[max(0, sample["index"] - 30):sample["index"]] if r is not None]
+            std = statistics.stdev(window) if len(window) >= 5 else 0.5
+            rmse = math.sqrt(sum_sq / known_count) if known_count >= min_samples else 0.0
+            spread = max(1.28 * std * math.sqrt(week), rmse)
+            total += 1
+            if abs(sample["actual"] - sample["predictions"][OPERATIONAL_MODEL]) <= spread:
+                hits += 1
+        key = f"{horizon}d"
+        counts[key] = total
+        hit_rate[key] = round(hits / total, 3) if total >= min_samples else None
+    return {
+        "hitRate": hit_rate,
+        "sampleCounts": counts,
+        "status": "ok" if any(v is not None for v in hit_rate.values()) else "insufficient",
+        "method": "replay",
+        "targetHitRate": 0.8,
     }
