@@ -598,6 +598,150 @@ class ForecastCurveTests(unittest.TestCase):
         self.assertIsNone(tier([None, 0.0]))
 
 
+def _series_rows(weights: list[float | None], start: str = "2030-01-01") -> list[dict]:
+    first = sync_garmin.date.fromisoformat(start)
+    return [_daily_row((first + sync_garmin.timedelta(days=i)).isoformat(), w) for i, w in enumerate(weights)]
+
+
+class DisplayConsistencyTests(unittest.TestCase):
+    """재검토 Q3: 한 화면의 표시가 서로 어긋나지 않는다(MD1 정체 판정, MD5, MD6, MD7, MD9)."""
+
+    @staticmethod
+    def _ewma_points(values: list[float]) -> list[dict]:
+        first = sync_garmin.date(2030, 1, 1)
+        return [{"date": (first + sync_garmin.timedelta(days=i)).isoformat(), "valueKg": v} for i, v in enumerate(values)]
+
+    def test_v_shaped_window_is_not_a_plateau(self) -> None:
+        detect = sync_garmin._modeling.detect_plateau
+        flat = [84.0] * 20
+        self.assertTrue(detect(self._ewma_points(flat))["detected"])
+        # 14일 창의 양 끝은 같지만 안에서 0.6kg 내려갔다 올라왔다. 예전에는 양 끝만 봐서 "평평"이었다.
+        down_up = [round(84.0 - 0.1 * i, 1) for i in range(1, 7)] + [round(83.4 + 0.1 * i, 1) for i in range(1, 7)]
+        dip = flat[:8] + down_up
+        self.assertEqual((84.0, 84.0), (dip[-14], dip[-1]))
+        self.assertFalse(detect(self._ewma_points(dip))["detected"])
+        bump = flat[:8] + [round(168.0 - v, 1) for v in down_up]
+        self.assertEqual((84.0, 84.0, 84.6), (bump[-14], bump[-1], max(bump)))
+        self.assertFalse(detect(self._ewma_points(bump))["detected"])
+        # 창 전체가 천천히(주 0.03kg) 움직이는 것은 여전히 정체다.
+        drift = [84.0 - 0.03 / 7 * i for i in range(20)]
+        self.assertTrue(detect(self._ewma_points(drift))["detected"])
+
+    @staticmethod
+    def _plateau_fixture() -> list[dict]:
+        """평평한 구간, 감량 구간, 다시 평평한 구간. 두 번째 평평한 구간 가운데 닷새 동안 1.5kg 낮게 재서 추세에 V자가 생긴다."""
+        from math import sin
+        weights = []
+        for i in range(150):
+            level = 84.0 if i < 45 else (84.0 - 0.05 * (i - 45) if i < 75 else 82.5)
+            dip = -1.5 if 95 <= i < 100 else 0.0
+            weights.append(round(level + dip + 0.2 * sin(i * 1.3), 2))
+        return _series_rows(weights)
+
+    def test_plateau_copy_never_appears_with_a_moving_badge(self) -> None:
+        # 접두 구간마다(그날 아침의 요약) 정체 문구와 배지를 대조한다.
+        rows = self._plateau_fixture()
+        plateau_days = 0
+        for end in range(30, len(rows)):
+            summary = sync_garmin.build_summary(rows[:end] + [{**rows[end], "weight_kg": None}], {"targetWeightKg": 78})
+            state = summary["insight"]["state"]
+            direction = summary["modelDiagnostics"]["trend"]["direction"]
+            if state in ("plateau_after_loss", "plateau_no_loss"):
+                plateau_days += 1
+                self.assertEqual("flat", direction, rows[end]["date"])
+            self.assertEqual(summary["plateau"]["detected"], state in ("plateau_after_loss", "plateau_no_loss"), rows[end]["date"])
+        self.assertGreater(plateau_days, 0, "the fixture should contain some flat stretches")
+
+    def test_losing_badge_does_not_carry_a_negative_loss_rate(self) -> None:
+        exposure = sync_garmin._modeling.model_trend_exposure
+        mixed = exposure(0.12, -0.0183)  # 7일 기울기는 감량, 혼합 감량률은 증량
+        self.assertEqual(("losing", 0.12, 0.12), (mixed["direction"], mixed["weeklyLossRateKg"], mixed["weeklyChangeKg"]))
+        agreeing = exposure(0.12, 0.2)
+        self.assertEqual(("losing", 0.2), (agreeing["direction"], agreeing["weeklyLossRateKg"]))
+
+    def test_coverage_points_climb_one_step_at_a_time(self) -> None:
+        points = sync_garmin._modeling.coverage_points
+        # (최근 30일 측정률 %, 측정일 수) → 점수. 30일 창에서 20·22·24일이 경계다.
+        ladder = {19: 0, 20: 1, 21: 1, 22: 2, 23: 2, 24: 3, 30: 3}
+        for days, expected in ladder.items():
+            with self.subTest(days=days):
+                self.assertEqual(expected, points(round(days / 30 * 100, 0), days))
+        # 이력이 짧으면 측정률이 100%여도 맨 윗단은 주지 않는다(예전과 같다).
+        self.assertEqual(2, points(100.0, 20))
+
+    def test_one_measurement_moves_the_confidence_score_by_one(self) -> None:
+        classify = sync_garmin._modeling.classify_prediction_confidence
+        backtest = {"14d": {"status": "ok", "maeKg": 0.55}}
+        scores = [classify(round(days / 30 * 100, 0), days, 0.3, backtest)["score"] for days in range(18, 26)]
+        self.assertEqual([2, 2, 3, 3, 4, 4, 5, 5], scores)
+        self.assertEqual("high", classify(80.0, 24, 0.3, backtest)["level"])
+        self.assertEqual("medium", classify(77.0, 23, 0.3, backtest)["level"])
+        self.assertIn("최근 측정일 수 부족", classify(77.0, 23, 0.3, backtest)["reasons"])
+        self.assertEqual([], classify(80.0, 24, 0.3, backtest)["reasons"])
+
+    def test_long_range_marker_compares_the_84_day_error_with_no_change(self) -> None:
+        assess = sync_garmin._modeling.long_range_assessment
+        ok = {"status": "ok", "sampleCount": 40}
+        worse = assess({"current": {"84d": {**ok, "maeKg": 1.49}}, "ewma_flat": {"84d": {**ok, "maeKg": 1.19}}})
+        self.assertEqual(("worse_than_flat", 1.49, 1.19, "84d"), (worse["status"], worse["maeKg"], worse["flatMaeKg"], worse["horizon"]))
+        better = assess({"current": {"84d": {**ok, "maeKg": 1.0}}, "ewma_flat": {"84d": {**ok, "maeKg": 1.19}}})
+        self.assertEqual("ok", better["status"])
+        thin = assess({"current": {"84d": {"status": "insufficient", "maeKg": 0.9, "sampleCount": 5}},
+                       "ewma_flat": {"84d": {"status": "insufficient", "maeKg": 1.2, "sampleCount": 5}}})
+        self.assertEqual("unverified", thin["status"])
+        self.assertEqual("unverified", assess({})["status"])
+
+    def test_summary_carries_the_long_range_marker(self) -> None:
+        short = sync_garmin.build_summary(_series_rows([84.0 - 0.01 * i for i in range(40)]), {"targetWeightKg": 78})
+        self.assertEqual("unverified", short["modelDiagnostics"]["longRange"]["status"])
+        self.assertEqual("unverified", sync_garmin.build_summary([], {"targetWeightKg": 78})["modelDiagnostics"]["longRange"]["status"])
+        from math import sin
+        long_rows = _series_rows([round(86.0 - 0.015 * i + 0.3 * sin(i * 1.7), 2) if i % 4 else None for i in range(200)])
+        long_range = sync_garmin.build_summary(long_rows, {"targetWeightKg": 78})["modelDiagnostics"]["longRange"]
+        self.assertIn(long_range["status"], ("ok", "worse_than_flat"))
+        self.assertGreaterEqual(long_range["sampleCount"], 20)
+
+    def test_coverage_numbers_count_the_same_window(self) -> None:
+        # 재검토 MD6: 요약의 측정률은 완료된 날(오늘 제외)을 세는데 모델 진단은 오늘을 포함해 세서 숫자가 달랐다.
+        weights = [84.0 if i % 4 else None for i in range(45)] + [None]  # 마지막 행은 아직 재지 않은 오늘
+        rows = _series_rows(weights)
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        coverage, quality = summary["coverage"], summary["modelDiagnostics"]["dataQuality"]
+        self.assertEqual((coverage["last30Measured"], coverage["last30Total"]),
+                         (quality["recentMeasuredDays"], quality["recentTotalDays"]))
+        self.assertEqual(coverage["last30Pct"], round(quality["recentCoveragePct"], 0))
+        self.assertEqual((rows[-31]["date"], rows[-2]["date"]), (coverage["windowStart"], coverage["windowEnd"]))
+        window = [p for p in summary["series"]["daily"] if coverage["windowStart"] <= p["date"] <= coverage["windowEnd"]]
+        self.assertEqual(coverage["last30Measured"], sum(1 for p in window if p["valueKg"] is not None))
+        self.assertEqual(30, len(window))
+
+        two_days = sync_garmin.build_summary(_series_rows([84.0, None]), {"targetWeightKg": 78})["coverage"]
+        self.assertEqual((1, 1, "2030-01-01", "2030-01-01"),
+                         (two_days["last30Measured"], two_days["last30Total"], two_days["windowStart"], two_days["windowEnd"]))
+
+    def test_insight_says_today_only_for_a_weight_measured_today(self) -> None:
+        # 재검토 MD7: 아침 수집은 오늘 체중이 들어오기 전에 돈다. 가장 최근 측정을 "오늘"이라고 쓰면 안 된다.
+        base = [84.0] * 40
+        yesterday = sync_garmin.build_summary(_series_rows(base + [84.6, None]), {"targetWeightKg": 78})["insight"]
+        self.assertTrue(yesterday["headline"].startswith("최근 측정(2/10) 84.6kg이지만"), yesterday["headline"])
+        older = sync_garmin.build_summary(_series_rows(base + [84.6, None, None, None]), {"targetWeightKg": 78})["insight"]
+        self.assertTrue(older["headline"].startswith("최근 측정(2/10) 84.6kg이지만"), older["headline"])
+        today = sync_garmin.build_summary(_series_rows(base + [84.0, 84.6]), {"targetWeightKg": 78})["insight"]
+        self.assertTrue(today["headline"].startswith("오늘 84.6kg이지만"), today["headline"])
+
+    def test_outlier_count_only_looks_at_the_recent_window(self) -> None:
+        # 재검토 MD9: 전체 이력에서 세면 지난 일이 남아 값이 늘기만 한다.
+        weights = [84.0] * 200
+        for index in (10, 40, 70):
+            weights[index] = 86.5  # 직전 측정과 2.5kg 차이: 오를 때와 내릴 때 한 번씩 센다
+        quality = sync_garmin._modeling.data_quality_diagnostics
+        self.assertEqual(0, quality(_series_rows(weights))["outlierCandidates"])
+        self.assertEqual(60, quality(_series_rows(weights))["outlierWindowDays"])
+        weights[170] = 86.5
+        self.assertEqual(2, quality(_series_rows(weights))["outlierCandidates"])
+        self.assertEqual(8, quality(_series_rows(weights), outlier_window_days=400)["outlierCandidates"])
+
+
 class SummarySlimTests(unittest.TestCase):
     """P9: 아무도 읽지 않는 계열은 요약에 없다."""
 
@@ -632,7 +776,12 @@ class PageHygieneTests(unittest.TestCase):
 
     def test_text_colors_meet_contrast(self) -> None:
         tokens = self._tokens()
-        backgrounds = {"white": "#FFFFFF", "panel": tokens["panel"], "panel-alt": tokens["panel-alt"], "bg": tokens["bg"]}
+        # 글자가 놓이는 밝은 배경: 패널(흰색), 패널 안의 칸(--panel-alt), 페이지 바탕(--bg).
+        backgrounds = {"white": "#FFFFFF", "panel-alt": tokens["panel-alt"], "bg": tokens["bg"]}
+        # 정의만 있고 쓰이지 않는 색 변수가 다시 생기지 않게 한다(재검토 FE7). 칩의 견본 색은 index.html의 style 속성에서 쓴다.
+        used_in = (self.APP / "style.css").read_text(encoding="utf-8") + (self.APP / "index.html").read_text(encoding="utf-8")
+        unused = [name for name in tokens if f"var(--{name})" not in used_in]
+        self.assertEqual([], unused, "color variables that are defined but never used")
         for name in ("muted", "accent-text", "ink", "ink-soft", "accent-ink"):
             for bg_name, bg in backgrounds.items():
                 with self.subTest(text=name, background=bg_name):
@@ -723,6 +872,7 @@ DASHBOARD_FIELDS = (
     "predictions.threeMonthWeightKg",
     "modelDiagnostics.confidence.level",
     "modelDiagnostics.confidence.reasons",
+    "modelDiagnostics.longRange.status",
     "modelDiagnostics.trend.predictionEnabled",
     "modelDiagnostics.trend.disabledReason",
     "predictionCI.series",

@@ -6,11 +6,11 @@
   <title>체중 대시보드</title>
   <!-- 공개 저장소·Pages라 누구나 볼 수 있다. 검색 노출만 막는다(2026-11-25 사용자 결정). -->
   <meta name="robots" content="noindex" />
-  <link rel="icon" href="./icons/icon.svg?v=20261125g" type="image/svg+xml" />
-  <link rel="icon" href="./icons/icon-192.png?v=20261125g" type="image/png" sizes="192x192" />
+  <link rel="icon" href="./icons/icon.svg?v=20261125h" type="image/svg+xml" />
+  <link rel="icon" href="./icons/icon-192.png?v=20261125h" type="image/png" sizes="192x192" />
   <!-- iOS 홈 화면 아이콘은 PNG만 쓴다(W5). -->
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125g" sizes="180x180" />
-  <link rel="manifest" href="./manifest.webmanifest?v=20261125g" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125h" sizes="180x180" />
+  <link rel="manifest" href="./manifest.webmanifest?v=20261125h" />
   <meta name="theme-color" content="#F5F2F0" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -22,7 +22,7 @@
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" rel="stylesheet" integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0" crossorigin="anonymous" />
   <!-- 고정폭 글꼴은 700 굵기만 쓴다. Google Fonts CSS는 브라우저마다 달라 SRI를 걸 수 없다. -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./style.css?v=20261125g" />
+  <link rel="stylesheet" href="./style.css?v=20261125h" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -49,8 +49,8 @@
 
     <section class="hero">
       <div class="hero-top">
-        <span class="hero-badge" id="statusBadge">예측 보류</span>
-        <span class="hero-status-reason" id="statusReason">최근 30일</span>
+        <span class="hero-badge hero-badge--neutral" id="statusBadge">불러오는 중</span>
+        <span class="hero-status-reason" id="statusReason"></span>
         <span class="hero-last">최근 <b id="lastEntry">–</b></span>
       </div>
       <div class="hero-main">
@@ -113,7 +113,7 @@
       <div class="panel-head-bar">
         <div class="panel-head-badge">A</div>
         <div>
-          <p class="eyebrow eyebrow-tight">체중 추세</p>
+          <p class="eyebrow eyebrow-tight">실측 · 추세 · 예측</p>
           <h2 class="panel-title">체중 추세</h2>
         </div>
         <div class="panel-head-legend">
@@ -236,7 +236,7 @@
           <div class="panel-head-bar">
             <div class="panel-head-badge">S</div>
             <div>
-              <p class="eyebrow eyebrow-tight">행동 시나리오</p>
+              <p class="eyebrow eyebrow-tight">3개월 뒤 예상 체중</p>
               <h3 class="panel-head-title">시나리오</h3>
             </div>
           </div>
@@ -274,7 +274,7 @@
           <div class="panel-head-inline">
             <div class="panel-head-icon">B</div>
             <div>
-              <p class="eyebrow">체성분 · 활동</p>
+              <p class="eyebrow eyebrow-tight">최신 측정 · 최근 7일</p>
               <h3 class="panel-head-title">몸 · 활동</h3>
             </div>
           </div>
@@ -309,7 +309,7 @@
           <div class="tile">
             <span class="tile-label">평균걸음</span>
             <span class="tile-num" id="stepsAvg">–</span>
-            <span class="tile-unit">K · 7D</span>
+            <span class="tile-unit">천 보 · 7일</span>
           </div>
         </div>
       </section>
@@ -322,7 +322,7 @@
           <span class="details-summary-badge">상세 정보</span>
           <span class="details-summary-hint">예측 정확도 · 체중 감량 효과 · 데이터 품질</span>
         </div>
-        <span class="details-summary-toggle">+</span>
+        <span class="details-summary-toggle" aria-hidden="true"></span>
       </summary>
       <div class="details-body">
         <div class="detail-section">
@@ -354,9 +354,9 @@
 
   <!-- W1: async라 CDN이 늦거나 막혀도 페이지를 막지 않는다. app.js가 최대 5초 기다린 뒤 차트 없이 나머지를 그린다. -->
   <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js" integrity="sha384-tgbB5AKnszdcfwcZtTfuhR3Ko1XZdlDfsLtkxiiAZiVkkXCkFmp+FQFh+V/UTo54" crossorigin="anonymous"></script>
-  <script defer src="./app.helpers.js?v=20261125g"></script>
-  <script defer src="./app.js?v=20261125g"></script>
-  <script defer src="./enhancements.js?v=20261125g"></script>
+  <script defer src="./app.helpers.js?v=20261125h"></script>
+  <script defer src="./app.js?v=20261125h"></script>
+  <script defer src="./enhancements.js?v=20261125h"></script>
   <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>

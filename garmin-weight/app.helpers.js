@@ -1,18 +1,8 @@
 'use strict';
 
 (() => {
-  // Light paper theme — style.css의 :root 변수와 동기화 유지
+  // 차트와 동기화 표시에 쓰는 색. 화면의 나머지 색은 style.css의 :root 변수다.
   const THEME = {
-    ink: '#3C2F2F',
-    inkSoft: 'rgba(60,47,47,0.78)',
-    muted: 'rgba(60,47,47,0.58)',
-    muted2: 'rgba(60,47,47,0.32)',
-    line: 'rgba(60,47,47,0.14)',
-    panel: '#FCF9F7',
-    bg: '#F5F2F0',
-    accent: '#FF6F61',
-    accentInk: '#A0522D',
-    accentTint: 'rgba(255,111,97,0.12)',
     // 차트 선 색 — style.css의 --ma7/--ma14/--predict/--target과 같아야 범례 견본이 맞는다.
     actual: '#3C2F2F',
     actualFill: 'rgba(60,47,47,0.06)',
@@ -28,16 +18,61 @@
     tooltipBg: '#FCF9F7',
     tooltipBorder: 'rgba(60,47,47,0.22)',
     tooltipBody: '#3C2F2F',
-    plateauShade: 'rgba(160,82,45,0.10)',
-    activityBar: 'rgba(160,82,45,0.28)',
-    activityBarStroke: '#A0522D',
-    activitySteps: 'rgba(60,47,47,0.36)',
     syncStale: '#A0522D',
     syncWarn: '#8B6F5E',
   };
 
   const fmtKg = (v, d=1) => Number.isFinite(v) ? `${v.toFixed(d)} kg` : '–';
   const fmtKgBare = (v, d=1) => Number.isFinite(v) ? v.toFixed(d) : '–';
+
+  // 주간 감량률(양수 = 감량)을 체중 변화 방향으로 적는다: 감량은 −, 증량은 +.
+  // 반올림하면 0인 값은 ±0.00이다. 예전에는 −0.00이나 +0.00으로 나왔다.
+  function fmtWeekly(lossKg, digits = 2) {
+    if (!Number.isFinite(lossKg)) return '–';
+    const magnitude = Math.abs(lossKg).toFixed(digits);
+    if (Number(magnitude) === 0) return `±${magnitude}`;
+    return `${lossKg > 0 ? '−' : '+'}${magnitude}`;
+  }
+
+  // 수집 엔드포인트의 화면용 이름(sync.failedEndpoints).
+  const ENDPOINT_LABELS = {
+    get_stats: '일일 요약',
+    get_heart_rates: '심박',
+    get_sleep_data: '수면',
+    get_body_composition: '체성분',
+    get_activities_fordate: '활동',
+    get_activities_by_date: '활동',
+    get_training_readiness: '훈련 준비도',
+    get_training_status: '훈련 상태',
+  };
+  const endpointLabels = (names) => [...new Set((names || []).map((name) => ENDPOINT_LABELS[name] || String(name)))];
+
+  // 백테스트 모델의 화면용 이름(modelDiagnostics.modelAudit의 키).
+  const MODEL_LABELS = {
+    current: '운영 · EWMA 혼합',
+    ewma_flat: '변화 없음',
+    ma7: '최근 7회 평균',
+    linreg_28d: '28일 회귀',
+    linreg_56d: '56일 회귀',
+    linreg_84d: '84일 회귀',
+    weighted_linreg_56d: '56일 가중 회귀',
+    robust_56d: '56일 강건 회귀',
+    kalman: 'Kalman',
+  };
+  const modelLabel = (name) => MODEL_LABELS[name] || String(name);
+
+  // 오늘 날짜(KST, YYYY-MM-DD). 요약의 날짜가 모두 KST 기준이다.
+  const todayKst = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+
+  // 마지막 체중 측정 후 지난 날 수. 요약이 센 값(요약의 마지막 날 기준)과 실제 오늘 기준 중 큰 쪽이다.
+  // 수집이 멈추면 요약의 마지막 날이 오늘이 아니므로, 요약의 값만 보면 며칠 전 측정이 "오늘 측정"으로 남는다.
+  function measurementAgeDays(coverage, today = todayKst()) {
+    const fromSummary = coverage?.daysSinceLastMeasurement;
+    const last = coverage?.lastMeasurementAt;
+    const fromToday = last ? Math.round((Date.parse(today) - Date.parse(last)) / 86400000) : NaN;
+    const candidates = [fromSummary, fromToday].filter(Number.isFinite);
+    return candidates.length ? Math.max(0, ...candidates) : null;
+  }
   const fmtDate = (iso) => {
     if (!iso) return '–';
     const d = new Date(iso + 'T00:00:00');
@@ -120,6 +155,11 @@
     THEME,
     fmtKg,
     fmtKgBare,
+    fmtWeekly,
+    endpointLabels,
+    modelLabel,
+    todayKst,
+    measurementAgeDays,
     fmtDate,
     fmtDateShort,
     fmtEta,

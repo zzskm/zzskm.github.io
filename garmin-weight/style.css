@@ -5,10 +5,8 @@
   color-scheme: light;
 
   --bg: #F5F2F0;
-  --panel: #FCF9F7;
   --panel-alt: #F9F7F5;
   --line: #E8E2DE;
-  --line-strong: #3C2F2F;
 
   --ink: #3C2F2F;
   --ink-soft: #5A4D4D;
@@ -23,15 +21,10 @@
   /* 흰 글자를 올리는 강조 배경(4.96:1) */
   --accent-strong: #C8402F;
   --accent-tint: rgba(255,111,97,0.12);
-  --scenario-active-bg: #FF6F61;
   --scenario-active-ink: #fff;
 
-  --actual: #3C2F2F;
-  --actual-fill: rgba(60,47,47,0.06);
-  --predict: #FF6F61;
-  --predict-fill: rgba(255,111,97,0.10);
-  --grid: #E8E2DE;
   /* 차트 선 색 — app.helpers.js의 THEME과 같은 값을 쓴다 */
+  --predict: #FF6F61;
   --ma7: #3C2F2F;
   --ma14: #A89F99;
   --target: #A0522D;
@@ -130,6 +123,15 @@ body {
 .panel-head-legend-swatch--trend { width: 14px; height: 0; border-top: 2px solid var(--ma7); background: none; }
 .panel-head-legend-swatch--forecast { width: 14px; height: 0; border-top: 2px dashed var(--predict); background: none; }
 .panel-head-legend-swatch--target { width: 14px; height: 0; border-top: 2px dashed var(--target); background: none; }
+/* 패널 제목 위의 작은 글. 규칙이 없으면 본문 크기(16px)로 나와 옆의 제목과 값보다 커진다. */
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .eyebrow-tight {
   margin: 0 0 4px;
 }
@@ -144,7 +146,7 @@ body {
 
 /* ====================== PREDICTION GUARD ====================== */
 .prediction-guard {
-  margin: 0 0 16px;
+  margin: 16px;
   padding: 16px 20px;
   border: 3px solid var(--ink);
   background: var(--bg);
@@ -263,6 +265,9 @@ body {
   font-weight: 900;
   color: var(--ink);
 }
+/* 열면 −로 바뀐다. 글자를 HTML에 두면 열어도 +가 그대로다. */
+.details-summary-toggle::before { content: '+'; }
+.details-panel[open] .details-summary-toggle::before { content: '−'; }
 
 /* ====================== TOPBAR ====================== */
 .topbar {
@@ -360,7 +365,6 @@ body {
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
-.hero-badge--paused { background: var(--accent-ink); }
 .hero-badge--losing { background: var(--ink); color: #fff; }
 .hero-badge--gaining { background: var(--accent-strong); color: #fff; }
 .hero-badge--neutral { background: #756A64; color: #fff; }
@@ -530,10 +534,10 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 10px 12px;
-  border: 1px solid var(--ink);
+  padding: 10px 16px;
+  /* 패널 테두리 안쪽에 테두리를 한 겹 더 두지 않는다. 구획은 아래 선으로만 나눈다. */
+  border-bottom: 1px solid var(--ink);
   background: var(--bg);
-  margin-bottom: 1px;
 }
 .coverage-head {
   display: flex;
@@ -563,14 +567,13 @@ body {
   grid-template-columns: repeat(2, 1fr);
   gap: 1px;
   background: var(--ink);
-  border: 1px solid var(--ink);
-  margin-bottom: 12px;
+  border-bottom: 1px solid var(--ink);
 }
 .coverage-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 10px 16px;
   background: var(--panel-alt);
 }
 .coverage-cell-label {
@@ -609,9 +612,9 @@ body {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding-bottom: 14px;
+  gap: 12px 16px;
+  /* 머리 안의 제목·컨트롤·안내 문구가 패널 테두리에 붙지 않게 한다. 아래 내용은 테두리까지 채운다. */
+  padding: 14px 16px;
   border-bottom: 2px solid var(--ink);
 }
 .panel-title {
@@ -703,7 +706,7 @@ body {
 .chip:not(:has(input:checked)) .chip-swatch { background: var(--muted-2); }
 
 /* Chart wrap */
-.chart-wrap { position: relative; height: clamp(240px, 38vh, 360px); border-top: 2px solid var(--ink); background: #fff; }
+.chart-wrap { position: relative; height: clamp(240px, 38vh, 360px); background: #fff; }
 .chart-wrap canvas { width: 100% !important; height: 100% !important; }
 .chart-notice {
   position: absolute;
@@ -724,7 +727,7 @@ body {
   display: none;
   flex-wrap: wrap;
   gap: 8px 16px;
-  margin-top: 10px;
+  margin: 10px 16px 12px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.15em;
@@ -743,19 +746,22 @@ body {
   padding-top: 0;
   border-top: 0;
 }
-.scenarios.is-muted .scenario-sub { color: var(--muted); }
+/* 신뢰도가 낮거나 시나리오 차이가 작으면 선택하지 않은 카드의 값을 한 단계 옅게 한다. */
+.scenarios.is-muted .scenario:not(.is-active) .scenario-val { color: var(--muted); }
 .scenarios-hint {
+  flex: 1 1 220px;
+  min-width: 0;
   margin: 0;
   font-size: 11px;
   font-weight: 700;
+  line-height: 1.45;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
 }
+.scenarios-hint.is-caution { color: var(--accent-text); }
 .scenarios-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--ink);
 }
 .model-strip {
   display: flex;
@@ -787,7 +793,7 @@ body {
 .model-strip-body {
   display: grid;
   grid-template-columns: 1fr;
-  border: 1px solid var(--ink);
+  border-bottom: 1px solid var(--line);
 }
 .model-strip-body > div {
   padding: 14px 20px;
@@ -796,6 +802,15 @@ body {
   background: var(--panel-alt);
 }
 .model-strip-body > div:last-child { border-bottom: 0; }
+/* 칸 이름표. 규칙이 없으면 본문 크기(16px)로 나와 아래 값(11~12px)보다 커진다. */
+.model-strip-cell .label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .model-strip-cell--confidence .model-strip-main--high { color: var(--ink); }
 .model-strip-cell--confidence .model-strip-main--medium { color: var(--accent-ink); }
 .model-strip-cell--confidence .model-strip-main--low { color: var(--accent-text); }
@@ -879,7 +894,6 @@ body {
   grid-template-columns: repeat(2, 1fr);
   gap: 1px;
   background: var(--ink);
-  border: 1px solid var(--ink);
 }
 .tile {
   display: flex;
@@ -1054,6 +1068,7 @@ body {
   overflow: hidden;
 }
 .quality-bar-fill {
+  display: block;
   height: 100%;
   background: var(--ink);
   transition: width .6s var(--ease);

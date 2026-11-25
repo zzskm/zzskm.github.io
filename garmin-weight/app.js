@@ -24,6 +24,10 @@
     THEME,
     fmtKg,
     fmtKgBare,
+    fmtWeekly,
+    endpointLabels,
+    modelLabel,
+    measurementAgeDays,
     fmtDate,
     fmtDateShort,
     fmtEta,
@@ -57,38 +61,45 @@
     const rolling = s.rolling || {};
     const current = s.current || {};
 
-    const trendKg = Number.isFinite(current.weightEwmaKg) ? current.weightEwmaKg : (start ? start.valueKg - (rolling.lossRateDetail?.blended ?? 0) * 30 : null);
+    const hasData = Boolean(last);
+    const trendKg = Number.isFinite(current.weightEwmaKg) ? current.weightEwmaKg : null;
     const weeklyChange = Number.isFinite(rolling.lossRateDetail?.blended) ? rolling.lossRateDetail.blended : null;
     const confidenceLevel = confidence.level || 'low';
     const confidenceLabel = confidence.label || '낮음';
+    // 3개월 예측이 "변화 없음"보다 나은지는 신뢰도 등급과 따로 본다(재검토 MD5). ok가 아니면 장기 값에 표시를 붙인다.
+    const longRangeCaveat = hasData && diagnostics.longRange && diagnostics.longRange.status !== 'ok';
 
     const startVal = start ? start.valueKg : null;
     const lastVal = last ? last.valueKg : null;
     setText('currentWeight', fmtKgBare(s.current?.weightKg));
 
     // weeklyLossKg 계열은 양수 = 감량. 표시할 땐 체중 변화 방향(감량 = −)으로 뒤집는다.
-    setText('heroWeeklyChange', Number.isFinite(weeklyChange) ? `${weeklyChange > 0 ? '−' : '+'}${Math.abs(weeklyChange).toFixed(2)} kg/주` : '–');
+    setText('heroWeeklyChange', Number.isFinite(weeklyChange) ? `${fmtWeekly(weeklyChange)} kg/주` : '–');
     setText('predictionConfidence', confidenceLabel);
     setText('predictionError', bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `±${bt14.maeKg.toFixed(2)} kg (14일 MAE)` : '–');
     setText('trendWeight', Number.isFinite(trendKg) ? `${trendKg.toFixed(1)} kg` : '–');
-    setText('toTarget', Number.isFinite(s.goal?.remainingKg) ? `${s.goal.remainingKg.toFixed(1)} kg` : '–');
+    {
+      const remaining = s.goal?.remainingKg;
+      setText('toTarget', !Number.isFinite(remaining) ? '–' : remaining <= 0 ? '도달' : `${remaining.toFixed(1)} kg`);
+    }
 
     setText('etaValue', fmtEta(s.goal));
     {
       const etaDate = s.goal?.etaDate ? fmtDateShort(s.goal.etaDate) : null;
-      const etaRange = fmtEtaRange(s.goal);
-      setText('etaSub', etaDate ? (etaRange ? `${etaDate} · ${etaRange}` : etaDate) : '–');
+      const parts = [etaDate, etaDate ? fmtEtaRange(s.goal) : null];
+      if (longRangeCaveat && ['date', 'beyond'].includes(s.goal?.etaStatus)) parts.push('장기 추정');
+      setText('etaSub', parts.filter(Boolean).join(' · ') || '–');
     }
 
     setText('bodyFat', Number.isFinite(current.bodyFatPercent) ? current.bodyFatPercent.toFixed(1) : '–');
     setText('bodyFatDelta', Number.isFinite(current.bodyFatDelta30d)
-      ? `${current.bodyFatDelta30d > 0 ? '+' : ''}${current.bodyFatDelta30d.toFixed(1)}%p / 30d` : '');
+      ? `${current.bodyFatDelta30d > 0 ? '+' : ''}${current.bodyFatDelta30d.toFixed(1)}%p / 30일` : '');
     setText('visceralFat', Number.isFinite(current.visceralFat) ? String(current.visceralFat) : '–');
     setText('restingHr', Number.isFinite(rolling.last7RestingHrAvg) ? String(Math.round(rolling.last7RestingHrAvg)) : '–');
     {
       const elLast = el('lastEntry');
       if (elLast) {
-        const daysSince = topCoverage.daysSinceLastMeasurement;
+        const daysSince = measurementAgeDays(topCoverage);
         if (Number.isFinite(daysSince)) {
           elLast.textContent = daysSince <= 0 ? '오늘 측정' : `${Math.round(daysSince)}일 전`;
         } else if (last?.date) {
@@ -107,14 +118,16 @@
     const reason = el('statusReason');
     const trendDir = diagnostics.trend?.direction;
     if (badge) {
-      badge.textContent = trendDir === 'losing' ? '감량 중'
+      badge.textContent = !hasData ? '기록 없음'
+        : trendDir === 'losing' ? '감량 중'
         : trendDir === 'gaining' ? '증량 중'
         : trendDir === 'warming_up' ? '추세 판단 중'
         : '유지';
-      badge.className = `hero-badge hero-badge--${trendDir === 'losing' ? 'losing' : trendDir === 'gaining' ? 'gaining' : 'neutral'}`;
+      badge.className = `hero-badge hero-badge--${!hasData ? 'neutral' : trendDir === 'losing' ? 'losing' : trendDir === 'gaining' ? 'gaining' : 'neutral'}`;
     }
     if (reason) {
-      reason.textContent = confidenceLevel === 'low' ? '신뢰도 낮음 · 참고용' : '추세 관찰 중';
+      reason.textContent = !hasData ? '체중 기록이 아직 없습니다'
+        : confidenceLevel === 'low' ? '신뢰도 낮음 · 참고용' : '추세 관찰 중';
     }
 
     // 진행률은 "목표까지"(goal.remainingKg)과 같은 기준인 추세 체중으로 계산한다. 일별 실측은 수분 변동이 크다.
@@ -122,7 +135,8 @@
     if (Number.isFinite(startVal) && Number.isFinite(progressKg) && Number.isFinite(target)) {
       const totalKg = startVal - target;
       const done = startVal - progressKg;
-      const pctGoal = totalKg > 0 ? Math.max(0, Math.min(100, (done / totalKg) * 100)) : 0;
+      // 추세가 목표 이하면 100%다. 시작 체중이 이미 목표 아래였던 경우도 "도달"과 함께 0%로 나오지 않게 한다.
+      const pctGoal = progressKg <= target ? 100 : (totalKg > 0 ? Math.max(0, Math.min(100, (done / totalKg) * 100)) : 0);
       setText('goalProgressBig', `${pctGoal.toFixed(0)}%`);
       el('heroProgressFill').style.width = pctGoal + '%';
       el('heroProgressMarker').style.left = pctGoal + '%';
@@ -132,16 +146,20 @@
 
     const rangeVal = s.rolling?.last7WeightRangeKg;
     setText('summaryRangeBox', Number.isFinite(rangeVal) ? `${rangeVal.toFixed(1)} kg` : '–');
-    // 분모와 점은 백엔드가 센 실제 창(최근 30일, 이력이 짧으면 그만큼)과 같게 맞춘다.
+    // 분모와 점은 백엔드가 센 창과 같아야 한다. 창은 완료된 날 30일이고 오늘은 들어가지 않는다(coverage.windowStart~windowEnd).
+    // 창 날짜가 없는 예전 요약에서만 마지막 total일을 그린다.
     setText('summaryCoverageText', `${measured}/${total}`);
     setText('summaryCoveragePct', `(${pct}%)`);
-    drawCoverageDots('summaryDots', total > 0 ? daily.slice(-total) : []);
+    const windowDays = topCoverage.windowStart && topCoverage.windowEnd
+      ? daily.filter((p) => p.date >= topCoverage.windowStart && p.date <= topCoverage.windowEnd)
+      : (total > 0 ? daily.slice(-total) : []);
+    drawCoverageDots('summaryDots', windowDays);
 
     const trend7 = trendWindows['7d']?.weeklyLossKg;
     const trend28 = trendWindows['28d']?.weeklyLossKg;
     // 표시 컨벤션: 체중 변화 방향 (감량 = −). weeklyLossKg는 양수 = 감량.
-    const trend7Text = Number.isFinite(trend7) ? `${trend7 > 0 ? '−' : '+'}${Math.abs(trend7).toFixed(2)}/주` : '–';
-    const trend28Text = Number.isFinite(trend28) ? `${trend28 > 0 ? '−' : '+'}${Math.abs(trend28).toFixed(2)}/주` : '–';
+    const trend7Text = Number.isFinite(trend7) ? `${fmtWeekly(trend7)}/주` : '–';
+    const trend28Text = Number.isFinite(trend28) ? `${fmtWeekly(trend28)}/주` : '–';
     const maeText = bt14?.status === 'ok' && Number.isFinite(bt14.maeKg) ? `${bt14.maeKg.toFixed(2)} kg` : '–';
     setText('summaryChange7d', trend7Text);
     setText('summaryChange28d', trend28Text);
@@ -160,8 +178,6 @@
     [['optimistic','scenarioOptDesc'],['base','scenarioBaseDesc'],['conservative','scenarioConDesc']].forEach(([key, descId]) => {
       const data = sc[key];
       const card = document.querySelector(`.scenario[data-scenario="${key}"]`);
-      const tag = card?.querySelector('.scenario-tag');
-      if (data?.uiLabel && tag) tag.textContent = data.uiLabel;
       if (card && data?.description) card.setAttribute('title', data.description);
       setText(descId, data?.description ?? '');
     });
@@ -220,7 +236,7 @@
       confEl.textContent = `${confidence.label || '낮음'} · ${score}점 · ${operating}`;
       confEl.className = `model-strip-main model-strip-main--${level}`;
       const shadow = diag.selectedModel?.name;
-      if (shadow && shadow !== 'current') confEl.title = `섀도 후보 ${shadow} — 참고용 비교이며 예측에는 쓰지 않습니다.`;
+      if (shadow && shadow !== 'current') confEl.title = `섀도 후보 ${modelLabel(shadow)} — 참고용 비교이며 예측에는 쓰지 않습니다.`;
       else confEl.removeAttribute('title');
     }
 
@@ -229,7 +245,7 @@
       const parts = ['7d', '14d', '28d'].map((k) => {
         const v = trend[k]?.weeklyLossKg;
         const day = k.replace('d', '일');
-        return Number.isFinite(v) ? `${day}\u00a0${v > 0 ? '−' : '+'}${Math.abs(v).toFixed(2)}/주` : `${day}\u00a0–`;
+        return Number.isFinite(v) ? `${day}\u00a0${fmtWeekly(v)}/주` : `${day}\u00a0–`;
       });
       // 항목마다 줄바꿈하지 않는 span으로 넣고, 줄은 항목 사이에서만 바뀌게 한다.
       const nodes = [];
@@ -256,14 +272,15 @@
     }
   }
 
+  // 측정률 창의 날마다 점 하나. 창의 마지막 날(가장 최근에 끝난 날)은 색을 달리한다.
   function drawCoverageDots(id, last30) {
     const host = el(id);
     if (!host) return;
-    const todayIso = last30.length ? last30[last30.length - 1].date : null;
+    const latestIso = last30.length ? last30[last30.length - 1].date : null;
     host.replaceChildren(...last30.map((p) => {
       const has = Number.isFinite(p.valueKg);
       const dot = document.createElement('span');
-      dot.className = has ? (p.date === todayIso ? 'dot-cell has-today' : 'dot-cell has') : 'dot-cell';
+      dot.className = has ? (p.date === latestIso ? 'dot-cell has-today' : 'dot-cell has') : 'dot-cell';
       const label = `${p.date}${has ? ' · ' + p.valueKg.toFixed(1) + 'kg' : ' · 기록 없음'}`;
       dot.setAttribute('role', 'img');
       dot.setAttribute('aria-label', label);
@@ -517,7 +534,11 @@
         const chip = document.querySelector('.chip[data-series="prediction"] input');
         if (chip) { chip.checked = false; }
       }
-      if (await waitForChart()) {
+      const hasWeights = (state.summary.series?.daily || []).some((p) => Number.isFinite(p.valueKg));
+      if (!hasWeights) {
+        // 그릴 점이 없으면 0~1.0 눈금만 있는 빈 차트 대신 안내를 둔다.
+        setChartNotice('표시할 체중 기록이 아직 없습니다.');
+      } else if (await waitForChart()) {
         setChartNotice('');
         renderChart();
       } else {
@@ -532,8 +553,10 @@
       const syncAgeHours = syncAt && Number.isFinite(syncAt.getTime()) ? (Date.now() - syncAt.getTime()) / 3600000 : null;
       const syncLate = syncAgeHours != null && syncAgeHours > SYNC_LATE_HOURS;
       const failedEndpoints = Array.isArray(sync?.failedEndpoints) ? sync.failedEndpoints : [];
+      // 엔드포인트 이름은 내부 이름이라 화면에는 항목 이름으로 적는다(체성분, 수면 등).
+      const failedItems = endpointLabels(failedEndpoints);
       const cov = state.summary.coverage;
-      const daysSince = cov?.daysSinceLastMeasurement;
+      const daysSince = measurementAgeDays(cov);
       const stale = Number.isFinite(daysSince) && daysSince >= 3;
       const lowCoverage = cov && cov.last30Pct < 70;
       const syncText = syncAgeHours != null
@@ -542,15 +565,17 @@
       const notes = [];
       if (offlineCopy) notes.push('새 요약을 받지 못해 이 기기에 저장된 마지막 요약을 보여 줍니다.');
       if (syncLate) notes.push(`마지막 수집 성공 후 ${Math.floor(syncAgeHours)}시간이 지났습니다. GitHub Actions의 garmin weight sync 실행 결과를 확인해 주세요.`);
-      if (failedEndpoints.length) notes.push(`지난 수집에서 일부 항목을 받지 못해 이전 값을 유지했습니다: ${failedEndpoints.join(', ')}`);
+      if (failedItems.length) notes.push(`지난 수집에서 일부 항목을 받지 못해 이전 값을 유지했습니다: ${failedItems.join(', ')} (${failedEndpoints.join(', ')})`);
       if (stale) notes.push(`마지막 체중 측정 후 ${Math.round(daysSince)}일째 새 측정이 없습니다. 체중계 동기화를 확인해 주세요.`);
       renderSyncPill({
         text: syncText,
         cov: cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '',
+        // 점 색만 바꾸면 거의 보이지 않고 터치 기기에는 툴팁이 없다. 일부 실패도 글자로 적는다(재검토 FE4).
         extra: (offlineCopy ? ' · 오프라인 사본' : '')
           + (syncLate ? ` · ${Math.floor(syncAgeHours)}시간째 수집 없음` : '')
+          + (failedItems.length ? ` · 일부 수집 실패(${failedItems.join(', ')})` : '')
           + (stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : ''),
-        tone: (syncLate || stale || offlineCopy) ? THEME.syncStale : ((lowCoverage || failedEndpoints.length) ? THEME.syncWarn : ''),
+        tone: (syncLate || stale || offlineCopy) ? THEME.syncStale : ((lowCoverage || failedItems.length) ? THEME.syncWarn : ''),
         title: notes.join(' '),
       });
       setText('statusLine', `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);
@@ -558,16 +583,50 @@
       window.dispatchEvent(new CustomEvent('garmin-weight:summary-ready', { detail: { summary: state.summary, config: state.config } }));
       appRoot.dataset.state = 'ready';
       appRoot.dataset.loadedOnce = 'true';
+      lastLoadOk = true;
     } catch (err) {
-      appRoot.dataset.state = 'error';
-      renderSyncPill({ text: '로드 실패', tone: THEME.syncStale });
-      setText('statusLine', `데이터를 불러오지 못했습니다: ${err.message}`);
+      lastLoadOk = false;
+      const why = describeLoadError(err);
+      if (firstLoad) {
+        // 보여 줄 자료가 없다. HTML의 기본값("–")이 남은 채로 원인을 위쪽 배지와 아래 줄에 적는다.
+        appRoot.dataset.state = 'error';
+        const badge = el('statusBadge');
+        if (badge) { badge.textContent = '불러오지 못함'; badge.className = 'hero-badge hero-badge--neutral'; }
+        setText('statusReason', `${why} · 다시 불러오기를 눌러 주세요`);
+        renderSyncPill({ text: '로드 실패', tone: THEME.syncStale });
+        setText('statusLine', `데이터를 불러오지 못했습니다(${why}).`);
+      } else {
+        // 새로고침만 실패했다. 화면의 자료는 그대로이고 동기화 표시에만 알린다.
+        renderSyncPill({ text: `새로고침 실패(${why}) · 이전 자료 표시 중`, tone: THEME.syncStale });
+      }
       console.error('[garmin-weight load]', err);
     } finally {
+      lastLoadAt = Date.now();
       if (reload) { reload.classList.remove('is-spinning'); reload.disabled = false; }
       delete appRoot.dataset.busy;
     }
   }
+
+  // 사용자에게 보일 실패 이유. 오류 원문(Failed to fetch 등)은 콘솔에만 남긴다.
+  function describeLoadError(err) {
+    const status = /\((\d{3})\)/.exec(String(err?.message || ''))?.[1];
+    if (status) return `서버 응답 ${status}`;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return '오프라인';
+    if (err instanceof SyntaxError) return '자료 형식 오류';
+    return '네트워크 오류';
+  }
+
+  // 열어 둔 화면(홈 화면 앱 포함)은 스스로 갱신되지 않는다. 다시 보이거나 네트워크가 돌아왔을 때,
+  // 마지막 시도가 실패했거나 오래됐으면 다시 받는다.
+  const REFRESH_AFTER_MS = 10 * 60 * 1000;
+  let lastLoadAt = 0;
+  let lastLoadOk = false;
+  function refreshIfStale() {
+    if (document.visibilityState !== 'visible' || appRoot.dataset.busy) return;
+    if (!lastLoadOk || Date.now() - lastLoadAt >= REFRESH_AFTER_MS) load();
+  }
+  document.addEventListener('visibilitychange', refreshIfStale);
+  window.addEventListener('online', refreshIfStale);
 
   document.querySelectorAll('.scenario[data-scenario]').forEach(btn => {
     btn.setAttribute('aria-pressed', btn.classList.contains('is-active') ? 'true' : 'false');

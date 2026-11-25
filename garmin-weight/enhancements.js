@@ -2,10 +2,26 @@
 
 (() => {
   const $ = (id) => document.getElementById(id);
-  const isFiniteNumber = (v) => Number.isFinite(Number(v));
+  // null과 빈 문자열은 숫자가 아니다(Number(null)은 0이라 그대로 넘기면 참이 된다).
+  const isFiniteNumber = (v) => v !== null && v !== '' && typeof v !== 'boolean' && Number.isFinite(Number(v));
+  const { fmtWeekly, modelLabel } = window.GWAppHelpers;
 
   function isLowConfidence(summary) {
     return summary?.modelDiagnostics?.confidence?.level === 'low';
+  }
+
+  function hasWeights(summary) {
+    return (summary?.series?.daily || []).some((p) => Number.isFinite(p.valueKg));
+  }
+
+  // 3개월 예측이 "변화 없음"보다 나은지(modelDiagnostics.longRange). ok가 아니면 3개월 값은 장기 추정이다.
+  function longRangeCaveat(summary) {
+    const longRange = summary?.modelDiagnostics?.longRange;
+    if (!longRange || longRange.status === 'ok' || !hasWeights(summary)) return null;
+    if (longRange.status === 'worse_than_flat' && isFiniteNumber(longRange.maeKg) && isFiniteNumber(longRange.flatMaeKg)) {
+      return `3개월 값은 장기 추정입니다 · 84일 검증 오차 ${Number(longRange.maeKg).toFixed(2)}kg, 변화 없음 가정 ${Number(longRange.flatMaeKg).toFixed(2)}kg`;
+    }
+    return '3개월 값은 장기 추정입니다 · 84일 검증 표본이 아직 모자랍니다';
   }
 
   function renderScenarioSub(summary) {
@@ -42,18 +58,25 @@
     // P7: 시나리오마다 자기 곡선을 쓰므로 차이가 작은 것은 계산 실패가 아니라 활동량 변화의 효과가 작다는 뜻이다.
     const spread = scenarioSpreadKg(summary);
     const lowConfidence = isLowConfidence(summary);
+    const caveat = longRangeCaveat(summary);
     const muted = lowConfidence || spread < 0.2;
     scenarios.classList.toggle('is-muted', muted);
 
-    const hint = scenarios.querySelector('.scenarios-hint');
+    // 안내 문구는 .scenarios 밖(패널 머리)에 있다. 예전에는 .scenarios 안에서 찾아 문구가 한 번도 바뀌지 않았다(재검토 FE3).
+    const hint = $('scenariosHint');
     if (!hint) return;
-    if (lowConfidence) {
+    if (!hasWeights(summary)) {
+      hint.textContent = '체중 기록이 쌓이면 시나리오를 보여 줍니다';
+    } else if (lowConfidence) {
       hint.textContent = '예측 신뢰도가 낮아 시나리오는 참고용입니다';
+    } else if (caveat) {
+      hint.textContent = caveat;
     } else if (spread < 0.2) {
       hint.textContent = '시나리오 간 3개월 차이가 0.2kg 미만입니다';
     } else {
       hint.textContent = '선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다';
     }
+    hint.classList.toggle('is-caution', !hasWeights(summary) || lowConfidence || Boolean(caveat) || spread < 0.2);
   }
 
   function readMae(backtest, horizon) {
@@ -62,19 +85,8 @@
   }
 
   // P6(M1): 운영 / 섀도 후보 / Kalman / 변화 없음을 같은 기준 시점(n)으로 한 표에 보여 준다.
+  // 모델 이름표(modelLabel)는 app.helpers.js에 있다.
   const AUDIT_HORIZONS = ['7d', '14d', '28d', '84d'];
-  const MODEL_LABELS = {
-    current: '운영 · EWMA 혼합',
-    ewma_flat: '변화 없음',
-    ma7: '최근 7회 평균',
-    linreg_28d: '28일 회귀',
-    linreg_56d: '56일 회귀',
-    linreg_84d: '84일 회귀',
-    weighted_linreg_56d: '56일 가중 회귀',
-    robust_56d: '56일 강건 회귀',
-    kalman: 'Kalman',
-  };
-  const modelLabel = (name) => MODEL_LABELS[name] || String(name);
 
   function okMae(stats, horizon) {
     return stats?.[horizon]?.status === 'ok' ? readMae(stats, horizon) : null;
@@ -181,7 +193,13 @@
   function renderPredictionGuard(summary) {
     const guard = $('predictionGuard');
     if (!guard) return;
-    if (isLowConfidence(summary)) {
+    if (!hasWeights(summary)) {
+      guard.hidden = false;
+      guard.querySelector('.prediction-guard-title').textContent = '기록 없음';
+      guard.querySelector('#predictionGuardText').textContent = '체중을 재면 추세와 예측을 보여 줍니다.';
+      const note = $('predictionGuardNote');
+      if (note) note.textContent = '';
+    } else if (isLowConfidence(summary)) {
       const diagnostics = summary?.modelDiagnostics || {};
       const reasons = (diagnostics.confidence?.reasons || []).filter(Boolean);
       guard.hidden = false;
@@ -230,17 +248,18 @@
   function renderDetails(s) {
     const diagnostics = s.modelDiagnostics || {};
     const tw = diagnostics.trendWindows || {};
-    const rows = ['3d', '7d', '14d', '28d']
+    // trendWindows에는 7·14·28일 창이 있다. 가장 짧은 창(7일)이 추세 배지의 기준이라 색을 달리한다.
+    const rows = ['7d', '14d', '28d']
       .map((k) => ({ key: k, v: Number.isFinite(tw[k]?.weeklyLossKg) ? tw[k].weeklyLossKg : null }))
       .filter((r) => r.v !== null);
     const maxAbs = rows.length ? Math.max(...rows.map((r) => Math.abs(r.v)), 0.0001) : 1;
     const detailTrend = $('detailTrend');
     if (detailTrend) {
       // weeklyLossKg는 양수 = 감량. 표시는 체중 변화 방향(감량 = −)이다.
-      const bars = rows.map((r) => node('div', r.key === '3d' ? 'windows-row is-recent' : 'windows-row', null, [
+      const bars = rows.map((r) => node('div', r.key === '7d' ? 'windows-row is-recent' : 'windows-row', null, [
         node('span', null, r.key.replace('d', '일')),
         bar('windows-bar-track', 'windows-bar-fill', (Math.abs(r.v) / maxAbs) * 100),
-        node('span', 'windows-val', `${r.v > 0 ? '−' : '+'}${Math.abs(r.v).toFixed(2)}`),
+        node('span', 'windows-val', fmtWeekly(r.v)),
       ]));
       detailTrend.replaceChildren(bars.length ? node('div', 'windows-bars', null, bars) : node('p', 'detail-note', '표본 부족'));
     }
@@ -249,13 +268,15 @@
     const detailQuality = $('detailQuality');
     if (detailQuality) {
       const dq = diagnostics.dataQuality || {};
+      // 최근 창(기본 60일)에서 직전 측정과 크게 벌어진 측정 수. 창 길이가 없는 예전 요약은 전체 이력에서 센 값이다.
       const outliers = dq.outlierCandidates ?? 0;
+      const outlierLabel = isFiniteNumber(dq.outlierWindowDays) ? `이상치 · ${dq.outlierWindowDays}일` : '이상치';
       const coveragePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
       const outlierLevel = outliers <= 3 ? '낮음' : (outliers <= 8 ? '중간' : '높음');
       const coverageLevel = coveragePct >= 80 ? '좋음' : (coveragePct >= 50 ? '보통' : '부족');
       detailQuality.replaceChildren(node('div', 'quality-section', null, [
         node('div', 'quality-row', null, [
-          node('span', 'quality-row-label', '이상치'),
+          node('span', 'quality-row-label', outlierLabel),
           bar('quality-bar-track', 'quality-bar-fill', outliers * 10),
           node('span', 'quality-val', `${outlierLevel}${outliers > 0 ? ` ${outliers}` : ''}`),
         ]),
@@ -287,9 +308,13 @@
       };
       const ciHitRate = s.predictionCI?.hitRate || {};
       const ci7 = Number.isFinite(ciHitRate['7d']) ? `${Math.round(Number(ciHitRate['7d']) * 100)}%` : '검증 대기';
+      // 3개월 값의 근거. "변화 없음" 가정의 오차와 나란히 적는다(modelDiagnostics.longRange).
+      const longRange = diagnostics.longRange || {};
+      const flatMae = isFiniteNumber(longRange.flatMaeKg) ? ` · 변화 없음 ${Number(longRange.flatMaeKg).toFixed(2)}kg` : '';
       detailMae.replaceChildren(
         detailRow('7일 예측 오차', mae('7d')),
         detailRow('14일 예측 오차', mae('14d')),
+        detailRow('84일 예측 오차', `${mae('84d')}${diagnostics.backtest?.['84d']?.status === 'ok' ? flatMae : ''}`, longRange.status === 'worse_than_flat'),
         detailRow('7일 신뢰구간 적중률', ci7, true),
       );
     }
