@@ -578,6 +578,42 @@
             `
             : "";
 
+        // Step-by-step walkthrough (airport arrival, departure morning) belongs to the main plan only.
+        const steps = !usePlanB && Array.isArray(item.steps) ? item.steps : [];
+        const stepsHtml = steps.length
+          ? `
+            <ol class="tl-steps" aria-label="단계별 진행">
+              ${steps
+                .map(
+                  (s) => `
+                    <li>
+                      <span class="tl-step-time">${esc(s.time)}</span>
+                      <div><strong>${esc(s.title)}</strong><span class="tl-step-detail">${esc(s.detail)}</span></div>
+                    </li>
+                  `
+                )
+                .join("")}
+            </ol>
+          `
+          : "";
+        const guideHtml =
+          Array.isArray(item.guide) && item.guide.length
+            ? `
+              <div class="tl-guide">
+                ${item.guide
+                  .map(
+                    (g) => `
+                      <details class="tl-guide-block">
+                        <summary>${esc(g.title)}</summary>
+                        <ul>${(g.lines || []).map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
+                      </details>
+                    `
+                  )
+                  .join("")}
+              </div>
+            `
+            : "";
+
         const bodyHtml = expanded
           ? `
             <div class="tl-body">
@@ -599,6 +635,9 @@
                   `
                   : ""
               }
+
+              ${stepsHtml}
+              ${guideHtml}
 
               <div class="tl-detail-grid">
                 <div class="tl-detail-box">
@@ -664,6 +703,7 @@
                   <span class="sh-badge cat-${esc(item.category)}">${esc(CAT_LABELS[item.category] || item.category)}</span>
                   ${resStatusMeta ? `<span class="sh-status-pill st-${esc(resRecord.status)}">${esc(resStatusMeta.label)}</span>` : ""}
                   ${usePlanB ? `<span class="sh-badge cat-hospital">Plan B 적용</span>` : ""}
+                  ${steps.length ? `<span class="sh-badge cat-transport">단계 ${steps.length}개 · 펼쳐 보기</span>` : ""}
                 </div>
                 <h3 class="tl-title">${esc(activeTitle)}</h3>
                 <div class="tl-place">
@@ -806,6 +846,37 @@
     const cashTotalCNY = quote && quote.cash ? Math.ceil(quote.cash.total[1] / 100) * 100 : 600;
     const fxRate = getFxRate();
     const tpl = shanghai.hotelParcelTemplate;
+    const pay = shanghai.paymentGuide;
+    const payHtml =
+      pay && Array.isArray(pay.methods)
+        ? `
+          <div class="sh-card">
+            <div class="sh-card-head">
+              <h2>결제 · 현금 · ATM 전략</h2>
+              <span class="field-note" style="margin:0">${esc(pay.asOfNote || "")}</span>
+            </div>
+            <p class="field-note" style="margin-top:0">${esc(pay.summary || "")}</p>
+            <div class="tl-detail-grid">
+              ${pay.methods
+                .map(
+                  (m) => `
+                    <div class="tl-detail-box">
+                      <small>${esc(m.role)} · ${esc(m.use)}</small>
+                      <strong>${esc(m.name)}</strong>
+                      <div class="check-note">${esc(m.note)}</div>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+            ${
+              Array.isArray(pay.atmTips) && pay.atmTips.length
+                ? `<ul class="pay-list">${pay.atmTips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`
+                : ""
+            }
+          </div>
+        `
+        : "";
 
     dom.panels.prep.innerHTML = `
       <div class="sh-card">
@@ -862,6 +933,8 @@
         <p class="field-note" style="margin:0">한국어 뜻: ${esc(tpl.ko)}</p>
       </div>
 
+      ${payHtml}
+
       <div class="sh-card">
         <div class="sh-card-head">
           <h2>관세 · 면세 ($800) · 현금 · 날씨 요약</h2>
@@ -880,9 +953,9 @@
             }
           </div>
           <div class="tl-detail-box">
-            <small>권장 비상 위안화 현금 (견적 연동)</small>
+            <small>비상 위안화 현금 기준액 (견적 연동)</small>
             <strong>약 ¥${formatNum(cashTotalCNY)} (약 ${formatManwon(cashTotalCNY * fxRate)})</strong>
-            <div class="check-note">노점 조식·우중시장·알리페이 장애 대비 (온라인 택배는 알리페이 선결제)</div>
+            <div class="check-note">사전 환전 대신 필요할 때 현지 ATM에서 인출(위 결제 전략) · 노점 조식·우중시장·알리페이 장애 대비 (온라인 택배는 알리페이 선결제)</div>
           </div>
           <div class="tl-detail-box">
             <small>${esc(TRIP_LABEL)} 상하이 예상 날씨 · 복장</small>
