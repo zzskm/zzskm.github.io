@@ -89,6 +89,7 @@ build_exercise_trend = _modeling.build_exercise_trend
 mean = _modeling.mean
 rolling_average = _modeling.rolling_average
 _projected_weight = _modeling._projected_weight
+forecast_weight = _modeling.forecast_weight
 build_prediction_series = _modeling.build_prediction_series
 measurement_weight = _modeling.measurement_weight
 compute_ewma = _modeling.compute_ewma
@@ -101,6 +102,7 @@ run_backtest = _modeling.run_backtest
 shadow_gate = _modeling.shadow_gate
 long_range_assessment = _modeling.long_range_assessment
 replay_ci_hit_rate = _modeling.replay_ci_hit_rate
+regime_split = _modeling.regime_split
 SHADOW_MODELS = _modeling.SHADOW_MODELS
 classify_prediction_confidence = _modeling.classify_prediction_confidence
 classify_loss_intensity = _modeling.classify_loss_intensity
@@ -1086,6 +1088,9 @@ FEATURE_DEFAULTS = {
     "sleepMeasurementWeighting": False,  # 수면 점수 60 미만인 날의 측정 가중치를 낮춘다
     "loadMeasurementWeighting": False,  # 급성 부하 400 이상인 날의 측정 가중치를 낮춘다
     "plateauLoadClassification": False,  # 정체기를 부하 변화로 글리코겐/대사로 나눈다
+    # 12주 예측과 목표 도달일에 느린 감량률(28일·56일 기울기)을 쓴다(재검토 MD2, 2026-11-25 사용자 결정이라 기본이 켜짐).
+    # 끄면 모든 기간이 혼합 감량률의 곡선이다. 켜면 3개월 값과 도달일이 덜 흔들리고, 이 이력의 84일 오차는 커진다.
+    "slowLongRangeRate": True,
 }
 
 
@@ -1291,6 +1296,10 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
 
     recent7_avg_kcal = exercise_trend["recent7Avg"] or 0.0
     base_trend_loss = weekly_loss_rate if weekly_loss_rate is not None else 0.0
+    # 12주 값과 목표 도달일에는 느린 감량률(28일·56일 기울기의 평균)을 쓴다(재검토 MD2). 없으면 혼합 감량률과 같다.
+    # 기능을 껐거나 느린 감량률을 만들 수 없으면 None이고, 그때는 모든 기간이 혼합 감량률의 곡선이다.
+    long_range_rate = loss_rate_detail.get("longRangeRate") if features["slowLongRangeRate"] else None
+    loss_rate_detail["longRangeApplied"] = long_range_rate is not None
 
     # Phase 1A: 운동 효율 캘리브레이션 (kcal_to_kg는 위에서 정한 동적 값 사용)
     calibration = compute_calibration(complete_rows, weekly_loss_rate, kcal_to_kg, window=trend_window)
@@ -1311,9 +1320,10 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             # Phase 2: 동적 kcal_to_kg · Phase 1A: 운동 효율 계수 적용
             extra_weekly_loss_kg = (extra_weekly_kcal / kcal_to_kg) * efficiency
             effective_loss = base_trend_loss + extra_weekly_loss_kg
+            long_loss = long_range_rate + extra_weekly_loss_kg if long_range_rate is not None else None
             assumed_daily = round_or_none(recent7_avg_kcal + extra_weekly_kcal / 7.0, 1)
-            # P3: 시나리오 3개월 예측도 지수 감쇠 사용
-            three_month_proj = _projected_weight(prediction_start, effective_loss, 12, target_weight)
+            # 시나리오의 3개월 값도 운영 예측과 같은 함수로 낸다(12주는 느린 감량률의 감쇠 곡선).
+            three_month_proj = forecast_weight(prediction_start, effective_loss, 12, target_weight, long_loss)
             scenarios[name] = {
                 "multiplier": round(effective_loss / base_trend_loss, 2) if base_trend_loss > 0 else 1.0,
                 "threeMonthWeightKg": round_or_none(three_month_proj, 2),
@@ -1321,19 +1331,21 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
                 "weeklyKcalDelta": round_or_none(extra_weekly_kcal, 1),
                 "extraWeeklyLossKg": round_or_none(extra_weekly_loss_kg, 4),
                 "effectiveWeeklyLossKg": round_or_none(effective_loss, 4),
+                "longRangeWeeklyLossKg": round_or_none(long_loss, 4),
                 "label": sdef["label"],
                 "description": sdef["description"],
             }
 
     # base 시나리오의 effective_weekly_loss 를 예측/ETA/CI 에 사용
     base_effective_loss = scenarios.get("base", {}).get("effectiveWeeklyLossKg") or 0.0
+    base_long_range_loss = scenarios.get("base", {}).get("longRangeWeeklyLossKg")
 
-    # P3: 1/3개월 예측도 지수 감쇠 외삽으로 통일
+    # 1개월 값은 혼합 감량률의 곡선, 3개월 값은 느린 감량률의 곡선에서 나온다(forecast_weight).
     one_month_weight = None
     three_month_weight = None
     if prediction_start is not None:
-        one_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 4, target_weight), 2)
-        three_month_weight = round_or_none(_projected_weight(prediction_start, base_effective_loss, 12, target_weight), 2)
+        one_month_weight = round_or_none(forecast_weight(prediction_start, base_effective_loss, 4, target_weight, base_long_range_loss), 2)
+        three_month_weight = round_or_none(forecast_weight(prediction_start, base_effective_loss, 12, target_weight, base_long_range_loss), 2)
 
     # M5: ETA는 예측 곡선(감쇠)이 목표 + ε 이하로 처음 내려가는 날이다. 최대 104주까지 보고 닿지 않으면 beyond다.
     eta_tolerance = parse_float(config.get("etaToleranceKg"))
@@ -1349,7 +1361,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     eta_range_dates = None
     if target_weight is not None and prediction_start is not None:
         remaining_kg = round_or_none(prediction_start - target_weight, 2)
-        eta_status, eta_days = projected_eta(prediction_start, base_effective_loss, target_weight, eta_tolerance)
+        eta_status, eta_days = projected_eta(prediction_start, base_effective_loss, target_weight, eta_tolerance,
+                                             long_weekly_loss=base_long_range_loss)
     eta_date = _eta_date(eta_days)
 
     # P6: 모든 모델을 같은 기준 시점·같은 실측 매칭으로 한 번에 평가한다. CI·신뢰도·화면이 같은 결과를 쓴다.
@@ -1359,6 +1372,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         target_weight=target_weight,
         train_window=trend_window,
         horizons=CI_HORIZONS,
+        use_long_rate=features["slowLongRangeRate"],
     )
     display_horizons = [f"{horizon}d" for horizon in BACKTEST_HORIZONS]
     backtest = {horizon: backtest_run["models"]["current"][horizon] for horizon in display_horizons}
@@ -1369,6 +1383,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         target_weight=target_weight,
         backtest_samples=backtest_run["samples"],
         start_date=latest_date,  # 예측선과 같은 날짜에 점을 찍는다(EWMA 계열은 어제에서 끝날 수 있다)
+        long_weekly_loss=base_long_range_loss,
     )
     loss_intensity = classify_loss_intensity(
         base_effective_loss if base_effective_loss > 0 else None,
@@ -1407,8 +1422,13 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
 
     # ETA 범위는 시나리오 곡선에서 구한다(낙관 = 가장 이른 날, 보수 = 가장 늦은 날).
     if eta_status == "date" and scenarios:
-        fast_status, fast_days = projected_eta(prediction_start, scenarios.get("optimistic", {}).get("effectiveWeeklyLossKg"), target_weight, eta_tolerance)
-        slow_status, slow_days = projected_eta(prediction_start, scenarios.get("conservative", {}).get("effectiveWeeklyLossKg"), target_weight, eta_tolerance)
+        def _scenario_eta(name: str) -> tuple[str, int | None]:
+            scenario = scenarios.get(name, {})
+            return projected_eta(prediction_start, scenario.get("effectiveWeeklyLossKg"), target_weight, eta_tolerance,
+                                 long_weekly_loss=scenario.get("longRangeWeeklyLossKg"))
+
+        fast_status, fast_days = _scenario_eta("optimistic")
+        slow_status, slow_days = _scenario_eta("conservative")
         if fast_status == "date":
             eta_range_days = {"min": fast_days, "max": slow_days if slow_status == "date" else None, "maxBeyond": slow_status != "date"}
             eta_range_dates = {"min": _eta_date(fast_days), "max": _eta_date(slow_days if slow_status == "date" else None)}
@@ -1421,7 +1441,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
     if prediction_start is not None:
         for name, scenario in scenarios.items():
             series = build_scenario_series(latest_date, prediction_start, scenario["effectiveWeeklyLossKg"] or 0.0,
-                                           target_weight, spreads_by_week)
+                                           target_weight, spreads_by_week,
+                                           long_weekly_loss=scenario.get("longRangeWeeklyLossKg"))
             scenario["series"] = series
             scenario["threeMonthWeightKg"] = series[-1]["valueKg"]
 
@@ -1489,6 +1510,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
         "kcalPerKgSource": kcal_source,
         "calibration": calibration,
         "ciCalibration": ci_calibration,
+        # 추세별 성적(재검토 MD4). 요약 파일에는 넣지 않고 model_audit.py(detail=True)만 받는다.
+        **({"regimes": regime_split(backtest_run["samples"])} if detail else {}),
         "notes": [
             "기본 예측은 체중 추세 기반입니다.",
             "시나리오는 운동 효율 계수(NEAT·보상 섭취 보정)와 동적 kcal/kg 사용.",
@@ -1546,7 +1569,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any], detail: bo
             # predictionCI.series의 중복 사본은 아무도 읽지 않아 뺐다(README의 소비자 목록 참고).
             "ma14": ma14_series,
             "ewma": ewma_series,
-            "prediction": build_prediction_series(latest_date, current_ewma, base_effective_loss, target_weight=target_weight),
+            "prediction": build_prediction_series(latest_date, current_ewma, base_effective_loss, target_weight=target_weight,
+                                                  long_weekly_loss=base_long_range_loss),
         },
     }
 

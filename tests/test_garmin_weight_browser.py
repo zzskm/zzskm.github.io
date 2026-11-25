@@ -15,6 +15,7 @@ import sys
 import threading
 import unittest
 from datetime import date, datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from math import sin
 from pathlib import Path
 
@@ -97,6 +98,14 @@ def stray_summary() -> dict:
     rows = [_row(start + timedelta(days=i), round(84.0 + 0.25 * sin(i * 1.3), 2)) for i in range(60)]
     rows[STRAY_DAY]["weight_kg"] = 70.0
     return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
+
+
+def js_fixed(value: float, digits: int = 1) -> str:
+    """JavaScript의 Number.prototype.toFixed와 같은 글자. 딱 중간인 값(84.25)은 큰 쪽(84.3)으로 간다.
+
+    파이썬의 f"{84.25:.1f}"는 짝수 쪽(84.2)으로 가서 화면의 글자와 다르다.
+    """
+    return str(Decimal(value).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP))
 
 
 def patched(summary: dict, *, scenario_values: float | None = None, long_range: str | None = None,
@@ -402,7 +411,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
                 page.click(f".scenario[data-scenario='{key}']")
                 card = scenarios[key]["threeMonthWeightKg"]
                 self.assertAlmostEqual(card, page.evaluate(line_end), delta=0.01)
-                self.assertEqual(f"{card:.1f}", page.text_content(f"#{card_id}").strip())
+                self.assertEqual(js_fixed(card), page.text_content(f"#{card_id}").strip())
                 self.assertAlmostEqual(scenarios[key]["series"][-1]["upper80"], page.evaluate(upper_end), delta=0.01)
         sparks = page.evaluate("() => ['optimistic','base','conservative'].map(k => document.querySelector(`.scenario-sparkline[data-spark='${k}'] polyline`).getAttribute('points'))")
         self.assertEqual(3, len(set(sparks)), "each card draws its own curve")
@@ -799,11 +808,12 @@ class GarminWeightBrowserTests(unittest.TestCase):
         steady = self.summaries["steady"]  # 마지막 날은 2030-03-01이다
         self.assertEqual("2030-03-01", steady["series"]["daily"][-1]["date"])
         this_year = self.open_page("steady")
-        this_year.server["payload"] = patched(steady, eta=(120, "2030-06-29"), long_range="ok")
+        # 주간 변화도 감량인 요약으로 본다(주간 변화가 감량이 아니면 도달일 옆에 기준 문구가 붙는다, Q7).
+        this_year.server["payload"] = patched(steady, eta=(120, "2030-06-29"), long_range="ok", blended=0.2)
         this_year.click("#reloadBtn")
         this_year.wait_for_function("document.getElementById('etaSub').textContent.includes('6/29')", timeout=10000)
         self.assertEqual("6/29", this_year.text_content("#etaSub"))
-        this_year.server["payload"] = patched(steady, eta=(460, "2031-06-04"), long_range="ok")
+        this_year.server["payload"] = patched(steady, eta=(460, "2031-06-04"), long_range="ok", blended=0.2)
         this_year.click("#reloadBtn")
         this_year.wait_for_function("document.getElementById('etaSub').textContent.includes('6/4')", timeout=10000)
         self.assertEqual("2031/6/4", this_year.text_content("#etaSub"))
@@ -890,6 +900,38 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual(first + 2, cdn["requests"])
         self.assertEqual(summary_requests, page.server["requests"])
         self.assertEqual(1, page.evaluate("document.querySelectorAll('#chartLib').length"))
+
+    # --- 재검토 Q7: 장기 예측 -------------------------------------------------------------
+
+    def test_eta_without_a_date_says_which_trend_it_follows(self) -> None:
+        """재검토 MD2: 도달일은 느린 감량률(최근 4~8주)로 정한다. 배지가 "감량 중"이어도 도달일이 없을 수 있어 기준을 적는다."""
+        applied = json.loads(json.dumps(self.summaries["steady"]))
+        applied["goal"].update({"etaStatus": "no_loss", "etaDays": None, "etaDate": None, "etaRangeDays": None})
+        applied["rolling"]["lossRateDetail"]["longRangeApplied"] = True
+        page = self.open_page("steady")
+        page.server["payload"] = applied
+        page.click("#reloadBtn")
+        page.wait_for_function("document.getElementById('etaSub').textContent.includes('추세 기준')", timeout=10000)
+        self.assertEqual(("감량 추세 아님", "최근 4~8주 추세 기준"), (page.text_content("#etaValue"), page.text_content("#etaSub")))
+        cell_title = "document.getElementById('etaValue').closest('.stat-cell').title"
+        self.assertIn("28일·56일", page.evaluate(cell_title))
+
+        # 주간 변화는 증량인데 긴 추세로는 도달일이 있는 날에도 기준을 적는다. 주간 변화도 감량이면 적지 않는다.
+        for blended, expected in ((-0.12, "6/29 · 최근 4~8주 추세 기준"), (0.2, "6/29")):
+            against = patched(applied, eta=(120, "2030-06-29"), long_range="ok", blended=blended)
+            page.server["payload"] = against
+            page.click("#reloadBtn")
+            page.wait_for_function("document.getElementById('etaSub').textContent.startsWith('6/29')", timeout=10000)
+            page.wait_for_function("!document.querySelector('.app').dataset.busy", timeout=10000)
+            self.assertEqual(expected, page.text_content("#etaSub"))
+
+        # 느린 감량률을 쓰지 않는 요약(기능을 껐거나 예전 요약)에서는 기준을 적지 않는다.
+        single = json.loads(json.dumps(applied))
+        single["rolling"]["lossRateDetail"]["longRangeApplied"] = False
+        page.server["payload"] = single
+        page.click("#reloadBtn")
+        page.wait_for_function("document.getElementById('etaSub').textContent === '–'", timeout=10000)
+        self.assertEqual("", page.evaluate(cell_title))
 
     def test_no_console_warnings(self) -> None:
         """P8(W5): 콘솔 경고가 없다(Playwright가 서비스 워커를 막는다는 안내는 테스트 환경 탓이라 뺀다)."""

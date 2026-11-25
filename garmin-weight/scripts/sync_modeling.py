@@ -313,6 +313,13 @@ def compute_weekly_loss_rate(
         blended = None
         normalized_weights = {k: 0.0 for k in window_used_weight}
 
+    # 장기 값(12주 예측과 목표 도달일)에 쓰는 느린 감량률: 28일과 56일 기울기의 평균이다(재검토 MD2).
+    # 56일 창에 점이 모자라면(이력이 짧다) 28일 기울기만 쓴다. 혼합 감량률을 만들 수 없으면 이것도 없다.
+    raw_long, long_points = _slope_over_window(ewma_map, end, LONG_RATE_WINDOW_DAYS, min_points=LONG_RATE_MIN_POINTS)
+    long_slope = round(-raw_long * 7, 4) if raw_long is not None else None
+    long_parts = [value for value in (window_slopes.get("28d"), long_slope) if value is not None]
+    long_range_rate = round(sum(long_parts) / len(long_parts), 4) if blended is not None and long_parts else None
+
     # 운동 칼로리 기대 감량률 (참고값, 시나리오에서만 사용)
     kcal_rows = rows[-14:] if len(rows) >= 14 else rows
     kcal_vals = [parse_float(r.get("exercise_calories")) or 0.0 for r in kcal_rows]
@@ -321,6 +328,10 @@ def compute_weekly_loss_rate(
 
     return {
         "blended": blended,
+        # 12주 예측과 목표 도달일이 쓰는 감량률과 그 재료(kg/주, 양수 = 감량).
+        "longRangeRate": long_range_rate,
+        "longRangeSlopes": {"28d": window_slopes.get("28d"), f"{LONG_RATE_WINDOW_DAYS}d": long_slope},
+        "longRangePoints": long_points,
         "ewmaSlope": window_slopes.get("28d"),  # legacy 호환
         "ma7Slope": window_slopes.get("7d"),    # legacy 호환 (단기 신호로 재매핑)
         "kcalRate": kcal_rate,
@@ -425,6 +436,38 @@ def _projected_weight(
     return target_weight + gap * math.exp(-k * week)
 
 
+# 장기 값에는 느린 감량률을 쓴다(재검토 MD2, 2026-11-25 사용자 결정: 곡선 모양은 그대로 두고 12주 값과 목표 도달일에만).
+# 혼합 감량률은 3·7일 창의 비중이 0.40이라, 측정 한 번에 12주 값이 0.5kg 넘게 움직이고 도달일이 수백 일씩 오갔다.
+LONG_RATE_FROM_WEEK = 4     # 이 주까지는 혼합 감량률의 곡선 그대로다(1개월 값과 7·14·28일 성적이 바뀌지 않는다)
+LONG_RATE_FULL_WEEK = 12    # 이 주부터는 느린 감량률의 곡선이다
+LONG_RATE_WINDOW_DAYS = 56  # 느린 감량률 = 28일 기울기와 이 창의 기울기의 평균
+LONG_RATE_MIN_POINTS = 28
+
+
+def forecast_weight(
+    start_weight: float,
+    weekly_loss: float,
+    week: float,
+    target_weight: float | None = None,
+    long_weekly_loss: float | None = None,
+) -> float:
+    """운영 모델의 예측 체중(week주 뒤). 예측선, 시나리오, 80% 구간의 중심, 목표 도달일, 백테스트가 모두 이 함수를 쓴다.
+
+    4주까지는 혼합 감량률(weekly_loss)의 감쇠 곡선이고 12주부터는 느린 감량률(long_weekly_loss)의 감쇠 곡선이다.
+    그 사이는 느린 감량률의 곡선에, 4주까지 벌어진 두 곡선의 차이를 12주까지 고르게 줄여 가며 더한다.
+    두 감량률이 같으면 모든 기간이 한 곡선이다. long_weekly_loss가 None이면 혼합 감량률의 곡선만 쓴다.
+    두 감량률이 크게 다르면(최근 며칠에 급히 빠졌을 때) 선이 4주 뒤에 방향을 바꾼다. 최근 추세와 긴 추세가 다르다는 뜻이다.
+    """
+    if long_weekly_loss is None or week <= LONG_RATE_FROM_WEEK:
+        return _projected_weight(start_weight, weekly_loss, week, target_weight)
+    far = _projected_weight(start_weight, long_weekly_loss, week, target_weight)
+    if week >= LONG_RATE_FULL_WEEK:
+        return far
+    gap = (_projected_weight(start_weight, weekly_loss, LONG_RATE_FROM_WEEK, target_weight)
+           - _projected_weight(start_weight, long_weekly_loss, LONG_RATE_FROM_WEEK, target_weight))
+    return far + gap * (LONG_RATE_FULL_WEEK - week) / (LONG_RATE_FULL_WEEK - LONG_RATE_FROM_WEEK)
+
+
 ETA_TOLERANCE_KG = 0.3
 ETA_MAX_WEEKS = 104
 
@@ -435,23 +478,29 @@ def projected_eta(
     target_weight: float | None,
     tolerance_kg: float = ETA_TOLERANCE_KG,
     max_weeks: int = ETA_MAX_WEEKS,
+    long_weekly_loss: float | None = None,
 ) -> tuple[str, int | None]:
-    """곡선이 목표 + tolerance_kg 이하로 처음 내려가는 날(오늘부터 일 수)과 상태.
+    """예측 곡선(forecast_weight)이 목표 + tolerance_kg 이하로 처음 내려가는 날(오늘부터 일 수)과 상태.
 
     상태: reached(이미 목표 + tolerance 이하) / date / beyond(max_weeks 안에 닿지 않음) / no_loss(감량 추세 아님) / unknown.
     tolerance 기본값 0.3kg은 일별 실측과 추세의 평균 차이(0.44kg)보다 작게 잡은 값이다. 감쇠 곡선은 목표에 닿지 않으므로
     목표 자체를 기준으로 하면 ETA가 무한이 된다.
+    12주 뒤부터는 느린 감량률의 곡선이므로 도달일은 대개 느린 감량률이 정한다. 곡선이 닿지 않을 때, 느린 감량률이
+    감량이면 beyond이고 아니면 no_loss다(최근 며칠이 감량이어도 긴 추세가 감량이 아니면 도달일을 내지 않는다).
     """
     if start_weight is None or target_weight is None:
         return "unknown", None
     if start_weight - target_weight <= tolerance_kg:
         return "reached", 0
-    if weekly_loss is None or weekly_loss <= 0:
+    if weekly_loss is None:
+        return "no_loss", None
+    deciding = long_weekly_loss if long_weekly_loss is not None else weekly_loss
+    if weekly_loss <= 0 and deciding <= 0:
         return "no_loss", None
     for day in range(1, max_weeks * 7 + 1):
-        if _projected_weight(start_weight, weekly_loss, day / 7, target_weight) <= target_weight + tolerance_kg:
+        if forecast_weight(start_weight, weekly_loss, day / 7, target_weight, long_weekly_loss) <= target_weight + tolerance_kg:
             return "date", day
-    return "beyond", None
+    return ("beyond" if deciding > 0 else "no_loss"), None
 
 
 def build_scenario_series(
@@ -461,12 +510,13 @@ def build_scenario_series(
     target_weight: float | None,
     spreads_by_week: dict[int, float],
     weeks: int = 12,
+    long_weekly_loss: float | None = None,
 ) -> list[dict[str, Any]]:
     """시나리오 하나의 예측 시계열(0~weeks주, weeks+1점)과 80% 구간. 카드 값과 차트 선이 같은 계산이다(M6)."""
     start_day = date.fromisoformat(latest_date)
     series = []
     for week in range(weeks + 1):
-        central = round(_projected_weight(start_weight, weekly_loss, week, target_weight), 2)
+        central = round(forecast_weight(start_weight, weekly_loss, week, target_weight, long_weekly_loss), 2)
         spread = spreads_by_week.get(week, 0.0) if week else 0.0
         series.append({
             "date": (start_day + timedelta(days=7 * week)).isoformat(),
@@ -483,6 +533,7 @@ def build_prediction_series(
     effective_weekly_loss: float | None,
     weeks: int = 12,
     target_weight: float | None = None,
+    long_weekly_loss: float | None = None,
 ) -> list[dict[str, Any]]:
     """예측 시리즈 생성. P3에서 지수 감쇠로 변경 — 장기 horizon의 과대 추정 완화."""
     if latest_date is None or start_weight is None or effective_weekly_loss is None:
@@ -492,7 +543,7 @@ def build_prediction_series(
     series = [{"date": latest_date, "valueKg": round(start_weight, 2)}]
     for week in range(1, weeks + 1):
         future_date = start_day + timedelta(days=7 * week)
-        projected = _projected_weight(start_weight, effective_weekly_loss, week, target_weight)
+        projected = forecast_weight(start_weight, effective_weekly_loss, week, target_weight, long_weekly_loss)
         series.append({"date": future_date.isoformat(), "valueKg": round(projected, 2)})
     return series
 
@@ -642,6 +693,7 @@ def compute_prediction_ci(
     target_weight: float | None = None,
     backtest_samples: dict[int, list[dict[str, Any]]] | None = None,
     start_date: str | None = None,
+    long_weekly_loss: float | None = None,
 ) -> dict[str, Any]:
     """예측 구간(80% 띠). start_date가 있으면 그 날부터 주 단위로 점을 찍는다(예측선과 날짜를 맞춘다).
 
@@ -669,7 +721,7 @@ def compute_prediction_ci(
 
     series = []
     for week in range(1, prediction_weeks + 1):
-        central = round(_projected_weight(start, effective_weekly_loss, week, target_weight), 2)
+        central = round(forecast_weight(start, effective_weekly_loss, week, target_weight, long_weekly_loss), 2)
         spread80 = round(widths[week - 1], 2)
         series.append({
             "date": (last_date + timedelta(weeks=week)).isoformat(),
@@ -1274,12 +1326,13 @@ def run_backtest(
     horizons: tuple[int, ...] = BACKTEST_HORIZONS,
     tolerance_days: int = BACKTEST_TOLERANCE_DAYS,
     min_samples: int = BACKTEST_MIN_SAMPLES,
+    use_long_rate: bool = True,
 ) -> dict[str, Any]:
     """기준 시점마다 앞부분(rows[:idx])만으로 모든 모델의 예측을 만들고 같은 실측과 비교한다.
 
     기준 시점은 학습 창(train_window) 뒤의 모든 날이다(감량기만 고르지 않는다, M3).
     한 기준 시점은 모든 모델이 예측을 낼 수 있고 실측이 ±tolerance_days 안에 있을 때만 표본이 된다(같은 표본).
-    운영 모델은 본 예측과 같은 감량률과 감쇠 곡선을 쓰고, 감량률을 정할 수 없는 초기에는 평평하게 잇는다.
+    운영 모델은 본 예측과 같은 함수(forecast_weight)와 같은 두 감량률을 쓰고, 감량률을 정할 수 없는 초기에는 평평하게 잇는다.
     """
     ewma_by_date = {p["date"]: p["valueKg"] for p in ewma_series if p.get("valueKg") is not None}
     ordinals = [date.fromisoformat(row["date"]).toordinal() for row in rows]
@@ -1297,14 +1350,16 @@ def run_backtest(
         level = ewma_by_date.get(cutoff_date)
         if level is None:
             continue
-        rate = compute_weekly_loss_rate(ewma_series[:idx], ma7_by_date, rows[:idx], cutoff_date, window=train_window)["blended"]
+        detail = compute_weekly_loss_rate(ewma_series[:idx], ma7_by_date, rows[:idx], cutoff_date, window=train_window)
+        rate, long_rate = detail["blended"], (detail["longRangeRate"] if use_long_rate else None)
         k = bisect.bisect_left(meas_row, idx)
         prefix = list(zip(meas_ord[:k], meas_w[:k]))
         state = kalman_states[idx - 1] if kalman_states else None
         shadow = shadow_predictors(prefix, ordinals[idx - 1], level, state)
         if any(name not in shadow for name in SHADOW_MODELS):
             continue  # 같은 표본: 한 모델이라도 예측을 못 내면 이 기준 시점은 모두에게서 뺀다
-        cutoffs.append({"index": idx, "ordinal": ordinals[idx - 1], "level": level, "rate": rate, "shadow": shadow})
+        cutoffs.append({"index": idx, "ordinal": ordinals[idx - 1], "level": level, "rate": rate, "longRate": long_rate,
+                        "shadow": shadow})
 
     samples: dict[int, list[dict[str, Any]]] = {h: [] for h in horizons}
     for cutoff in cutoffs:
@@ -1313,12 +1368,13 @@ def run_backtest(
             if actual is None:
                 continue
             rate = cutoff["rate"] if cutoff["rate"] is not None else 0.0
-            predictions = {OPERATIONAL_MODEL: _projected_weight(cutoff["level"], rate, horizon / 7, target_weight)}
+            predictions = {OPERATIONAL_MODEL: forecast_weight(cutoff["level"], rate, horizon / 7, target_weight, cutoff["longRate"])}
             for name, (base, slope_per_day) in cutoff["shadow"].items():
                 predictions[name] = base + slope_per_day * horizon
             samples[horizon].append({
                 "index": cutoff["index"],
                 "cutoff": cutoff["ordinal"],
+                "rate": cutoff["rate"],
                 "actualOrdinal": actual_ord,
                 "actual": actual,
                 "predictions": predictions,
@@ -1338,6 +1394,34 @@ def run_backtest(
         "horizons": horizons,
         "minSamples": min_samples,
     }
+
+
+def regime_split(
+    samples_by_horizon: dict[int, list[dict[str, Any]]],
+    horizons: tuple[int, ...] = BACKTEST_HORIZONS,
+) -> dict[str, Any]:
+    """운영 모델의 성적을 기준 시점의 추세로 나눈다(재검토 MD4). 화면에는 쓰지 않고 model_audit.py가 내보낸다.
+
+    losing: 기준 시점의 혼합 감량률이 감량(> 0)이던 표본. other: 그 밖(유지·증량, 감량률을 정할 수 없던 초기).
+    전체 평균은 두 구간의 차이를 가린다. 2026-11-25 재검토에서는 감량 추세일 때 28일 예측부터 "변화 없음"보다 나빴다.
+    biasKg는 예측 − 실측의 평균이다(음수면 예측이 실제보다 낮다, 곧 감량을 과하게 본다).
+    """
+    out: dict[str, Any] = {}
+    for horizon in horizons:
+        groups: dict[str, list[dict[str, Any]]] = {"losing": [], "other": []}
+        for sample in samples_by_horizon.get(horizon, []):
+            groups["losing" if (sample.get("rate") or 0.0) > 0 else "other"].append(sample)
+        out[f"{horizon}d"] = {}
+        for name, items in groups.items():
+            errors = [item["predictions"][OPERATIONAL_MODEL] - item["actual"] for item in items]
+            flat_errors = [item["predictions"][FLAT_MODEL] - item["actual"] for item in items]
+            out[f"{horizon}d"][name] = {
+                "sampleCount": len(items),
+                "maeKg": round(sum(abs(e) for e in errors) / len(errors), 3) if errors else None,
+                "flatMaeKg": round(sum(abs(e) for e in flat_errors) / len(flat_errors), 3) if flat_errors else None,
+                "biasKg": round(sum(errors) / len(errors), 3) if errors else None,
+            }
+    return out
 
 
 LONG_RANGE_HORIZON = "84d"

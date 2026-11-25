@@ -434,6 +434,15 @@ class GarminWeightTests(unittest.TestCase):
         # 요약에는 화면이 쓰는 필드만 있고, 감사에는 전체 통계가 있다. 같은 계산이므로 MAE가 같다.
         for horizon in ("7d", "14d", "28d", "84d"):
             self.assertEqual(diag["modelAudit"]["kalman"][horizon]["maeKg"], audit["models"]["kalman"][horizon]["maeKg"])
+        # 재검토 MD4: 감사에는 추세별 성적이 있다. 두 구간의 표본 수를 더하면 전체 표본 수다. 요약 파일에는 넣지 않는다.
+        self.assertNotIn("regimes", diag)
+        for horizon in ("7d", "14d", "28d", "84d"):
+            split = audit["regimes"][horizon]
+            self.assertEqual(["losing", "other"], list(split))
+            self.assertEqual(audit["sampleCounts"][horizon], split["losing"]["sampleCount"] + split["other"]["sampleCount"])
+        self.assertEqual(diag["backtest"]["84d"]["sampleCount"], audit["sampleCounts"]["84d"])
+        self.assertEqual(summary["rolling"]["lossRateDetail"]["longRangeRate"], audit["lossRate"]["longRangeRate"])
+        self.assertIs(True, audit["lossRate"]["longRangeApplied"])
         self.assertEqual({"maeKg", "status"}, set(diag["modelAudit"]["kalman"]["7d"]))
         self.assertIn("biasKg", audit["models"]["kalman"]["7d"])
         self.assertEqual(diag["ciCalibration"]["hitRate"], audit["ciHitRate"]["hitRate"])
@@ -484,15 +493,21 @@ class ForecastCurveTests(unittest.TestCase):
         summary = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80})
         scenarios = summary["predictions"]["scenarios"]
         base = scenarios["base"]
-        start, loss = base["series"][0]["valueKg"], base["effectiveWeeklyLossKg"]
+        start, loss, long_loss = base["series"][0]["valueKg"], base["effectiveWeeklyLossKg"], base["longRangeWeeklyLossKg"]
+        # 꾸준히 빠지는 이력이라 두 감량률이 거의 같다.
+        self.assertAlmostEqual(loss, long_loss, delta=0.02)
+
+        def curve(week: float) -> float:
+            return sync_garmin.forecast_weight(start, loss, week, 80, long_loss)
+
         # 곡선의 초기 기울기 = 주 0.40kg ± 5% (예전 상한 때문에 0.12kg)
-        initial = (start - sync_garmin._projected_weight(start, loss, 1 / 7, 80)) * 7
+        initial = (start - curve(1 / 7)) * 7
         self.assertAlmostEqual(0.40, initial, delta=0.02)
         # ETA 날짜의 곡선 값이 목표 + ε 이하이고, 그 전날은 아니다
         goal = summary["goal"]
         self.assertEqual("date", goal["etaStatus"])
-        self.assertLessEqual(sync_garmin._projected_weight(start, loss, goal["etaDays"] / 7, 80), 80 + goal["etaToleranceKg"])
-        self.assertGreater(sync_garmin._projected_weight(start, loss, (goal["etaDays"] - 1) / 7, 80), 80 + goal["etaToleranceKg"])
+        self.assertLessEqual(curve(goal["etaDays"] / 7), 80 + goal["etaToleranceKg"])
+        self.assertGreater(curve((goal["etaDays"] - 1) / 7), 80 + goal["etaToleranceKg"])
         self.assertLessEqual(goal["etaRangeDays"]["min"], goal["etaDays"])
         self.assertGreaterEqual(goal["etaRangeDays"]["max"], goal["etaDays"])
         # 세 시나리오 카드가 서로 다르고, 카드 값과 선 끝 값이 같다
@@ -800,9 +815,9 @@ class StrayMeasurementTests(unittest.TestCase):
         self.assertAlmostEqual(clean["current"]["weightEwmaKg"], stray["current"]["weightEwmaKg"], delta=0.12)
         self.assertAlmostEqual(clean["predictions"]["threeMonthWeightKg"], stray["predictions"]["threeMonthWeightKg"], delta=1.0)
         # 추세가 0.08kg 내려가 감량률의 부호가 바뀔 수는 있다. 그래도 도달일이 생기지는 않는다.
-        self.assertEqual("no_loss", clean["goal"]["etaStatus"])
-        self.assertIn(stray["goal"]["etaStatus"], ("no_loss", "beyond"))
-        self.assertIsNone(stray["goal"]["etaDays"])
+        for summary in (clean, stray):
+            self.assertIn(summary["goal"]["etaStatus"], ("no_loss", "beyond"))
+            self.assertIsNone(summary["goal"]["etaDays"])
         quality = stray["modelDiagnostics"]["dataQuality"]
         self.assertIn(rows[-2]["date"], quality["limitedDates"])
         self.assertGreaterEqual(quality["outlierCandidates"], 1)
@@ -930,6 +945,176 @@ class IntervalShapeTests(unittest.TestCase):
         std = summary["predictionCI"]["stdResidual"]
         half = [round(point["upper80"] - point["central"], 2) for point in summary["predictionCI"]["series"]]
         self.assertEqual([round(1.28 * std * week ** 0.5, 2) for week in range(1, 13)], half)
+
+
+class LongRangeRateTests(unittest.TestCase):
+    """재검토 MD2(결정): 12주 값과 목표 도달일에는 느린 감량률(28일·56일 기울기의 평균)을 쓴다. 곡선 모양은 그대로다."""
+
+    @staticmethod
+    def _steady_then_drop(drop_days: int = 0) -> list[dict]:
+        """120일 동안 주 0.2kg씩 빠지다가, 마지막 drop_days일에 하루 0.4kg씩 급히 빠진다."""
+        from math import sin
+        weights = [86.0 - 0.2 / 7 * i + 0.15 * sin(i * 1.3) for i in range(120)]
+        for back in range(drop_days):
+            weights[119 - back] -= 0.4 * (drop_days - back)
+        return _series_rows([round(w, 2) for w in weights])
+
+    def test_forecast_uses_the_fast_rate_first_and_the_slow_rate_later(self) -> None:
+        modeling = sync_garmin._modeling
+        curve, forecast = modeling._projected_weight, modeling.forecast_weight
+        start, fast, slow, target = 84.0, 0.5, 0.1, 78.0
+        for week in (0, 1, 2.5, 4):
+            self.assertEqual(curve(start, fast, week, target), forecast(start, fast, week, target, slow))
+        for week in (12, 20, 60):
+            self.assertEqual(curve(start, slow, week, target), forecast(start, fast, week, target, slow))
+        # 그 사이는 느린 감량률의 곡선에, 4주까지 벌어진 차이를 12주까지 고르게 줄여 가며 더한다.
+        gap = curve(start, fast, 4, target) - curve(start, slow, 4, target)
+        self.assertLess(gap, -1.0)
+        self.assertAlmostEqual(curve(start, slow, 8, target) + gap / 2, forecast(start, fast, 8, target, slow))
+        self.assertAlmostEqual(curve(start, slow, 5, target) + gap * 7 / 8, forecast(start, fast, 5, target, slow))
+        self.assertAlmostEqual(curve(start, slow, 11.9, target) + gap * 0.1 / 8, forecast(start, fast, 11.9, target, slow))
+        # 두 감량률이 같으면 모든 기간이 한 곡선이다(곡선 모양은 그대로다).
+        for week in (3, 5, 8, 11, 12, 40):
+            self.assertAlmostEqual(curve(start, fast, week, target), forecast(start, fast, week, target, fast), places=12)
+        # 느린 감량률이 없으면 모든 기간이 혼합 감량률의 곡선이다(예전과 같다).
+        for week in (1, 6, 12, 30):
+            self.assertEqual(curve(start, fast, week, target), forecast(start, fast, week, target))
+            self.assertEqual(curve(start, fast, week, target), forecast(start, fast, week, target, None))
+
+    def test_slow_rate_is_the_mean_of_the_28_and_56_day_slopes(self) -> None:
+        modeling = sync_garmin._modeling
+
+        def detail(days: int) -> dict:
+            rows = self._steady_then_drop()[:days]
+            ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(rows, modeling.compute_ewma([r["weight_kg"] for r in rows]))]
+            return modeling.compute_weekly_loss_rate(ewma, {}, rows, rows[-1]["date"])
+
+        full = detail(120)
+        slopes = full["longRangeSlopes"]
+        self.assertEqual(["28d", "56d"], list(slopes))
+        self.assertEqual(full["windowSlopes"]["28d"], slopes["28d"])
+        self.assertAlmostEqual((slopes["28d"] + slopes["56d"]) / 2, full["longRangeRate"], places=4)
+        self.assertAlmostEqual(0.2, full["longRangeRate"], delta=0.03)  # 주 0.2kg씩 빠지는 이력이다
+        # 56일 창에 점이 28개에 못 미치면 28일 기울기만 쓴다.
+        short = detail(20)
+        self.assertIsNone(short["longRangeSlopes"]["56d"])
+        self.assertEqual(short["longRangeSlopes"]["28d"], short["longRangeRate"])
+        # 혼합 감량률을 만들 수 없는 초기에는 느린 감량률도 없다.
+        early = detail(10)
+        self.assertIsNone(early["blended"])
+        self.assertIsNone(early["longRangeRate"])
+
+    def test_three_month_value_and_eta_come_from_the_slow_rate(self) -> None:
+        modeling = sync_garmin._modeling
+        summary = sync_garmin.build_summary(self._steady_then_drop(drop_days=5), {"targetWeightKg": 78})
+        detail = summary["rolling"]["lossRateDetail"]
+        fast, slow = detail["blended"], detail["longRangeRate"]
+        self.assertTrue(detail["longRangeApplied"])
+        self.assertGreater(fast, slow * 2)  # 최근 닷새의 급한 감량이 혼합 감량률을 끌어올렸다
+        start = summary["series"]["prediction"][0]["valueKg"]
+        predictions = summary["predictions"]
+        self.assertEqual(round(modeling._projected_weight(start, fast, 4, 78.0), 2), predictions["oneMonthWeightKg"])
+        self.assertEqual(round(modeling._projected_weight(start, slow, 12, 78.0), 2), predictions["threeMonthWeightKg"])
+        base = predictions["scenarios"]["base"]
+        self.assertEqual((fast, slow), (base["effectiveWeeklyLossKg"], base["longRangeWeeklyLossKg"]))
+        self.assertEqual(predictions["threeMonthWeightKg"], base["series"][-1]["valueKg"])
+        self.assertEqual([p["valueKg"] for p in summary["series"]["prediction"]], [p["valueKg"] for p in base["series"]])
+        self.assertEqual([round(modeling.forecast_weight(start, fast, week, 78.0, slow), 2) for week in range(13)],
+                         [p["valueKg"] for p in summary["series"]["prediction"]])
+        # 세 시나리오는 두 감량률에 같은 만큼을 더하거나 뺀다.
+        for name, scenario in predictions["scenarios"].items():
+            with self.subTest(scenario=name):
+                self.assertAlmostEqual(fast - slow, scenario["effectiveWeeklyLossKg"] - scenario["longRangeWeeklyLossKg"], places=3)
+        # 도달일은 그려진 곡선이 목표 + ε에 처음 닿는 날이다. 12주 뒤이므로 느린 감량률의 곡선 위에 있다.
+        goal = summary["goal"]
+        self.assertEqual("date", goal["etaStatus"])
+        self.assertGreater(goal["etaDays"], 84)
+        limit = 78.0 + goal["etaToleranceKg"]
+        self.assertLessEqual(modeling._projected_weight(start, slow, goal["etaDays"] / 7, 78.0), limit)
+        self.assertGreater(modeling._projected_weight(start, slow, (goal["etaDays"] - 1) / 7, 78.0), limit)
+
+    def test_a_few_fast_days_move_the_long_range_values_less(self) -> None:
+        def values(drop_days: int, slow_rate: bool) -> tuple[float, float, int | None]:
+            config = {"targetWeightKg": 78, "features": {"slowLongRangeRate": slow_rate}}
+            summary = sync_garmin.build_summary(self._steady_then_drop(drop_days), config)
+            return summary["predictions"]["oneMonthWeightKg"], summary["predictions"]["threeMonthWeightKg"], summary["goal"]["etaDays"]
+
+        before_on, after_on = values(0, True), values(5, True)
+        before_off, after_off = values(0, False), values(5, False)
+        # 1개월 값은 두 설정에서 같다.
+        self.assertEqual((before_off[0], after_off[0]), (before_on[0], after_on[0]))
+        # 닷새의 급한 감량이 3개월 값과 도달일을 움직이는 폭: 느린 감량률을 쓰면 절반에 못 미친다.
+        moved_on, moved_off = before_on[1] - after_on[1], before_off[1] - after_off[1]
+        self.assertGreater(moved_off, 1.0)
+        self.assertLess(moved_on, moved_off / 2)
+        self.assertLess(abs(before_on[2] - after_on[2]), abs(before_off[2] - after_off[2]) / 2)
+
+    def test_eta_follows_the_long_trend(self) -> None:
+        eta = sync_garmin._modeling.projected_eta
+        # 최근에는 빠지지만 긴 추세가 감량이 아니면 도달일을 내지 않는다(곡선이 12주 안에 닿지 않는 한).
+        self.assertEqual(("no_loss", None), eta(84.0, 0.3, 78.0, long_weekly_loss=-0.05))
+        self.assertEqual(("no_loss", None), eta(84.0, 0.3, 78.0, long_weekly_loss=0.0))
+        # 최근에 조금 올랐어도 긴 추세가 감량이면 도달일이 남는다.
+        status, days = eta(84.0, -0.1, 78.0, long_weekly_loss=0.3)
+        self.assertEqual("date", status)
+        self.assertGreater(days, 84)
+        self.assertEqual(("beyond", None), eta(84.0, -0.1, 78.0, long_weekly_loss=0.02))
+        self.assertEqual(("no_loss", None), eta(84.0, -0.1, 78.0, long_weekly_loss=-0.02))
+        # 목표가 코앞이면 최근 추세의 곡선이 먼저 닿는다.
+        status, days = eta(78.6, 0.3, 78.0, long_weekly_loss=-0.05)
+        self.assertEqual("date", status)
+        self.assertLessEqual(days, 28)
+        # 느린 감량률을 주지 않으면 예전과 같다.
+        self.assertEqual(eta(84.0, 0.5, 78.0), eta(84.0, 0.5, 78.0, long_weekly_loss=0.5))
+
+    def test_switch_off_keeps_one_rate_for_every_horizon(self) -> None:
+        modeling = sync_garmin._modeling
+        rows = self._steady_then_drop(drop_days=5)
+        off = sync_garmin.build_summary(rows, {"targetWeightKg": 78, "features": {"slowLongRangeRate": False}}, detail=True)
+        detail = off["rolling"]["lossRateDetail"]
+        self.assertFalse(detail["longRangeApplied"])
+        self.assertIsNotNone(detail["longRangeRate"])  # 값은 진단용으로 남는다
+        start, fast = off["series"]["prediction"][0]["valueKg"], detail["blended"]
+        self.assertEqual([round(modeling._projected_weight(start, fast, week, 78.0), 2) for week in range(13)],
+                         [p["valueKg"] for p in off["series"]["prediction"]])
+        on = sync_garmin.build_summary(rows, {"targetWeightKg": 78}, detail=True)
+        self.assertTrue(sync_garmin.feature_flags({})["slowLongRangeRate"], "the switch is on unless the config turns it off")
+        # 4주까지의 성적은 두 설정에서 같고, 12주 성적만 다르다.
+        for horizon in ("7d", "14d", "28d"):
+            self.assertEqual(off["modelDiagnostics"]["backtest"][horizon], on["modelDiagnostics"]["backtest"][horizon])
+        self.assertNotEqual(off["modelDiagnostics"]["backtest"]["84d"]["maeKg"], on["modelDiagnostics"]["backtest"]["84d"]["maeKg"])
+
+    def test_regime_split_separates_losing_cutoffs(self) -> None:
+        """재검토 MD4: 전체 평균은 감량 추세일 때와 그 밖의 차이를 가린다. 기준 시점의 감량률 부호로 나눈다."""
+        def sample(rate, predicted, flat, actual):
+            return {"rate": rate, "actual": actual, "predictions": {"current": predicted, "ewma_flat": flat}}
+
+        samples = {28: [sample(0.3, 83.0, 84.0, 83.6), sample(0.1, 82.0, 83.0, 83.0),   # 감량 추세: 예측이 0.6, 1.0 낮다
+                        sample(0.0, 84.0, 84.0, 84.2), sample(-0.2, 85.0, 84.2, 84.6), sample(None, 84.0, 84.0, 84.0)]}
+        split = sync_garmin._modeling.regime_split(samples, horizons=(28, 84))
+        self.assertEqual({"sampleCount": 2, "maeKg": 0.8, "flatMaeKg": 0.2, "biasKg": -0.8}, split["28d"]["losing"])
+        self.assertEqual({"sampleCount": 3, "maeKg": 0.2, "flatMaeKg": 0.2, "biasKg": 0.067}, split["28d"]["other"])
+        self.assertEqual({"sampleCount": 0, "maeKg": None, "flatMaeKg": None, "biasKg": None}, split["84d"]["losing"])
+
+    def test_backtest_uses_the_same_forecast_as_the_summary(self) -> None:
+        modeling = sync_garmin._modeling
+        rows = self._steady_then_drop(drop_days=5)
+        ewma = [{"date": r["date"], "valueKg": v} for r, v in zip(rows, modeling.compute_ewma([r["weight_kg"] for r in rows]))]
+        run = modeling.run_backtest(rows, ewma, {}, target_weight=78.0, horizons=(28, 56, 84))
+        checked = 0
+        for horizon in (28, 56, 84):
+            for sample in run["samples"][horizon][-3:]:
+                index = sample["index"]
+                detail = modeling.compute_weekly_loss_rate(ewma[:index], {}, rows[:index], rows[index - 1]["date"])
+                expected = modeling.forecast_weight(ewma[index - 1]["valueKg"], detail["blended"], horizon / 7, 78.0, detail["longRangeRate"])
+                self.assertAlmostEqual(expected, sample["predictions"]["current"], places=9)
+                checked += 1
+        self.assertEqual(9, checked)
+        single = modeling.run_backtest(rows, ewma, {}, target_weight=78.0, horizons=(84,), use_long_rate=False)
+        sample = single["samples"][84][-1]
+        detail = modeling.compute_weekly_loss_rate(ewma[:sample["index"]], {}, rows[:sample["index"]], rows[sample["index"] - 1]["date"])
+        self.assertAlmostEqual(modeling._projected_weight(ewma[sample["index"] - 1]["valueKg"], detail["blended"], 12, 78.0),
+                               sample["predictions"]["current"], places=9)
 
 
 class SummarySlimTests(unittest.TestCase):
