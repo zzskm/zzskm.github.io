@@ -42,11 +42,18 @@ def build_audit(csv_path: Path, config_path: Path) -> dict[str, Any]:
         "models": {"current": diagnostics.get("backtest", {}), **diagnostics.get("modelAudit", {})},
         "shadowGate": diagnostics.get("selectedModel"),
         "ciHitRate": diagnostics.get("ciCalibration", {}),
+        # MD4: the operational model split by the trend at the cutoff. Compare maeKg with flatMaeKg in each group.
+        "regimes": diagnostics.get("regimes", {}),
+        "lossRate": {
+            key: summary.get("rolling", {}).get("lossRateDetail", {}).get(key)
+            for key in ("blended", "longRangeRate", "longRangeSlopes", "longRangeApplied")
+        },
         "notes": [
             "Same code path as summary.json (sync_garmin.build_summary).",
             "Every model uses the same cutoffs and the same nearest actual within ±3 days.",
             "Weight change sign: predictions are weights; bias = predicted - actual.",
             "ciHitRate replays the 80% interval as it would have been built at each cutoff.",
+            "regimes: 'losing' = the blended loss rate at the cutoff was above zero; 'other' = flat, gaining or unknown.",
         ],
     }
 

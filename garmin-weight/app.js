@@ -97,7 +97,18 @@
       const etaDate = s.goal?.etaDate ? fmtDateShort(s.goal.etaDate, referenceDate()) : null;
       const parts = [etaDate, etaDate ? fmtEtaRange(s.goal) : null];
       if (longRangeCaveat && ['date', 'beyond'].includes(s.goal?.etaStatus)) parts.push('장기 추정');
+      // 도달일은 느린 감량률(28일·56일 기울기)로 정한다(재검토 MD2). 그래서 주간 변화는 감량인데 도달일이 없거나,
+      // 주간 변화는 증량인데 도달일이 있는 날이 생긴다. 도달일이 없을 때와 주간 변화와 어긋날 때 그 기준을 적는다.
+      const slowBasis = Boolean(rolling.lossRateDetail?.longRangeApplied);
+      const etaStatus = s.goal?.etaStatus;
+      const againstWeeklyChange = ['date', 'beyond'].includes(etaStatus) && Number.isFinite(weeklyChange) && weeklyChange <= 0;
+      if (slowBasis && (etaStatus === 'no_loss' || againstWeeklyChange)) parts.push('최근 4~8주 추세 기준');
       setText('etaSub', parts.filter(Boolean).join(' · ') || '–');
+      const etaCell = el('etaValue')?.closest('.stat-cell');
+      if (etaCell) {
+        if (slowBasis) etaCell.title = '목표 도달일과 3개월 값은 최근 4~8주의 추세(28일·56일 기울기의 평균)로 계산합니다.';
+        else etaCell.removeAttribute('title');
+      }
     }
 
     setText('bodyFat', Number.isFinite(current.bodyFatPercent) ? current.bodyFatPercent.toFixed(1) : '–');
