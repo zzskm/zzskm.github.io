@@ -421,7 +421,7 @@
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
       if (e.key === 'r' || e.key === 'R') {
-        if (appRoot.dataset.state !== 'loading') load();
+        if (!appRoot.dataset.busy) load();
         return;
       }
       if (e.key === '1') document.querySelector('.seg-btn[data-range="30"]')?.click();
@@ -451,16 +451,41 @@
     else pill.removeAttribute('title');
   }
 
-  async function waitForChart() {
-    if (window.Chart && el('weightChart')) return true;
-    await new Promise(r => setTimeout(r, 50));
-    return waitForChart();
+  // W1: Chart.js(CDN)를 무한히 기다리지 않는다. 제한 시간 안에 오지 않으면 false다.
+  const CHART_WAIT_MS = 5000;
+  async function waitForChart(timeoutMs = CHART_WAIT_MS) {
+    const deadline = Date.now() + timeoutMs;
+    while (!(window.Chart && el('weightChart'))) {
+      if (Date.now() >= deadline) return false;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return true;
+  }
+
+  function setChartNotice(text) {
+    const notice = el('chartNotice');
+    if (!notice) return;
+    notice.textContent = text || '';
+    notice.hidden = !text;
+  }
+
+  // 차트 없이 그린 뒤에도 라이브러리가 늦게 도착하면 그때 차트를 그린다.
+  let lateChartWatch = null;
+  function watchForLateChart() {
+    if (lateChartWatch) return;
+    lateChartWatch = waitForChart(60000).then((ok) => {
+      lateChartWatch = null;
+      if (ok && state.summary) { setChartNotice(''); renderChart(); }
+    });
   }
 
   async function load() {
     const reload = el('reloadBtn');
     if (reload) { reload.classList.add('is-spinning'); reload.disabled = true; }
-    appRoot.dataset.state = 'loading';
+    // W1: 화면을 투명하게 가리는 것은 첫 로드뿐이다. 새로고침 때는 내용을 그대로 두고 busy만 표시한다.
+    const firstLoad = !appRoot.dataset.loadedOnce;
+    if (firstLoad) appRoot.dataset.state = 'loading';
+    appRoot.dataset.busy = 'true';
     try {
       const [summaryRes, configRes] = await Promise.all([
         fetch(`${SUMMARY_URL}?ts=${Date.now()}`, { cache: 'no-store' }),
@@ -476,8 +501,13 @@
         const chip = document.querySelector('.chip[data-series="prediction"] input');
         if (chip) { chip.checked = false; }
       }
-      await waitForChart();
-      renderChart();
+      if (await waitForChart()) {
+        setChartNotice('');
+        renderChart();
+      } else {
+        setChartNotice('차트 라이브러리를 불러오지 못했습니다. 숫자는 최신이며, 네트워크가 돌아오면 차트가 나타납니다.');
+        watchForLateChart();
+      }
 
       // 동기화 시각은 Garmin에서 마지막으로 받아 온 시각이다. 요약을 다시 만든 시각(generatedAt)은 sync 블록이 없던 요약에서만 쓴다.
       const sync = state.summary.sync || null;
@@ -508,6 +538,7 @@
 
       window.dispatchEvent(new CustomEvent('garmin-weight:summary-ready', { detail: { summary: state.summary, config: state.config } }));
       appRoot.dataset.state = 'ready';
+      appRoot.dataset.loadedOnce = 'true';
     } catch (err) {
       appRoot.dataset.state = 'error';
       renderSyncPill({ text: '로드 실패', tone: THEME.syncStale });
@@ -515,6 +546,7 @@
       console.error('[garmin-weight load]', err);
     } finally {
       if (reload) { reload.classList.remove('is-spinning'); reload.disabled = false; }
+      delete appRoot.dataset.busy;
     }
   }
 

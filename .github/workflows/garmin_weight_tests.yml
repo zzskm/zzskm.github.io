@@ -9,7 +9,10 @@ on:
       - 'garmin-weight/*.js'
       - 'garmin-weight/*.html'
       - 'garmin-weight/*.css'
+      - 'garmin-weight/manifest.webmanifest'
+      - 'garmin-weight/icons/**'
       - 'tests/test_garmin*'
+      - 'tests/garmin_weight*.mjs'
       - 'requirements.txt'
       - '.github/workflows/garmin_weight_tests.yml'
   pull_request:
@@ -19,7 +22,10 @@ on:
       - 'garmin-weight/*.js'
       - 'garmin-weight/*.html'
       - 'garmin-weight/*.css'
+      - 'garmin-weight/manifest.webmanifest'
+      - 'garmin-weight/icons/**'
       - 'tests/test_garmin*'
+      - 'tests/garmin_weight*.mjs'
       - 'requirements.txt'
       - '.github/workflows/garmin_weight_tests.yml'
   workflow_dispatch:
@@ -54,6 +60,9 @@ jobs:
           for f in garmin-weight/app.js garmin-weight/app.helpers.js garmin-weight/enhancements.js garmin-weight/sw.js; do
             node --check "$f"
           done
+      # 서비스 워커 캐시 동작(쿼리를 뗀 데이터 캐시 키, CDN 응답 저장)을 Cache API 흉내로 확인한다.
+      - name: Service worker tests
+        run: node --test tests/garmin_weight_sw.test.mjs
 
   # 수집 코드가 부르는 메서드가 고정한 garminconnect 버전에 모두 있는지 본다. 로그인은 하지 않는다.
   library:

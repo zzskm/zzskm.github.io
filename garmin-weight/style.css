@@ -711,6 +711,21 @@ body {
 /* Chart wrap */
 .chart-wrap { position: relative; height: clamp(240px, 38vh, 360px); border-top: 2px solid var(--ink); background: #fff; }
 .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+.chart-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  background: #fff;
+}
+.chart-notice[hidden] { display: none; }
 .chart-legend-mobile {
   display: none;
   flex-wrap: wrap;

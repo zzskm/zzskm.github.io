@@ -119,7 +119,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def open_page(self, fixture: str = "steady", width: int = 1440):
+    def open_page(self, fixture: str = "steady", width: int = 1440, block_cdn: bool = False, console: list | None = None):
         context = self.browser.new_context(viewport={"width": width, "height": 1000}, service_workers="block",
                                            timezone_id="Asia/Seoul", color_scheme="light")
         self.addCleanup(context.close)
@@ -129,9 +129,14 @@ class GarminWeightBrowserTests(unittest.TestCase):
         summary = self.summaries[fixture]
         page.route("**/garmin-weight/data/summary.json*", lambda r: r.fulfill(json=summary))
         page.route("**/garmin-weight/config.json*", lambda r: r.fulfill(json={"targetWeightKg": TARGET_KG}))
+        if block_cdn:
+            page.route("https://cdn.jsdelivr.net/**", lambda r: r.abort())
+        if console is not None:
+            page.on("console", lambda m: console.append(f"{m.type}: {m.text}"))
         page.goto(f"http://127.0.0.1:{self.server.server_port}{PAGE}")
         page.wait_for_function("document.querySelector('.app')?.dataset.state === 'ready'", timeout=20000)
-        page.wait_for_function("window.Chart && Chart.getChart(document.getElementById('weightChart'))", timeout=20000)
+        if not block_cdn:
+            page.wait_for_function("window.Chart && Chart.getChart(document.getElementById('weightChart'))", timeout=20000)
         self.addCleanup(lambda: self.assertEqual([], errors, "page errors"))
         return page
 
@@ -319,6 +324,44 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual("2년 이후", page.text_content("#etaValue"))
         self.assertEqual("약 5주~2년 이후 범위", page.evaluate("() => window.GWAppHelpers.fmtEtaRange({ etaRangeDays: { min: 35, max: null, maxBeyond: true } })"))
         self.assertEqual("감량 추세 아님", page.evaluate("() => window.GWAppHelpers.fmtEta({ etaStatus: 'no_loss' })"))
+
+    def test_page_works_without_the_chart_cdn(self) -> None:
+        """P8(W1): CDN이 막혀도 5초 안에 숫자를 보여 주고, 차트 자리에 안내를 띄우며, 새로고침 버튼이 살아 있다."""
+        import time
+        started = time.monotonic()
+        page = self.open_page("steady", block_cdn=True)
+        elapsed = time.monotonic() - started
+        self.assertLess(elapsed, 12)
+        # 투명도 전환(0.5초)이 끝날 때까지 기다린다.
+        page.wait_for_function("getComputedStyle(document.querySelector('.app')).opacity === '1'", timeout=3000)
+        facts = page.evaluate("""() => ({
+          opacity: getComputedStyle(document.querySelector('.app')).opacity,
+          notice: document.getElementById('chartNotice').hidden ? null : document.getElementById('chartNotice').textContent,
+          weight: document.getElementById('currentWeight').textContent,
+          reloadDisabled: document.getElementById('reloadBtn').disabled,
+        })""")
+        self.assertEqual("1", facts["opacity"])
+        self.assertIn("차트 라이브러리를 불러오지 못했습니다", facts["notice"])
+        self.assertNotEqual("–", facts["weight"])
+        self.assertIs(False, facts["reloadDisabled"])
+
+    def test_reload_keeps_the_page_visible(self) -> None:
+        """P8(W1): 새로고침 때는 화면을 투명하게 가리지 않는다."""
+        page = self.open_page("steady")
+        page.evaluate("""() => { window.__states = []; new MutationObserver(() => window.__states.push(
+            getComputedStyle(document.querySelector('.app')).opacity + '/' + document.querySelector('.app').dataset.state))
+          .observe(document.querySelector('.app'), { attributes: true }); }""")
+        page.click("#reloadBtn")
+        page.wait_for_function("!document.querySelector('.app').dataset.busy && window.__states.length > 0")
+        states = page.evaluate("window.__states")
+        self.assertTrue(all(not s.endswith("/loading") for s in states), states)
+
+    def test_no_console_warnings(self) -> None:
+        """P8(W5): 콘솔 경고가 없다(Playwright가 서비스 워커를 막는다는 안내는 테스트 환경 탓이라 뺀다)."""
+        messages: list[str] = []
+        self.open_page("steady", console=messages)
+        problems = [m for m in messages if m.split(":")[0] in ("warning", "error") and "Service Worker registration blocked" not in m]
+        self.assertEqual([], problems)
 
 
 if __name__ == "__main__":
