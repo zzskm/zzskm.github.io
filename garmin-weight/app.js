@@ -35,11 +35,20 @@
     firstValidDaily,
     lastValidDaily,
     sliceByRange,
-    buildPredictionFromScenario,
     scenarioSeries,
     dayNumber,
     dayIso,
+    yearOf,
+    forecastWeeks,
+    dateTicks,
+    tickLabel,
   } = window.GWAppHelpers;
+
+  // 날짜에 연도를 붙일지 정하는 기준일: 요약의 마지막 날이다. 이 해와 다른 해의 날짜에만 연도가 붙는다.
+  const referenceDate = () => {
+    const daily = state.summary?.series?.daily || [];
+    return daily.length ? daily[daily.length - 1].date : null;
+  };
 
   function setText(id, v) { const n = el(id); if (n) n.textContent = v; }
 
@@ -85,7 +94,7 @@
 
     setText('etaValue', fmtEta(s.goal));
     {
-      const etaDate = s.goal?.etaDate ? fmtDateShort(s.goal.etaDate) : null;
+      const etaDate = s.goal?.etaDate ? fmtDateShort(s.goal.etaDate, referenceDate()) : null;
       const parts = [etaDate, etaDate ? fmtEtaRange(s.goal) : null];
       if (longRangeCaveat && ['date', 'beyond'].includes(s.goal?.etaStatus)) parts.push('장기 추정');
       setText('etaSub', parts.filter(Boolean).join(' · ') || '–');
@@ -289,14 +298,6 @@
     }));
   }
 
-  function buildCiBands(s, scenario) {
-    const series = scenarioSeries(s, scenario);
-    return {
-      upper: series.map((p) => ({ date: p.date, valueKg: p.upper80 })),
-      lower: series.map((p) => ({ date: p.date, valueKg: p.lower80 })),
-    };
-  }
-
   // F3: {x: 일 번호, y: kg} 점. 값이 없는 날은 빼고 spanGaps로 잇는다.
   const toXY = (arr) => arr.filter((p) => Number.isFinite(p.valueKg)).map((p) => ({ x: dayNumber(p.date), y: p.valueKg }));
 
@@ -334,6 +335,22 @@
     },
   };
 
+  // 툴팁의 한 줄. 예측 점에는 80% 구간을 붙인다(그 값은 화면의 다른 곳에 숫자로 없다).
+  // 추세에 일부만 반영한 측정에는 그 사실을 붙인다.
+  function tooltipLabel(item) {
+    const raw = item.raw || {};
+    const base = `${item.dataset.label}: ${item.formattedValue}`;
+    if (raw.limited) return `${base} · 추세에 일부만 반영`;
+    if (Number.isFinite(raw.lower) && Number.isFinite(raw.upper) && raw.upper - raw.lower >= 0.01) {
+      return `${base} (80% 구간 ${raw.lower.toFixed(1)}~${raw.upper.toFixed(1)})`;
+    }
+    return base;
+  }
+
+  // 가로축 눈금 하나(예: 12/29)에 주는 폭. 눈금 수는 차트 폭에서 정한다.
+  const TICK_SPACING_PX = 56;
+  const MAX_TICKS = 14;
+
   function ensureChart() {
     if (state.chart) return true;
     const canvas = el('weightChart');
@@ -341,7 +358,6 @@
     if (!window.Chart) return false;
     Chart.defaults.font.family = THEME.font;
     Chart.defaults.color = THEME.tick;
-    const dateTick = (value) => fmtDateShort(dayIso(value));
     state.chart = new Chart(canvas, {
       type: 'line',
       data: { datasets: [] },
@@ -349,16 +365,17 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        // 선형 가로축에서는 데이터셋마다 점의 날짜가 달라 index 모드를 쓸 수 없다. 같은 날짜(x)의 점을 모은다.
-        interaction: { mode: 'x', intersect: false },
+        // 가로 위치에서 가장 가까운 날짜의 점을 모은다. 예전의 'x' 모드는 점 바로 위에서만 툴팁이 떠서,
+        // 점이 주 단위로 놓인 예측 구간에서는 거의 뜨지 않았다(재검토 FE1).
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
         plugins: {
           // 범례는 패널 머리(index.html)에 직접 그린다. 기본 범례는 내부 라벨(ciUpper 등)까지 보여 준다.
           legend: { display: false },
           tooltip: {
             filter: (item) => !String(item.dataset.label || '').startsWith('ci'),
             callbacks: {
-              title: (items) => (items.length ? fmtDate(dayIso(items[0].parsed.x)) : ''),
-              label: (item) => `${item.dataset.label}: ${item.formattedValue}${item.raw?.limited ? ' · 추세에 일부만 반영' : ''}`,
+              title: (items) => (items.length ? fmtDate(dayIso(items[0].parsed.x), referenceDate()) : ''),
+              label: tooltipLabel,
             },
             backgroundColor: THEME.tooltipBg,
             borderColor: THEME.tooltipBorder,
@@ -369,7 +386,23 @@
           targetLine: { value: null },
         },
         scales: {
-          x: { type: 'linear', ticks: { autoSkip: true, maxTicksLimit: 8, precision: 0, callback: dateTick }, grid: { color: THEME.grid } },
+          x: {
+            type: 'linear',
+            // 눈금은 주·달의 경계에 직접 놓는다. 기본 눈금은 일 번호의 배수라 달력과 맞지 않는다.
+            afterBuildTicks: (axis) => {
+              const count = Math.min(MAX_TICKS, Math.floor(axis.width / TICK_SPACING_PX));
+              axis.ticks = dateTicks(axis.min, axis.max, count).map((value) => ({ value }));
+            },
+            ticks: {
+              autoSkip: false,
+              maxRotation: 0,
+              callback(value, index, ticks) {
+                const spansYears = yearOf(dayIso(this.min)) !== yearOf(dayIso(this.max));
+                return tickLabel(value, index > 0 ? ticks[index - 1].value : null, spansYears);
+              },
+            },
+            grid: { color: THEME.grid },
+          },
           y: { grid: { color: THEME.grid } },
         },
       },
@@ -377,7 +410,17 @@
     return true;
   }
 
-  function renderChart() {
+  // 지금 보기에서 그릴 예측. 선택한 시나리오의 시계열(13점)을 보기 범위에 맞는 주 수까지만 남긴다.
+  function visibleForecast(s, pastDays) {
+    const series = scenarioSeries(s, state.scenario);
+    if (!series.length) return { weeks: 0, points: [] };
+    const weeks = forecastWeeks(pastDays);
+    const limit = dayNumber(series[0].date) + weeks * 7;
+    return { weeks, points: series.filter((p) => dayNumber(p.date) <= limit) };
+  }
+
+  // mode는 Chart.js의 update 모드다. 시나리오만 바꿀 때는 'none'(애니메이션 없음)을 준다.
+  function renderChart(mode) {
     if (!ensureChart()) return;
     const s = state.summary;
     const cfg = state.config;
@@ -391,45 +434,41 @@
     document.querySelectorAll('[data-legend="limited"]').forEach((item) => { item.hidden = !actual.some((point) => point.limited); });
     const ewma = sliceByRange(s.series?.ewma || [], state.range);
     const ma14 = sliceByRange(s.series?.ma14 || [], state.range);
-    const prediction = buildPredictionFromScenario(s, state.scenario);
-    const ci = buildCiBands(s, state.scenario);
+    // 예측은 보이는 과거의 절반까지만 그린다. 12주를 늘 그리면 30일 보기에서 과거가 차트 폭의 26%뿐이었다(재검토 FE1).
+    const pastDays = daily.length ? dayNumber(daily[daily.length - 1].date) - dayNumber(daily[0].date) : NaN;
+    const forecast = visibleForecast(s, pastDays);
+    document.querySelectorAll('[data-legend="forecast"]').forEach((item) => {
+      item.textContent = forecast.weeks ? `예측 · ${forecast.weeks}주` : '예측';
+    });
 
-    const all = [daily, ewma, ma14, prediction, ci.upper, ci.lower].flat().map((p) => dayNumber(p.date));
-    state.chart.options.scales.x.min = all.length ? Math.min(...all) : undefined;
-    state.chart.options.scales.x.max = all.length ? Math.max(...all) : undefined;
-    state.chart.data.datasets = [];
-
+    const datasets = [];
     if (state.visible.prediction) {
-      state.chart.data.datasets.push({ label: 'ciUpper', data: toXY(ci.upper), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: '+1', backgroundColor: THEME.predictFill, tension: 0.25, order: 2 });
-      state.chart.data.datasets.push({ label: 'ciLower', data: toXY(ci.lower), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: false, tension: 0.25, order: 2 });
-      state.chart.data.datasets.push({ label: '예측', data: toXY(prediction), borderColor: THEME.predict, borderWidth: 1.75, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: THEME.predict, tension: 0.25, spanGaps: true, fill: false, order: 1 });
+      const band = forecast.points.filter((p) => Number.isFinite(p.upper80) && Number.isFinite(p.lower80));
+      const line = forecast.points.filter((p) => Number.isFinite(p.valueKg));
+      datasets.push({ label: 'ciUpper', data: band.map((p) => ({ x: dayNumber(p.date), y: p.upper80 })), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, spanGaps: true, fill: '+1', backgroundColor: THEME.predictFill, tension: 0.25, order: 2 });
+      datasets.push({ label: 'ciLower', data: band.map((p) => ({ x: dayNumber(p.date), y: p.lower80 })), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, spanGaps: true, fill: false, tension: 0.25, order: 2 });
+      datasets.push({ label: '예측', data: line.map((p) => ({ x: dayNumber(p.date), y: p.valueKg, lower: p.lower80, upper: p.upper80 })), borderColor: THEME.predict, borderWidth: 1.75, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: THEME.predict, tension: 0.25, spanGaps: true, fill: false, order: 1 });
     }
 
     if (state.visible.ma7) {
-      state.chart.data.datasets.push({ label: '추세', data: toXY(ewma), borderColor: THEME.ma7, borderWidth: 1.75, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 3 });
+      datasets.push({ label: '추세', data: toXY(ewma), borderColor: THEME.ma7, borderWidth: 1.75, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 3 });
     }
     if (state.visible.ma14) {
-      state.chart.data.datasets.push({ label: '14일 평균', data: toXY(ma14), borderColor: THEME.ma14, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
+      datasets.push({ label: '14일 평균', data: toXY(ma14), borderColor: THEME.ma14, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
     }
 
     const whenLimited = (limitedValue, value) => (ctx) => (ctx.raw?.limited ? limitedValue : value);
-    state.chart.data.datasets.push({ label: '실제', data: actual, borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: whenLimited(4, 3), pointHoverRadius: 5, pointBackgroundColor: whenLimited('#fff', THEME.actualPoint), pointBorderColor: whenLimited(THEME.predict, '#fff'), pointBorderWidth: whenLimited(2, 1.5), tension: 0.3, spanGaps: true, fill: true, order: 0 });
+    datasets.push({ label: '실제', data: actual, borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: whenLimited(4, 3), pointHoverRadius: 5, pointBackgroundColor: whenLimited('#fff', THEME.actualPoint), pointBorderColor: whenLimited(THEME.predict, '#fff'), pointBorderWidth: whenLimited(2, 1.5), tension: 0.3, spanGaps: true, fill: true, order: 0 });
 
-    state.chart.update();
-  }
-
-  function updatePrediction() {
-    if (!state.chart) return;
-    const s = state.summary;
-    const prediction = buildPredictionFromScenario(s, state.scenario);
-    const ci = buildCiBands(s, state.scenario);
-    const predDataset = state.chart.data.datasets.find(d => d.label === '예측');
-    if (predDataset) predDataset.data = toXY(prediction);
-    const upper = state.chart.data.datasets.find(d => d.label === 'ciUpper');
-    if (upper) upper.data = toXY(ci.upper);
-    const lower = state.chart.data.datasets.find(d => d.label === 'ciLower');
-    if (lower) lower.data = toXY(ci.lower);
-    state.chart.update('none');
+    // 가로축은 지금 보이는 계열의 날짜로 정한다. 예전에는 꺼 둔 계열까지 넣어서 예측을 꺼도 오른쪽이 비어 있었다.
+    const days = datasets.flatMap((dataset) => dataset.data.map((point) => point.x));
+    let first = days.length ? Math.min(...days) : undefined;
+    let last = days.length ? Math.max(...days) : undefined;
+    if (days.length && last - first < 1) { first -= 1; last += 1; }  // 점이 하루뿐이면 축의 폭이 0이 된다
+    state.chart.options.scales.x.min = first;
+    state.chart.options.scales.x.max = last;
+    state.chart.data.datasets = datasets;
+    state.chart.update(mode);
   }
 
   function bindControls() {
@@ -451,7 +490,7 @@
         state.scenario = btn.dataset.scenario;
         document.querySelectorAll('.scenario').forEach(b => { b.classList.toggle('is-active', b === btn); b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
         if (state.summary) renderScenarioSparklines(state.summary);
-        updatePrediction();
+        renderChart('none');
       });
     });
     el('reloadBtn').addEventListener('click', () => load());
@@ -490,17 +529,6 @@
     else pill.removeAttribute('title');
   }
 
-  // W1: Chart.js(CDN)를 무한히 기다리지 않는다. 제한 시간 안에 오지 않으면 false다.
-  const CHART_WAIT_MS = 5000;
-  async function waitForChart(timeoutMs = CHART_WAIT_MS) {
-    const deadline = Date.now() + timeoutMs;
-    while (!(window.Chart && el('weightChart'))) {
-      if (Date.now() >= deadline) return false;
-      await new Promise(r => setTimeout(r, 50));
-    }
-    return true;
-  }
-
   function setChartNotice(text) {
     const notice = el('chartNotice');
     if (!notice) return;
@@ -508,13 +536,69 @@
     notice.hidden = !text;
   }
 
-  // 차트 없이 그린 뒤에도 라이브러리가 늦게 도착하면 그때 차트를 그린다.
-  let lateChartWatch = null;
-  function watchForLateChart() {
-    if (lateChartWatch) return;
-    lateChartWatch = waitForChart(60000).then((ok) => {
-      lateChartWatch = null;
-      if (ok && state.summary) { setChartNotice(''); renderChart(); }
+  // Chart.js(CDN)가 준비되면 true, 받지 못했으면 false. 화면은 이 결과를 기다리지 않는다.
+  // 실패한 <script>는 다시 실행되지 않는다. 그래서 다시 받을 때는 같은 주소와 무결성 값으로 새 태그를 넣는다
+  // (재검토 FE6: 예전에는 "네트워크가 돌아오면 차트가 나타납니다"라고 적고 다시 받지 않았다).
+  function chartLibrary() {
+    if (window.Chart) return Promise.resolve(true);
+    let script = el('chartLib');
+    if (!script) return Promise.resolve(false);
+    if (script.dataset.failed) {
+      const fresh = document.createElement('script');
+      fresh.id = script.id;
+      fresh.async = true;
+      fresh.integrity = script.integrity;
+      fresh.crossOrigin = script.crossOrigin;
+      fresh.src = script.src;
+      script.replaceWith(fresh);
+      script = fresh;
+    }
+    return new Promise((resolve) => {
+      const settle = (ok) => {
+        script.removeEventListener('load', onLoad);
+        script.removeEventListener('error', onError);
+        if (!ok) script.dataset.failed = 'true';
+        resolve(ok);
+      };
+      const onLoad = () => settle(Boolean(window.Chart));
+      const onError = () => settle(false);
+      script.addEventListener('load', onLoad);
+      script.addEventListener('error', onError);
+    });
+  }
+
+  // 차트를 그린다. 숫자가 화면에 나온 뒤에 부른다(재검토 FE2: 예전에는 Chart.js를 5초까지 기다린 뒤에야 화면을 보여 줬다).
+  // .app의 data-chart가 지금 상태다: empty(그릴 자료 없음) / loading / unavailable(라이브러리를 못 받음) / drawn.
+  let chartRequest = 0;
+  async function drawChart() {
+    const request = ++chartRequest;
+    const hasWeights = (state.summary?.series?.daily || []).some((p) => Number.isFinite(p.valueKg));
+    if (!hasWeights) {
+      // 그릴 점이 없으면 0~1.0 눈금만 있는 빈 차트 대신 안내를 둔다.
+      setChartNotice('표시할 체중 기록이 아직 없습니다.');
+      appRoot.dataset.chart = 'empty';
+      return;
+    }
+    if (!window.Chart) {
+      appRoot.dataset.chart = 'loading';
+      setChartNotice('차트를 불러오는 중입니다.');
+      const ok = await chartLibrary();
+      if (request !== chartRequest) return;  // 그 사이에 다시 불러왔다. 나중 요청이 그린다.
+      if (!ok) {
+        setChartNotice('차트 라이브러리를 불러오지 못했습니다. 숫자는 최신입니다. 다시 불러오기를 누르거나 네트워크가 돌아오면 차트를 다시 받습니다.');
+        appRoot.dataset.chart = 'unavailable';
+        return;
+      }
+    }
+    setChartNotice('');
+    renderChart();
+    appRoot.dataset.chart = 'drawn';
+  }
+
+  function requestChart() {
+    drawChart().catch((err) => {
+      setChartNotice('차트를 그리지 못했습니다.');
+      console.error('[garmin-weight chart]', err);
     });
   }
 
@@ -542,18 +626,6 @@
         const chip = document.querySelector('.chip[data-series="prediction"] input');
         if (chip) { chip.checked = false; }
       }
-      const hasWeights = (state.summary.series?.daily || []).some((p) => Number.isFinite(p.valueKg));
-      if (!hasWeights) {
-        // 그릴 점이 없으면 0~1.0 눈금만 있는 빈 차트 대신 안내를 둔다.
-        setChartNotice('표시할 체중 기록이 아직 없습니다.');
-      } else if (await waitForChart()) {
-        setChartNotice('');
-        renderChart();
-      } else {
-        setChartNotice('차트 라이브러리를 불러오지 못했습니다. 숫자는 최신이며, 네트워크가 돌아오면 차트가 나타납니다.');
-        watchForLateChart();
-      }
-
       // 동기화 시각은 Garmin에서 마지막으로 받아 온 시각이다. 요약을 다시 만든 시각(generatedAt)은 sync 블록이 없던 요약에서만 쓴다.
       const sync = state.summary.sync || null;
       const syncStamp = sync?.lastSuccessAt || state.summary.generatedAt;
@@ -592,6 +664,8 @@
       appRoot.dataset.state = 'ready';
       appRoot.dataset.loadedOnce = 'true';
       lastLoadOk = true;
+      // 숫자를 먼저 보여 주고 차트는 그 뒤에 그린다. 라이브러리가 이미 와 있으면 같은 순간에 그려진다.
+      requestChart();
     } catch (err) {
       lastLoadOk = false;
       const why = describeLoadError(err);
@@ -634,11 +708,19 @@
     if (!lastLoadOk || Date.now() - lastLoadAt >= REFRESH_AFTER_MS) load();
   }
   document.addEventListener('visibilitychange', refreshIfStale);
-  window.addEventListener('online', refreshIfStale);
+  window.addEventListener('online', () => {
+    refreshIfStale();
+    // 요약을 다시 받지 않는 경우에도, 받지 못한 차트 라이브러리는 다시 받는다.
+    if (state.summary && appRoot.dataset.chart === 'unavailable') requestChart();
+  });
 
   document.querySelectorAll('.scenario[data-scenario]').forEach(btn => {
     btn.setAttribute('aria-pressed', btn.classList.contains('is-active') ? 'true' : 'false');
   });
+
+  // 글꼴 CSS를 화면을 막지 않게 읽으므로 차트가 글꼴보다 먼저 그려질 수 있다. 캔버스의 글자(눈금, 목표 라벨)는
+  // 글꼴이 도착해도 스스로 다시 그려지지 않으니 그때 한 번 다시 그린다.
+  document.fonts?.addEventListener?.('loadingdone', () => { if (state.chart) state.chart.update('none'); });
 
   bindControls();
   load();

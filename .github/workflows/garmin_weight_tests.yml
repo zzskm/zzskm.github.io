@@ -62,8 +62,8 @@ jobs:
             node --check "$f"
           done
       # 서비스 워커의 설치·활성화·요청 처리를 Cache API 흉내로 확인한다. 실제 브라우저 확인은 browser 잡에 있다.
-      - name: Service worker tests
-        run: node --test tests/garmin_weight_sw.test.mjs
+      - name: Service worker and page helper tests
+        run: node --test tests/garmin_weight_sw.test.mjs tests/garmin_weight_helpers.test.mjs
 
   # 고정한 garminconnect 버전으로 수집 코드의 가정을 확인한다. 로그인도 네트워크 호출도 하지 않는다(전송 계층을 가짜로 바꾼다).
   # - 수집이 부르는 메서드와 토큰 갱신 함수가 있다.
