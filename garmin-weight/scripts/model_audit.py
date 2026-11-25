@@ -34,7 +34,7 @@ def _load_sync_garmin() -> Any:
 def build_audit(csv_path: Path, config_path: Path) -> dict[str, Any]:
     sync_garmin = _load_sync_garmin()
     rows = sync_garmin.normalize_rows(sync_garmin.load_existing_rows(csv_path))
-    summary = sync_garmin.build_summary(rows, sync_garmin.load_json(config_path))
+    summary = sync_garmin.build_summary(rows, sync_garmin.load_json(config_path), detail=True)
     diagnostics = summary.get("modelDiagnostics", {})
     return {
         "source": {"csv": str(csv_path), "config": str(config_path), "rows": len(rows)},

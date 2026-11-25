@@ -207,64 +207,91 @@
     renderPredictionGuard(summary);
   }
 
+  // F7: 문자열을 HTML로 끼워 넣지 않고 요소를 만들어 textContent로 채운다.
+  function node(tag, className, text, children = []) {
+    const n = document.createElement(tag);
+    if (className) n.className = className;
+    if (text !== undefined && text !== null) n.textContent = text;
+    children.forEach((child) => n.appendChild(child));
+    return n;
+  }
+  function bar(trackClass, fillClass, pct) {
+    const fill = node('span', fillClass);
+    fill.style.width = `${Math.max(0, Math.min(100, pct)).toFixed(0)}%`;
+    return node(trackClass === 'windows-bar-track' ? 'span' : 'div', trackClass, null, [fill]);
+  }
+  function detailRow(label, value, accent = false) {
+    return node('div', accent ? 'detail-row detail-row-accent' : 'detail-row', null, [
+      node('span', 'detail-row-label', label),
+      node('span', 'detail-row-value', value),
+    ]);
+  }
+
   function renderDetails(s) {
     const diagnostics = s.modelDiagnostics || {};
-    const trendWindows = diagnostics.trendWindows || {};
-    const tw = trendWindows;
-    const order = ['3d', '7d', '14d', '28d'];
-    const rows = order.map(k => ({ key: k, v: Number.isFinite(tw[k]?.weeklyLossKg) ? tw[k].weeklyLossKg : null })).filter(r => r.v !== null);
-    const maxAbs = rows.length ? Math.max(...rows.map(r => Math.abs(r.v)), 0.0001) : 1;
-    const trendBars = rows.map((r) => {
-      const pct = Math.min(100, (Math.abs(r.v) / maxAbs) * 100);
-      const sign = r.v > 0 ? '−' : '+';
-      const recent = r.key === '3d' ? ' is-recent' : '';
-      return `<div class="windows-row${recent}"><span>${r.key}</span><span class="windows-bar-track"><span class="windows-bar-fill" style="width:${pct.toFixed(0)}%"></span></span><span class="windows-val">${sign}${Math.abs(r.v).toFixed(2)}</span></div>`;
-    }).join('');
+    const tw = diagnostics.trendWindows || {};
+    const rows = ['3d', '7d', '14d', '28d']
+      .map((k) => ({ key: k, v: Number.isFinite(tw[k]?.weeklyLossKg) ? tw[k].weeklyLossKg : null }))
+      .filter((r) => r.v !== null);
+    const maxAbs = rows.length ? Math.max(...rows.map((r) => Math.abs(r.v)), 0.0001) : 1;
     const detailTrend = $('detailTrend');
-    if (detailTrend) detailTrend.innerHTML = trendBars ? `<div class="windows-bars">${trendBars}</div>` : '<p class="detail-note">표본 부족</p>';
+    if (detailTrend) {
+      // weeklyLossKg는 양수 = 감량. 표시는 체중 변화 방향(감량 = −)이다.
+      const bars = rows.map((r) => node('div', r.key === '3d' ? 'windows-row is-recent' : 'windows-row', null, [
+        node('span', null, r.key.replace('d', '일')),
+        bar('windows-bar-track', 'windows-bar-fill', (Math.abs(r.v) / maxAbs) * 100),
+        node('span', 'windows-val', `${r.v > 0 ? '−' : '+'}${Math.abs(r.v).toFixed(2)}`),
+      ]));
+      detailTrend.replaceChildren(bars.length ? node('div', 'windows-bars', null, bars) : node('p', 'detail-note', '표본 부족'));
+    }
 
     const coverage = diagnostics.coverage || s.coverage || {};
-    const confidence = diagnostics.confidence || {};
-    const backtest14 = diagnostics.backtest?.['14d'];
     const detailQuality = $('detailQuality');
     if (detailQuality) {
       const dq = diagnostics.dataQuality || {};
       const outliers = dq.outlierCandidates ?? 0;
-      const variancePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
+      const coveragePct = dq.recentCoveragePct ?? (coverage.last30Pct ?? 0);
       const outlierLevel = outliers <= 3 ? '낮음' : (outliers <= 8 ? '중간' : '높음');
-      const varianceLevel = variancePct >= 80 ? '좋음' : (variancePct >= 50 ? '보통' : '부족');
-      const outlierWidth = Math.max(0, Math.min(100, outliers * 10));
-      const varianceWidth = Math.max(0, Math.min(100, variancePct));
-      detailQuality.innerHTML = `
-        <div class="quality-section">
-          <div class="quality-row">
-            <span class="quality-row-label">이상치</span>
-            <div class="quality-bar-track"><span class="quality-bar-fill" style="width:${outlierWidth.toFixed(0)}%"></span></div>
-            <span class="quality-val">${outlierLevel}${outliers > 0 ? ` ${outliers}` : ''}</span>
-          </div>
-          <div class="quality-row">
-            <span class="quality-row-label">측정률</span>
-            <div class="quality-bar-track"><span class="quality-bar-fill quality-bar-fill--accent" style="width:${varianceWidth.toFixed(0)}%"></span></div>
-            <span class="quality-val">${varianceLevel} ${variancePct.toFixed(0)}%</span>
-          </div>
-        </div>
-      `;
+      const coverageLevel = coveragePct >= 80 ? '좋음' : (coveragePct >= 50 ? '보통' : '부족');
+      detailQuality.replaceChildren(node('div', 'quality-section', null, [
+        node('div', 'quality-row', null, [
+          node('span', 'quality-row-label', '이상치'),
+          bar('quality-bar-track', 'quality-bar-fill', outliers * 10),
+          node('span', 'quality-val', `${outlierLevel}${outliers > 0 ? ` ${outliers}` : ''}`),
+        ]),
+        node('div', 'quality-row', null, [
+          node('span', 'quality-row-label', '측정률'),
+          bar('quality-bar-track', 'quality-bar-fill quality-bar-fill--accent', coveragePct),
+          node('span', 'quality-val', `${coverageLevel} ${Number(coveragePct).toFixed(0)}%`),
+        ]),
+      ]));
     }
 
-    const diag = diagnostics;
-    const calib = diag.calibration || {};
+    const calib = diagnostics.calibration || {};
     const eff = calib.exerciseEfficiency;
-    const kcal = diag.kcalPerKg;
-    const src = diag.kcalPerKgSource;
+    const kcal = diagnostics.kcalPerKg;
     const detailMetabolic = $('detailMetabolic');
-    if (detailMetabolic) detailMetabolic.innerHTML = `<p>감량 반응: ${Number.isFinite(eff) ? (eff < 0.7 ? '운동 대비 변화 느림' : '운동 대비 변화 안정적') : '–'}</p><p>1kg 변화 기준: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}</p><p>${calib.interpretation || ''}</p>`;
+    if (detailMetabolic) {
+      detailMetabolic.replaceChildren(
+        node('p', null, `감량 반응: ${Number.isFinite(eff) ? (eff < 0.7 ? '운동 대비 변화 느림' : '운동 대비 변화 안정적') : '–'}`),
+        node('p', null, `1kg 변화 기준: ${Number.isFinite(kcal) ? `${Math.round(kcal).toLocaleString('ko-KR')} kcal` : '–'}`),
+        node('p', null, calib.interpretation || ''),
+      );
+    }
 
     const detailMae = $('detailMae');
     if (detailMae) {
-      const bt7 = diagnostics.backtest?.['7d'];
+      const mae = (h) => {
+        const bt = diagnostics.backtest?.[h];
+        return bt?.status === 'ok' ? `${Number(bt.maeKg).toFixed(2)}kg` : '표본 부족';
+      };
       const ciHitRate = s.predictionCI?.hitRate || {};
       const ci7 = Number.isFinite(ciHitRate['7d']) ? `${Math.round(Number(ciHitRate['7d']) * 100)}%` : '검증 대기';
-      detailMae.innerHTML = `<div class="detail-row"><span class="detail-row-label">7일 예측 오차</span><span class="detail-row-value">${bt7?.status === 'ok' ? `${Number(bt7.maeKg).toFixed(2)}kg` : '표본 부족'}</span></div><div class="detail-row"><span class="detail-row-label">14일 예측 오차</span><span class="detail-row-value">${backtest14?.status === 'ok' ? `${Number(backtest14.maeKg).toFixed(2)}kg` : '표본 부족'}</span></div><div class="detail-row detail-row-accent"><span class="detail-row-label">신뢰구간 적중률</span><span class="detail-row-value">${ci7}</span></div>`;
+      detailMae.replaceChildren(
+        detailRow('7일 예측 오차', mae('7d')),
+        detailRow('14일 예측 오차', mae('14d')),
+        detailRow('7일 신뢰구간 적중률', ci7, true),
+      );
     }
   }
 

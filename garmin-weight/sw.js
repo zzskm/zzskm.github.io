@@ -2,7 +2,7 @@
 
 // 자산 버전은 여기 한 곳에서 정한다. index.html과 manifest의 ?v= 값이 이것과 같아야 한다
 // (tests/test_garmin_weight.py가 검사한다). 자산을 바꾸면 이 값을 올린다. 캐시 이름도 이 값에서 나온다.
-const ASSET_VERSION = '20261125e';
+const ASSET_VERSION = '20261125f';
 const CACHE_VERSION = `gw-${ASSET_VERSION}`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;

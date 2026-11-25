@@ -4,11 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>체중 대시보드</title>
-  <link rel="icon" href="./icons/icon.svg?v=20261125e" type="image/svg+xml" />
-  <link rel="icon" href="./icons/icon-192.png?v=20261125e" type="image/png" sizes="192x192" />
+  <!-- 공개 저장소·Pages라 누구나 볼 수 있다. 검색 노출만 막는다(2026-11-25 사용자 결정). -->
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="./icons/icon.svg?v=20261125f" type="image/svg+xml" />
+  <link rel="icon" href="./icons/icon-192.png?v=20261125f" type="image/png" sizes="192x192" />
   <!-- iOS 홈 화면 아이콘은 PNG만 쓴다(W5). -->
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125e" sizes="180x180" />
-  <link rel="manifest" href="./manifest.webmanifest?v=20261125e" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125f" sizes="180x180" />
+  <link rel="manifest" href="./manifest.webmanifest?v=20261125f" />
   <meta name="theme-color" content="#F5F2F0" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -20,7 +22,7 @@
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" rel="stylesheet" integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0" crossorigin="anonymous" />
   <!-- 고정폭 글꼴은 700 굵기만 쓴다. Google Fonts CSS는 브라우저마다 달라 SRI를 걸 수 없다. -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./style.css?v=20261125e" />
+  <link rel="stylesheet" href="./style.css?v=20261125f" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -31,7 +33,7 @@
       </div>
       <div class="topbar-meta">
         <div class="sync-pill" id="lastSync">
-          <div class="sync-label">Last Sync Status</div>
+          <div class="sync-label">마지막 동기화</div>
           <div class="sync-text"><span class="sync-dot"></span>동기화 중…</div>
         </div>
         <button id="reloadBtn" class="icon-button" type="button" aria-label="다시 불러오기" title="다시 불러오기 (R)">
@@ -48,7 +50,7 @@
     <section class="hero">
       <div class="hero-top">
         <span class="hero-badge" id="statusBadge">예측 보류</span>
-        <span class="hero-status-reason" id="statusReason">LATEST 30 DAYS (LOW RELIABILITY)</span>
+        <span class="hero-status-reason" id="statusReason">최근 30일</span>
         <span class="hero-last">최근 <b id="lastEntry">–</b></span>
       </div>
       <div class="hero-main">
@@ -57,29 +59,29 @@
         </h1>
         <div class="stat-cells">
           <div class="stat-cell">
-            <span class="stat-cell-label">Trend Weight</span>
+            <span class="stat-cell-label">추세 체중</span>
             <span id="trendWeight" class="stat-cell-value">–</span>
           </div>
           <div class="stat-cell">
-            <span class="stat-cell-label">Weekly Change</span>
+            <span class="stat-cell-label">주간 변화</span>
             <span id="heroWeeklyChange" class="stat-cell-value">–</span>
           </div>
           <div class="stat-cell">
-            <span class="stat-cell-label">To Target</span>
+            <span class="stat-cell-label">목표까지</span>
             <span id="toTarget" class="stat-cell-value">–</span>
           </div>
           <div class="stat-cell">
-            <span class="stat-cell-label">Target ETA</span>
+            <span class="stat-cell-label">목표 도달</span>
             <span id="etaValue" class="stat-cell-value">–</span>
             <span id="etaSub" class="stat-cell-sub">–</span>
           </div>
           <div class="stat-cell">
-            <span class="stat-cell-label">Goal Progress</span>
+            <span class="stat-cell-label">목표 진행률</span>
             <span id="goalProgressBig" class="stat-cell-value">–</span>
           </div>
           <div class="stat-cell stat-cell--confidence">
-            <span class="stat-cell-label">Confidence</span>
-            <span id="predictionConfidence" class="stat-cell-value">LOW</span>
+            <span class="stat-cell-label">신뢰도</span>
+            <span id="predictionConfidence" class="stat-cell-value">–</span>
             <span id="predictionError" class="stat-cell-sub">–</span>
           </div>
         </div>
@@ -88,8 +90,8 @@
         <div class="hero-progress-bar">
           <div class="hero-progress-fill" id="heroProgressFill" style="width:0%"></div>
           <div class="hero-progress-track-labels">
-            <span id="heroProgressStart">84.2 kg (Start)</span>
-            <span id="heroProgressTarget">80.0 kg (Target)</span>
+            <span id="heroProgressStart">시작 –</span>
+            <span id="heroProgressTarget">목표 –</span>
           </div>
           <div class="hero-progress-marker" id="heroProgressMarker" style="left:0%"></div>
         </div>
@@ -97,7 +99,7 @@
     </section>
 
     <section class="insight-strip" id="insightCard" hidden>
-      <span class="insight-tag">INSIGHT</span>
+      <span class="insight-tag">인사이트</span>
       <div class="insight-text">
         <p class="insight-headline" id="insightHeadline"></p>
         <p class="insight-lines" id="insightLines"></p>
@@ -112,13 +114,13 @@
         <div class="panel-head-badge">A</div>
         <div>
           <p class="eyebrow eyebrow-tight">체중 추세</p>
-          <h2 class="panel-title">Weight Trend</h2>
+          <h2 class="panel-title">체중 추세</h2>
         </div>
         <div class="panel-head-legend">
-          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch"></span>Actual</span>
-          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--trend"></span>Trend</span>
-          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--forecast"></span>Forecast</span>
-          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--target"></span>Target</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch"></span>실측</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--trend"></span>추세</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--forecast"></span>예측</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--target"></span>목표</span>
         </div>
       </div>
         <div class="panel-controls">
@@ -163,10 +165,10 @@
         <p class="chart-notice" id="chartNotice" role="status" hidden></p>
       </div>
       <div class="chart-legend-mobile" aria-hidden="true">
-        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--actual"></span>Actual</span>
-        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--trend"></span>Trend</span>
-        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--forecast"></span>Forecast</span>
-        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--target"></span>Target</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--actual"></span>실측</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--trend"></span>추세</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--forecast"></span>예측</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--target"></span>목표</span>
       </div>
     </section>
 
@@ -174,12 +176,12 @@
         <div class="panel-head">
           <div class="panel-head-bar">
             <div class="panel-head-badge-sm">M</div>
-            <h4 class="panel-head-title-sm">Model Diagnostics</h4>
+            <h4 class="panel-head-title-sm">모델 진단</h4>
           </div>
         </div>
         <div class="coverage-block">
           <div class="coverage-head">
-            <span class="coverage-label">Coverage</span>
+            <span class="coverage-label">측정률</span>
             <span class="coverage-value">
               <span id="summaryCoverageText">–</span>
               <span id="summaryCoveragePct" class="coverage-sub">( – )</span>
@@ -189,25 +191,25 @@
         </div>
         <div class="coverage-grid">
           <div class="coverage-cell">
-            <span class="coverage-cell-label">7d Range</span>
+            <span class="coverage-cell-label">7일 범위</span>
             <span class="coverage-cell-value" id="summaryRangeBox">–</span>
           </div>
           <div class="coverage-cell">
-            <span class="coverage-cell-label">7d Change</span>
+            <span class="coverage-cell-label">7일 변화</span>
             <span class="coverage-cell-value" id="summaryChange7d">–</span>
           </div>
           <div class="coverage-cell">
-            <span class="coverage-cell-label">28d Change</span>
+            <span class="coverage-cell-label">28일 변화</span>
             <span class="coverage-cell-value" id="summaryChange28d">–</span>
           </div>
           <div class="coverage-cell">
-            <span class="coverage-cell-label">14d MAE</span>
+            <span class="coverage-cell-label">14일 오차</span>
             <span class="coverage-cell-value" id="summaryMae14d">–</span>
           </div>
         </div>
         <div class="model-strip" id="modelStrip">
           <div class="model-strip-head">
-            <span class="model-strip-tag">MODEL</span>
+            <span class="model-strip-tag">모델</span>
             <span class="model-strip-tag-label">신뢰도 · 추세 · 검증</span>
           </div>
           <div class="model-strip-body">
@@ -235,7 +237,7 @@
             <div class="panel-head-badge">S</div>
             <div>
               <p class="eyebrow eyebrow-tight">행동 시나리오</p>
-              <h3 class="panel-head-title">Action Scenarios</h3>
+              <h3 class="panel-head-title">시나리오</h3>
             </div>
           </div>
           <p class="scenarios-hint" id="scenariosHint">선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다</p>
@@ -245,23 +247,23 @@
             <button class="scenario" data-scenario="optimistic" type="button" aria-pressed="false">
               <span class="scenario-tag scenario-tag--aggressive">낙관</span>
               <span id="scenarioOpt" class="scenario-val">–</span>
-              <span class="scenario-sub">Exercise +2 sessions</span>
+              <span class="scenario-sub">운동 늘림</span>
               <svg class="scenario-sparkline" data-spark="optimistic" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
-              <p class="scenario-desc" id="scenarioOptDesc"></p>
+              <span class="scenario-desc" id="scenarioOptDesc"></span>
             </button>
             <button class="scenario is-active" data-scenario="base" type="button" aria-pressed="true">
               <span class="scenario-tag scenario-tag--standard">기준</span>
               <span id="scenarioBase" class="scenario-val">–</span>
               <span class="scenario-sub">현재 운동량 유지</span>
               <svg class="scenario-sparkline" data-spark="base" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
-              <p class="scenario-desc" id="scenarioBaseDesc"></p>
+              <span class="scenario-desc" id="scenarioBaseDesc"></span>
             </button>
             <button class="scenario" data-scenario="conservative" type="button" aria-pressed="false">
               <span class="scenario-tag scenario-tag--conservative">보수</span>
               <span id="scenarioCon" class="scenario-val">–</span>
-              <span class="scenario-sub">Exercise −2 sessions</span>
+              <span class="scenario-sub">운동 줄임</span>
               <svg class="scenario-sparkline" data-spark="conservative" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true"></svg>
-              <p class="scenario-desc" id="scenarioConDesc"></p>
+              <span class="scenario-desc" id="scenarioConDesc"></span>
             </button>
           </div>
         </div>
@@ -273,7 +275,7 @@
             <div class="panel-head-icon">B</div>
             <div>
               <p class="eyebrow">체성분 · 활동</p>
-              <h3 class="panel-head-title">Body &amp; Activity</h3>
+              <h3 class="panel-head-title">몸 · 활동</h3>
             </div>
           </div>
         </div>
@@ -297,12 +299,12 @@
           <div class="tile">
             <span class="tile-label">운동시간</span>
             <span class="tile-num" id="exerciseMinutes">–</span>
-            <span class="tile-unit">MIN · 7D</span>
+            <span class="tile-unit">분 · 7일</span>
           </div>
           <div class="tile">
             <span class="tile-label">활동일수</span>
             <span class="tile-num" id="activeDays">–</span>
-            <span class="tile-unit">DAYS · 7D</span>
+            <span class="tile-unit">일 · 7일</span>
           </div>
           <div class="tile">
             <span class="tile-label">평균걸음</span>
@@ -345,7 +347,6 @@
     <footer class="foot">
       <span id="statusLine">데이터를 불러오는 중입니다.</span>
       <span>
-        <span class="kbd-hint">SYNC V2.4.1 · REF: BRUTALIST GRID V1.0</span>
         <span class="kbd-hint-shortcuts">단축키: <kbd>R</kbd> 새로고침 · <kbd>1</kbd> 30일 · <kbd>2</kbd> 60일 · <kbd>3</kbd> 전체</span>
       </span>
     </footer>
@@ -353,9 +354,9 @@
 
   <!-- W1: async라 CDN이 늦거나 막혀도 페이지를 막지 않는다. app.js가 최대 5초 기다린 뒤 차트 없이 나머지를 그린다. -->
   <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js" integrity="sha384-tgbB5AKnszdcfwcZtTfuhR3Ko1XZdlDfsLtkxiiAZiVkkXCkFmp+FQFh+V/UTo54" crossorigin="anonymous"></script>
-  <script defer src="./app.helpers.js?v=20261125e"></script>
-  <script defer src="./app.js?v=20261125e"></script>
-  <script defer src="./enhancements.js?v=20261125e"></script>
+  <script defer src="./app.helpers.js?v=20261125f"></script>
+  <script defer src="./app.js?v=20261125f"></script>
+  <script defer src="./enhancements.js?v=20261125f"></script>
   <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>
