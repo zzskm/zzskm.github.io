@@ -413,7 +413,7 @@ def build_prediction_series(
     return series
 
 
-def measurement_weight(row: dict[str, Any]) -> float:
+def measurement_weight(row: dict[str, Any], use_sleep: bool = True, use_load: bool = True) -> float:
     """Phase 4 — 컨텍스트 기반 측정 신뢰도 가중치 (0.5 ~ 1.0).
 
     수면 부족·급격한 훈련 부하 증가는 수분 정체/글리코겐 변동을 일으켜 그날
@@ -421,10 +421,10 @@ def measurement_weight(row: dict[str, Any]) -> float:
     비중을 줄여 추세선이 노이즈에 끌려가지 않게 한다.
     """
     w = 1.0
-    score = parse_float(row.get("sleep_score"))
+    score = parse_float(row.get("sleep_score")) if use_sleep else None
     if score is not None and score < 60:
         w *= 0.7  # 수면 점수 60 미만 → 수분 정체 가능성
-    load = parse_int(row.get("training_load_acute"))
+    load = parse_int(row.get("training_load_acute")) if use_load else None
     if load is not None and load >= 400:
         w *= 0.85  # 급성 부하 매우 높음 → 글리코겐/수분 저장 가능성
     return max(w, 0.4)
