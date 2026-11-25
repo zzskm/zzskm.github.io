@@ -103,6 +103,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true",
                         help="Fetch from Garmin but write neither CSV nor summary; print call statistics as JSON.")
     parser.add_argument("--stats-output", default=None, help="With --dry-run, write the JSON report here instead of stdout.")
+    parser.add_argument("--probe-activities-since", default=None,
+                        help="With --dry-run, count activities per month from this date (one range query, no values).")
     parser.add_argument("--previous-summary", default="garmin-weight/data/summary.json",
                         help="Summary whose sync block is carried over (--skip-garmin) or extended.")
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
@@ -1284,6 +1286,26 @@ def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, An
     }
 
 
+def probe_activity_history(client: Any, since: str, until: str) -> dict[str, Any]:
+    """기간 조회 한 번으로 월별 활동 수만 센다(D1 판정용). 활동 내용은 남기지 않고 구조만 남긴다."""
+    history_log = CallLog(keep_structures=True)
+    activities, status = safe_call(client, "get_activities_by_date", since, until, log=history_log)
+    by_month: dict[str, int] = {}
+    for activity in activities if isinstance(activities, list) else []:
+        start = activity.get("startTimeLocal") if isinstance(activity, dict) else None
+        month = start[:7] if isinstance(start, str) and re.match(r"^\d{4}-\d{2}", start) else "unknown"
+        by_month[month] = by_month.get(month, 0) + 1
+    return {
+        "since": since,
+        "until": until,
+        "status": status,
+        "errors": history_log.errors,
+        "total": sum(by_month.values()),
+        "byMonth": dict(sorted(by_month.items())),
+        "structure": history_log.structures.get("get_activities_by_date"),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
@@ -1321,7 +1343,10 @@ def main(argv: list[str] | None = None) -> int:
     failed = log.status() == "failed"
 
     if args.dry_run:
-        report = json.dumps(build_probe_report(result, existing_rows, auth, days), ensure_ascii=False, indent=2)
+        probe = build_probe_report(result, existing_rows, auth, days)
+        if args.probe_activities_since:
+            probe["activityHistory"] = probe_activity_history(client, args.probe_activities_since, days[-1])
+        report = json.dumps(probe, ensure_ascii=False, indent=2)
         if args.stats_output:
             Path(args.stats_output).parent.mkdir(parents=True, exist_ok=True)
             Path(args.stats_output).write_text(report + "\n", encoding="utf-8")

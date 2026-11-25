@@ -44,6 +44,7 @@ class FakeGarmin:
         self.empty = set(empty)
         self.status = status
         self.calls: list[str] = []
+        self.history: list[dict] = []  # 기간 조회(시작일 != 종료일)에 돌려줄 활동
 
     def _respond(self, name: str, payload):
         self.calls.append(name)
@@ -76,7 +77,7 @@ class FakeGarmin:
         return self._respond("get_activities_fordate", {"ActivitiesForDay": {"payload": [{"duration": 1800.0, "calories": 250.0}]}})
 
     def get_activities_by_date(self, start, end):
-        return self._respond("get_activities_by_date", [])
+        return self._respond("get_activities_by_date", list(self.history) if start != end else [])
 
     def get_training_readiness(self, day):
         return self._respond("get_training_readiness", [])
@@ -320,6 +321,28 @@ class MainTests(unittest.TestCase):
         self.assertIn("<id>", report["structures"]["get_body_composition"]["devices"])
         self.assertEqual("int", report["structures"]["get_stats"]["totalSteps"])
         self.assertNotIn("get_activities_fordate", report["structures"])
+        self.assertNotIn("activityHistory", report)
+
+    def test_dry_run_counts_activity_history_by_month_without_values(self) -> None:
+        client = FakeGarmin()
+        client.history = [
+            {"activityId": 123456789, "activityName": SECRET, "startTimeLocal": "2026-05-03 07:10:00", "duration": 1800.0},
+            {"activityId": 123456790, "activityName": SECRET, "startTimeLocal": "2026-05-14 07:10:00", "duration": 2400.0},
+            {"activityId": 123456791, "activityName": SECRET, "startTimeLocal": "2026-11-20 18:00:00", "duration": 900.0},
+            {"activityId": 123456792},
+        ]
+        report_path = self.tmp / "probe.json"
+        code, out = self.run_main(client, "--dry-run", "--stats-output", str(report_path), "--probe-activities-since", "2026-03-01")
+        self.assertEqual(0, code)
+        text = report_path.read_text(encoding="utf-8")
+        self.assertNotIn(SECRET, text + out)
+        self.assertNotIn("123456789", text)
+        history = json.loads(text)["activityHistory"]
+        self.assertEqual(("2026-03-01", DAY, "ok", 4), (history["since"], history["until"], history["status"], history["total"]))
+        self.assertEqual({"2026-05": 2, "2026-11": 1, "unknown": 1}, history["byMonth"])
+        # 구조에는 키와 타입만 남는다(키가 없는 활동이 섞여도 있는 쪽의 타입).
+        self.assertEqual({"activityId": "int", "activityName": "str", "startTimeLocal": "str", "duration": "float"},
+                         history["structure"]["<item>"])
 
 
 if __name__ == "__main__":
