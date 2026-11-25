@@ -2,6 +2,9 @@ import React,{useCallback,useEffect,useMemo,useState} from 'react';
 import {KR_DEFAULTS} from '../../retirement-simulator/src/model/defaults.js';
 import {parseBackup,MAX_BACKUP_BYTES} from '../../retirement-simulator/src/state/backup.js';
 import {computeStory,choiceInput,nextEventAge} from './story.js';
+import {QuickSetup} from './QuickSetup.jsx';
+import {PersonaAvatar} from './PersonaAvatar.jsx';
+import {getPersona,inferPersonaId} from './personas.js';
 
 const fmt=n=>Number(n??0).toLocaleString('ko-KR');
 const fmtMoney=(n,hidden=false)=>hidden?'••••':`${fmt(Math.round(n))}만 원`;
@@ -26,30 +29,30 @@ function Symbol({name,size=18}) {
  };
  return <svg {...common}>{paths[name]??paths.arrow}</svg>;
 }
-function Scene({frame,input}) {
+function Scene({frame,input,personaId,characterName}) {
  const chapter=frame.chapter;
  return <div className={`scene-artwork scene-${chapter} scene-tone-${frame.tone}`}>
   <div className="scene-grain"/>
   <svg className="scene-landscape" viewBox="0 0 700 470" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
    <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#253d49"/><stop offset="1" stopColor="#789188"/></linearGradient>
-    <linearGradient id="hill" x1="0" y1="0" x2=".75" y2="1"><stop stopColor="#54716c"/><stop offset="1" stopColor="#1a3940"/></linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c4d9d3"/><stop offset="1" stopColor="#f4e9d4"/></linearGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2=".75" y2="1"><stop stopColor="#a5bca3"/><stop offset="1" stopColor="#73988d"/></linearGradient>
     <radialGradient id="sunGlow"><stop stopColor="#f7d6a0" stopOpacity=".35"/><stop offset="1" stopColor="#f7d6a0" stopOpacity="0"/></radialGradient>
    </defs>
    <rect width="700" height="470" fill="url(#sky)"/>
    <circle cx="476" cy="117" r="124" fill="url(#sunGlow)"/>
    <circle cx="476" cy="117" r="53" fill="#f4d9a8" opacity=".9"/>
-   <path d="M0 272Q130 196 282 273T700 243V470H0Z" fill="#7d9384" opacity=".76"/>
+   <path d="M0 272Q130 196 282 273T700 243V470H0Z" fill="#c8d5b7" opacity=".76"/>
    <path d="M0 329Q172 265 316 330T700 290V470H0Z" fill="url(#hill)"/>
-   <path d="M0 395Q250 348 430 397T700 360V470H0Z" fill="#17313b" opacity=".84"/>
+   <path d="M0 395Q250 348 430 397T700 360V470H0Z" fill="#77988a" opacity=".84"/>
    <g transform="translate(130 215)" fill="#e9dfc8">
      <rect x="35" y="60" width="88" height="115" rx="3" opacity=".88"/>
      <path d="M22 65L79 18l57 47Z" fill="#d5b89a"/>
-     <rect x="64" y="119" width="23" height="56" rx="2" fill="#435d62"/>
+     <rect x="64" y="119" width="23" height="56" rx="2" fill="#749588"/>
      <rect x="48" y="78" width="20" height="23" rx="2" fill="#eabf80"/>
      <rect x="93" y="78" width="19" height="23" rx="2" fill="#eabf80"/>
    </g>
-   <g fill="#16363a" opacity=".8"><path d="M560 338v-115h8v115Z"/><circle cx="565" cy="216" r="46"/><circle cx="535" cy="235" r="30"/><circle cx="590" cy="241" r="32"/></g>
+   <g fill="#577d68" opacity=".8"><path d="M560 338v-115h8v115Z"/><circle cx="565" cy="216" r="46"/><circle cx="535" cy="235" r="30"/><circle cx="590" cy="241" r="32"/></g>
    <g fill="none" stroke="#e9e7d7" strokeWidth="2" opacity=".22"><path d="M0 419Q300 397 700 431"/><path d="M0 438Q300 416 700 451"/></g>
   </svg>
   <div className="scene-gradient"/>
@@ -57,6 +60,9 @@ function Scene({frame,input}) {
    <span className="scene-overline">CHAPTER {frame.chapter==='준비기'?'I':frame.chapter==='브릿지'?'II':'III'} · {frame.chapter}</span>
    <span className="scene-age"><span>{frame.age}</span>세</span>
    <span className="scene-year">{frame.year}년 · {frame.age-input.currentAge+1}번째 해</span>
+  </div>
+  <div className="scene-character"><PersonaAvatar id={personaId} age={frame.age} size="large"/>
+    <span>{characterName} · {getPersona(personaId)?.short??'나의 이야기'}</span>
   </div>
   <div className="scene-caption">이 풍경은 연출 이미지이며 미래 사건을 예측하지 않습니다.</div>
  </div>;
@@ -73,9 +79,9 @@ function AssetTrend({frames,index,hidden}) {
    <div className="trend-heading"><span>금융자산 경로 · 현재가치</span><b>{hidden?'금액 숨김':`${fmt(current.financialAssets)}만 원`}</b></div>
    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`현재 ${current.age}세 금융자산 변화 그래프. 0원 기준선 포함`} preserveAspectRatio="none">
     <line x1={0} x2={w} y1={y0} y2={y0} stroke="#d4a57e" strokeDasharray="4 7" strokeWidth="1" opacity=".6"/>
-    <path d={path} fill="none" stroke="#88bfaf" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d={path} fill="none" stroke="#538d74" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
     <line x1={xCur} x2={xCur} y1={0} y2={h} stroke="#d4dfdb" strokeWidth="1" opacity=".4"/>
-    <circle cx={xCur} cy={y(current.financialAssets)} r="5" fill="#dce9d9" stroke="#476b63" strokeWidth="2"/>
+    <circle cx={xCur} cy={y(current.financialAssets)} r="5" fill="#eaf7ef" stroke="#467d61" strokeWidth="2"/>
    </svg>
    <div className="trend-ticks"><span>{frames[0].age}세</span><span>{current.age}세 · 선택</span><span>{frames.at(-1).age}세</span></div>
  </div>;
@@ -116,9 +122,10 @@ function StoryCard({frame,hidden}) {
  </section>;
 }
 export function App() {
- const [imports,setImports]=useState([{id:'demo',name:'예시 · 기본 계획',input:KR_DEFAULTS}]);
+ const [imports,setImports]=useState([{id:'demo',name:'예시 · 기본 계획',input:KR_DEFAULTS,personaId:'one-child',characterName:'나'}]);
  const [activeId,setActiveId]=useState('demo');
  const [choice,setChoice]=useState('base');
+ const [setupOpen,setSetupOpen]=useState(true);
  const [age,setAge]=useState(KR_DEFAULTS.currentAge);
  const [playing,setPlaying]=useState(false);
  const [speed,setSpeed]=useState(1);
@@ -126,6 +133,8 @@ export function App() {
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('예시 계획으로 시작한다. 기존 은퇴 시뮬레이터의 실제 JSON을 가져올 수 있다.');
  const active=imports.find(x=>x.id===activeId)??imports[0];
+ const personaId=active.personaId??inferPersonaId(active.input);
+ const characterName=active.characterName??'나';
  const original=useMemo(()=>computeStory(active.input),[active.input]);
  const story=useMemo(()=>choice==='base'?original:computeStory(choiceInput(active.input,choice)),[active.input,choice,original]);
  const frames=story.frames,first=frames[0].age,last=frames.at(-1).age;
@@ -142,11 +151,12 @@ export function App() {
   return ()=>window.clearInterval(id);
  },[playing,speed,first,last]);
  useEffect(()=>{setAge(x=>Math.max(first,Math.min(last,x)));},[first,last]);
- const selectStory=id=>{const item=imports.find(x=>x.id===id);if(!item)return;setActiveId(id);setChoice('base');setAge(item.input.currentAge);setPlaying(false);setError('');};
+ const selectStory=id=>{const item=imports.find(x=>x.id===id);if(!item)return;setActiveId(id);setChoice('base');setAge(item.input.currentAge);setPlaying(false);setSetupOpen(false);setError('');};
  const loadParsed=parsed=>{
-  const items=parsed.scenarios.map((s,i)=>({...s,id:`import-${i}-${s.id}`}));
+  const items=parsed.scenarios.map((s,i)=>({...s,id:`import-${i}-${s.id}`,
+    personaId:s.personaId??inferPersonaId(s.input),characterName:s.characterName??'나'}));
   const firstMatch=items.find(s=>s.id===`import-0-${parsed.activeId}`)??items.find(s=>s.id.endsWith(`-${parsed.activeId}`))??items[0];
-  setImports(items);setActiveId(firstMatch.id);setChoice('base');setAge(firstMatch.input.currentAge);setPlaying(false);setError('');
+  setImports(items);setActiveId(firstMatch.id);setChoice('base');setAge(firstMatch.input.currentAge);setPlaying(false);setSetupOpen(false);setError('');
   setNotice(`${items.length}개 시나리오를 이 브라우저에만 불러왔다. 서버 전송이나 자동 저장은 하지 않는다.`);
  };
  const loadLocal=()=>{
@@ -164,6 +174,13 @@ export function App() {
   }catch(err){setError(err.message??'백업 파일을 읽지 못했습니다.');}
   finally{e.target.value='';}
  };
+ const applyQuickPlan=(input,nextPersonaId,nextName)=>{
+   setImports(prev=>prev.map(item=>item.id===activeId?
+     {...item,input,personaId:nextPersonaId,characterName:nextName,
+       name:item.id==='demo'?'나의 은퇴 계획':item.name}:item));
+   setChoice('base');setAge(input.currentAge);setPlaying(false);setSetupOpen(false);
+   setError('');setNotice('입력한 값으로 스토리를 다시 계산했다. 설정은 현재 화면에만 적용되며 JSON 원본을 변경하지 않는다.');
+ };
  const jumpEvent=forward=>{
   const next=nextEventAge(story.events,clampedAge,forward);
   if(next!==null)changeAge(next);
@@ -177,7 +194,7 @@ export function App() {
    <div className="topbar-inner">
     <a href="./" className="brand" aria-label="은퇴 연대기 시작 화면"><span className="brand-mark">R<span>·</span>S</span><span>RETIREMENT <b>STORY</b></span></a>
     <nav className="mainnav"><span className="nav-active">스토리</span><a href="../retirement-simulator/">정밀 시뮬레이터 <Symbol name="arrow" size={15}/></a></nav>
-    <button type="button" className="privacy" onClick={()=>setHidden(v=>!v)} aria-pressed={hidden}>
+    <button type="button" className="privacy" onClick={()=>{setHidden(v=>!v);setSetupOpen(false);}} aria-pressed={hidden}>
      <Symbol name={hidden?'lock':'unlock'} size={16}/>{hidden?'금액 보기':'금액 숨기기'}
     </button>
    </div>
@@ -201,10 +218,20 @@ export function App() {
     </div>
    </section>
    {error?<p className="feedback error" role="alert">{error}</p>:<p className="feedback" role="status">{notice}</p>}
+   <section className="character-strip" aria-label="현재 캐릭터">
+    <div className="character-strip-left"><PersonaAvatar id={personaId} age={frame.age} size="tiny"/>
+      <div><span className="eyebrow">MY CHARACTER</span><strong>{characterName} · {getPersona(personaId)?.title??'나의 인생'}</strong>
+       <small>{getPersona(personaId)?.caption??'개인 은퇴 계획'}</small></div>
+    </div>
+    <button type="button" onClick={()=>{setSetupOpen(v=>!v);setHidden(false);setPlaying(false);}}
+      className="edit-character" aria-expanded={setupOpen}>{setupOpen?'설정 닫기':'캐릭터·정보 수정'}</button>
+   </section>
+   {setupOpen&&<QuickSetup key={active.id} input={active.input} initialPersonaId={personaId}
+      initialName={characterName} onApply={applyQuickPlan} onCancel={()=>setSetupOpen(false)}/>}
 
    <div className="story-grid">
     <div className="story-left">
-     <Scene frame={frame} input={story.input}/>
+     <Scene frame={frame} input={story.input} personaId={personaId} characterName={characterName}/>
      <div className="playback-panel">
       <div className="timeline-meta"><span>시간 여행</span><span>{clampedAge}세 / {last}세</span></div>
       <input type="range" min={first} max={last} value={clampedAge} onChange={e=>changeAge(Number(e.target.value))} aria-label="이야기 연령 이동" className="age-slider"/>
