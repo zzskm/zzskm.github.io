@@ -6,11 +6,11 @@
   <title>체중 대시보드</title>
   <!-- 공개 저장소·Pages라 누구나 볼 수 있다. 검색 노출만 막는다(2026-11-25 사용자 결정). -->
   <meta name="robots" content="noindex" />
-  <link rel="icon" href="./icons/icon.svg?v=20261125i" type="image/svg+xml" />
-  <link rel="icon" href="./icons/icon-192.png?v=20261125i" type="image/png" sizes="192x192" />
+  <link rel="icon" href="./icons/icon.svg?v=20261125j" type="image/svg+xml" />
+  <link rel="icon" href="./icons/icon-192.png?v=20261125j" type="image/png" sizes="192x192" />
   <!-- iOS 홈 화면 아이콘은 PNG만 쓴다(W5). -->
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125i" sizes="180x180" />
-  <link rel="manifest" href="./manifest.webmanifest?v=20261125i" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=20261125j" sizes="180x180" />
+  <link rel="manifest" href="./manifest.webmanifest?v=20261125j" />
   <meta name="theme-color" content="#F5F2F0" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -19,10 +19,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- W4: 쓰는 글자 범위만 받는 dynamic-subset(전체 2MB 대신). W3: integrity + crossorigin이면 서비스 워커가 저장할 수 있다.
        jsDelivr가 즉석에서 만드는 .min 파일은 내용이 바뀔 수 있어 SRI를 걸 수 없으므로 원본 파일을 쓴다. -->
-  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" rel="stylesheet" integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0" crossorigin="anonymous" />
+  <!-- 글꼴 CSS 두 개는 화면을 막지 않게 읽는다: media="print"로 받고, 다 받으면 화면에 적용한다.
+       그냥 rel="stylesheet"면 CDN이 8초 늦을 때 첫 화면도 8초 늦었다(재검토 FE2). 그동안은 시스템 글꼴로 보인다. -->
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" rel="stylesheet" media="print" onload="this.media='all'" integrity="sha384-2nNKoOPayicGa+aRguOQuiZP+RqQ4G3jalfDeOgftkKD7zBM2gJXTwcFqCZltdv0" crossorigin="anonymous" />
   <!-- 고정폭 글꼴은 700 굵기만 쓴다. Google Fonts CSS는 브라우저마다 달라 SRI를 걸 수 없다. -->
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./style.css?v=20261125i" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" crossorigin="anonymous" />
+  <link rel="stylesheet" href="./style.css?v=20261125j" />
 </head>
 <body>
   <div class="app" data-state="loading">
@@ -119,7 +121,7 @@
         <div class="panel-head-legend">
           <span class="panel-head-legend-item"><span class="panel-head-legend-swatch"></span>실측</span>
           <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--trend"></span>추세</span>
-          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--forecast"></span>예측</span>
+          <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--forecast"></span><span data-legend="forecast">예측</span></span>
           <span class="panel-head-legend-item"><span class="panel-head-legend-swatch panel-head-legend-swatch--target"></span>목표</span>
           <span class="panel-head-legend-item" data-legend="limited" title="추세에서 0.8kg 넘게 벗어난 측정은 추세에 일부만 반영합니다" hidden><span class="panel-head-legend-swatch panel-head-legend-swatch--limited"></span>일부 반영</span>
         </div>
@@ -168,7 +170,7 @@
       <div class="chart-legend-mobile" aria-hidden="true">
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--actual"></span>실측</span>
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--trend"></span>추세</span>
-        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--forecast"></span>예측</span>
+        <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--forecast"></span><span data-legend="forecast">예측</span></span>
         <span class="chart-legend-item"><span class="chart-legend-swatch chart-legend-swatch--target"></span>목표</span>
         <span class="chart-legend-item" data-legend="limited" hidden><span class="chart-legend-swatch chart-legend-swatch--limited"></span>일부 반영</span>
       </div>
@@ -354,11 +356,12 @@
     </footer>
   </div>
 
-  <!-- W1: async라 CDN이 늦거나 막혀도 페이지를 막지 않는다. app.js가 최대 5초 기다린 뒤 차트 없이 나머지를 그린다. -->
-  <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js" integrity="sha384-tgbB5AKnszdcfwcZtTfuhR3Ko1XZdlDfsLtkxiiAZiVkkXCkFmp+FQFh+V/UTo54" crossorigin="anonymous"></script>
-  <script defer src="./app.helpers.js?v=20261125i"></script>
-  <script defer src="./app.js?v=20261125i"></script>
-  <script defer src="./enhancements.js?v=20261125i"></script>
+  <!-- W1: async라 CDN이 늦거나 막혀도 페이지를 막지 않는다. app.js는 숫자를 먼저 보여 주고 차트는 이 스크립트가 오면 그린다.
+       못 받으면 표시를 남긴다(onerror). app.js가 그 표시를 보고, 다시 불러올 때 같은 주소로 새 태그를 넣어 다시 받는다. -->
+  <script async id="chartLib" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js" integrity="sha384-tgbB5AKnszdcfwcZtTfuhR3Ko1XZdlDfsLtkxiiAZiVkkXCkFmp+FQFh+V/UTo54" crossorigin="anonymous" onerror="this.dataset.failed='true'"></script>
+  <script defer src="./app.helpers.js?v=20261125j"></script>
+  <script defer src="./app.js?v=20261125j"></script>
+  <script defer src="./enhancements.js?v=20261125j"></script>
   <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>

@@ -12,7 +12,7 @@ on:
       - 'garmin-weight/manifest.webmanifest'
       - 'garmin-weight/icons/**'
       - 'tests/test_garmin*'
-      - 'tests/garmin_weight*.mjs'
+      - 'tests/garmin_weight*'
       - 'requirements.txt'
       # 수집·probe 워크플로의 셸 스텝도 테스트가 본다(tests/test_garmin_workflows.py).
       - '.github/workflows/garmin_weight_*.yml'
@@ -26,7 +26,7 @@ on:
       - 'garmin-weight/manifest.webmanifest'
       - 'garmin-weight/icons/**'
       - 'tests/test_garmin*'
-      - 'tests/garmin_weight*.mjs'
+      - 'tests/garmin_weight*'
       - 'requirements.txt'
       - '.github/workflows/garmin_weight_*.yml'
   workflow_dispatch:
@@ -51,7 +51,7 @@ jobs:
       - name: Unit tests
         env:
           PYTHONUTF8: '1'
-        run: python -m unittest discover -s tests -p 'test_garmin*.py' -v
+        run: bash tests/garmin_weight_ci.sh discover -s tests -p 'test_garmin*.py'
       - name: Rebuild summary from committed CSV (smoke)
         run: |
           python garmin-weight/scripts/sync_garmin.py --skip-garmin --output-summary "$RUNNER_TEMP/summary.json"
@@ -62,8 +62,8 @@ jobs:
             node --check "$f"
           done
       # 서비스 워커의 설치·활성화·요청 처리를 Cache API 흉내로 확인한다. 실제 브라우저 확인은 browser 잡에 있다.
-      - name: Service worker tests
-        run: node --test tests/garmin_weight_sw.test.mjs
+      - name: Service worker and page helper tests
+        run: node --test tests/garmin_weight_sw.test.mjs tests/garmin_weight_helpers.test.mjs
 
   # 고정한 garminconnect 버전으로 수집 코드의 가정을 확인한다. 로그인도 네트워크 호출도 하지 않는다(전송 계층을 가짜로 바꾼다).
   # - 수집이 부르는 메서드와 토큰 갱신 함수가 있다.
@@ -84,7 +84,7 @@ jobs:
           PYTHONUTF8: '1'
           # 라이브러리가 없으면 건너뛰지 않고 실패하게 한다.
           GARMIN_REQUIRE_LIBRARY_TESTS: '1'
-        run: python -m unittest tests.test_garmin_library -v
+        run: bash tests/garmin_weight_ci.sh tests.test_garmin_library
 
   browser:
     runs-on: ubuntu-latest
@@ -102,10 +102,10 @@ jobs:
         env:
           PYTHONUTF8: '1'
           GARMIN_REQUIRE_BROWSER_TESTS: '1'
-        run: python -m unittest tests.test_garmin_weight_browser -v
+        run: bash tests/garmin_weight_ci.sh tests.test_garmin_weight_browser
       # 프로필을 유지한 채 브라우저를 여러 번 다시 띄워 설치·배포·오프라인을 본다.
       - name: Service worker life cycle
         env:
           PYTHONUTF8: '1'
           GARMIN_REQUIRE_BROWSER_TESTS: '1'
-        run: python -m unittest tests.test_garmin_weight_sw_browser -v
+        run: bash tests/garmin_weight_ci.sh tests.test_garmin_weight_sw_browser

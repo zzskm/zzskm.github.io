@@ -66,6 +66,14 @@ def warming_up_summary() -> dict:
     return sync_garmin.build_summary([_row(start + timedelta(days=i), 84.0 - i * 0.05) for i in range(9)], {"targetWeightKg": TARGET_KG})
 
 
+def years_summary() -> dict:
+    """400일(2029-10-01 ~ 2030-11-04). 해가 바뀌고, 전체 보기에서 예측 12주(2031-01-27까지)가 모두 나온다."""
+    start = date(2029, 10, 1)
+    rows = [_row(start + timedelta(days=i), round(88.0 - 0.008 * i + 0.3 * sin(i * 1.7), 2) if i % 4 else None)
+            for i in range(400)]
+    return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
+
+
 def with_sync(summary: dict, hours_ago: float, failed: tuple[str, ...] = ()) -> dict:
     """마지막 수집 성공 시각을 hours_ago시간 전으로 둔다. generatedAt은 그대로(방금)다."""
     stamp = (datetime.now(timezone.utc) - timedelta(hours=hours_ago)).replace(microsecond=0, tzinfo=None).isoformat() + "Z"
@@ -145,6 +153,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
             "stale": steady_summary(unmeasured_tail_days=5),  # sync 블록이 없는 예전 요약: generatedAt을 쓴다
             "warming": warming_up_summary(),
             "long": with_sync(long_summary(), 2),
+            "years": with_sync(years_summary(), 2),
         }
         long = cls.summaries["long"]
         cls.summaries.update({
@@ -168,8 +177,13 @@ class GarminWeightBrowserTests(unittest.TestCase):
         cls.thread.join()
 
     def open_page(self, fixture: str = "steady", width: int = 1440, block_cdn: bool = False, console: list | None = None,
-                  fixed_time: str | None = None, summary_status: int = 200, expect_state: str = "ready"):
+                  fixed_time: str | None = None, summary_status: int = 200, expect_state: str = "ready",
+                  intercept: list | None = None, wait_until: str = "load", expect_chart: bool = True):
         """fixture 요약으로 페이지를 연다. summary_status가 200이 아니면 요약 요청이 그 상태로 실패한다.
+
+        intercept는 (주소 패턴, 처리 함수) 목록이다. 처리 함수가 요청을 끝내지 않고 돌아가면 그 요청은 응답 없이
+        기다린다(느린 CDN). 그런 요청이 있으면 load 이벤트가 오지 않으므로 wait_until="domcontentloaded"로 연다.
+        expect_chart가 거짓이면 차트가 그려질 때까지 기다리지 않는다.
 
         돌려주는 page에는 server가 붙는다: server["status"]와 server["payload"]를 바꾸면 다음 요청부터 응답이 바뀌고,
         server["requests"]는 요약 요청 수다.
@@ -194,14 +208,16 @@ class GarminWeightBrowserTests(unittest.TestCase):
         page.route("**/garmin-weight/config.json*", lambda r: r.fulfill(json={"targetWeightKg": TARGET_KG}))
         if block_cdn:
             page.route("https://cdn.jsdelivr.net/**", lambda r: r.abort())
+        for pattern, handler in intercept or ():
+            page.route(pattern, handler)
         if console is not None:
             page.on("console", lambda m: console.append(f"{m.type}: {m.text}"))
         if fixed_time is not None:
             page.clock.set_fixed_time(fixed_time)
-        page.goto(f"http://127.0.0.1:{self.server.server_port}{PAGE}")
+        page.goto(f"http://127.0.0.1:{self.server.server_port}{PAGE}", wait_until=wait_until)
         page.wait_for_function("(state) => document.querySelector('.app')?.dataset.state === state", arg=expect_state, timeout=20000)
         has_weights = any(point.get("valueKg") is not None for point in server["payload"]["series"]["daily"])
-        if not block_cdn and expect_state == "ready" and has_weights:
+        if expect_chart and not block_cdn and expect_state == "ready" and has_weights:
             page.wait_for_function("window.Chart && Chart.getChart(document.getElementById('weightChart'))", timeout=20000)
         self.addCleanup(lambda: self.assertEqual([], errors, "page errors"))
         return page
@@ -354,7 +370,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertNotEqual("#ffffff", page.evaluate(stroke, "base"))
 
     def test_time_axis_is_proportional(self) -> None:
-        """P7(F3): 60일 보기에서 과거와 미래의 하루당 픽셀 수가 같다(예측 13점이 실측 60점과 같은 간격이 아니다)."""
+        """P7(F3): 60일 보기에서 과거와 미래의 하루당 픽셀 수가 같다(주 단위 예측 점이 일 단위 실측 점과 같은 간격이 아니다)."""
         page = self.open_page("long")
         facts = page.evaluate("""() => {
           const chart = Chart.getChart(document.getElementById('weightChart'));
@@ -368,13 +384,17 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual("linear", facts["type"])
         self.assertAlmostEqual(facts["past"], facts["future"], places=6)
         self.assertEqual(7, facts["predStep"])
-        self.assertGreaterEqual(facts["span"], 60 + 84 - 1)
+        self.assertEqual(60 + 28, facts["span"])  # 과거 60일 + 예측 4주(재검토 FE1)
 
     def test_scenarios_draw_their_own_curves(self) -> None:
-        """P7(M6, F6): 카드 값 = 차트 선의 끝 값, 시나리오를 바꾸면 선과 띠가 그 시나리오 시계열로 바뀐다."""
-        summary = self.summaries["long"]
+        """P7(M6, F6): 카드 값 = 차트 선의 끝 값, 시나리오를 바꾸면 선과 띠가 그 시나리오 시계열로 바뀐다.
+
+        카드는 3개월 값이다. 예측 12주가 모두 보이는 전체 보기에서 선의 끝과 같다.
+        """
+        summary = self.summaries["years"]
         scenarios = summary["predictions"]["scenarios"]
-        page = self.open_page("long")
+        page = self.open_page("years")
+        page.click(".seg-btn[data-range='all']")
         line_end = "() => { const d = Chart.getChart(document.getElementById('weightChart')).data.datasets.find(d => d.label === '예측').data; return d[d.length - 1].y; }"
         upper_end = "() => { const d = Chart.getChart(document.getElementById('weightChart')).data.datasets.find(d => d.label === 'ciUpper').data; return d[d.length - 1].y; }"
         for key, card_id in (("base", "scenarioBase"), ("optimistic", "scenarioOpt"), ("conservative", "scenarioCon")):
@@ -387,6 +407,10 @@ class GarminWeightBrowserTests(unittest.TestCase):
         sparks = page.evaluate("() => ['optimistic','base','conservative'].map(k => document.querySelector(`.scenario-sparkline[data-spark='${k}'] polyline`).getAttribute('points'))")
         self.assertEqual(3, len(set(sparks)), "each card draws its own curve")
         self.assertEqual(13, len(sparks[0].split()))
+        # 60일 보기에서는 선이 4주에서 끝난다. 그 값도 같은 시나리오 시계열의 것이다(마지막에 고른 시나리오는 보수적).
+        page.click(".seg-btn[data-range='60']")
+        self.assertAlmostEqual(scenarios["conservative"]["series"][4]["valueKg"], page.evaluate(line_end), delta=0.01)
+        self.assertAlmostEqual(scenarios["conservative"]["series"][4]["upper80"], page.evaluate(upper_end), delta=0.01)
 
     def test_eta_beyond_two_years_is_labelled(self) -> None:
         page = self.open_page("steady")
@@ -405,6 +429,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
         page = self.open_page("steady", block_cdn=True)
         elapsed = time.monotonic() - started
         self.assertLess(elapsed, 12)
+        page.wait_for_function("document.querySelector('.app').dataset.chart === 'unavailable'", timeout=10000)
         # 투명도 전환(0.5초)이 끝날 때까지 기다린다.
         page.wait_for_function("getComputedStyle(document.querySelector('.app')).opacity === '1'", timeout=3000)
         facts = page.evaluate("""() => ({
@@ -457,7 +482,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
     def test_long_range_marker_sits_next_to_the_eta(self) -> None:
         """재검토 MD5: 신뢰도 등급이 높아도 3개월 값이 "변화 없음"보다 나쁘면 목표 도달일 옆에 표시한다."""
         marked = self.open_page("longworse")
-        self.assertEqual("7/5 · 장기 추정", marked.text_content("#etaSub"))
+        self.assertEqual("2031/7/5 · 장기 추정", marked.text_content("#etaSub"))  # 요약의 마지막 날은 2030년이다
         self.assertIn("84일 예측 오차", marked.text_content("#detailMae"))
         plain = self.open_page("long")
         self.assertNotIn("장기 추정", plain.text_content("#etaSub"))
@@ -635,7 +660,8 @@ class GarminWeightBrowserTests(unittest.TestCase):
 
     def test_band_has_no_step_between_neighbouring_weeks(self) -> None:
         """재검토 MD3: 8주 → 9주에 폭이 1.8배로 뛰던 계단이 차트에 없다."""
-        page = self.open_page("long")
+        page = self.open_page("years")
+        page.click(".seg-btn[data-range='all']")  # 예측 12주가 모두 보이는 보기
         half = page.evaluate("""() => {
           const chart = Chart.getChart(document.getElementById('weightChart'));
           const pick = (label) => chart.data.datasets.find((d) => d.label === label).data;
@@ -647,6 +673,223 @@ class GarminWeightBrowserTests(unittest.TestCase):
         for earlier, later in zip(half[1:], half[2:]):
             self.assertGreaterEqual(later + 1e-9, earlier)
             self.assertLessEqual(later, earlier * 1.5 + 0.01)
+
+    # --- 재검토 Q5: 차트와 로딩 -----------------------------------------------------------
+
+    CHART_FACTS_JS = """() => {
+      const chart = Chart.getChart(document.getElementById('weightChart'));
+      const x = chart.scales.x;
+      const pick = (label) => (chart.data.datasets.find((d) => d.label === label)?.data || []).map((p) => p.x);
+      const past = pick('추세');
+      return {
+        min: x.min, max: x.max, width: x.width,
+        forecast: pick('예측'), band: pick('ciUpper'),
+        firstPast: Math.min(...past), lastPast: Math.max(...past),
+        ticks: x.ticks.map((t) => ({ day: window.GWAppHelpers.dayIso(t.value), label: t.label })),
+        legend: [...document.querySelectorAll('[data-legend=forecast]')].map((n) => n.textContent),
+      };
+    }"""
+
+    # 차트 위에서 포인터를 px(캔버스 왼쪽 기준)로 옮긴다. Chart.js는 포인터 이벤트를 다음 애니메이션 프레임에 처리한다.
+    POINTER_JS = """
+          const chart = Chart.getChart(document.getElementById('weightChart'));
+          const x = chart.scales.x, area = chart.chartArea;
+          const rect = chart.canvas.getBoundingClientRect();
+          const middle = (area.top + area.bottom) / 2;
+          const move = async (px) => {
+            chart.canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: rect.left + px, clientY: rect.top + middle, bubbles: true }));
+            await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+          };"""
+
+    def test_forecast_takes_at_most_a_third_of_the_chart(self) -> None:
+        """재검토 FE1(결정): 예측 12주를 늘 그려서 30일 보기의 과거가 차트 폭의 26%였다. 보이는 과거의 절반까지만 그린다."""
+        page = self.open_page("years")
+        for view, weeks in (("30", 2), ("60", 4), ("all", 12)):
+            with self.subTest(view=view):
+                page.click(f".seg-btn[data-range='{view}']")
+                facts = page.evaluate(self.CHART_FACTS_JS)
+                self.assertEqual(weeks + 1, len(facts["forecast"]))  # 시작점 + 주마다 한 점
+                self.assertEqual(weeks + 1, len(facts["band"]))
+                self.assertEqual(facts["lastPast"] + 7 * weeks, facts["max"])
+                share = (facts["max"] - facts["lastPast"]) / (facts["max"] - facts["min"])
+                self.assertLessEqual(share, 1 / 3 + 1e-9)
+                if view != "all":
+                    self.assertGreater(share, 0.3)  # 줄일 수 있는 만큼만 줄인다
+                self.assertEqual([f"예측 · {weeks}주"] * 2, facts["legend"])
+
+    def test_axis_follows_the_visible_series(self) -> None:
+        """재검토 FE1: 예측 칩을 꺼도 가로축이 예측 구간까지 남아 오른쪽 59%가 비어 있었다."""
+        page = self.open_page("years")
+        shown = page.evaluate(self.CHART_FACTS_JS)
+        self.assertEqual(shown["lastPast"] + 28, shown["max"])
+        page.evaluate("document.querySelector('.chip[data-series=prediction] input').click()")
+        hidden = page.evaluate(self.CHART_FACTS_JS)
+        self.assertEqual([], hidden["forecast"])
+        self.assertEqual((shown["firstPast"], shown["lastPast"]), (hidden["min"], hidden["max"]))
+
+    def test_tooltip_follows_the_pointer_in_the_forecast(self) -> None:
+        """재검토 FE1: 예측 구간에서는 점 바로 위(폭의 4%)에서만 툴팁이 떴고, 80% 구간의 값은 화면 어디에도 없었다."""
+        summary = self.summaries["years"]
+        page = self.open_page("years")
+        facts = page.evaluate(f"""async () => {{
+          {self.POINTER_JS}
+          const lastPast = Math.max(...chart.data.datasets.find((d) => d.label === '추세').data.map((p) => p.x));
+          const sweep = async (from, to) => {{
+            let shown = 0, total = 0;
+            for (let px = Math.ceil(from); px <= Math.floor(to); px += 4) {{
+              await move(px);
+              total += 1;
+              if (chart.tooltip.getActiveElements().length) shown += 1;
+            }}
+            return {{ shown, total }};
+          }};
+          const boundary = x.getPixelForValue(lastPast);
+          const past = await sweep(area.left, boundary);
+          const future = await sweep(boundary + 1, area.right);
+          await move(x.getPixelForValue(lastPast + 14) + 3);  // 2주 뒤의 예측 점 근처
+          const forecast = {{ title: chart.tooltip.title, lines: chart.tooltip.body.flatMap((b) => b.lines) }};
+          return {{ past, future, forecast, mode: chart.options.interaction.mode }};
+        }}""")
+        self.assertEqual("nearest", facts["mode"])
+        self.assertEqual(facts["past"]["total"], facts["past"]["shown"])
+        self.assertEqual(facts["future"]["total"], facts["future"]["shown"])
+        self.assertGreater(facts["future"]["total"], 50)
+        point = summary["predictions"]["scenarios"]["base"]["series"][2]
+        self.assertEqual([f"예측: {point['valueKg']:g} (80% 구간 {point['lower80']:.1f}~{point['upper80']:.1f})"], facts["forecast"]["lines"])
+        day = date.fromisoformat(point["date"])
+        self.assertEqual(2030, day.year)
+        self.assertEqual([f"{day.month}월 {day.day}일"], facts["forecast"]["title"])
+        # 60일 보기에는 지난해가 없다. 전체 보기에서 지난해의 날짜에는 연도가 붙는다(요약의 마지막 날은 2030년이다).
+        page.click(".seg-btn[data-range='all']")
+        hovered = page.evaluate(f"""async () => {{
+          {self.POINTER_JS}
+          await move(x.getPixelForValue(x.min + 30));
+          return {{ title: chart.tooltip.title, day: window.GWAppHelpers.dayIso(x.min + 30) }};
+        }}""")
+        day = date.fromisoformat(hovered["day"])
+        self.assertEqual(2029, day.year)
+        self.assertEqual([f"2029년 {day.month}월 {day.day}일"], hovered["title"])
+
+    def test_ticks_sit_on_calendar_boundaries_and_carry_the_year(self) -> None:
+        """재검토 FE1: 눈금이 9/25, 10/24, 12/13처럼 달력과 맞지 않았고, 해가 바뀌어도 연도가 없었다."""
+        for width in (1440, 390):
+            page = self.open_page("years", width=width)
+            for view in ("30", "60", "all"):
+                with self.subTest(width=width, view=view):
+                    page.click(f".seg-btn[data-range='{view}']")
+                    facts = page.evaluate(self.CHART_FACTS_JS)
+                    days = [date.fromisoformat(tick["day"]) for tick in facts["ticks"]]
+                    labels = [tick["label"] for tick in facts["ticks"]]
+                    self.assertGreaterEqual(len(days), 2)
+                    self.assertLessEqual(len(days), facts["width"] // 56)
+                    self.assertTrue(all(day.weekday() == 0 for day in days) or all(day.day == 1 for day in days), days)
+                    if view == "all":
+                        # 2029-10 ~ 2031-01: 첫 눈금과 해가 바뀌는 눈금에만 둘째 줄에 연도가 붙는다.
+                        expected = [(days[0].isoformat(), str(days[0].year))]
+                        expected += [(day.isoformat(), str(day.year)) for earlier, day in zip(days, days[1:]) if day.year != earlier.year]
+                        self.assertEqual(expected, [(day.isoformat(), label[1]) for day, label in zip(days, labels) if isinstance(label, list)])
+                        self.assertGreaterEqual(len(expected), 2)
+                        self.assertEqual("2031", expected[-1][1])
+                    else:
+                        self.assertTrue(all(isinstance(label, str) for label in labels), labels)
+                        self.assertTrue(all(label == f"{day.month}/{day.day}" for day, label in zip(days, labels)))
+
+    def test_eta_date_carries_the_year_when_it_is_not_this_year(self) -> None:
+        """재검토 FE1: 460일 뒤의 도달일이 "2/28"로만 나왔다. 요약의 마지막 날과 해가 다르면 연도를 붙인다."""
+        steady = self.summaries["steady"]  # 마지막 날은 2030-03-01이다
+        self.assertEqual("2030-03-01", steady["series"]["daily"][-1]["date"])
+        this_year = self.open_page("steady")
+        this_year.server["payload"] = patched(steady, eta=(120, "2030-06-29"), long_range="ok")
+        this_year.click("#reloadBtn")
+        this_year.wait_for_function("document.getElementById('etaSub').textContent.includes('6/29')", timeout=10000)
+        self.assertEqual("6/29", this_year.text_content("#etaSub"))
+        this_year.server["payload"] = patched(steady, eta=(460, "2031-06-04"), long_range="ok")
+        this_year.click("#reloadBtn")
+        this_year.wait_for_function("document.getElementById('etaSub').textContent.includes('6/4')", timeout=10000)
+        self.assertEqual("2031/6/4", this_year.text_content("#etaSub"))
+
+    def test_numbers_show_before_the_chart_library_arrives(self) -> None:
+        """재검토 FE2: Chart.js가 늦으면 숫자도 그만큼 늦게 보였다(5초까지 기다린 뒤에야 화면을 보여 줬다)."""
+        held: list = []
+        page = self.open_page("steady", intercept=[("https://cdn.jsdelivr.net/npm/**", lambda route: held.append(route))],
+                              wait_until="domcontentloaded", expect_chart=False)
+        page.wait_for_function("getComputedStyle(document.querySelector('.app')).opacity === '1'", timeout=5000)
+        waiting = page.evaluate("""() => ({
+          state: document.querySelector('.app').dataset.state,
+          chart: document.querySelector('.app').dataset.chart,
+          busy: document.querySelector('.app').dataset.busy || null,
+          notice: document.getElementById('chartNotice').hidden ? null : document.getElementById('chartNotice').textContent,
+          weight: document.getElementById('currentWeight').textContent,
+          reloadDisabled: document.getElementById('reloadBtn').disabled,
+          library: typeof window.Chart,
+        })""")
+        self.assertEqual(1, len(held), "the chart library request is still pending")
+        self.assertEqual(("ready", "loading", None, "차트를 불러오는 중입니다.", False, "undefined"),
+                         (waiting["state"], waiting["chart"], waiting["busy"], waiting["notice"], waiting["reloadDisabled"], waiting["library"]))
+        self.assertNotEqual("–", waiting["weight"])
+
+        held[0].continue_()
+        page.wait_for_function("document.querySelector('.app').dataset.chart === 'drawn'", timeout=20000)
+        self.assertTrue(page.evaluate("!!Chart.getChart(document.getElementById('weightChart')) && document.getElementById('chartNotice').hidden"))
+
+    def test_slow_font_css_does_not_hold_the_page(self) -> None:
+        """재검토 FE2: 글꼴 CSS가 8초 늦으면 첫 화면도 8초 늦었고, 그동안 스크립트도 돌지 않았다."""
+        held: list = []
+
+        def hold_stylesheets(route) -> None:
+            # CSS만 붙잡는다. CSS를 놓아준 뒤에 오는 글꼴 파일 요청은 그대로 보낸다.
+            if route.request.resource_type == "stylesheet":
+                held.append(route)
+            else:
+                route.continue_()
+
+        page = self.open_page("steady", wait_until="domcontentloaded",
+                              intercept=[("https://cdn.jsdelivr.net/gh/**", hold_stylesheets),
+                                         ("https://fonts.googleapis.com/**", hold_stylesheets)])
+        # 여기까지 왔으면 숫자와 차트가 모두 그려졌다. 글꼴 CSS 두 개는 아직 오지 않았다.
+        page.wait_for_function("getComputedStyle(document.querySelector('.app')).opacity === '1'", timeout=5000)
+        self.assertEqual(2, len(held))
+        self.assertNotEqual("–", page.text_content("#currentWeight"))
+        media = "[...document.querySelectorAll('link[rel=stylesheet][href^=http]')].map((link) => link.media)"
+        self.assertEqual(["print", "print"], page.evaluate(media))
+        for route in held:
+            route.continue_()
+        page.wait_for_function(f"{media}.every((value) => value === 'all')", timeout=20000)
+
+    def test_chart_library_is_fetched_again_after_a_failure(self) -> None:
+        """재검토 FE6: "네트워크가 돌아오면 차트가 나타납니다"라고 적고는 다시 받지 않았다. 페이지를 새로 고쳐야 했다."""
+        cdn = {"blocked": True, "requests": 0}
+
+        def chart_library(route) -> None:
+            cdn["requests"] += 1
+            if cdn["blocked"]:
+                route.abort()
+            else:
+                route.continue_()
+
+        unavailable = "document.querySelector('.app').dataset.chart === 'unavailable'"
+        page = self.open_page("steady", intercept=[("https://cdn.jsdelivr.net/npm/**", chart_library)], expect_chart=False)
+        page.wait_for_function(unavailable, timeout=10000)
+        self.assertIn("차트 라이브러리를 불러오지 못했습니다", page.text_content("#chartNotice"))
+        first = cdn["requests"]
+        self.assertGreaterEqual(first, 1)
+
+        # 아직 막혀 있다. 다시 불러오면 한 번 더 받아 보고 같은 안내로 돌아온다. 새로고침 버튼은 기다리지 않는다.
+        with page.expect_request("**/chart.umd.js"):
+            page.click("#reloadBtn")
+        page.wait_for_function(unavailable, timeout=10000)
+        self.assertEqual(first + 1, cdn["requests"])
+        self.assertIs(False, page.evaluate("document.getElementById('reloadBtn').disabled"))
+
+        # 네트워크가 돌아왔다는 이벤트만으로 다시 받는다. 요약은 다시 받지 않는다.
+        cdn["blocked"] = False
+        summary_requests = page.server["requests"]
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        page.wait_for_function("document.querySelector('.app').dataset.chart === 'drawn'", timeout=20000)
+        self.assertTrue(page.evaluate("!!Chart.getChart(document.getElementById('weightChart')) && document.getElementById('chartNotice').hidden"))
+        self.assertEqual(first + 2, cdn["requests"])
+        self.assertEqual(summary_requests, page.server["requests"])
+        self.assertEqual(1, page.evaluate("document.querySelectorAll('#chartLib').length"))
 
     def test_no_console_warnings(self) -> None:
         """P8(W5): 콘솔 경고가 없다(Playwright가 서비스 워커를 막는다는 안내는 테스트 환경 탓이라 뺀다)."""

@@ -73,16 +73,21 @@
     const candidates = [fromSummary, fromToday].filter(Number.isFinite);
     return candidates.length ? Math.max(0, ...candidates) : null;
   }
-  const fmtDate = (iso) => {
+  // 날짜 글자. reference(YYYY-MM-DD)를 주면 그 해와 다른 해의 날짜에 연도를 붙인다.
+  // 연도가 없어서 460일 뒤의 도달일이 "2/28"로만 나왔다(재검토 FE1).
+  const yearOf = (iso) => Number(String(iso).slice(0, 4));
+  const fmtDate = (iso, reference) => {
     if (!iso) return '–';
     const d = new Date(iso + 'T00:00:00');
-    return `${d.getMonth()+1}월 ${d.getDate()}일`;
+    const text = `${d.getMonth()+1}월 ${d.getDate()}일`;
+    return reference && yearOf(reference) !== d.getFullYear() ? `${d.getFullYear()}년 ${text}` : text;
   };
-  const fmtDateShort = (iso) => {
+  const fmtDateShort = (iso, reference) => {
     const d = new Date(iso + 'T00:00:00');
-    return `${d.getMonth()+1}/${d.getDate()}`;
+    const text = `${d.getMonth()+1}/${d.getDate()}`;
+    return reference && yearOf(reference) !== d.getFullYear() ? `${d.getFullYear()}/${text}` : text;
   };
-  
+
   // etaStatus: reached / date / beyond(2년 안에 닿지 않음) / no_loss / unknown (P7)
   function fmtEta(goal) {
     if (goal?.etaStatus === 'beyond') return '2년 이후';
@@ -137,10 +142,6 @@
     }));
   }
 
-  function buildPredictionFromScenario(summary, scenario) {
-    return scenarioSeries(summary, scenario).map((p) => ({ date: p.date, valueKg: p.valueKg }));
-  }
-
   // F3: 날짜를 일 단위 숫자로 바꿔 선형 축에 그린다(시간에 비례하는 가로축). UTC 자정 기준이라 시간대와 무관하다.
   const DAY_MS = 86400000;
   function dayNumber(iso) {
@@ -149,6 +150,65 @@
   }
   function dayIso(n) {
     return new Date(Math.round(n) * DAY_MS).toISOString().slice(0, 10);
+  }
+
+  // 차트에 그릴 예측 주 수. 보이는 과거가 pastDays일이면 예측은 그 절반까지라서 차트 폭의 1/3을 넘지 않는다
+  // (재검토 FE1의 결정). 예측 점이 주 단위라 주 단위로 자른다. 이력이 2주에 못 미쳐도 1주는 그린다.
+  const FORECAST_MAX_WEEKS = 12;
+  function forecastWeeks(pastDays) {
+    if (!Number.isFinite(pastDays)) return FORECAST_MAX_WEEKS;
+    return Math.max(1, Math.min(FORECAST_MAX_WEEKS, Math.floor(pastDays / 14)));
+  }
+
+  // 가로축 눈금(일 번호). 날, 주(월요일), 달(1일)의 경계에만 놓고, maxTicks개를 넘지 않는 가장 촘촘한 간격을 고른다.
+  // 예전 눈금은 일 번호의 배수라서 9/25, 10/24, 12/13처럼 달력과 맞지 않았다(재검토 FE1).
+  const MONDAY = 4; // 1970-01-05(일 번호 4)가 월요일이다
+  function dateTicks(min, max, maxTicks) {
+    const first = Math.ceil(min);
+    const last = Math.floor(max);
+    if (!Number.isFinite(first) || !Number.isFinite(last) || last < first) return [];
+    const everyDays = (step, anchor) => {
+      const out = [];
+      for (let n = first + ((((anchor - first) % step) + step) % step); n <= last; n += step) out.push(n);
+      return out;
+    };
+    const everyMonths = (step) => {
+      const out = [];
+      const start = new Date(first * DAY_MS);
+      let year = start.getUTCFullYear();
+      let month = start.getUTCMonth();
+      for (;;) {
+        const n = Date.UTC(year, month, 1) / DAY_MS;
+        if (n > last) break;
+        if (n >= first && month % step === 0) out.push(n);
+        month += 1;
+        if (month > 11) { month = 0; year += 1; }
+      }
+      return out;
+    };
+    const limit = Math.max(2, Math.floor(maxTicks) || 2);
+    const candidates = [
+      () => everyDays(1, 0), () => everyDays(2, 0), () => everyDays(7, MONDAY), () => everyDays(14, MONDAY),
+      () => everyMonths(1), () => everyMonths(2), () => everyMonths(3), () => everyMonths(6), () => everyMonths(12),
+    ];
+    let widest = [];
+    for (const build of candidates) {
+      const ticks = build();
+      if (!ticks.length) continue;
+      if (ticks.length <= limit) return ticks;
+      widest = ticks;
+    }
+    // 몇 해에 걸친 좁은 차트: 해의 첫날 눈금을 고르게 솎는다.
+    const stride = Math.ceil(widest.length / limit);
+    return widest.filter((_, index) => index % stride === 0);
+  }
+
+  // 눈금 글자. 해가 바뀌는 눈금에는 둘째 줄에 연도를 적는다. 축이 두 해에 걸치면 첫 눈금에도 적는다.
+  function tickLabel(value, previous, spansYears) {
+    const iso = dayIso(value);
+    const year = yearOf(iso);
+    const marksYear = previous == null ? Boolean(spansYears) : yearOf(dayIso(previous)) !== year;
+    return marksYear ? [fmtDateShort(iso), String(year)] : fmtDateShort(iso);
   }
 
   window.GWAppHelpers = {
@@ -167,9 +227,12 @@
     firstValidDaily,
     lastValidDaily,
     sliceByRange,
-    buildPredictionFromScenario,
     scenarioSeries,
     dayNumber,
     dayIso,
+    yearOf,
+    forecastWeeks,
+    dateTicks,
+    tickLabel,
   };
 })();
