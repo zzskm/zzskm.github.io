@@ -1,4 +1,4 @@
-/* trip_2026_dec_china.styles.css - Shanghai trip page (itinerary + quote mode).
+/* trip_2026_dec_china.styles.css - Shanghai on-site itinerary page.
 
    Flat surfaces: a light grey page with white blocks on it, so blocks are told apart by tone
    instead of frames. Lines are kept for controls (inputs, check boxes, choice cards) and for
@@ -8,8 +8,9 @@
      down (teal)    - cost going down, things done or confirmed
    plus an amber note for cautions. No gradients, drop shadows, blur or emoji icons.
 
-   trip_2026_dec.styles.css is shared with the Japan page and is not edited. Its palette is
-   re-declared on this page's body below, so the quote mode follows the same colours. */
+   trip_2026_dec.styles.css is shared with the Japan page and is not edited. This page uses its
+   base pieces (page type, header, dialog, link button, note text); its palette is re-declared on
+   this page's body below. */
 
 .shanghai-shell {
   /* Names used by the shared sheet */
@@ -67,22 +68,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Header: title and status on one line, trip facts below, then the mode switch ---------- */
+/* ---------- Header: title and status on one line, trip facts below ---------- */
 .sh-topbar {
-  max-width: 1240px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 14px 20px 12px;
-}
-
-.mode-field .sh-topbar {
-  max-width: 1120px;
-}
-
-/* The quote mode's two panels are wider; the header lines up with their left edge. */
-.mode-plan .sh-topbar {
-  max-width: 1480px;
-  padding-left: 24px;
-  padding-right: 24px;
 }
 
 .sh-topbar-row {
@@ -148,77 +138,19 @@
   white-space: nowrap;
 }
 
-.sh-topbar-sub {
-  margin: 10px 0 0;
-  font-size: 0.84rem;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* The intro belongs to the quote mode. */
-.mode-field .sh-topbar-sub {
-  display: none;
-}
-
-/* ---------- Segmented controls: the mode switch, and bookings / prep ---------- */
-.mode-switch,
-.sub-seg {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  padding: 3px;
-  border-radius: 10px;
-  background: #e4e7ec;
-}
-
-.mode-switch {
-  max-width: 380px;
-  margin-top: 10px;
-}
-
-.sub-seg {
-  max-width: 440px;
-  margin-bottom: 12px;
-}
-
-.mode-btn,
-.sub-seg-btn {
-  min-height: 38px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 600;
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-.mode-btn.is-active,
-.sub-seg-btn.is-active {
-  background: var(--panel);
-  color: var(--active-text);
-  font-weight: 800;
-}
-
-.mode-btn:focus-visible,
-.sub-seg-btn:focus-visible,
 .field-nav-btn:focus-visible,
 .field-mnav-btn:focus-visible,
 .day-tab-btn:focus-visible,
 .sh-btn:focus-visible,
-.sh-chip:focus-visible {
+.sh-chip:focus-visible,
+.word-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.sub-seg-count {
-  margin-left: 4px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  opacity: 0.85;
+/* Chinese breaks between characters; the page's Korean rule (break between words only) is undone for it. */
+.shanghai-shell [lang="zh-CN"] {
+  word-break: normal;
 }
 
 /* ---------- Footer: the link to the other trip ---------- */
@@ -228,30 +160,9 @@
   padding: 8px 20px 32px;
 }
 
-/* ---------- Grade tags (shared with the quote mode stay cards) ---------- */
-.grade-pill {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: var(--r-tag);
-  font-size: 0.72rem;
-  font-weight: 700;
-  vertical-align: middle;
-}
-
-.grade-pill.is-grade-A {
-  background: var(--sh-green-bg);
-  color: var(--sh-green-text);
-}
-
-.grade-pill.is-grade-B {
-  background: var(--sh-amber-bg);
-  color: var(--sh-amber-text);
-}
-
-.grade-pill.is-grade-excluded {
-  background: var(--sh-red-bg);
-  color: var(--sh-red-text);
+.shanghai-shell .page-switch a,
+.shanghai-shell .close-btn {
+  border-radius: var(--r);
 }
 
 /* ---------- Itinerary shell ---------- */
@@ -266,32 +177,6 @@
   flex-direction: column;
   gap: 8px;
   margin-bottom: 10px;
-}
-
-/* Open reservations: one tappable caution line */
-.dash-urgent {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--tap-min);
-  padding: 8px 14px;
-  border: 0;
-  border-radius: var(--r-card);
-  background: var(--warn-bg);
-  color: var(--warn-text);
-  font: inherit;
-  font-size: 0.86rem;
-  line-height: 1.3;
-  text-align: left;
-  cursor: pointer;
-}
-
-.dash-urgent-go {
-  flex: none;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 /* Now / next: two tappable rows on one white block */
@@ -451,6 +336,25 @@ button.dash-now-line {
   color: var(--muted);
 }
 
+/* One hotel per line, its taxi card at the right edge */
+.dash-stay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.dash-stay + .dash-stay {
+  margin-top: 2px;
+}
+
+.dash-stay .link-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .dash-progress {
   height: 4px;
   margin-top: 8px;
@@ -597,9 +501,8 @@ button.dash-now-line {
   color: #fff;
 }
 
-/* Category and status tags: a soft block of tone, coloured only when the state matters. */
-.sh-badge,
-.sh-status-pill {
+/* Category tags: a soft block of tone */
+.sh-badge {
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
@@ -608,26 +511,6 @@ button.dash-now-line {
   color: var(--body);
   font-size: 0.74rem;
   font-weight: 700;
-}
-
-.sh-badge.cat-hospital,
-.sh-status-pill.st-need_booking {
-  background: var(--signal-soft);
-  color: var(--signal);
-}
-
-.sh-status-pill.st-review {
-  color: var(--muted);
-}
-
-.sh-status-pill.st-booked {
-  background: var(--accent-soft);
-  color: var(--active-text);
-}
-
-.sh-status-pill.st-used {
-  background: var(--down-bg);
-  color: var(--down-text);
 }
 
 .sh-input,
@@ -658,7 +541,7 @@ button.dash-now-line {
 }
 
 /* Square check box, filled when done */
-#field-mode input[type="checkbox"] {
+#field-app input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   flex: none;
@@ -671,13 +554,13 @@ button.dash-now-line {
   cursor: pointer;
 }
 
-#field-mode input[type="checkbox"]:checked {
+#field-app input[type="checkbox"]:checked {
   border-color: var(--accent);
   background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E");
 }
 
-#field-mode input[type="checkbox"]:focus-visible {
+#field-app input[type="checkbox"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -883,8 +766,7 @@ button.dash-now-line {
   color: #fff;
 }
 
-.tl-fixed,
-.tl-res.st-need_booking {
+.tl-fixed {
   color: var(--signal);
   font-weight: 800;
 }
@@ -1033,9 +915,38 @@ button.dash-now-line {
 
 .tl-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 0 16px;
   padding-right: 16px;
+}
+
+/* Sentences for this item: the one filled control of the row, so it is found at a glance. */
+.tl-phrase-btn span {
+  padding: 5px 10px;
+  border-radius: var(--r-tag);
+  background: var(--accent);
+  color: #fff;
+  line-height: 1.3;
+}
+
+/* Places to pick from or to drop by: each opens its taxi card */
+.tl-cands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.tl-cands-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.tl-steps + .tl-cands {
+  margin-top: 8px;
 }
 
 .tl-foot-btn {
@@ -1356,139 +1267,11 @@ button.dash-now-line {
   color: var(--muted);
 }
 
-/* ---------- Prep tab ---------- */
-.check-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.check-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.check-row:last-child {
-  border-bottom: 0;
-}
-
-.check-row.is-urgent {
-  box-shadow: inset 3px 0 0 var(--signal);
-  padding-left: 12px;
-}
-
-.check-row.is-done {
-  color: var(--muted);
-}
-
-.check-row.is-done .check-title {
-  text-decoration: line-through;
-}
-
-.check-body {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.check-title {
-  font-size: 0.92rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
+/* ---------- Small note under a line (contacts, payment methods) ---------- */
 .check-note {
   margin-top: 2px;
   font-size: 0.82rem;
   color: var(--muted);
-}
-
-.template-box {
-  margin-bottom: 8px;
-  padding: 12px 14px;
-  border-radius: var(--r);
-  background: var(--bg);
-  font-size: 0.9rem;
-  line-height: 1.55;
-}
-
-/* ---------- Bookings & hotel verification ---------- */
-.res-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.res-card {
-  border-radius: var(--r);
-  background: var(--bg);
-  padding: 12px 14px;
-}
-
-.res-card.is-urgent {
-  box-shadow: inset 3px 0 0 var(--signal);
-}
-
-.res-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.res-controls {
-  display: grid;
-  grid-template-columns: 150px 1fr 1fr;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.hotel-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.hotel-card {
-  border: 1px solid transparent;
-  border-radius: var(--r);
-  background: var(--bg);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hotel-card.is-selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.verify-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-}
-
-.v-chip {
-  font-size: 0.76rem;
-  font-weight: 600;
-}
-
-.v-chip.v-ok {
-  color: var(--sh-green-text);
-}
-
-.v-chip.v-unverified {
-  color: var(--sh-amber-text);
-}
-
-.v-chip.v-no {
-  color: var(--sh-red-text);
 }
 
 /* ---------- Budget tab ---------- */
@@ -1578,34 +1361,140 @@ button.dash-now-line {
   font-size: 0.86rem;
 }
 
-/* ---------- Pre-booking hotel inquiry (bookings tab) ---------- */
-.inq-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* ---------- Phrases tab ---------- */
+/* Words to say aloud: the Korean reading is the largest line, the Chinese is the smallest. */
+.word-group {
+  margin: 14px 0 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.sh-card-head + .word-group {
+  margin-top: 0;
+}
+
+.word-grid {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
-.inq-row {
+.word-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 84px;
   padding: 10px 12px;
+  border: 0;
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.word-card:hover {
+  background: var(--band);
+}
+
+.word-pron {
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.word-ko {
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--body);
+}
+
+.word-zh {
+  margin-top: auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Sentences to show: situation, then the Chinese sentence large, then meaning and reading. */
+.phrase-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.phrase-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
   border-radius: var(--r);
   background: var(--bg);
 }
 
-.inq-row.is-yes {
-  box-shadow: inset 3px 0 0 var(--ok);
+.phrase-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.inq-row.is-no {
+.phrase-head .sh-badge {
+  background: var(--panel);
+}
+
+.phrase-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.phrase-zh {
+  margin: 0;
+  font-size: 1.22rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.phrase-ko {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--body);
+}
+
+.phrase-pron,
+.phrase-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: var(--muted);
 }
 
-.inq-controls {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 8px;
-  margin-top: 6px;
+.phrase-hint {
+  font-weight: 700;
+  color: var(--active-text);
+}
+
+.phrase-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.phrase-zh,
+.word-zh,
+.phrase-big,
+.place-zh,
+.place-addr[lang="zh-CN"],
+.tl-addr-text {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", "Pretendard", "Malgun Gothic", sans-serif;
 }
 
 /* ---------- Dialogs ---------- */
@@ -1707,13 +1596,114 @@ button.dash-now-line {
   color: var(--muted);
 }
 
+/* Phrase card: one sentence shown to staff or a driver. Same white card as the taxi card;
+   the sentence sits in the middle, meaning and reading small underneath, actions at the bottom. */
+.phrase-sheet {
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+  min-height: min(560px, 85vh);
+  min-height: min(560px, 85dvh);
+}
+
+.phrase-big {
+  margin: auto 0;
+  padding: 12px 0;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #111111;
+}
+
+.phrase-big.is-short {
+  font-size: clamp(3rem, 16vw, 4.5rem);
+  line-height: 1.2;
+}
+
+.phrase-big.is-mid {
+  font-size: clamp(1.9rem, 8.5vw, 2.6rem);
+  line-height: 1.3;
+}
+
+.phrase-big.is-long {
+  font-size: clamp(1.5rem, 7vw, 2.1rem);
+}
+
+.phrase-sub {
+  margin-bottom: 14px;
+  padding-top: 12px;
+  border-top: 2px solid #111111;
+}
+
+.phrase-sub p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.phrase-sub-ko {
+  font-size: 0.92rem;
+  color: var(--body);
+}
+
+.phrase-sub-pron {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.phrase-pager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.phrase-pager[hidden] {
+  display: none;
+}
+
+.phrase-pager .sh-btn {
+  min-height: 44px;
+}
+
+.phrase-pager .sh-btn:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.phrase-count {
+  min-width: 4em;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.phrase-sheet-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The free space of the card goes around the sentence only; the controls stay together at the bottom. */
+.shanghai-shell .phrase-sheet .taxi-actions {
+  margin-top: 0;
+}
+
+/* The browser's tap flash of the control that opened a card would show on top of the white card. */
+.tl-phrase-btn,
+.word-card,
+[data-phrase-open],
+[data-taxi-place] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ---------- Toast ---------- */
 .field-toast {
   position: fixed;
   left: 50%;
   bottom: 84px;
   transform: translateX(-50%);
-  z-index: 250;
+  /* Above an open dialog, so "copied" is seen while the card is up. */
+  z-index: 400;
   max-width: calc(100vw - 32px);
   padding: 10px 16px;
   border-radius: var(--r);
@@ -1724,197 +1714,6 @@ button.dash-now-line {
   text-align: center;
 }
 
-/* ---------- Quote mode and shared pieces: same surfaces as the itinerary ---------- */
-#plan-mode * {
-  box-shadow: none;
-}
-
-.shanghai-shell .panel {
-  border: 0;
-  border-radius: var(--r-card);
-}
-
-.shanghai-shell .result-head {
-  border-radius: var(--r-card) var(--r-card) 0 0;
-  background: var(--panel);
-}
-
-.shanghai-shell .page-switch a,
-.shanghai-shell :is(.mini-btn, .qty-btn, .toggle-btn, .stat, .result-cond, .warn, .card-btn, .fold, .fold > summary, .day, .evidence-btn, .mobile-bar-btn, .toast, .category-toggle, .quote-input, .close-btn) {
-  border-radius: var(--r);
-}
-
-.shanghai-shell :is(.meta-chip, .tab-badge, .delta, .delta-flash, .badge, .act-tag, .fold-count, .day-tag, .day-night, .warn-tag) {
-  border-radius: var(--r-tag);
-}
-
-.shanghai-shell .card-btn:hover {
-  transform: none;
-}
-
-/* Cost going down is teal, going up is orange. */
-.shanghai-shell :is(.delta, .delta-flash).is-down {
-  background: var(--down-bg);
-  color: var(--down-text);
-}
-
-/* Step headings: clear air above, a quiet band, the number as plain figures */
-.shanghai-shell .step-title {
-  margin-top: 28px;
-  border: 0;
-  background: var(--band);
-  color: var(--text);
-}
-
-.shanghai-shell .step-num {
-  display: inline;
-  width: auto;
-  height: auto;
-  border-radius: 0;
-  background: none;
-  color: var(--active-text);
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.shanghai-shell .category {
-  border-top: 1px solid var(--line-soft);
-}
-
-.shanghai-shell .step-title + .category,
-.shanghai-shell .step-title + .category[hidden] + .category {
-  border-top: 0;
-}
-
-/* The shared sheet lays this body out by id, which keeps it shown when its section is folded. */
-.shanghai-shell .category:not(.is-open) #cat-schedule {
-  display: none;
-}
-
-/* Section header: what is picked, what it costs, and whether that price is a confirmed one.
-   A folded section shows it in full strength, an open one quietly (the cards say it already). */
-.shanghai-shell .category-title {
-  flex: 0 0 auto;
-  max-width: 64%;
-}
-
-.shanghai-shell .category-summary {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  min-width: 0;
-  max-width: none;
-  margin-left: 8px;
-  overflow: visible;
-  font-size: 0.8rem;
-}
-
-.shanghai-shell .category:not(.is-open) .category-summary {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.sum-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sum-amt {
-  flex: none;
-  white-space: nowrap;
-}
-
-.sum-lock {
-  flex: none;
-  padding: 0 6px;
-  border-radius: var(--r-tag);
-  background: var(--down-bg);
-  color: var(--down-text);
-  font-size: 0.72rem;
-  font-weight: 800;
-  line-height: 1.6;
-  white-space: nowrap;
-}
-
-/* The figure that matters is at least twice the size of its range. */
-.shanghai-shell .big-number {
-  font-size: clamp(1.9rem, 3vw, 2.3rem);
-}
-
-.shanghai-shell .result-band {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.shanghai-shell .result-head h2 {
-  color: var(--muted);
-}
-
-.shanghai-shell .stat {
-  border: 0;
-  background: var(--bg);
-}
-
-.shanghai-shell .result-block {
-  border-top: 1px solid var(--line-soft);
-}
-
-.shanghai-shell .tab-panel > .result-block:first-child,
-.shanghai-shell .tab-panel > .result-block[hidden] + .result-block {
-  border-top: 0;
-}
-
-/* A changed total blinks once, so the effect of a pick is seen without reading the number. */
-@keyframes value-pulse {
-  0% {
-    background-color: #bfdbfe;
-  }
-
-  100% {
-    background-color: transparent;
-  }
-}
-
-.price-updated {
-  border-radius: 4px;
-  animation: value-pulse 450ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .price-updated {
-    animation: none;
-  }
-}
-
-/* Cards on the left, the total and its tabs pinned on the right. */
-@media (min-width: 1024px) {
-  .shanghai-shell .layout {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  }
-
-  .shanghai-shell .panel-right {
-    top: 16px;
-    max-height: calc(100vh - 32px);
-    max-height: calc(100dvh - 32px);
-  }
-
-  .shanghai-shell .panel-left {
-    padding: 20px;
-  }
-
-  .shanghai-shell .panel-left .step-title {
-    margin-left: -20px;
-    margin-right: -20px;
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-}
-
 /* ---------- Narrow screens ---------- */
 @media (max-width: 900px) {
   .dash-grid {
@@ -1922,10 +1721,10 @@ button.dash-now-line {
   }
 
   .place-grid,
-  .hotel-grid,
   .note-card-grid,
   .contact-list,
-  .budget-summary-grid {
+  .budget-summary-grid,
+  .phrase-list {
     grid-template-columns: 1fr;
   }
 
@@ -1933,8 +1732,8 @@ button.dash-now-line {
     grid-template-columns: 1fr 1fr;
   }
 
-  .res-controls {
-    grid-template-columns: 1fr;
+  .word-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1947,25 +1746,9 @@ button.dash-now-line {
     font-size: 1.15rem;
   }
 
-  .mode-plan .sh-topbar {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  /* One line of facts: the flights are in the timetable, what is booked is in the bookings tab. */
-  .sh-meta-flights,
-  .sh-meta-wide {
+  /* One line of facts: the flights are in the timetable and in the progress fold. */
+  .sh-meta-flights {
     display: none;
-  }
-
-  .mode-switch,
-  .sub-seg {
-    max-width: none;
-  }
-
-  .mode-btn,
-  .sub-seg-btn {
-    min-height: var(--tap-min);
   }
 
   .field-shell {
@@ -1985,8 +1768,8 @@ button.dash-now-line {
     min-height: var(--tap-min);
   }
 
-  #field-mode .link-btn,
-  #field-mode a[href^="tel:"] {
+  #field-app .link-btn,
+  #field-app a[href^="tel:"] {
     display: inline-flex;
     align-items: center;
     min-height: var(--tap-min);
@@ -2032,13 +1815,9 @@ button.dash-now-line {
     color: var(--active-text);
   }
 
-  /* Room for the fixed bottom bar of each mode. */
+  /* Room for the fixed bottom bar. */
   .sh-footer {
     padding: 8px 12px calc(var(--sh-bottom-nav-h) + env(safe-area-inset-bottom, 0px) + 20px);
-  }
-
-  .mode-plan .sh-footer {
-    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Day tabs and the timetable run edge to edge. */
@@ -2070,8 +1849,7 @@ button.dash-now-line {
   }
 
   .tl-detail-grid,
-  .tl-edit-grid,
-  .inq-controls {
+  .tl-edit-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2100,6 +1878,23 @@ button.dash-now-line {
   .taxi-actions {
     margin-top: auto;
   }
+
+  /* The phrase card fills the screen: nothing else is in view while it is shown to someone. */
+  .shanghai-shell .phrase-sheet {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .word-card {
+    min-height: 88px;
+  }
+
+  .phrase-zh {
+    font-size: 1.3rem;
+  }
 }
 
 /* ---------- Paper ---------- */
@@ -2110,8 +1905,6 @@ button.dash-now-line {
 
   .skip-link,
   .sh-pill-row,
-  .mode-switch,
-  .sub-seg,
   #field-dashboard,
   .field-nav-desktop,
   .field-nav-mobile,
@@ -2122,7 +1915,6 @@ button.dash-now-line {
   .tl-transit-link,
   .sh-btn,
   .field-toast,
-  .toast,
   .modal {
     display: none !important;
   }
