@@ -63,9 +63,12 @@ python garmin-weight/scripts/model_audit.py --output /tmp/audit.json
 # 테스트
 PYTHONUTF8=1 python -m unittest discover -s tests -p 'test_garmin*.py'
 node --test tests/garmin_weight_sw.test.mjs
-# 브라우저 테스트(Playwright + 시스템 Chrome). 브라우저가 없으면 건너뛴다.
+# 브라우저 테스트(Playwright + 시스템 Chrome). 브라우저가 없으면 건너뛴다. 뒤의 것은 서비스 워커 수명 주기(약 40초)다.
 BROWSER_EXECUTABLE="C:/Program Files/Google/Chrome/Application/chrome.exe" GARMIN_REQUIRE_BROWSER_TESTS=1 \
-  python -m unittest tests.test_garmin_weight_browser
+  python -m unittest tests.test_garmin_weight_browser tests.test_garmin_weight_sw_browser
+
+# 실제 garminconnect로 도는 테스트. requirements.txt를 설치한 환경에서만 돈다(없으면 건너뛴다).
+GARMIN_REQUIRE_LIBRARY_TESTS=1 python -m unittest tests.test_garmin_library
 ```
 
 Garmin 호출을 바꿨으면 로컬 성공만 믿지 말고 probe 브랜치로 러너에서 확인한다. 결과는 `git fetch`로 읽고 브랜치를 지운다.
@@ -175,6 +178,21 @@ CSV를 손으로 고쳤다면:
 ## 자산 버전과 서비스 워커
 
 - 로컬 자산의 버전은 `sw.js`의 `ASSET_VERSION` 한 곳에서 정한다. `index.html`과 `manifest.webmanifest`의 `?v=` 값이 이것과 같아야 한다. 테스트가 이를 검사한다.
-- 자산을 바꾸면 이 값을 올린다. 캐시 이름도 이 값에서 나온다.
-- 데이터 캐시 키에는 쿼리가 없다. 오프라인일 때는 마지막으로 받은 요약을 보여 준다.
-- CDN 자산(Chart.js, Pretendard)은 `integrity`와 `crossorigin`을 붙여 서비스 워커가 저장한다. jsDelivr가 즉석에서 만드는 `.min` 파일에는 SRI를 걸 수 없으므로 원본 파일을 쓴다.
+- 자산을 바꾸면 이 값을 올린다.
+- 캐시는 셋이다.
+
+  | 캐시 | 내용 | 버전을 올리면 |
+  |---|---|---|
+  | `gw-shell-<ASSET_VERSION>` | 화면과 로컬 자산 13개(`SHELL_ASSETS`) | 새로 만들고 예전 것은 지운다 |
+  | `gw-data-v1` | `data/summary.json`, `config.json`(쿼리를 뗀 주소가 키) | 그대로 둔다 |
+  | `gw-runtime-v1` | CDN 자산(Chart.js, 글꼴 CSS와 글꼴 파일) | 그대로 둔다 |
+
+- 설치할 때:
+  - 셸은 HTTP 캐시를 거치지 않고 받는다(`cache: 'reload'`). Pages의 `max-age=600` 때문에, 거치면 배포 직후 10분 동안 예전 `index.html`이 새 캐시에 들어간다.
+  - 요약, 설정, Chart.js, Pretendard CSS를 미리 받는다. 그래서 한 번만 방문해도 오프라인에서 차트까지 나온다. 미리 받기는 실패해도 설치를 막지 않는다.
+- 요약과 설정은 네트워크가 먼저다. 네트워크가 안 되거나 응답이 404·5xx면 마지막으로 받은 사본을 준다. 그 응답에는 `X-GW-From-Cache: 1`이 붙고 화면의 동기화 표시에 "오프라인 사본"이 나온다.
+- 셸은 캐시가 먼저고 뒤에서 새로 받아 둔다(재검증 요구, `cache: 'no-cache'`). 배포 뒤 첫 방문은 예전 화면이고 그다음 방문부터 새 화면이다.
+- 화면 주소(폴더 주소와 `index.html`)는 쿼리가 붙어 와도 쿼리를 뗀 주소로 찾는다. 셸 목록에 없는 파일(CSV, 문서, 예전 버전의 자산)은 워커가 맡지 않는다.
+- 활성화할 때는 `gw-`로 시작하는 예전 캐시만 지운다. 캐시 저장소는 출처(`zzskm.github.io`) 전체가 함께 쓰므로 다른 앱의 캐시를 건드리지 않는다.
+- CDN 자산(Chart.js, Pretendard)은 `integrity`와 `crossorigin`을 붙여 서비스 워커가 저장한다. jsDelivr가 즉석에서 만드는 `.min` 파일에는 SRI를 걸 수 없으므로 원본 파일을 쓴다. `sw.js`의 `CDN_ASSETS`는 `index.html`이 쓰는 주소와 같아야 한다(테스트가 검사한다).
+- 테스트는 두 층이다. `tests/garmin_weight_sw.test.mjs`는 Cache API를 흉내 내 설치·활성화·요청 처리를 본다. `tests/test_garmin_weight_sw_browser.py`는 실제 브라우저로 한 번 방문 뒤 오프라인, 배포 뒤 다음 방문, 요약 404를 본다.
