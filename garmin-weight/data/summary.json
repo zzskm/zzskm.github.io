@@ -1,41 +1,41 @@
 {
-  "generatedAt": "2026-11-24T23:49:24Z",
+  "generatedAt": "2026-11-25T23:46:51Z",
   "current": {
-    "weightKg": 84.1,
-    "weightDate": "2026-11-24",
-    "weightMa7Kg": 84.14,
-    "weightMa14Kg": 84.28,
-    "weightEwmaKg": 84.21,
-    "bodyFatPercent": 29.3,
-    "bodyFatDelta30d": 0.1,
-    "visceralFat": 20.0
+    "weightKg": 84.4,
+    "weightDate": "2026-11-26",
+    "weightMa7Kg": 84.22,
+    "weightMa14Kg": 84.29,
+    "weightEwmaKg": 84.22,
+    "bodyFatPercent": 35.9,
+    "bodyFatDelta30d": 6.7,
+    "visceralFat": 14.0
   },
   "rolling": {
     "weeklyLossRateKg": null,
-    "last7ExerciseMinutes": 111.0,
-    "last7ExerciseCalories": 1912.0,
-    "last7StepsTotal": 43729,
-    "last7StepsAvg": 6247.0,
-    "last7ActiveDays": 3,
+    "last7ExerciseMinutes": 174.0,
+    "last7ExerciseCalories": 2363.0,
+    "last7StepsTotal": 53266,
+    "last7StepsAvg": 7609.0,
+    "last7ActiveDays": 4,
     "last7WeightRangeKg": 1.1,
     "last7SleepHoursAvg": 4.08,
-    "last7RestingHrAvg": 58.7,
+    "last7RestingHrAvg": 59.4,
     "exerciseTrend": {
-      "recent7Avg": 273.1,
+      "recent7Avg": 337.6,
       "prev21Avg": 342.8,
-      "deltaPct": -0.203,
-      "slopePerDay": -2.11,
-      "direction": "decreasing"
+      "deltaPct": -0.015,
+      "slopePerDay": 1.22,
+      "direction": "stable"
     },
     "lossRateDetail": {
-      "blended": -0.0397,
-      "ewmaSlope": -0.0804,
-      "ma7Slope": -0.01,
-      "kcalRate": 0.2967,
+      "blended": -0.0574,
+      "longRangeRate": -0.0822,
+      "longRangeSlopes": {
+        "28d": -0.083,
+        "56d": -0.0814
+      },
+      "longRangePoints": 57,
       "weights": {
-        "ewma": 0.25,
-        "ma7": 0.3,
-        "kcal": 0.0,
         "windows": {
           "3d": 0.1,
           "7d": 0.3,
@@ -44,150 +44,396 @@
         }
       },
       "windowSlopes": {
-        "3d": 0.028,
-        "7d": -0.01,
-        "14d": -0.0555,
-        "28d": -0.0804
+        "3d": -0.021,
+        "7d": -0.0592,
+        "14d": -0.048,
+        "28d": -0.083
       },
-      "model": "multi_window_ewma_blend"
+      "windowPoints": {
+        "3d": 4,
+        "7d": 8,
+        "14d": 15,
+        "28d": 29
+      },
+      "longWindowMinPoints": 14,
+      "model": "multi_window_ewma_blend",
+      "rateSource": "multi_window_blend",
+      "longRangeApplied": true
     }
   },
   "predictions": {
-    "oneMonthWeightKg": 84.37,
-    "threeMonthWeightKg": 84.69,
+    "oneMonthWeightKg": 84.45,
+    "threeMonthWeightKg": 85.21,
     "scenarios": {
       "optimistic": {
-        "multiplier": 1.0,
-        "threeMonthWeightKg": 83.27,
-        "assumedDailyKcal": 409.7,
-        "weeklyKcalDelta": 956.0,
-        "extraWeeklyLossKg": 0.1242,
-        "effectiveWeeklyLossKg": 0.0845,
+        "threeMonthWeightKg": 84.14,
+        "weeklyKcalDelta": 709.0,
+        "effectiveWeeklyLossKg": 0.0312,
+        "longRangeWeeklyLossKg": 0.0064,
         "label": "낙관",
-        "description": "주2회 추가 운동 (회당 ~478kcal) 가정"
+        "description": "하루 활동량 +30% 가정",
+        "series": [
+          {
+            "date": "2026-11-26",
+            "valueKg": 84.22,
+            "lower80": 84.22,
+            "upper80": 84.22
+          },
+          {
+            "date": "2026-12-03",
+            "valueKg": 84.19,
+            "lower80": 83.43,
+            "upper80": 84.95
+          },
+          {
+            "date": "2026-12-10",
+            "valueKg": 84.16,
+            "lower80": 83.29,
+            "upper80": 85.03
+          },
+          {
+            "date": "2026-12-17",
+            "valueKg": 84.13,
+            "lower80": 83.15,
+            "upper80": 85.11
+          },
+          {
+            "date": "2026-12-24",
+            "valueKg": 84.1,
+            "lower80": 82.97,
+            "upper80": 85.23
+          },
+          {
+            "date": "2026-12-31",
+            "valueKg": 84.1,
+            "lower80": 82.7,
+            "upper80": 85.5
+          },
+          {
+            "date": "2027-01-07",
+            "valueKg": 84.11,
+            "lower80": 82.71,
+            "upper80": 85.51
+          },
+          {
+            "date": "2027-01-14",
+            "valueKg": 84.11,
+            "lower80": 82.7,
+            "upper80": 85.52
+          },
+          {
+            "date": "2027-01-21",
+            "valueKg": 84.12,
+            "lower80": 82.53,
+            "upper80": 85.71
+          },
+          {
+            "date": "2027-01-28",
+            "valueKg": 84.13,
+            "lower80": 82.18,
+            "upper80": 86.08
+          },
+          {
+            "date": "2027-02-04",
+            "valueKg": 84.13,
+            "lower80": 82.15,
+            "upper80": 86.11
+          },
+          {
+            "date": "2027-02-11",
+            "valueKg": 84.14,
+            "lower80": 81.83,
+            "upper80": 86.45
+          },
+          {
+            "date": "2027-02-18",
+            "valueKg": 84.14,
+            "lower80": 81.64,
+            "upper80": 86.64
+          }
+        ]
       },
       "base": {
-        "multiplier": 1.0,
-        "threeMonthWeightKg": 84.69,
-        "assumedDailyKcal": 273.1,
+        "threeMonthWeightKg": 85.21,
         "weeklyKcalDelta": 0.0,
-        "extraWeeklyLossKg": 0.0,
-        "effectiveWeeklyLossKg": -0.0397,
+        "effectiveWeeklyLossKg": -0.0574,
+        "longRangeWeeklyLossKg": -0.0822,
         "label": "기준",
-        "description": "현재 운동량 유지 기준 예측"
+        "description": "현재 운동량 유지 기준 예측",
+        "series": [
+          {
+            "date": "2026-11-26",
+            "valueKg": 84.22,
+            "lower80": 84.22,
+            "upper80": 84.22
+          },
+          {
+            "date": "2026-12-03",
+            "valueKg": 84.28,
+            "lower80": 83.52,
+            "upper80": 85.04
+          },
+          {
+            "date": "2026-12-10",
+            "valueKg": 84.33,
+            "lower80": 83.46,
+            "upper80": 85.2
+          },
+          {
+            "date": "2026-12-17",
+            "valueKg": 84.39,
+            "lower80": 83.41,
+            "upper80": 85.37
+          },
+          {
+            "date": "2026-12-24",
+            "valueKg": 84.45,
+            "lower80": 83.32,
+            "upper80": 85.58
+          },
+          {
+            "date": "2026-12-31",
+            "valueKg": 84.54,
+            "lower80": 83.14,
+            "upper80": 85.94
+          },
+          {
+            "date": "2027-01-07",
+            "valueKg": 84.64,
+            "lower80": 83.24,
+            "upper80": 86.04
+          },
+          {
+            "date": "2027-01-14",
+            "valueKg": 84.73,
+            "lower80": 83.32,
+            "upper80": 86.14
+          },
+          {
+            "date": "2027-01-21",
+            "valueKg": 84.83,
+            "lower80": 83.24,
+            "upper80": 86.42
+          },
+          {
+            "date": "2027-01-28",
+            "valueKg": 84.92,
+            "lower80": 82.97,
+            "upper80": 86.87
+          },
+          {
+            "date": "2027-02-04",
+            "valueKg": 85.02,
+            "lower80": 83.04,
+            "upper80": 87.0
+          },
+          {
+            "date": "2027-02-11",
+            "valueKg": 85.11,
+            "lower80": 82.8,
+            "upper80": 87.42
+          },
+          {
+            "date": "2027-02-18",
+            "valueKg": 85.21,
+            "lower80": 82.71,
+            "upper80": 87.71
+          }
+        ]
       },
       "conservative": {
-        "multiplier": 1.0,
-        "threeMonthWeightKg": 86.18,
-        "assumedDailyKcal": 136.5,
-        "weeklyKcalDelta": -956.0,
-        "extraWeeklyLossKg": -0.1242,
-        "effectiveWeeklyLossKg": -0.1639,
+        "threeMonthWeightKg": 86.27,
+        "weeklyKcalDelta": -709.0,
+        "effectiveWeeklyLossKg": -0.146,
+        "longRangeWeeklyLossKg": -0.1708,
         "label": "보수적",
-        "description": "주2회 운동 누락 (회당 ~478kcal) 가정"
+        "description": "하루 활동량 -30% 가정",
+        "series": [
+          {
+            "date": "2026-11-26",
+            "valueKg": 84.22,
+            "lower80": 84.22,
+            "upper80": 84.22
+          },
+          {
+            "date": "2026-12-03",
+            "valueKg": 84.37,
+            "lower80": 83.61,
+            "upper80": 85.13
+          },
+          {
+            "date": "2026-12-10",
+            "valueKg": 84.51,
+            "lower80": 83.64,
+            "upper80": 85.38
+          },
+          {
+            "date": "2026-12-17",
+            "valueKg": 84.66,
+            "lower80": 83.68,
+            "upper80": 85.64
+          },
+          {
+            "date": "2026-12-24",
+            "valueKg": 84.8,
+            "lower80": 83.67,
+            "upper80": 85.93
+          },
+          {
+            "date": "2026-12-31",
+            "valueKg": 84.99,
+            "lower80": 83.59,
+            "upper80": 86.39
+          },
+          {
+            "date": "2027-01-07",
+            "valueKg": 85.17,
+            "lower80": 83.77,
+            "upper80": 86.57
+          },
+          {
+            "date": "2027-01-14",
+            "valueKg": 85.35,
+            "lower80": 83.94,
+            "upper80": 86.76
+          },
+          {
+            "date": "2027-01-21",
+            "valueKg": 85.54,
+            "lower80": 83.95,
+            "upper80": 87.13
+          },
+          {
+            "date": "2027-01-28",
+            "valueKg": 85.72,
+            "lower80": 83.77,
+            "upper80": 87.67
+          },
+          {
+            "date": "2027-02-04",
+            "valueKg": 85.9,
+            "lower80": 83.92,
+            "upper80": 87.88
+          },
+          {
+            "date": "2027-02-11",
+            "valueKg": 86.09,
+            "lower80": 83.78,
+            "upper80": 88.4
+          },
+          {
+            "date": "2027-02-18",
+            "valueKg": 86.27,
+            "lower80": 83.77,
+            "upper80": 88.77
+          }
+        ]
       }
     }
   },
   "goal": {
     "targetWeightKg": 78.0,
-    "remainingKg": 6.21,
+    "remainingKg": 6.22,
     "etaDays": null,
     "etaDate": null,
     "etaRangeDays": null,
-    "etaRangeDates": null
+    "etaStatus": "no_loss",
+    "etaToleranceKg": 0.3
   },
   "lossIntensity": null,
   "plateau": {
-    "detected": true,
-    "startDate": "2026-11-12",
-    "durationDays": 13,
-    "weeklyChangeDelta": -0.048,
+    "detected": false,
+    "startDate": null,
+    "durationDays": 0,
+    "weeklyChangeDelta": -0.059,
     "type": null
   },
   "predictionCI": {
-    "stdResidual": 0.294,
+    "stdResidual": 0.289,
     "series": [
       {
-        "date": "2026-12-02",
-        "central": 84.25,
-        "lower80": 83.53,
-        "upper80": 84.97
+        "date": "2026-12-03",
+        "central": 84.28,
+        "lower80": 83.52,
+        "upper80": 85.04
       },
       {
-        "date": "2026-12-09",
-        "central": 84.29,
-        "lower80": 83.47,
-        "upper80": 85.11
-      },
-      {
-        "date": "2026-12-16",
+        "date": "2026-12-10",
         "central": 84.33,
-        "lower80": 83.51,
-        "upper80": 85.15
-      },
-      {
-        "date": "2026-12-23",
-        "central": 84.37,
-        "lower80": 83.35,
-        "upper80": 85.39
-      },
-      {
-        "date": "2026-12-30",
-        "central": 84.41,
-        "lower80": 83.39,
-        "upper80": 85.43
-      },
-      {
-        "date": "2027-01-06",
-        "central": 84.45,
-        "lower80": 83.43,
-        "upper80": 85.47
-      },
-      {
-        "date": "2027-01-13",
-        "central": 84.49,
-        "lower80": 83.47,
-        "upper80": 85.51
-      },
-      {
-        "date": "2027-01-20",
-        "central": 84.53,
         "lower80": 83.46,
-        "upper80": 85.6
+        "upper80": 85.2
       },
       {
-        "date": "2027-01-27",
-        "central": 84.57,
-        "lower80": 83.44,
-        "upper80": 85.7
+        "date": "2026-12-17",
+        "central": 84.39,
+        "lower80": 83.41,
+        "upper80": 85.37
       },
       {
-        "date": "2027-02-03",
-        "central": 84.61,
-        "lower80": 83.42,
-        "upper80": 85.8
+        "date": "2026-12-24",
+        "central": 84.45,
+        "lower80": 83.32,
+        "upper80": 85.58
       },
       {
-        "date": "2027-02-10",
-        "central": 84.65,
-        "lower80": 83.4,
-        "upper80": 85.9
+        "date": "2026-12-31",
+        "central": 84.54,
+        "lower80": 83.14,
+        "upper80": 85.94
       },
       {
-        "date": "2027-02-17",
-        "central": 84.69,
-        "lower80": 83.38,
-        "upper80": 86.0
+        "date": "2027-01-07",
+        "central": 84.64,
+        "lower80": 83.24,
+        "upper80": 86.04
+      },
+      {
+        "date": "2027-01-14",
+        "central": 84.73,
+        "lower80": 83.32,
+        "upper80": 86.14
+      },
+      {
+        "date": "2027-01-21",
+        "central": 84.83,
+        "lower80": 83.24,
+        "upper80": 86.42
+      },
+      {
+        "date": "2027-01-28",
+        "central": 84.92,
+        "lower80": 82.97,
+        "upper80": 86.87
+      },
+      {
+        "date": "2027-02-04",
+        "central": 85.02,
+        "lower80": 83.04,
+        "upper80": 87.0
+      },
+      {
+        "date": "2027-02-11",
+        "central": 85.11,
+        "lower80": 82.8,
+        "upper80": 87.42
+      },
+      {
+        "date": "2027-02-18",
+        "central": 85.21,
+        "lower80": 82.71,
+        "upper80": 87.71
       }
     ],
     "hitRate": {
-      "7d": null,
-      "14d": null,
-      "28d": null
+      "7d": 0.82,
+      "14d": 0.842,
+      "28d": 0.778,
+      "84d": 0.57
     },
     "calibration": {
-      "status": "insufficient",
+      "status": "ok",
       "targetHitRate": 0.8,
+      "method": "replay",
       "notes": []
     }
   },
@@ -196,7 +442,7 @@
     "confidence": {
       "level": "medium",
       "label": "보통",
-      "score": 3,
+      "score": 4,
       "reasons": [
         "최근 측정일 수 부족"
       ]
@@ -214,279 +460,267 @@
       "recentTotalDays": 30,
       "recentCoveragePct": 76.7,
       "longestMissingStreak": 5,
-      "outlierCandidates": 10,
+      "outlierCandidates": 3,
+      "outlierWindowDays": 60,
+      "limitedDates": [
+        "2026-03-21",
+        "2026-03-31",
+        "2026-04-02",
+        "2026-04-09",
+        "2026-04-10",
+        "2026-04-21",
+        "2026-04-22",
+        "2026-04-27",
+        "2026-04-29",
+        "2026-05-20",
+        "2026-05-26",
+        "2026-06-08",
+        "2026-06-14",
+        "2026-06-15",
+        "2026-06-22",
+        "2026-06-23",
+        "2026-06-30",
+        "2026-07-07",
+        "2026-07-09",
+        "2026-07-10",
+        "2026-07-13",
+        "2026-07-22",
+        "2026-08-16",
+        "2026-08-27",
+        "2026-08-31",
+        "2026-09-10",
+        "2026-09-12",
+        "2026-09-14",
+        "2026-09-30",
+        "2026-10-12",
+        "2026-11-16"
+      ],
       "usableForRegression": true,
       "recentMeasurementCadence": 0.628,
       "confidencePenalties": [
         "missing_streak_long"
-      ]
+      ],
+      "implausibleWeights": 0
     },
     "trend": {
-      "direction": "flat",
-      "weeklyChangeKg": -0.01,
+      "direction": "gaining",
+      "weeklyChangeKg": -0.0592,
       "weeklyLossRateKg": null,
       "predictionEnabled": true,
-      "disabledReason": null
+      "disabledReason": null,
+      "rateSource": "multi_window_blend"
     },
     "selectedModel": {
-      "name": "ma7_baseline",
-      "status": "adopted_new",
-      "reason": "adopted_ma7_baseline",
-      "gate": {
-        "minSampleCount": 20,
-        "minImprovementKg": 0.05,
-        "minImprovementPct": 0.08,
-        "minHorizonWins": 2
-      }
+      "name": "current",
+      "status": "no_change",
+      "reason": "no shadow candidate passed the gate",
+      "affectsPrediction": false
+    },
+    "longRange": {
+      "horizon": "84d",
+      "status": "worse_than_flat",
+      "maeKg": 1.491,
+      "flatMaeKg": 1.181,
+      "sampleCount": 151
     },
     "trendWindows": {
       "7d": {
-        "weeklyLossKg": -0.01,
+        "weeklyLossKg": -0.0592,
         "points": 8
       },
       "14d": {
-        "weeklyLossKg": -0.0555,
+        "weeklyLossKg": -0.048,
         "points": 15
       },
       "28d": {
-        "weeklyLossKg": -0.0804,
+        "weeklyLossKg": -0.083,
         "points": 29
       }
     },
-    "residualStdKg": 0.294,
+    "residualStdKg": 0.289,
     "backtest": {
       "7d": {
-        "sampleCount": 95,
-        "biasKg": -0.009,
-        "maeKg": 0.588,
-        "rmseKg": 0.719,
+        "sampleCount": 228,
+        "maeKg": 0.511,
+        "rmseKg": 0.658,
+        "biasKg": -0.071,
         "status": "ok"
       },
       "14d": {
-        "sampleCount": 95,
-        "biasKg": -0.179,
-        "maeKg": 0.608,
-        "rmseKg": 0.824,
+        "sampleCount": 221,
+        "maeKg": 0.546,
+        "rmseKg": 0.719,
+        "biasKg": -0.099,
         "status": "ok"
       },
       "28d": {
-        "sampleCount": 95,
-        "biasKg": -0.481,
-        "maeKg": 0.785,
-        "rmseKg": 1.017,
+        "sampleCount": 207,
+        "maeKg": 0.659,
+        "rmseKg": 0.867,
+        "biasKg": -0.176,
+        "status": "ok"
+      },
+      "84d": {
+        "sampleCount": 151,
+        "maeKg": 1.491,
+        "rmseKg": 1.825,
+        "biasKg": -1.261,
         "status": "ok"
       }
     },
+    "backtestSampleCounts": {
+      "7d": 228,
+      "14d": 221,
+      "28d": 207,
+      "84d": 151
+    },
     "modelAudit": {
-      "flat_baseline": {
+      "ewma_flat": {
         "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.548,
-          "rmseKg": 0.699,
-          "biasKg": -0.098,
+          "maeKg": 0.549,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.617,
-          "rmseKg": 0.78,
-          "biasKg": -0.117,
+          "maeKg": 0.625,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "maeKg": 0.753,
-          "rmseKg": 0.916,
-          "biasKg": -0.17,
+          "maeKg": 0.769,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 1.181,
           "status": "ok"
         }
       },
-      "ma7_baseline": {
+      "ma7": {
         "7d": {
-          "sampleCount": 134,
-          "maeKg": 0.53,
-          "rmseKg": 0.686,
-          "biasKg": -0.032,
+          "maeKg": 0.533,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 129,
-          "maeKg": 0.547,
-          "rmseKg": 0.733,
-          "biasKg": -0.088,
+          "maeKg": 0.581,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 117,
-          "maeKg": 0.623,
-          "rmseKg": 0.808,
-          "biasKg": -0.139,
+          "maeKg": 0.703,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 1.157,
           "status": "ok"
         }
       },
-      "ewma_baseline": {
+      "linreg_28d": {
         "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.548,
-          "rmseKg": 0.699,
-          "biasKg": -0.098,
+          "maeKg": 0.524,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.617,
-          "rmseKg": 0.78,
-          "biasKg": -0.117,
+          "maeKg": 0.603,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "maeKg": 0.753,
-          "rmseKg": 0.916,
-          "biasKg": -0.17,
+          "maeKg": 0.794,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 2.345,
           "status": "ok"
         }
       },
-      "linear_regression_28d": {
+      "linreg_56d": {
         "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.62,
-          "rmseKg": 0.783,
-          "biasKg": -0.093,
+          "maeKg": 0.514,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.815,
-          "rmseKg": 1.0,
-          "biasKg": -0.099,
+          "maeKg": 0.56,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "maeKg": 1.293,
-          "rmseKg": 1.569,
-          "biasKg": -0.145,
+          "maeKg": 0.668,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 1.791,
           "status": "ok"
         }
       },
-      "linear_regression_56d": {
+      "linreg_84d": {
         "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.605,
-          "rmseKg": 0.764,
-          "biasKg": -0.076,
+          "maeKg": 0.522,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.782,
-          "rmseKg": 0.951,
-          "biasKg": -0.067,
+          "maeKg": 0.566,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "maeKg": 1.124,
-          "rmseKg": 1.344,
-          "biasKg": -0.045,
+          "maeKg": 0.681,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 1.989,
           "status": "ok"
         }
       },
-      "linear_regression_84d": {
+      "weighted_linreg_56d": {
         "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.596,
-          "rmseKg": 0.754,
-          "biasKg": -0.058,
+          "maeKg": 0.513,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.77,
-          "rmseKg": 0.93,
-          "biasKg": -0.03,
+          "maeKg": 0.546,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "maeKg": 1.118,
-          "rmseKg": 1.316,
-          "biasKg": 0.044,
+          "maeKg": 0.664,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 1.739,
           "status": "ok"
         }
       },
-      "weighted_linear_regression_56d": {
+      "robust_56d": {
         "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.61,
-          "rmseKg": 0.766,
-          "biasKg": -0.086,
+          "maeKg": 0.515,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.782,
-          "rmseKg": 0.953,
-          "biasKg": -0.09,
+          "maeKg": 0.555,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "maeKg": 1.16,
-          "rmseKg": 1.364,
-          "biasKg": -0.098,
-          "status": "ok"
-        }
-      },
-      "robust_regression_56d": {
-        "7d": {
-          "sampleCount": 223,
-          "maeKg": 0.598,
-          "rmseKg": 0.76,
-          "biasKg": -0.076,
+          "maeKg": 0.662,
           "status": "ok"
         },
-        "14d": {
-          "sampleCount": 216,
-          "maeKg": 0.768,
-          "rmseKg": 0.937,
-          "biasKg": -0.068,
-          "status": "ok"
-        },
-        "28d": {
-          "sampleCount": 202,
-          "maeKg": 1.09,
-          "rmseKg": 1.308,
-          "biasKg": -0.05,
+        "84d": {
+          "maeKg": 1.734,
           "status": "ok"
         }
       },
       "kalman": {
         "7d": {
-          "sampleCount": 223,
-          "biasKg": -0.163,
-          "maeKg": 0.588,
-          "rmseKg": 0.738,
+          "maeKg": 0.595,
           "status": "ok"
         },
         "14d": {
-          "sampleCount": 216,
-          "biasKg": -0.284,
-          "maeKg": 0.691,
-          "rmseKg": 0.905,
+          "maeKg": 0.723,
           "status": "ok"
         },
         "28d": {
-          "sampleCount": 202,
-          "biasKg": -0.55,
-          "maeKg": 0.945,
-          "rmseKg": 1.187,
+          "maeKg": 1.048,
+          "status": "ok"
+        },
+        "84d": {
+          "maeKg": 2.713,
           "status": "ok"
         }
       }
     },
-    "kcalPerKg": 7700.0,
+    "kcalPerKg": 8000.0,
     "kcalPerKgSource": "body_fat",
     "calibration": {
       "exerciseEfficiency": null,
@@ -494,79 +728,55 @@
       "windowDays": 28,
       "interpretation": "감량 추세가 확인되지 않아 보정값을 계산하지 않습니다."
     },
-    "modelComparison": {
-      "kalmanBacktest": {
-        "7d": {
-          "sampleCount": 223,
-          "biasKg": -0.163,
-          "maeKg": 0.588,
-          "rmseKg": 0.738,
-          "status": "ok"
-        },
-        "14d": {
-          "sampleCount": 216,
-          "biasKg": -0.284,
-          "maeKg": 0.691,
-          "rmseKg": 0.905,
-          "status": "ok"
-        },
-        "28d": {
-          "sampleCount": 202,
-          "biasKg": -0.55,
-          "maeKg": 0.945,
-          "rmseKg": 1.187,
-          "status": "ok"
-        }
-      },
-      "perHorizon": {
-        "28d": {
-          "v1MaeKg": 0.785,
-          "kalmanMaeKg": 0.945,
-          "deltaKg": -0.16,
-          "kalmanWins": false
-        },
-        "7d": {
-          "v1MaeKg": 0.588,
-          "kalmanMaeKg": 0.588,
-          "deltaKg": 0.0,
-          "kalmanWins": false
-        },
-        "14d": {
-          "v1MaeKg": 0.608,
-          "kalmanMaeKg": 0.691,
-          "deltaKg": -0.083,
-          "kalmanWins": false
-        }
-      },
-      "recommendKalman": false
-    },
     "ciCalibration": {
       "hitRate": {
-        "7d": null,
-        "14d": null,
-        "28d": null
+        "7d": 0.82,
+        "14d": 0.842,
+        "21d": 0.841,
+        "28d": 0.778,
+        "35d": 0.78,
+        "42d": 0.772,
+        "49d": 0.785,
+        "56d": 0.743,
+        "63d": 0.738,
+        "70d": 0.679,
+        "77d": 0.614,
+        "84d": 0.57
       },
-      "status": "insufficient",
-      "samples": 0
-    },
-    "notes": [
-      "기본 예측은 체중 추세 기반입니다.",
-      "시나리오는 운동 효율 계수(NEAT·보상 섭취 보정)와 동적 kcal/kg 사용.",
-      "28일 이상 예측은 장기 추정으로 취급합니다."
-    ]
+      "sampleCounts": {
+        "7d": 228,
+        "14d": 221,
+        "21d": 214,
+        "28d": 207,
+        "35d": 200,
+        "42d": 193,
+        "49d": 186,
+        "56d": 179,
+        "63d": 172,
+        "70d": 165,
+        "77d": 158,
+        "84d": 151
+      },
+      "status": "ok",
+      "method": "replay",
+      "targetHitRate": 0.8
+    }
   },
   "insight": {
-    "headline": "13일째 정체 중이지만 대사 적응 과정의 정상 패턴입니다. 운동량 10% ↑ 또는 식단 변화로 돌파해 보세요.",
+    "headline": "최근 추세가 주 0.06kg씩 늘고 있어 목표에서 멀어지는 중입니다. 식사량과 활동량을 점검해 보세요.",
     "lines": [
-      "13일째 정체 중이지만 대사 적응 과정의 정상 패턴입니다. 운동량 10% ↑ 또는 식단 변화로 돌파해 보세요."
-    ]
+      "최근 추세가 주 0.06kg씩 늘고 있어 목표에서 멀어지는 중입니다. 식사량과 활동량을 점검해 보세요."
+    ],
+    "state": "gaining"
   },
   "coverage": {
     "last30Measured": 23,
     "last30Total": 30,
     "last30Pct": 77.0,
-    "lastMeasurementAt": "2026-11-24",
-    "daysSinceLastMeasurement": 1
+    "windowStart": "2026-10-27",
+    "windowEnd": "2026-11-25",
+    "lastMeasurementAt": "2026-11-26",
+    "daysSinceLastMeasurement": 0
   },
   "series": {
     "daily": [
@@ -1601,1040 +1811,10 @@
       {
         "date": "2026-11-25",
         "valueKg": null
-      }
-    ],
-    "ma7": [
-      {
-        "date": "2026-03-13",
-        "valueKg": null
       },
       {
-        "date": "2026-03-14",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-03-15",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-03-16",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-03-17",
-        "valueKg": 84.47
-      },
-      {
-        "date": "2026-03-18",
-        "valueKg": 84.38
-      },
-      {
-        "date": "2026-03-19",
+        "date": "2026-11-26",
         "valueKg": 84.4
-      },
-      {
-        "date": "2026-03-20",
-        "valueKg": 84.4
-      },
-      {
-        "date": "2026-03-21",
-        "valueKg": 84.6
-      },
-      {
-        "date": "2026-03-22",
-        "valueKg": 84.6
-      },
-      {
-        "date": "2026-03-23",
-        "valueKg": 84.7
-      },
-      {
-        "date": "2026-03-24",
-        "valueKg": 84.67
-      },
-      {
-        "date": "2026-03-25",
-        "valueKg": 84.8
-      },
-      {
-        "date": "2026-03-26",
-        "valueKg": 84.83
-      },
-      {
-        "date": "2026-03-27",
-        "valueKg": 84.78
-      },
-      {
-        "date": "2026-03-28",
-        "valueKg": 84.66
-      },
-      {
-        "date": "2026-03-29",
-        "valueKg": 84.66
-      },
-      {
-        "date": "2026-03-30",
-        "valueKg": 84.66
-      },
-      {
-        "date": "2026-03-31",
-        "valueKg": 84.3
-      },
-      {
-        "date": "2026-04-01",
-        "valueKg": 84.22
-      },
-      {
-        "date": "2026-04-02",
-        "valueKg": 83.47
-      },
-      {
-        "date": "2026-04-03",
-        "valueKg": 83.1
-      },
-      {
-        "date": "2026-04-04",
-        "valueKg": 82.35
-      },
-      {
-        "date": "2026-04-05",
-        "valueKg": 82.35
-      },
-      {
-        "date": "2026-04-06",
-        "valueKg": 82.35
-      },
-      {
-        "date": "2026-04-07",
-        "valueKg": 82.75
-      },
-      {
-        "date": "2026-04-08",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-04-09",
-        "valueKg": 83.6
-      },
-      {
-        "date": "2026-04-10",
-        "valueKg": 83.47
-      },
-      {
-        "date": "2026-04-11",
-        "valueKg": 83.48
-      },
-      {
-        "date": "2026-04-12",
-        "valueKg": 83.48
-      },
-      {
-        "date": "2026-04-13",
-        "valueKg": 83.49
-      },
-      {
-        "date": "2026-04-14",
-        "valueKg": 83.4
-      },
-      {
-        "date": "2026-04-15",
-        "valueKg": 83.44
-      },
-      {
-        "date": "2026-04-16",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-04-17",
-        "valueKg": 83.6
-      },
-      {
-        "date": "2026-04-18",
-        "valueKg": 83.62
-      },
-      {
-        "date": "2026-04-19",
-        "valueKg": 83.65
-      },
-      {
-        "date": "2026-04-20",
-        "valueKg": 83.78
-      },
-      {
-        "date": "2026-04-21",
-        "valueKg": 83.7
-      },
-      {
-        "date": "2026-04-22",
-        "valueKg": 83.42
-      },
-      {
-        "date": "2026-04-23",
-        "valueKg": 83.22
-      },
-      {
-        "date": "2026-04-24",
-        "valueKg": 83.08
-      },
-      {
-        "date": "2026-04-25",
-        "valueKg": 83.08
-      },
-      {
-        "date": "2026-04-26",
-        "valueKg": 83.08
-      },
-      {
-        "date": "2026-04-27",
-        "valueKg": 83.15
-      },
-      {
-        "date": "2026-04-28",
-        "valueKg": 83.27
-      },
-      {
-        "date": "2026-04-29",
-        "valueKg": 83.25
-      },
-      {
-        "date": "2026-04-30",
-        "valueKg": 83.43
-      },
-      {
-        "date": "2026-05-01",
-        "valueKg": 83.46
-      },
-      {
-        "date": "2026-05-02",
-        "valueKg": 83.55
-      },
-      {
-        "date": "2026-05-03",
-        "valueKg": 83.58
-      },
-      {
-        "date": "2026-05-04",
-        "valueKg": 83.44
-      },
-      {
-        "date": "2026-05-05",
-        "valueKg": 83.38
-      },
-      {
-        "date": "2026-05-06",
-        "valueKg": 83.42
-      },
-      {
-        "date": "2026-05-07",
-        "valueKg": 83.28
-      },
-      {
-        "date": "2026-05-08",
-        "valueKg": 83.2
-      },
-      {
-        "date": "2026-05-09",
-        "valueKg": 83.14
-      },
-      {
-        "date": "2026-05-10",
-        "valueKg": 83.05
-      },
-      {
-        "date": "2026-05-11",
-        "valueKg": 82.92
-      },
-      {
-        "date": "2026-05-12",
-        "valueKg": 82.83
-      },
-      {
-        "date": "2026-05-13",
-        "valueKg": 82.83
-      },
-      {
-        "date": "2026-05-14",
-        "valueKg": 82.83
-      },
-      {
-        "date": "2026-05-15",
-        "valueKg": 82.82
-      },
-      {
-        "date": "2026-05-16",
-        "valueKg": 82.82
-      },
-      {
-        "date": "2026-05-17",
-        "valueKg": 82.82
-      },
-      {
-        "date": "2026-05-18",
-        "valueKg": 82.96
-      },
-      {
-        "date": "2026-05-19",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-05-20",
-        "valueKg": 82.54
-      },
-      {
-        "date": "2026-05-21",
-        "valueKg": 82.47
-      },
-      {
-        "date": "2026-05-22",
-        "valueKg": 82.42
-      },
-      {
-        "date": "2026-05-23",
-        "valueKg": 82.44
-      },
-      {
-        "date": "2026-05-24",
-        "valueKg": 82.44
-      },
-      {
-        "date": "2026-05-25",
-        "valueKg": 82.15
-      },
-      {
-        "date": "2026-05-26",
-        "valueKg": 82.33
-      },
-      {
-        "date": "2026-05-27",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-05-28",
-        "valueKg": 82.9
-      },
-      {
-        "date": "2026-05-29",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-05-30",
-        "valueKg": 83.12
-      },
-      {
-        "date": "2026-05-31",
-        "valueKg": 83.12
-      },
-      {
-        "date": "2026-06-01",
-        "valueKg": 83.12
-      },
-      {
-        "date": "2026-06-02",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-06-03",
-        "valueKg": 83.03
-      },
-      {
-        "date": "2026-06-04",
-        "valueKg": 83.2
-      },
-      {
-        "date": "2026-06-05",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-06-06",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-06-07",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-06-08",
-        "valueKg": 83.63
-      },
-      {
-        "date": "2026-06-09",
-        "valueKg": 83.8
-      },
-      {
-        "date": "2026-06-10",
-        "valueKg": 83.5
-      },
-      {
-        "date": "2026-06-11",
-        "valueKg": 83.5
-      },
-      {
-        "date": "2026-06-12",
-        "valueKg": 83.43
-      },
-      {
-        "date": "2026-06-13",
-        "valueKg": 83.43
-      },
-      {
-        "date": "2026-06-14",
-        "valueKg": 83.58
-      },
-      {
-        "date": "2026-06-15",
-        "valueKg": 83.5
-      },
-      {
-        "date": "2026-06-16",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-06-17",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-06-18",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-06-19",
-        "valueKg": 83.5
-      },
-      {
-        "date": "2026-06-20",
-        "valueKg": 83.5
-      },
-      {
-        "date": "2026-06-21",
-        "valueKg": 83.25
-      },
-      {
-        "date": "2026-06-22",
-        "valueKg": 82.4
-      },
-      {
-        "date": "2026-06-23",
-        "valueKg": 81.35
-      },
-      {
-        "date": "2026-06-24",
-        "valueKg": 81.47
-      },
-      {
-        "date": "2026-06-25",
-        "valueKg": 81.85
-      },
-      {
-        "date": "2026-06-26",
-        "valueKg": 81.85
-      },
-      {
-        "date": "2026-06-27",
-        "valueKg": 81.85
-      },
-      {
-        "date": "2026-06-28",
-        "valueKg": 81.85
-      },
-      {
-        "date": "2026-06-29",
-        "valueKg": 81.92
-      },
-      {
-        "date": "2026-06-30",
-        "valueKg": 82.33
-      },
-      {
-        "date": "2026-07-01",
-        "valueKg": 82.53
-      },
-      {
-        "date": "2026-07-02",
-        "valueKg": 82.3
-      },
-      {
-        "date": "2026-07-03",
-        "valueKg": 82.4
-      },
-      {
-        "date": "2026-07-04",
-        "valueKg": 82.32
-      },
-      {
-        "date": "2026-07-05",
-        "valueKg": 82.32
-      },
-      {
-        "date": "2026-07-06",
-        "valueKg": 82.2
-      },
-      {
-        "date": "2026-07-07",
-        "valueKg": 82.12
-      },
-      {
-        "date": "2026-07-08",
-        "valueKg": 82.1
-      },
-      {
-        "date": "2026-07-09",
-        "valueKg": 82.0
-      },
-      {
-        "date": "2026-07-10",
-        "valueKg": 81.82
-      },
-      {
-        "date": "2026-07-11",
-        "valueKg": 81.76
-      },
-      {
-        "date": "2026-07-12",
-        "valueKg": 81.76
-      },
-      {
-        "date": "2026-07-13",
-        "valueKg": 82.0
-      },
-      {
-        "date": "2026-07-14",
-        "valueKg": 82.12
-      },
-      {
-        "date": "2026-07-15",
-        "valueKg": 82.18
-      },
-      {
-        "date": "2026-07-16",
-        "valueKg": 82.3
-      },
-      {
-        "date": "2026-07-17",
-        "valueKg": 82.44
-      },
-      {
-        "date": "2026-07-18",
-        "valueKg": 82.44
-      },
-      {
-        "date": "2026-07-19",
-        "valueKg": 82.4
-      },
-      {
-        "date": "2026-07-20",
-        "valueKg": 82.22
-      },
-      {
-        "date": "2026-07-21",
-        "valueKg": 82.18
-      },
-      {
-        "date": "2026-07-22",
-        "valueKg": 81.95
-      },
-      {
-        "date": "2026-07-23",
-        "valueKg": 81.92
-      },
-      {
-        "date": "2026-07-24",
-        "valueKg": 81.82
-      },
-      {
-        "date": "2026-07-25",
-        "valueKg": 81.82
-      },
-      {
-        "date": "2026-07-26",
-        "valueKg": 81.74
-      },
-      {
-        "date": "2026-07-27",
-        "valueKg": 81.62
-      },
-      {
-        "date": "2026-07-28",
-        "valueKg": 81.47
-      },
-      {
-        "date": "2026-07-29",
-        "valueKg": 81.75
-      },
-      {
-        "date": "2026-07-30",
-        "valueKg": 82.25
-      },
-      {
-        "date": "2026-07-31",
-        "valueKg": 82.7
-      },
-      {
-        "date": "2026-08-01",
-        "valueKg": 82.7
-      },
-      {
-        "date": "2026-08-02",
-        "valueKg": 82.63
-      },
-      {
-        "date": "2026-08-03",
-        "valueKg": 82.63
-      },
-      {
-        "date": "2026-08-04",
-        "valueKg": 82.6
-      },
-      {
-        "date": "2026-08-05",
-        "valueKg": 82.6
-      },
-      {
-        "date": "2026-08-06",
-        "valueKg": 82.6
-      },
-      {
-        "date": "2026-08-07",
-        "valueKg": 82.6
-      },
-      {
-        "date": "2026-08-08",
-        "valueKg": 82.68
-      },
-      {
-        "date": "2026-08-09",
-        "valueKg": 82.72
-      },
-      {
-        "date": "2026-08-10",
-        "valueKg": 82.72
-      },
-      {
-        "date": "2026-08-11",
-        "valueKg": 82.8
-      },
-      {
-        "date": "2026-08-12",
-        "valueKg": 82.8
-      },
-      {
-        "date": "2026-08-13",
-        "valueKg": 82.8
-      },
-      {
-        "date": "2026-08-14",
-        "valueKg": 82.88
-      },
-      {
-        "date": "2026-08-15",
-        "valueKg": 82.86
-      },
-      {
-        "date": "2026-08-16",
-        "valueKg": 82.97
-      },
-      {
-        "date": "2026-08-17",
-        "valueKg": 82.97
-      },
-      {
-        "date": "2026-08-18",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-08-19",
-        "valueKg": 82.96
-      },
-      {
-        "date": "2026-08-20",
-        "valueKg": 82.98
-      },
-      {
-        "date": "2026-08-21",
-        "valueKg": 83.02
-      },
-      {
-        "date": "2026-08-22",
-        "valueKg": 83.1
-      },
-      {
-        "date": "2026-08-23",
-        "valueKg": 83.0
-      },
-      {
-        "date": "2026-08-24",
-        "valueKg": 83.12
-      },
-      {
-        "date": "2026-08-25",
-        "valueKg": 83.05
-      },
-      {
-        "date": "2026-08-26",
-        "valueKg": 83.13
-      },
-      {
-        "date": "2026-08-27",
-        "valueKg": 83.27
-      },
-      {
-        "date": "2026-08-28",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-08-29",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-08-30",
-        "valueKg": 83.3
-      },
-      {
-        "date": "2026-08-31",
-        "valueKg": 83.35
-      },
-      {
-        "date": "2026-09-01",
-        "valueKg": 83.42
-      },
-      {
-        "date": "2026-09-02",
-        "valueKg": 83.38
-      },
-      {
-        "date": "2026-09-03",
-        "valueKg": 83.23
-      },
-      {
-        "date": "2026-09-04",
-        "valueKg": 83.23
-      },
-      {
-        "date": "2026-09-05",
-        "valueKg": 83.23
-      },
-      {
-        "date": "2026-09-06",
-        "valueKg": 83.23
-      },
-      {
-        "date": "2026-09-07",
-        "valueKg": 83.17
-      },
-      {
-        "date": "2026-09-08",
-        "valueKg": 83.25
-      },
-      {
-        "date": "2026-09-09",
-        "valueKg": 83.7
-      },
-      {
-        "date": "2026-09-10",
-        "valueKg": 83.8
-      },
-      {
-        "date": "2026-09-11",
-        "valueKg": 83.78
-      },
-      {
-        "date": "2026-09-12",
-        "valueKg": 83.88
-      },
-      {
-        "date": "2026-09-13",
-        "valueKg": 83.88
-      },
-      {
-        "date": "2026-09-14",
-        "valueKg": 84.16
-      },
-      {
-        "date": "2026-09-15",
-        "valueKg": 83.98
-      },
-      {
-        "date": "2026-09-16",
-        "valueKg": 83.8
-      },
-      {
-        "date": "2026-09-17",
-        "valueKg": 83.72
-      },
-      {
-        "date": "2026-09-18",
-        "valueKg": 83.72
-      },
-      {
-        "date": "2026-09-19",
-        "valueKg": 83.58
-      },
-      {
-        "date": "2026-09-20",
-        "valueKg": 83.62
-      },
-      {
-        "date": "2026-09-21",
-        "valueKg": 83.44
-      },
-      {
-        "date": "2026-09-22",
-        "valueKg": 83.44
-      },
-      {
-        "date": "2026-09-23",
-        "valueKg": 83.52
-      },
-      {
-        "date": "2026-09-24",
-        "valueKg": 83.52
-      },
-      {
-        "date": "2026-09-25",
-        "valueKg": 83.52
-      },
-      {
-        "date": "2026-09-26",
-        "valueKg": 83.52
-      },
-      {
-        "date": "2026-09-27",
-        "valueKg": 83.43
-      },
-      {
-        "date": "2026-09-28",
-        "valueKg": 83.33
-      },
-      {
-        "date": "2026-09-29",
-        "valueKg": 83.57
-      },
-      {
-        "date": "2026-09-30",
-        "valueKg": 83.97
-      },
-      {
-        "date": "2026-10-01",
-        "valueKg": 83.97
-      },
-      {
-        "date": "2026-10-02",
-        "valueKg": 83.9
-      },
-      {
-        "date": "2026-10-03",
-        "valueKg": 83.9
-      },
-      {
-        "date": "2026-10-04",
-        "valueKg": 83.9
-      },
-      {
-        "date": "2026-10-05",
-        "valueKg": 83.92
-      },
-      {
-        "date": "2026-10-06",
-        "valueKg": 83.97
-      },
-      {
-        "date": "2026-10-07",
-        "valueKg": 83.8
-      },
-      {
-        "date": "2026-10-08",
-        "valueKg": 83.9
-      },
-      {
-        "date": "2026-10-09",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-10-10",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-10-11",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-10-12",
-        "valueKg": 84.6
-      },
-      {
-        "date": "2026-10-13",
-        "valueKg": 84.57
-      },
-      {
-        "date": "2026-10-14",
-        "valueKg": 84.57
-      },
-      {
-        "date": "2026-10-15",
-        "valueKg": 84.67
-      },
-      {
-        "date": "2026-10-16",
-        "valueKg": 84.67
-      },
-      {
-        "date": "2026-10-17",
-        "valueKg": 84.45
-      },
-      {
-        "date": "2026-10-18",
-        "valueKg": 84.32
-      },
-      {
-        "date": "2026-10-19",
-        "valueKg": 84.02
-      },
-      {
-        "date": "2026-10-20",
-        "valueKg": 83.82
-      },
-      {
-        "date": "2026-10-21",
-        "valueKg": 83.8
-      },
-      {
-        "date": "2026-10-22",
-        "valueKg": 83.73
-      },
-      {
-        "date": "2026-10-23",
-        "valueKg": 83.73
-      },
-      {
-        "date": "2026-10-24",
-        "valueKg": 83.72
-      },
-      {
-        "date": "2026-10-25",
-        "valueKg": 83.7
-      },
-      {
-        "date": "2026-10-26",
-        "valueKg": 83.92
-      },
-      {
-        "date": "2026-10-27",
-        "valueKg": 84.12
-      },
-      {
-        "date": "2026-10-28",
-        "valueKg": 84.28
-      },
-      {
-        "date": "2026-10-29",
-        "valueKg": 84.22
-      },
-      {
-        "date": "2026-10-30",
-        "valueKg": 84.16
-      },
-      {
-        "date": "2026-10-31",
-        "valueKg": 84.12
-      },
-      {
-        "date": "2026-11-01",
-        "valueKg": 84.12
-      },
-      {
-        "date": "2026-11-02",
-        "valueKg": 84.03
-      },
-      {
-        "date": "2026-11-03",
-        "valueKg": 84.02
-      },
-      {
-        "date": "2026-11-04",
-        "valueKg": 83.95
-      },
-      {
-        "date": "2026-11-05",
-        "valueKg": 84.03
-      },
-      {
-        "date": "2026-11-06",
-        "valueKg": 84.02
-      },
-      {
-        "date": "2026-11-07",
-        "valueKg": 84.04
-      },
-      {
-        "date": "2026-11-08",
-        "valueKg": 84.02
-      },
-      {
-        "date": "2026-11-09",
-        "valueKg": 84.12
-      },
-      {
-        "date": "2026-11-10",
-        "valueKg": 84.17
-      },
-      {
-        "date": "2026-11-11",
-        "valueKg": 84.23
-      },
-      {
-        "date": "2026-11-12",
-        "valueKg": 84.22
-      },
-      {
-        "date": "2026-11-13",
-        "valueKg": 84.27
-      },
-      {
-        "date": "2026-11-14",
-        "valueKg": 84.27
-      },
-      {
-        "date": "2026-11-15",
-        "valueKg": 84.34
-      },
-      {
-        "date": "2026-11-16",
-        "valueKg": 84.44
-      },
-      {
-        "date": "2026-11-17",
-        "valueKg": 84.42
-      },
-      {
-        "date": "2026-11-18",
-        "valueKg": 84.45
-      },
-      {
-        "date": "2026-11-19",
-        "valueKg": 84.38
-      },
-      {
-        "date": "2026-11-20",
-        "valueKg": 84.25
-      },
-      {
-        "date": "2026-11-21",
-        "valueKg": 84.26
-      },
-      {
-        "date": "2026-11-22",
-        "valueKg": 84.33
-      },
-      {
-        "date": "2026-11-23",
-        "valueKg": 84.2
-      },
-      {
-        "date": "2026-11-24",
-        "valueKg": 84.14
-      },
-      {
-        "date": "2026-11-25",
-        "valueKg": 84.14
       }
     ],
     "ma14": [
@@ -3669,6 +2849,10 @@
       {
         "date": "2026-11-25",
         "valueKg": 84.28
+      },
+      {
+        "date": "2026-11-26",
+        "valueKg": 84.29
       }
     ],
     "ewma": [
@@ -3706,619 +2890,619 @@
       },
       {
         "date": "2026-03-21",
-        "valueKg": 84.38
+        "valueKg": 84.37
       },
       {
         "date": "2026-03-22",
-        "valueKg": 84.38
+        "valueKg": 84.37
       },
       {
         "date": "2026-03-23",
-        "valueKg": 84.38
+        "valueKg": 84.37
       },
       {
         "date": "2026-03-24",
-        "valueKg": 84.43
+        "valueKg": 84.42
       },
       {
         "date": "2026-03-25",
-        "valueKg": 84.45
+        "valueKg": 84.44
       },
       {
         "date": "2026-03-26",
-        "valueKg": 84.46
+        "valueKg": 84.45
       },
       {
         "date": "2026-03-27",
-        "valueKg": 84.48
+        "valueKg": 84.47
       },
       {
         "date": "2026-03-28",
-        "valueKg": 84.49
+        "valueKg": 84.48
       },
       {
         "date": "2026-03-29",
-        "valueKg": 84.49
+        "valueKg": 84.48
       },
       {
         "date": "2026-03-30",
-        "valueKg": 84.49
+        "valueKg": 84.48
       },
       {
         "date": "2026-03-31",
-        "valueKg": 84.35
+        "valueKg": 84.4
       },
       {
         "date": "2026-04-01",
-        "valueKg": 84.35
+        "valueKg": 84.4
       },
       {
         "date": "2026-04-02",
-        "valueKg": 84.07
+        "valueKg": 84.32
       },
       {
         "date": "2026-04-03",
-        "valueKg": 84.07
+        "valueKg": 84.32
       },
       {
         "date": "2026-04-04",
-        "valueKg": 84.07
+        "valueKg": 84.32
       },
       {
         "date": "2026-04-05",
-        "valueKg": 84.07
+        "valueKg": 84.32
       },
       {
         "date": "2026-04-06",
-        "valueKg": 84.07
+        "valueKg": 84.32
       },
       {
         "date": "2026-04-07",
-        "valueKg": 84.06
+        "valueKg": 84.28
       },
       {
         "date": "2026-04-08",
-        "valueKg": 84.0
+        "valueKg": 84.2
       },
       {
         "date": "2026-04-09",
-        "valueKg": 83.94
+        "valueKg": 84.12
       },
       {
         "date": "2026-04-10",
-        "valueKg": 83.86
+        "valueKg": 84.04
       },
       {
         "date": "2026-04-11",
-        "valueKg": 83.82
+        "valueKg": 83.99
       },
       {
         "date": "2026-04-12",
-        "valueKg": 83.79
+        "valueKg": 83.94
       },
       {
         "date": "2026-04-13",
-        "valueKg": 83.76
+        "valueKg": 83.89
       },
       {
         "date": "2026-04-14",
-        "valueKg": 83.71
+        "valueKg": 83.84
       },
       {
         "date": "2026-04-15",
-        "valueKg": 83.72
+        "valueKg": 83.83
       },
       {
         "date": "2026-04-16",
-        "valueKg": 83.72
+        "valueKg": 83.83
       },
       {
         "date": "2026-04-17",
-        "valueKg": 83.75
+        "valueKg": 83.85
       },
       {
         "date": "2026-04-18",
-        "valueKg": 83.75
+        "valueKg": 83.85
       },
       {
         "date": "2026-04-19",
-        "valueKg": 83.75
+        "valueKg": 83.85
       },
       {
         "date": "2026-04-20",
-        "valueKg": 83.78
+        "valueKg": 83.86
       },
       {
         "date": "2026-04-21",
-        "valueKg": 83.7
+        "valueKg": 83.78
       },
       {
         "date": "2026-04-22",
-        "valueKg": 83.6
+        "valueKg": 83.7
       },
       {
         "date": "2026-04-23",
-        "valueKg": 83.48
+        "valueKg": 83.57
       },
       {
         "date": "2026-04-24",
-        "valueKg": 83.46
+        "valueKg": 83.55
       },
       {
         "date": "2026-04-25",
-        "valueKg": 83.42
-      },
-      {
-        "date": "2026-04-26",
-        "valueKg": 83.42
-      },
-      {
-        "date": "2026-04-27",
-        "valueKg": 83.52
-      },
-      {
-        "date": "2026-04-28",
-        "valueKg": 83.54
-      },
-      {
-        "date": "2026-04-29",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-04-30",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-05-01",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-05-02",
-        "valueKg": 83.45
-      },
-      {
-        "date": "2026-05-03",
-        "valueKg": 83.48
-      },
-      {
-        "date": "2026-05-04",
         "valueKg": 83.5
       },
       {
+        "date": "2026-04-26",
+        "valueKg": 83.5
+      },
+      {
+        "date": "2026-04-27",
+        "valueKg": 83.58
+      },
+      {
+        "date": "2026-04-28",
+        "valueKg": 83.59
+      },
+      {
+        "date": "2026-04-29",
+        "valueKg": 83.51
+      },
+      {
+        "date": "2026-04-30",
+        "valueKg": 83.51
+      },
+      {
+        "date": "2026-05-01",
+        "valueKg": 83.51
+      },
+      {
+        "date": "2026-05-02",
+        "valueKg": 83.51
+      },
+      {
+        "date": "2026-05-03",
+        "valueKg": 83.53
+      },
+      {
+        "date": "2026-05-04",
+        "valueKg": 83.55
+      },
+      {
         "date": "2026-05-05",
-        "valueKg": 83.49
+        "valueKg": 83.53
       },
       {
         "date": "2026-05-06",
-        "valueKg": 83.42
+        "valueKg": 83.46
       },
       {
         "date": "2026-05-07",
-        "valueKg": 83.36
+        "valueKg": 83.39
       },
       {
         "date": "2026-05-08",
-        "valueKg": 83.3
+        "valueKg": 83.33
       },
       {
         "date": "2026-05-09",
-        "valueKg": 83.25
+        "valueKg": 83.28
       },
       {
         "date": "2026-05-10",
-        "valueKg": 83.25
+        "valueKg": 83.28
       },
       {
         "date": "2026-05-11",
-        "valueKg": 83.22
+        "valueKg": 83.24
       },
       {
         "date": "2026-05-12",
-        "valueKg": 83.18
+        "valueKg": 83.21
       },
       {
         "date": "2026-05-13",
-        "valueKg": 83.15
+        "valueKg": 83.17
       },
       {
         "date": "2026-05-14",
-        "valueKg": 83.11
+        "valueKg": 83.13
       },
       {
         "date": "2026-05-15",
-        "valueKg": 83.07
+        "valueKg": 83.09
       },
       {
         "date": "2026-05-16",
-        "valueKg": 83.07
+        "valueKg": 83.09
       },
       {
         "date": "2026-05-17",
-        "valueKg": 83.07
+        "valueKg": 83.09
       },
       {
         "date": "2026-05-18",
-        "valueKg": 83.12
+        "valueKg": 83.14
       },
       {
         "date": "2026-05-19",
-        "valueKg": 83.12
+        "valueKg": 83.14
       },
       {
         "date": "2026-05-20",
-        "valueKg": 82.86
+        "valueKg": 83.06
       },
       {
         "date": "2026-05-21",
-        "valueKg": 82.86
+        "valueKg": 83.06
       },
       {
         "date": "2026-05-22",
-        "valueKg": 82.82
+        "valueKg": 83.0
       },
       {
         "date": "2026-05-23",
-        "valueKg": 82.79
+        "valueKg": 82.95
       },
       {
         "date": "2026-05-24",
-        "valueKg": 82.79
+        "valueKg": 82.95
       },
       {
         "date": "2026-05-25",
-        "valueKg": 82.79
+        "valueKg": 82.95
       },
       {
         "date": "2026-05-26",
-        "valueKg": 82.89
+        "valueKg": 83.03
       },
       {
         "date": "2026-05-27",
-        "valueKg": 82.92
+        "valueKg": 83.05
       },
       {
         "date": "2026-05-28",
-        "valueKg": 82.88
+        "valueKg": 82.99
       },
       {
         "date": "2026-05-29",
-        "valueKg": 82.89
+        "valueKg": 82.99
       },
       {
         "date": "2026-05-30",
-        "valueKg": 82.89
+        "valueKg": 82.99
       },
       {
         "date": "2026-05-31",
-        "valueKg": 82.89
+        "valueKg": 82.99
       },
       {
         "date": "2026-06-01",
-        "valueKg": 82.89
+        "valueKg": 82.99
       },
       {
         "date": "2026-06-02",
-        "valueKg": 82.93
+        "valueKg": 83.02
       },
       {
         "date": "2026-06-03",
-        "valueKg": 82.97
+        "valueKg": 83.05
       },
       {
         "date": "2026-06-04",
-        "valueKg": 82.97
+        "valueKg": 83.05
       },
       {
         "date": "2026-06-05",
-        "valueKg": 82.97
+        "valueKg": 83.05
       },
       {
         "date": "2026-06-06",
-        "valueKg": 82.97
+        "valueKg": 83.05
       },
       {
         "date": "2026-06-07",
-        "valueKg": 82.97
+        "valueKg": 83.05
       },
       {
         "date": "2026-06-08",
-        "valueKg": 83.1
+        "valueKg": 83.13
       },
       {
         "date": "2026-06-09",
-        "valueKg": 83.1
+        "valueKg": 83.13
       },
       {
         "date": "2026-06-10",
-        "valueKg": 83.06
+        "valueKg": 83.09
       },
       {
         "date": "2026-06-11",
-        "valueKg": 83.06
+        "valueKg": 83.09
       },
       {
         "date": "2026-06-12",
-        "valueKg": 83.09
+        "valueKg": 83.11
       },
       {
         "date": "2026-06-13",
-        "valueKg": 83.09
+        "valueKg": 83.11
       },
       {
         "date": "2026-06-14",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-15",
-        "valueKg": 83.26
+        "valueKg": 83.27
       },
       {
         "date": "2026-06-16",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-17",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-18",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-19",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-20",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-21",
-        "valueKg": 83.18
+        "valueKg": 83.19
       },
       {
         "date": "2026-06-22",
-        "valueKg": 83.1
+        "valueKg": 83.11
       },
       {
         "date": "2026-06-23",
-        "valueKg": 82.83
+        "valueKg": 83.03
       },
       {
         "date": "2026-06-24",
-        "valueKg": 82.71
+        "valueKg": 82.9
       },
       {
         "date": "2026-06-25",
-        "valueKg": 82.74
+        "valueKg": 82.91
       },
       {
         "date": "2026-06-26",
-        "valueKg": 82.74
+        "valueKg": 82.91
       },
       {
         "date": "2026-06-27",
-        "valueKg": 82.74
+        "valueKg": 82.91
       },
       {
         "date": "2026-06-28",
-        "valueKg": 82.74
+        "valueKg": 82.91
       },
       {
         "date": "2026-06-29",
-        "valueKg": 82.73
+        "valueKg": 82.88
       },
       {
         "date": "2026-06-30",
-        "valueKg": 82.66
+        "valueKg": 82.8
       },
       {
         "date": "2026-07-01",
-        "valueKg": 82.66
+        "valueKg": 82.8
       },
       {
         "date": "2026-07-02",
-        "valueKg": 82.66
+        "valueKg": 82.8
       },
       {
         "date": "2026-07-03",
-        "valueKg": 82.65
+        "valueKg": 82.78
       },
       {
         "date": "2026-07-04",
-        "valueKg": 82.59
+        "valueKg": 82.71
       },
       {
         "date": "2026-07-05",
-        "valueKg": 82.59
+        "valueKg": 82.71
       },
       {
         "date": "2026-07-06",
-        "valueKg": 82.55
+        "valueKg": 82.65
       },
       {
         "date": "2026-07-07",
-        "valueKg": 82.46
+        "valueKg": 82.57
       },
       {
         "date": "2026-07-08",
-        "valueKg": 82.41
-      },
-      {
-        "date": "2026-07-09",
-        "valueKg": 82.32
-      },
-      {
-        "date": "2026-07-10",
-        "valueKg": 82.24
-      },
-      {
-        "date": "2026-07-11",
-        "valueKg": 82.24
-      },
-      {
-        "date": "2026-07-12",
-        "valueKg": 82.24
-      },
-      {
-        "date": "2026-07-13",
-        "valueKg": 82.35
-      },
-      {
-        "date": "2026-07-14",
-        "valueKg": 82.34
-      },
-      {
-        "date": "2026-07-15",
-        "valueKg": 82.34
-      },
-      {
-        "date": "2026-07-16",
-        "valueKg": 82.31
-      },
-      {
-        "date": "2026-07-17",
-        "valueKg": 82.3
-      },
-      {
-        "date": "2026-07-18",
-        "valueKg": 82.3
-      },
-      {
-        "date": "2026-07-19",
-        "valueKg": 82.29
-      },
-      {
-        "date": "2026-07-20",
-        "valueKg": 82.28
-      },
-      {
-        "date": "2026-07-21",
-        "valueKg": 82.26
-      },
-      {
-        "date": "2026-07-22",
-        "valueKg": 82.13
-      },
-      {
-        "date": "2026-07-23",
-        "valueKg": 82.11
-      },
-      {
-        "date": "2026-07-24",
-        "valueKg": 82.05
-      },
-      {
-        "date": "2026-07-25",
-        "valueKg": 82.05
-      },
-      {
-        "date": "2026-07-26",
-        "valueKg": 82.05
-      },
-      {
-        "date": "2026-07-27",
-        "valueKg": 82.05
-      },
-      {
-        "date": "2026-07-28",
-        "valueKg": 82.05
-      },
-      {
-        "date": "2026-07-29",
-        "valueKg": 82.05
-      },
-      {
-        "date": "2026-07-30",
-        "valueKg": 82.14
-      },
-      {
-        "date": "2026-07-31",
-        "valueKg": 82.18
-      },
-      {
-        "date": "2026-08-01",
-        "valueKg": 82.18
-      },
-      {
-        "date": "2026-08-02",
-        "valueKg": 82.21
-      },
-      {
-        "date": "2026-08-03",
-        "valueKg": 82.21
-      },
-      {
-        "date": "2026-08-04",
-        "valueKg": 82.24
-      },
-      {
-        "date": "2026-08-05",
-        "valueKg": 82.24
-      },
-      {
-        "date": "2026-08-06",
-        "valueKg": 82.3
-      },
-      {
-        "date": "2026-08-07",
-        "valueKg": 82.32
-      },
-      {
-        "date": "2026-08-08",
-        "valueKg": 82.39
-      },
-      {
-        "date": "2026-08-09",
-        "valueKg": 82.39
-      },
-      {
-        "date": "2026-08-10",
-        "valueKg": 82.39
-      },
-      {
-        "date": "2026-08-11",
-        "valueKg": 82.43
-      },
-      {
-        "date": "2026-08-12",
-        "valueKg": 82.47
-      },
-      {
-        "date": "2026-08-13",
         "valueKg": 82.51
       },
       {
+        "date": "2026-07-09",
+        "valueKg": 82.43
+      },
+      {
+        "date": "2026-07-10",
+        "valueKg": 82.35
+      },
+      {
+        "date": "2026-07-11",
+        "valueKg": 82.35
+      },
+      {
+        "date": "2026-07-12",
+        "valueKg": 82.35
+      },
+      {
+        "date": "2026-07-13",
+        "valueKg": 82.43
+      },
+      {
+        "date": "2026-07-14",
+        "valueKg": 82.42
+      },
+      {
+        "date": "2026-07-15",
+        "valueKg": 82.41
+      },
+      {
+        "date": "2026-07-16",
+        "valueKg": 82.38
+      },
+      {
+        "date": "2026-07-17",
+        "valueKg": 82.36
+      },
+      {
+        "date": "2026-07-18",
+        "valueKg": 82.36
+      },
+      {
+        "date": "2026-07-19",
+        "valueKg": 82.34
+      },
+      {
+        "date": "2026-07-20",
+        "valueKg": 82.33
+      },
+      {
+        "date": "2026-07-21",
+        "valueKg": 82.31
+      },
+      {
+        "date": "2026-07-22",
+        "valueKg": 82.23
+      },
+      {
+        "date": "2026-07-23",
+        "valueKg": 82.19
+      },
+      {
+        "date": "2026-07-24",
+        "valueKg": 82.13
+      },
+      {
+        "date": "2026-07-25",
+        "valueKg": 82.13
+      },
+      {
+        "date": "2026-07-26",
+        "valueKg": 82.13
+      },
+      {
+        "date": "2026-07-27",
+        "valueKg": 82.13
+      },
+      {
+        "date": "2026-07-28",
+        "valueKg": 82.13
+      },
+      {
+        "date": "2026-07-29",
+        "valueKg": 82.13
+      },
+      {
+        "date": "2026-07-30",
+        "valueKg": 82.21
+      },
+      {
+        "date": "2026-07-31",
+        "valueKg": 82.24
+      },
+      {
+        "date": "2026-08-01",
+        "valueKg": 82.24
+      },
+      {
+        "date": "2026-08-02",
+        "valueKg": 82.27
+      },
+      {
+        "date": "2026-08-03",
+        "valueKg": 82.27
+      },
+      {
+        "date": "2026-08-04",
+        "valueKg": 82.29
+      },
+      {
+        "date": "2026-08-05",
+        "valueKg": 82.29
+      },
+      {
+        "date": "2026-08-06",
+        "valueKg": 82.35
+      },
+      {
+        "date": "2026-08-07",
+        "valueKg": 82.37
+      },
+      {
+        "date": "2026-08-08",
+        "valueKg": 82.43
+      },
+      {
+        "date": "2026-08-09",
+        "valueKg": 82.43
+      },
+      {
+        "date": "2026-08-10",
+        "valueKg": 82.43
+      },
+      {
+        "date": "2026-08-11",
+        "valueKg": 82.47
+      },
+      {
+        "date": "2026-08-12",
+        "valueKg": 82.5
+      },
+      {
+        "date": "2026-08-13",
+        "valueKg": 82.54
+      },
+      {
         "date": "2026-08-14",
-        "valueKg": 82.55
+        "valueKg": 82.58
       },
       {
         "date": "2026-08-15",
-        "valueKg": 82.59
+        "valueKg": 82.61
       },
       {
         "date": "2026-08-16",
-        "valueKg": 82.68
+        "valueKg": 82.69
       },
       {
         "date": "2026-08-17",
-        "valueKg": 82.68
+        "valueKg": 82.69
       },
       {
         "date": "2026-08-18",
-        "valueKg": 82.68
+        "valueKg": 82.69
       },
       {
         "date": "2026-08-19",
-        "valueKg": 82.67
+        "valueKg": 82.68
       },
       {
         "date": "2026-08-20",
-        "valueKg": 82.7
+        "valueKg": 82.71
       },
       {
         "date": "2026-08-21",
-        "valueKg": 82.74
+        "valueKg": 82.75
       },
       {
         "date": "2026-08-22",
@@ -4334,55 +3518,55 @@
       },
       {
         "date": "2026-08-25",
-        "valueKg": 82.86
+        "valueKg": 82.87
       },
       {
         "date": "2026-08-26",
-        "valueKg": 82.88
+        "valueKg": 82.89
       },
       {
         "date": "2026-08-27",
-        "valueKg": 82.98
+        "valueKg": 82.97
       },
       {
         "date": "2026-08-28",
-        "valueKg": 82.98
+        "valueKg": 82.97
       },
       {
         "date": "2026-08-29",
-        "valueKg": 82.98
+        "valueKg": 82.97
       },
       {
         "date": "2026-08-30",
-        "valueKg": 82.98
+        "valueKg": 82.97
       },
       {
         "date": "2026-08-31",
-        "valueKg": 83.06
-      },
-      {
-        "date": "2026-09-01",
         "valueKg": 83.05
       },
       {
-        "date": "2026-09-02",
+        "date": "2026-09-01",
         "valueKg": 83.04
+      },
+      {
+        "date": "2026-09-02",
+        "valueKg": 83.03
       },
       {
         "date": "2026-09-03",
-        "valueKg": 83.04
+        "valueKg": 83.03
       },
       {
         "date": "2026-09-04",
-        "valueKg": 83.04
+        "valueKg": 83.03
       },
       {
         "date": "2026-09-05",
-        "valueKg": 83.04
+        "valueKg": 83.03
       },
       {
         "date": "2026-09-06",
-        "valueKg": 83.04
+        "valueKg": 83.03
       },
       {
         "date": "2026-09-07",
@@ -4398,251 +3582,251 @@
       },
       {
         "date": "2026-09-10",
-        "valueKg": 83.25
+        "valueKg": 83.24
       },
       {
         "date": "2026-09-11",
-        "valueKg": 83.29
+        "valueKg": 83.28
       },
       {
         "date": "2026-09-12",
-        "valueKg": 83.39
+        "valueKg": 83.36
       },
       {
         "date": "2026-09-13",
-        "valueKg": 83.39
+        "valueKg": 83.36
       },
       {
         "date": "2026-09-14",
-        "valueKg": 83.55
+        "valueKg": 83.44
       },
       {
         "date": "2026-09-15",
-        "valueKg": 83.51
+        "valueKg": 83.41
       },
       {
         "date": "2026-09-16",
-        "valueKg": 83.43
+        "valueKg": 83.34
       },
       {
         "date": "2026-09-17",
-        "valueKg": 83.44
+        "valueKg": 83.36
       },
       {
         "date": "2026-09-18",
-        "valueKg": 83.44
+        "valueKg": 83.36
       },
       {
         "date": "2026-09-19",
-        "valueKg": 83.44
+        "valueKg": 83.36
       },
       {
         "date": "2026-09-20",
-        "valueKg": 83.47
+        "valueKg": 83.4
       },
       {
         "date": "2026-09-21",
-        "valueKg": 83.53
+        "valueKg": 83.47
       },
       {
         "date": "2026-09-22",
-        "valueKg": 83.49
+        "valueKg": 83.43
       },
       {
         "date": "2026-09-23",
-        "valueKg": 83.45
+        "valueKg": 83.4
       },
       {
         "date": "2026-09-24",
-        "valueKg": 83.45
+        "valueKg": 83.4
       },
       {
         "date": "2026-09-25",
-        "valueKg": 83.45
+        "valueKg": 83.4
       },
       {
         "date": "2026-09-26",
-        "valueKg": 83.45
+        "valueKg": 83.4
       },
       {
         "date": "2026-09-27",
-        "valueKg": 83.45
+        "valueKg": 83.4
       },
       {
         "date": "2026-09-28",
-        "valueKg": 83.49
+        "valueKg": 83.44
       },
       {
         "date": "2026-09-29",
-        "valueKg": 83.52
+        "valueKg": 83.48
       },
       {
         "date": "2026-09-30",
-        "valueKg": 83.6
+        "valueKg": 83.56
       },
       {
         "date": "2026-10-01",
-        "valueKg": 83.64
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-02",
-        "valueKg": 83.63
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-03",
-        "valueKg": 83.63
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-04",
-        "valueKg": 83.63
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-05",
-        "valueKg": 83.63
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-06",
-        "valueKg": 83.63
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-07",
-        "valueKg": 83.63
+        "valueKg": 83.6
       },
       {
         "date": "2026-10-08",
-        "valueKg": 83.69
+        "valueKg": 83.66
       },
       {
         "date": "2026-10-09",
-        "valueKg": 83.69
+        "valueKg": 83.66
       },
       {
         "date": "2026-10-10",
-        "valueKg": 83.69
+        "valueKg": 83.66
       },
       {
         "date": "2026-10-11",
-        "valueKg": 83.69
+        "valueKg": 83.66
       },
       {
         "date": "2026-10-12",
-        "valueKg": 83.82
+        "valueKg": 83.74
       },
       {
         "date": "2026-10-13",
-        "valueKg": 83.89
+        "valueKg": 83.82
       },
       {
         "date": "2026-10-14",
-        "valueKg": 83.89
+        "valueKg": 83.82
       },
       {
         "date": "2026-10-15",
-        "valueKg": 83.95
-      },
-      {
-        "date": "2026-10-16",
-        "valueKg": 83.95
-      },
-      {
-        "date": "2026-10-17",
-        "valueKg": 83.93
-      },
-      {
-        "date": "2026-10-18",
-        "valueKg": 83.92
-      },
-      {
-        "date": "2026-10-19",
         "valueKg": 83.88
       },
       {
-        "date": "2026-10-20",
-        "valueKg": 83.84
+        "date": "2026-10-16",
+        "valueKg": 83.88
       },
       {
-        "date": "2026-10-21",
+        "date": "2026-10-17",
+        "valueKg": 83.88
+      },
+      {
+        "date": "2026-10-18",
+        "valueKg": 83.87
+      },
+      {
+        "date": "2026-10-19",
         "valueKg": 83.83
       },
       {
+        "date": "2026-10-20",
+        "valueKg": 83.8
+      },
+      {
+        "date": "2026-10-21",
+        "valueKg": 83.79
+      },
+      {
         "date": "2026-10-22",
-        "valueKg": 83.85
+        "valueKg": 83.82
       },
       {
         "date": "2026-10-23",
-        "valueKg": 83.85
+        "valueKg": 83.82
       },
       {
         "date": "2026-10-24",
-        "valueKg": 83.85
+        "valueKg": 83.82
       },
       {
         "date": "2026-10-25",
-        "valueKg": 83.85
+        "valueKg": 83.82
       },
       {
         "date": "2026-10-26",
-        "valueKg": 83.91
+        "valueKg": 83.88
       },
       {
         "date": "2026-10-27",
-        "valueKg": 83.95
+        "valueKg": 83.92
       },
       {
         "date": "2026-10-28",
-        "valueKg": 83.98
+        "valueKg": 83.96
       },
       {
         "date": "2026-10-29",
-        "valueKg": 83.97
-      },
-      {
-        "date": "2026-10-30",
-        "valueKg": 83.97
-      },
-      {
-        "date": "2026-10-31",
-        "valueKg": 83.96
-      },
-      {
-        "date": "2026-11-01",
-        "valueKg": 83.96
-      },
-      {
-        "date": "2026-11-02",
         "valueKg": 83.95
       },
       {
+        "date": "2026-10-30",
+        "valueKg": 83.95
+      },
+      {
+        "date": "2026-10-31",
+        "valueKg": 83.94
+      },
+      {
+        "date": "2026-11-01",
+        "valueKg": 83.94
+      },
+      {
+        "date": "2026-11-02",
+        "valueKg": 83.94
+      },
+      {
         "date": "2026-11-03",
-        "valueKg": 83.98
+        "valueKg": 83.96
       },
       {
         "date": "2026-11-04",
-        "valueKg": 83.97
+        "valueKg": 83.96
       },
       {
         "date": "2026-11-05",
-        "valueKg": 84.01
+        "valueKg": 84.0
       },
       {
         "date": "2026-11-06",
-        "valueKg": 83.99
-      },
-      {
-        "date": "2026-11-07",
-        "valueKg": 83.99
-      },
-      {
-        "date": "2026-11-08",
         "valueKg": 83.98
       },
       {
+        "date": "2026-11-07",
+        "valueKg": 83.98
+      },
+      {
+        "date": "2026-11-08",
+        "valueKg": 83.97
+      },
+      {
         "date": "2026-11-09",
-        "valueKg": 84.04
+        "valueKg": 84.03
       },
       {
         "date": "2026-11-10",
-        "valueKg": 84.08
+        "valueKg": 84.07
       },
       {
         "date": "2026-11-11",
@@ -4654,550 +3838,166 @@
       },
       {
         "date": "2026-11-13",
-        "valueKg": 84.12
+        "valueKg": 84.11
       },
       {
         "date": "2026-11-14",
-        "valueKg": 84.12
+        "valueKg": 84.11
       },
       {
         "date": "2026-11-15",
-        "valueKg": 84.12
+        "valueKg": 84.11
       },
       {
         "date": "2026-11-16",
-        "valueKg": 84.21
+        "valueKg": 84.19
       },
       {
         "date": "2026-11-17",
-        "valueKg": 84.23
+        "valueKg": 84.22
       },
       {
         "date": "2026-11-18",
-        "valueKg": 84.23
+        "valueKg": 84.22
       },
       {
         "date": "2026-11-19",
-        "valueKg": 84.21
+        "valueKg": 84.19
       },
       {
         "date": "2026-11-20",
-        "valueKg": 84.15
+        "valueKg": 84.13
       },
       {
         "date": "2026-11-21",
-        "valueKg": 84.17
+        "valueKg": 84.15
       },
       {
         "date": "2026-11-22",
-        "valueKg": 84.22
+        "valueKg": 84.21
       },
       {
         "date": "2026-11-23",
-        "valueKg": 84.22
+        "valueKg": 84.21
       },
       {
         "date": "2026-11-24",
-        "valueKg": 84.21
+        "valueKg": 84.2
       },
       {
         "date": "2026-11-25",
-        "valueKg": 84.21
+        "valueKg": 84.2
+      },
+      {
+        "date": "2026-11-26",
+        "valueKg": 84.22
       }
     ],
     "prediction": [
       {
-        "date": "2026-11-25",
-        "valueKg": 84.21
+        "date": "2026-11-26",
+        "valueKg": 84.22
       },
       {
-        "date": "2026-12-02",
-        "valueKg": 84.25
+        "date": "2026-12-03",
+        "valueKg": 84.28
       },
       {
-        "date": "2026-12-09",
-        "valueKg": 84.29
-      },
-      {
-        "date": "2026-12-16",
+        "date": "2026-12-10",
         "valueKg": 84.33
       },
       {
-        "date": "2026-12-23",
-        "valueKg": 84.37
+        "date": "2026-12-17",
+        "valueKg": 84.39
       },
       {
-        "date": "2026-12-30",
-        "valueKg": 84.41
-      },
-      {
-        "date": "2027-01-06",
+        "date": "2026-12-24",
         "valueKg": 84.45
       },
       {
-        "date": "2027-01-13",
-        "valueKg": 84.49
+        "date": "2026-12-31",
+        "valueKg": 84.54
       },
       {
-        "date": "2027-01-20",
-        "valueKg": 84.53
+        "date": "2027-01-07",
+        "valueKg": 84.64
       },
       {
-        "date": "2027-01-27",
-        "valueKg": 84.57
+        "date": "2027-01-14",
+        "valueKg": 84.73
       },
       {
-        "date": "2027-02-03",
-        "valueKg": 84.61
+        "date": "2027-01-21",
+        "valueKg": 84.83
       },
       {
-        "date": "2027-02-10",
-        "valueKg": 84.65
+        "date": "2027-01-28",
+        "valueKg": 84.92
       },
       {
-        "date": "2027-02-17",
-        "valueKg": 84.69
-      }
-    ],
-    "predictionCI": [
-      {
-        "date": "2026-12-02",
-        "central": 84.25,
-        "lower80": 83.53,
-        "upper80": 84.97
-      },
-      {
-        "date": "2026-12-09",
-        "central": 84.29,
-        "lower80": 83.47,
-        "upper80": 85.11
-      },
-      {
-        "date": "2026-12-16",
-        "central": 84.33,
-        "lower80": 83.51,
-        "upper80": 85.15
-      },
-      {
-        "date": "2026-12-23",
-        "central": 84.37,
-        "lower80": 83.35,
-        "upper80": 85.39
-      },
-      {
-        "date": "2026-12-30",
-        "central": 84.41,
-        "lower80": 83.39,
-        "upper80": 85.43
-      },
-      {
-        "date": "2027-01-06",
-        "central": 84.45,
-        "lower80": 83.43,
-        "upper80": 85.47
-      },
-      {
-        "date": "2027-01-13",
-        "central": 84.49,
-        "lower80": 83.47,
-        "upper80": 85.51
-      },
-      {
-        "date": "2027-01-20",
-        "central": 84.53,
-        "lower80": 83.46,
-        "upper80": 85.6
-      },
-      {
-        "date": "2027-01-27",
-        "central": 84.57,
-        "lower80": 83.44,
-        "upper80": 85.7
-      },
-      {
-        "date": "2027-02-03",
-        "central": 84.61,
-        "lower80": 83.42,
-        "upper80": 85.8
-      },
-      {
-        "date": "2027-02-10",
-        "central": 84.65,
-        "lower80": 83.4,
-        "upper80": 85.9
-      },
-      {
-        "date": "2027-02-17",
-        "central": 84.69,
-        "lower80": 83.38,
-        "upper80": 86.0
-      }
-    ],
-    "steps": [
-      {
-        "date": "2026-10-27",
-        "value": 9699
-      },
-      {
-        "date": "2026-10-28",
-        "value": 9633
-      },
-      {
-        "date": "2026-10-29",
-        "value": 8680
-      },
-      {
-        "date": "2026-10-30",
-        "value": 8084
-      },
-      {
-        "date": "2026-10-31",
-        "value": 8193
-      },
-      {
-        "date": "2026-11-01",
-        "value": 4750
-      },
-      {
-        "date": "2026-11-02",
-        "value": 8572
-      },
-      {
-        "date": "2026-11-03",
-        "value": 10583
-      },
-      {
-        "date": "2026-11-04",
-        "value": 9538
-      },
-      {
-        "date": "2026-11-05",
-        "value": 8808
-      },
-      {
-        "date": "2026-11-06",
-        "value": 9002
-      },
-      {
-        "date": "2026-11-07",
-        "value": 2993
-      },
-      {
-        "date": "2026-11-08",
-        "value": 4752
-      },
-      {
-        "date": "2026-11-09",
-        "value": 8235
-      },
-      {
-        "date": "2026-11-10",
-        "value": 10231
-      },
-      {
-        "date": "2026-11-11",
-        "value": 7410
-      },
-      {
-        "date": "2026-11-12",
-        "value": 9091
-      },
-      {
-        "date": "2026-11-13",
-        "value": 9695
-      },
-      {
-        "date": "2026-11-14",
-        "value": 3578
-      },
-      {
-        "date": "2026-11-15",
-        "value": 4245
-      },
-      {
-        "date": "2026-11-16",
-        "value": 10298
-      },
-      {
-        "date": "2026-11-17",
-        "value": 9646
-      },
-      {
-        "date": "2026-11-18",
-        "value": 4223
-      },
-      {
-        "date": "2026-11-19",
-        "value": 10434
-      },
-      {
-        "date": "2026-11-20",
-        "value": 9252
-      },
-      {
-        "date": "2026-11-21",
-        "value": 6453
-      },
-      {
-        "date": "2026-11-22",
-        "value": 9639
-      },
-      {
-        "date": "2026-11-23",
-        "value": 5202
-      },
-      {
-        "date": "2026-11-24",
-        "value": 2632
-      },
-      {
-        "date": "2026-11-25",
-        "value": 117
-      }
-    ],
-    "exerciseMinutes": [
-      {
-        "date": "2026-10-27",
-        "value": 39.0
-      },
-      {
-        "date": "2026-10-28",
-        "value": 25.0
-      },
-      {
-        "date": "2026-10-29",
-        "value": 34.0
-      },
-      {
-        "date": "2026-10-30",
-        "value": 33.0
-      },
-      {
-        "date": "2026-10-31",
-        "value": 0
-      },
-      {
-        "date": "2026-11-01",
-        "value": 0
-      },
-      {
-        "date": "2026-11-02",
-        "value": 54.0
-      },
-      {
-        "date": "2026-11-03",
-        "value": 62.0
-      },
-      {
-        "date": "2026-11-04",
-        "value": 35.0
-      },
-      {
-        "date": "2026-11-05",
-        "value": 43.0
-      },
-      {
-        "date": "2026-11-06",
-        "value": 38.0
-      },
-      {
-        "date": "2026-11-07",
-        "value": 0
-      },
-      {
-        "date": "2026-11-08",
-        "value": 0
-      },
-      {
-        "date": "2026-11-09",
-        "value": 41.0
-      },
-      {
-        "date": "2026-11-10",
-        "value": 48.0
-      },
-      {
-        "date": "2026-11-11",
-        "value": 31.0
-      },
-      {
-        "date": "2026-11-12",
-        "value": 43.0
-      },
-      {
-        "date": "2026-11-13",
-        "value": 61.0
-      },
-      {
-        "date": "2026-11-14",
-        "value": 0
-      },
-      {
-        "date": "2026-11-15",
-        "value": 0
-      },
-      {
-        "date": "2026-11-16",
-        "value": 59.0
-      },
-      {
-        "date": "2026-11-17",
-        "value": 72.0
-      },
-      {
-        "date": "2026-11-18",
-        "value": 0
-      },
-      {
-        "date": "2026-11-19",
-        "value": 58.0
-      },
-      {
-        "date": "2026-11-20",
-        "value": 46.0
-      },
-      {
-        "date": "2026-11-21",
-        "value": 7.0
-      },
-      {
-        "date": "2026-11-22",
-        "value": 0
-      },
-      {
-        "date": "2026-11-23",
-        "value": 0
-      },
-      {
-        "date": "2026-11-24",
-        "value": 0
-      },
-      {
-        "date": "2026-11-25",
-        "value": 0
-      }
-    ],
-    "exerciseCaloriesDaily": [
-      {
-        "date": "2026-10-27",
-        "value": 466.0
-      },
-      {
-        "date": "2026-10-28",
-        "value": 337.0
-      },
-      {
-        "date": "2026-10-29",
-        "value": 351.0
-      },
-      {
-        "date": "2026-10-30",
-        "value": 305.0
-      },
-      {
-        "date": "2026-10-31",
-        "value": 309.0
-      },
-      {
-        "date": "2026-11-01",
-        "value": 114.0
-      },
-      {
-        "date": "2026-11-02",
-        "value": 382.0
-      },
-      {
-        "date": "2026-11-03",
-        "value": 559.0
-      },
-      {
-        "date": "2026-11-04",
-        "value": 446.0
-      },
-      {
-        "date": "2026-11-05",
-        "value": 335.0
-      },
-      {
-        "date": "2026-11-06",
-        "value": 351.0
-      },
-      {
-        "date": "2026-11-07",
-        "value": 47.0
-      },
-      {
-        "date": "2026-11-08",
-        "value": 136.0
-      },
-      {
-        "date": "2026-11-09",
-        "value": 358.0
-      },
-      {
-        "date": "2026-11-10",
-        "value": 464.0
-      },
-      {
-        "date": "2026-11-11",
-        "value": 384.0
-      },
-      {
-        "date": "2026-11-12",
-        "value": 394.0
-      },
-      {
-        "date": "2026-11-13",
-        "value": 497.0
-      },
-      {
-        "date": "2026-11-14",
-        "value": 69.0
-      },
-      {
-        "date": "2026-11-15",
-        "value": 174.0
-      },
-      {
-        "date": "2026-11-16",
-        "value": 698.0
-      },
-      {
-        "date": "2026-11-17",
-        "value": 629.0
-      },
-      {
-        "date": "2026-11-18",
-        "value": 196.0
-      },
-      {
-        "date": "2026-11-19",
-        "value": 475.0
-      },
-      {
-        "date": "2026-11-20",
-        "value": 470.0
-      },
-      {
-        "date": "2026-11-21",
-        "value": 232.0
-      },
-      {
-        "date": "2026-11-22",
-        "value": 306.0
-      },
-      {
-        "date": "2026-11-23",
-        "value": 193.0
+        "date": "2027-02-04",
+        "valueKg": 85.02
       },
       {
-        "date": "2026-11-24",
-        "value": 234.0
+        "date": "2027-02-11",
+        "valueKg": 85.11
       },
       {
-        "date": "2026-11-25",
-        "value": 2.0
+        "date": "2027-02-18",
+        "valueKg": 85.21
       }
     ]
+  },
+  "sync": {
+    "status": "ok",
+    "auth": "password",
+    "lastAttemptAt": "2026-11-25T23:46:51Z",
+    "lastSuccessAt": "2026-11-25T23:46:51Z",
+    "days": 3,
+    "endDate": "2026-11-26",
+    "calls": {
+      "ok": 18,
+      "empty": 3,
+      "failed": 0
+    },
+    "failedEndpoints": [],
+    "endpoints": {
+      "get_activities_fordate": {
+        "ok": 3,
+        "empty": 0,
+        "failed": 0
+      },
+      "get_body_composition": {
+        "ok": 3,
+        "empty": 0,
+        "failed": 0
+      },
+      "get_heart_rates": {
+        "ok": 3,
+        "empty": 0,
+        "failed": 0
+      },
+      "get_sleep_data": {
+        "ok": 3,
+        "empty": 0,
+        "failed": 0
+      },
+      "get_stats": {
+        "ok": 3,
+        "empty": 0,
+        "failed": 0
+      },
+      "get_training_readiness": {
+        "ok": 0,
+        "empty": 3,
+        "failed": 0
+      },
+      "get_training_status": {
+        "ok": 3,
+        "empty": 0,
+        "failed": 0
+      }
+    },
+    "keptDays": []
   }
 }
