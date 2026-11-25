@@ -57,6 +57,26 @@ def step_scripts(workflow: str) -> dict[str, str]:
     return scripts
 
 
+def step_block(workflow: str, step_name: str) -> str:
+    """이름으로 찾은 스텝의 YAML 원문(다음 스텝 전까지)."""
+    lines = (WORKFLOWS / workflow).read_text(encoding="utf-8").splitlines()
+    start = next(index for index, line in enumerate(lines) if line.strip() == f"- name: {step_name}")
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    block = [lines[start]]
+    for line in lines[start + 1:]:
+        if line.strip().startswith("- ") and len(line) - len(line.lstrip()) == indent:
+            break
+        block.append(line)
+    return "\n".join(block)
+
+
+def step_condition(workflow: str, step_name: str) -> str | None:
+    for line in step_block(workflow, step_name).splitlines():
+        if line.strip().startswith("if:"):
+            return line.strip()[len("if:"):].strip()
+    return None
+
+
 def run_bash(script: str, env: dict[str, str] | None = None, *extra_args: str) -> subprocess.CompletedProcess:
     assert BASH is not None
     with tempfile.TemporaryDirectory() as tmp:
@@ -126,6 +146,37 @@ class SyncStepInputTests(unittest.TestCase):
         self.assertNotIn("((", body)
         self.assertNotIn("--protect-existing", body)
         self.assertNotIn("date +", body)
+
+
+class SyncStepConditionTests(unittest.TestCase):
+    """수집 워크플로의 스텝 조건(재검토 SY9, SY11). 러너에서는 main의 실행으로만 확인되므로 글자로 고정한다."""
+
+    def test_commit_depends_on_the_sync_step_only(self) -> None:
+        # success()로 걸면 수집 뒤의 뒷정리(토큰 암호화, 캐시 저장, 아티팩트)가 실패했을 때 받은 데이터가 버려진다.
+        self.assertIn("id: sync", step_block(SYNC_WORKFLOW, "Sync Garmin aggregates"))
+        condition = step_condition(SYNC_WORKFLOW, "Commit and push data") or ""
+        self.assertIn("steps.sync.outcome == 'success'", condition)
+        self.assertIn("github.ref == 'refs/heads/main'", condition)
+        self.assertIn("!cancelled()", condition)
+        self.assertNotIn("success()", condition)
+
+    def test_token_cache_is_restored_and_saved_on_main_only(self) -> None:
+        # 다른 브랜치의 수동 실행이 main의 토큰으로 로그인하면 갱신된 토큰이 저장되지 않아 main의 캐시가 무효가 된다.
+        self.assertEqual("github.ref == 'refs/heads/main'", step_condition(SYNC_WORKFLOW, "Restore token cache"))
+        self.assertIn("github.ref == 'refs/heads/main'", step_condition(SYNC_WORKFLOW, "Encrypt tokens for the cache") or "")
+        self.assertIn("steps.token-encrypt.outputs.save == 'true'", step_condition(SYNC_WORKFLOW, "Save token cache") or "")
+
+    def test_cleanup_steps_run_after_a_failed_sync(self) -> None:
+        for name in ("Encrypt tokens for the cache", "Save token cache", "Remove plaintext tokens", "Upload artifacts"):
+            with self.subTest(step=name):
+                self.assertIn("always()", step_condition(SYNC_WORKFLOW, name) or "")
+
+    def test_probe_uses_its_own_token_cache(self) -> None:
+        for name in ("Restore probe token cache", "Save probe token cache"):
+            with self.subTest(step=name):
+                block = step_block(PROBE_WORKFLOW, name)
+                self.assertIn("garmin-tokens-probe-v1-", block)
+                self.assertNotIn("garmin-tokens-v1-", block)
 
 
 @unittest.skipUnless(BASH or os.environ.get("CI"), "bash not found")

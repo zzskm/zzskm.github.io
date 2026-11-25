@@ -79,7 +79,10 @@ jobs:
       # 토큰 캐시(S1): garminconnect 토큰 파일을 GARMIN_TOKENS 값으로 암호화해 Actions 캐시에 둔다.
       # 캐시는 바꿀 수 없으므로 실행마다 새 키로 저장하고, 복원은 접두사로 가장 최근 것을 받는다.
       # 경로 문자열이 캐시 버전에 들어가므로 복원과 저장은 같은 경로를 써야 한다.
+      # 복원도 저장처럼 main에서만 한다. 다른 브랜치의 수동 실행이 main의 토큰으로 로그인하면 토큰이 갱신될 수 있는데,
+      # 그 실행은 저장하지 않으므로 main의 캐시에 남은 리프레시 토큰이 무효가 된다. 다른 브랜치는 비밀번호로 로그인한다.
       - name: Restore token cache
+        if: github.ref == 'refs/heads/main'
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ${{ runner.temp }}/garmin-token-cache
@@ -117,6 +120,7 @@ jobs:
       # 4일 이상이면 보호 병합으로 돈다(값이 있던 칸을 비우거나 0으로 만들지 않는다). 그것도 스크립트가 정한다.
       # 여기서는 형태만 본다. 셸 산술은 08·099 같은 값을 8진수로 읽다 실패해 검사가 통째로 빠지므로 쓰지 않는다.
       - name: Sync Garmin aggregates
+        id: sync
         run: |
           set -euo pipefail
           if ! [[ "${BACKFILL_DAYS}" =~ ^[1-9][0-9]?$ ]]; then
@@ -183,10 +187,12 @@ jobs:
           # 같은 내용이 커밋되므로 오래 둘 필요가 없다. 실패한 실행의 결과를 볼 때만 쓴다.
           retention-days: 7
 
-      # 수집이 전부 실패하면 sync 스크립트가 1로 끝나 이 스텝은 건너뛴다(직전 데이터 유지, 실패 알림).
+      # 수집이 실패하면(전부 실패, 중간에 멈춤, Garmin 응답 없음) sync 스크립트가 1로 끝나 이 스텝은 건너뛴다
+      # (직전 데이터 유지, 실패 알림). 조건은 수집 스텝의 결과만 본다. 수집은 성공했는데 그 뒤의 뒷정리
+      # (토큰 암호화, 캐시 저장, 아티팩트 업로드)가 실패했다고 받은 데이터를 버리지 않는다.
       # 데이터 파일은 이 워크플로만 쓴다. 푸시가 밀리면 최신 main 위에 같은 두 파일을 다시 얹어 커밋한다.
       - name: Commit and push data
-        if: success() && github.ref == 'refs/heads/main'
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' && github.ref == 'refs/heads/main' }}
         env:
           DATA_FILES: "garmin-weight/data/daily_metrics.csv garmin-weight/data/summary.json"
           MAX_ATTEMPTS: "5"
