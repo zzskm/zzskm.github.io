@@ -6,16 +6,16 @@
   <meta name="color-scheme" content="light" />
   <meta name="theme-color" content="#f5f6f8" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-  <title>상하이 처방 여행 · 청주 출발 (11/28–12/02)</title>
-  <meta name="description" content="청주공항에서 춘추항공으로 떠나는 2026년 11/28-12/2 상하이 4박 5일 여행. 현지 일정표·지도·예약·관세 체크·숙소 택배 수령 문의·상하이 미식 가이드 및 주차비 포함 견적" />
+  <title>상하이 4박 5일 여행 · 청주 출발 (11/28–12/02)</title>
+  <meta name="description" content="청주공항에서 춘추항공으로 떠나는 2026년 11/28–12/02 상하이 4박 5일 현지 일정표. 날짜별 일정·지도와 식당·택시 카드·중국어 회화 카드·지출 기록" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="상하이 처방 여행 · 청주 출발 (11/28–12/02)" />
-  <meta property="og:description" content="청주 출발 상하이 4박 5일 · 실행 모드 일정표 &amp; 숙소 택배 수령 문의 · 주차비·로밍 포함 견적" />
+  <meta property="og:title" content="상하이 4박 5일 여행 · 청주 출발 (11/28–12/02)" />
+  <meta property="og:description" content="청주 출발 상하이 4박 5일 · 현지 일정표 · 택시 카드 · 중국어 회화 카드" />
   <link rel="preload" as="script" href="trip_2026_dec_china.data.js" />
   <link rel="stylesheet" href="trip_2026_dec.styles.css" />
   <link rel="stylesheet" href="trip_2026_dec_china.styles.css" />
 </head>
-<body class="shanghai-shell mode-field">
+<body class="shanghai-shell">
   <a class="skip-link" href="#field-main">본문으로 건너뛰기</a>
   <header class="topbar sh-topbar">
     <div class="sh-topbar-row">
@@ -26,25 +26,18 @@
       </div>
     </div>
     <p class="sh-topbar-meta">
-      <span>11/28(토)–12/02(수)</span> · <span>청주 출발 2인</span> · <span>예약 확정</span><span class="sh-meta-wide"> (항공·숙소·통신사 로밍)</span>
+      <span>11/28(토)–12/02(수)</span> · <span>청주 출발 2인</span> · <span>항공·숙소 확정</span>
       <span class="sh-meta-flights">· 9C7050 12:00 → 13:15 · 9C7049 11:00 → 14:05</span>
-    </p>
-    <div class="mode-switch" role="group" aria-label="화면 모드 전환">
-      <button type="button" id="mode-btn-field" class="mode-btn is-active" aria-pressed="true" data-mode="field">일정표</button>
-      <button type="button" id="mode-btn-plan" class="mode-btn" aria-pressed="false" data-mode="plan">준비 · 견적</button>
-    </div>
-    <p class="sh-topbar-sub">
-      출발 전 주차·로밍·숙소 분할(A 2박 + B 2박)·견적을 비교하는 <strong>준비·견적 모드</strong>입니다. 기준일 <strong id="head-asof">-</strong>.
     </p>
   </header>
 
-  <div id="field-mode" class="field-shell">
+  <div id="field-app" class="field-shell">
     <section id="field-dashboard" class="field-dashboard" aria-label="여행 요약 대시보드"></section>
 
-    <nav class="field-nav-desktop" aria-label="상하이 실행 메뉴">
+    <nav class="field-nav-desktop" aria-label="상하이 일정표 메뉴">
       <button type="button" class="field-nav-btn is-active" data-ftab="schedule" aria-pressed="true">일정</button>
       <button type="button" class="field-nav-btn" data-ftab="map" aria-pressed="false">지도 · 식당</button>
-      <button type="button" class="field-nav-btn" data-ftab="bookings" aria-pressed="false">예약 · 준비</button>
+      <button type="button" class="field-nav-btn" data-ftab="phrases" aria-pressed="false">회화</button>
       <button type="button" class="field-nav-btn" data-ftab="budget" aria-pressed="false">비용</button>
       <button type="button" class="field-nav-btn" data-ftab="notes" aria-pressed="false">메모</button>
     </nav>
@@ -52,8 +45,7 @@
     <main id="field-main" class="field-main" tabindex="-1">
       <section id="ftab-schedule" class="field-panel" data-fpanel="schedule"></section>
       <section id="ftab-map" class="field-panel" data-fpanel="map" hidden></section>
-      <section id="ftab-prep" class="field-panel" data-fpanel="prep" hidden></section>
-      <section id="ftab-bookings" class="field-panel" data-fpanel="bookings" hidden></section>
+      <section id="ftab-phrases" class="field-panel" data-fpanel="phrases" hidden></section>
       <section id="ftab-budget" class="field-panel" data-fpanel="budget" hidden></section>
       <section id="ftab-notes" class="field-panel" data-fpanel="notes" hidden></section>
     </main>
@@ -61,366 +53,10 @@
     <nav class="field-nav-mobile" aria-label="모바일 하단 메뉴">
       <button type="button" class="field-mnav-btn is-active" data-ftab="schedule" aria-pressed="true"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><span>일정</span></button>
       <button type="button" class="field-mnav-btn" data-ftab="map" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg></span><span>지도</span></button>
-      <button type="button" class="field-mnav-btn" data-ftab="bookings" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M8 12.5l3 3 5-6"/></svg></span><span>예약·준비</span></button>
+      <button type="button" class="field-mnav-btn" data-ftab="phrases" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5h16v10.5h-8.5L7 20v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/></svg></span><span>회화</span></button>
       <button type="button" class="field-mnav-btn" data-ftab="budget" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9 7.5l3 4.5 3-4.5M12 12v5M9.5 13h5M9.5 15.5h5"/></svg></span><span>비용</span></button>
       <button type="button" class="field-mnav-btn" data-ftab="notes" aria-pressed="false"><span class="mnav-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h9l3.5 3.5v13.5H6z"/><path d="M9 11h6M9 14.5h6M9 8h3"/></svg></span><span>메모</span></button>
     </nav>
-  </div>
-
-  <div id="plan-mode" class="plan-shell" hidden>
-  <main class="layout">
-    <section class="panel panel-left" id="cards-panel" aria-label="카드 선택">
-      <div class="panel-head">
-        <h2>카드 선택</h2>
-        <div class="panel-tools">
-          <button id="toggle-all" class="mini-btn" type="button">모두 접기</button>
-          <button id="reset-state" class="mini-btn" type="button">초기화</button>
-        </div>
-      </div>
-      <p class="field-note panel-hint">카드를 고르면 일정과 금액이 바로 바뀝니다. <span class="delta is-up">+금액</span> <span class="delta is-down">−금액</span>은 그 카드로 바꿀 때 1인 비용이 달라지는 폭입니다.</p>
-
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">01</span> 일정 · 인원</h3>
-
-      <div class="category is-open" data-section="city">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-city">
-          <span class="category-title">도시</span>
-          <span id="summary-city" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-city">
-          <div id="city-options"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="party">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-party">
-          <span class="category-title">인원</span>
-          <span id="summary-party" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-party">
-          <div id="party-controls"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="schedule">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-schedule">
-          <span class="category-title">일정 · 시기</span>
-          <span id="summary-schedule" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-schedule">
-          <div class="card-group">
-            <p class="group-label">출발 방식</p>
-            <div id="departure-options" class="card-grid"></div>
-          </div>
-          <div class="card-group">
-            <p class="group-label">기간</p>
-            <div id="duration-options" class="card-grid"></div>
-          </div>
-          <div class="card-group">
-            <p class="group-label">출발 시기</p>
-            <div id="season-options" class="card-grid"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="fx">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-fx">
-          <span id="title-fx" class="category-title">환율</span>
-          <span id="summary-fx" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-fx">
-          <div id="fx-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">02</span> 마운자로 처방</h3>
-
-      <div class="category is-open" data-section="rx">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-rx">
-          <span class="category-title">용량 · 처방일</span>
-          <span id="summary-rx" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-rx">
-          <div class="card-group">
-            <p id="label-rxPlan" class="group-label">용량 · 수량</p>
-            <div id="rxPlan-options" class="card-grid"></div>
-          </div>
-          <div class="card-group">
-            <p id="label-rxDay" class="group-label">처방일 (이날 밤부터 2인 1실)</p>
-            <div id="rxDay-options" class="card-grid"></div>
-          </div>
-          <div id="warn-rx" class="warn-list" role="status" hidden></div>
-          <div id="rxPatients-controls"></div>
-        </div>
-      </div>
-
-      <p id="city-divider" class="city-divider">여기부터는 도시마다 따로 저장됩니다.</p>
-
-      <div class="category is-open" data-section="clinic">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-clinic">
-          <span id="title-clinic" class="category-title">처방 클리닉 · 수령 방식</span>
-          <span id="summary-clinic" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-clinic">
-          <div id="clinic-options" class="card-grid card-grid-wide"></div>
-          <div id="warn-clinic" class="warn-list" role="status" hidden></div>
-        </div>
-      </div>
-
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">03</span> 이동 · 숙소</h3>
-
-      <div class="category is-open" data-section="flight">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-flight">
-          <span id="title-flight" class="category-title">항공 (1인 왕복)</span>
-          <span id="summary-flight" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-flight">
-          <div id="flight-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="parking" id="section-parking" hidden>
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-parking">
-          <span id="title-parking" class="category-title">국내 공항 주차 (자차)</span>
-          <span id="summary-parking" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-parking">
-          <div id="parking-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="airport">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-airport">
-          <span id="title-airport" class="category-title">공항 이동</span>
-          <span id="summary-airport" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-airport">
-          <div id="airport-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="data" id="section-data" hidden>
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-data">
-          <span class="category-title">인터넷 (eSIM · 로밍)</span>
-          <span id="summary-data" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-data">
-          <div id="data-options" class="card-grid card-grid-wide"></div>
-          <div id="warn-data" class="warn-list" role="status" hidden></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="stayPre">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayPre">
-          <span id="title-stayPre" class="category-title">처방 전 숙소 · 초저가</span>
-          <span id="summary-stayPre" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-stayPre">
-          <div id="stayPre-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="roomConfig">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-roomConfig">
-          <span id="title-roomConfig" class="category-title">처방 후 객실 구성</span>
-          <span id="summary-roomConfig" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-roomConfig">
-          <div id="roomConfig-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="stayA">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayA">
-          <span id="title-stayA" class="category-title">처방 후 숙소 · 2인 1실</span>
-          <span id="summary-stayA" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-stayA">
-          <div id="stayA-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="stayB">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-stayB">
-          <span id="title-stayB" class="category-title">B숙소 (뒤 1·2박 분할)</span>
-          <span id="summary-stayB" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-stayB">
-          <div id="stayB-options" class="card-grid"></div>
-          <div id="stayB-nights-controls"></div>
-          <div id="warn-stayB" class="warn-list" role="status" hidden></div>
-        </div>
-      </div>
-
-      <h3 class="step-title"><span class="step-num" aria-hidden="true">04</span> 식사 · 관광</h3>
-
-      <div class="category is-open" data-section="meal">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-meal">
-          <span class="category-title">식비</span>
-          <span id="summary-meal" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-meal">
-          <div id="meal-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="transport">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-transport">
-          <span class="category-title">시내 교통</span>
-          <span id="summary-transport" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-transport">
-          <div id="transport-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="activityPacks">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activityPacks">
-          <span class="category-title">액티비티 팩 (한 번에 고르기)</span>
-          <span id="summary-activityPack" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-activityPacks">
-          <div id="activityPack-options" class="card-grid"></div>
-        </div>
-      </div>
-
-      <div class="category is-open" data-section="activities">
-        <button class="category-toggle" type="button" aria-expanded="true" aria-controls="cat-activities">
-          <span id="title-activities" class="category-title">액티비티</span>
-          <span id="summary-activities" class="category-summary"></span>
-          <span class="category-arrow" aria-hidden="true">▾</span>
-        </button>
-        <div class="category-body" id="cat-activities">
-          <div id="warn-activities" class="warn-list" role="status" hidden></div>
-          <div id="activity-controls"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel panel-right" id="result-panel" aria-label="결과" tabindex="-1">
-      <div class="result-head">
-        <div class="result-top">
-          <h2>1인 예상 비용</h2>
-          <p class="result-context" id="result-context">-</p>
-        </div>
-        <div class="result-main">
-          <p class="big-number"><span id="per-person-total" aria-live="polite">-</span><span id="result-delta" class="delta-flash" hidden></span></p>
-          <p class="result-band" id="per-person-band">-</p>
-        </div>
-        <dl class="result-stats">
-          <div class="stat">
-            <dt id="group-total-label">총액</dt>
-            <dd class="stat-value" id="group-total">-</dd>
-            <dd class="stat-sub" id="group-total-sub"></dd>
-          </div>
-          <div class="stat" id="per-month" hidden>
-            <dt id="per-month-label">처방 1개월분당</dt>
-            <dd class="stat-value" id="per-month-value">-</dd>
-            <dd class="stat-sub" id="per-month-sub"></dd>
-          </div>
-        </dl>
-        <p class="result-cond" id="rx-condition" hidden></p>
-      </div>
-
-      <div class="tabs" id="result-tabs" role="tablist" aria-label="결과 종류">
-        <button type="button" class="tab" role="tab" id="tab-plan" data-tab="plan" aria-controls="panel-plan" aria-selected="true">일정<span id="tab-plan-badge" class="tab-badge" hidden></span></button>
-        <button type="button" class="tab" role="tab" id="tab-cost" data-tab="cost" aria-controls="panel-cost" aria-selected="false" tabindex="-1">비용</button>
-        <button type="button" class="tab" role="tab" id="tab-rx" data-tab="rx" aria-controls="panel-rx" aria-selected="false" tabindex="-1">처방 준비</button>
-        <button type="button" class="tab" role="tab" id="tab-book" data-tab="book" aria-controls="panel-book" aria-selected="false" tabindex="-1">예약 · 메모</button>
-      </div>
-
-      <div class="result-scroll" id="result-scroll">
-        <div class="tab-panel" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
-          <div id="timeline-warning" class="warn-list" role="status" hidden></div>
-          <details class="fold pretrip" id="pretrip-block" open>
-            <summary><span class="pretrip-title">출발 전 할 일</span><span id="pretrip-count" class="fold-count"></span></summary>
-            <ul id="pretrip-list" class="check-list"></ul>
-          </details>
-          <ol id="timeline-list" class="timeline-list"></ol>
-          <p class="field-note">날짜 옆 회색 표시는 그날 밤 숙소입니다. 끝낸 할 일에 체크하면 이 브라우저에 저장됩니다.</p>
-        </div>
-
-        <div class="tab-panel" id="panel-cost" role="tabpanel" aria-labelledby="tab-cost" hidden>
-          <div class="result-block" id="compare-block">
-            <h3>도시 비교</h3>
-            <table class="compare-table">
-              <thead>
-                <tr>
-                  <th scope="col">도시</th>
-                  <th scope="col">1인 평균</th>
-                  <th scope="col">1개월분당</th>
-                  <th scope="col">총액</th>
-                </tr>
-              </thead>
-              <tbody id="compare-body"></tbody>
-            </table>
-            <p class="field-note"></p>
-          </div>
-
-          <div class="result-block">
-            <h3>항목별 비용 <small id="breakdown-unit"></small></h3>
-            <ul id="breakdown-list" class="breakdown-list"></ul>
-            <p class="field-note">큰 숫자는 예상값, 작은 숫자는 80% 확률로 들어오는 범위입니다. 모든 항목이 한꺼번에 최고가가 되지는 않으므로 합계 범위는 항목 범위를 그냥 더한 것보다 좁습니다.</p>
-            <p class="field-note">항공·숙박은 예약 사이트에서 확인한 가격을 넣으면 추정 대신 그 값으로 계산합니다. <button type="button" class="link-btn" data-goto-tab="book">확정가 넣으러 가기</button></p>
-          </div>
-        </div>
-
-        <div class="tab-panel" id="panel-rx" role="tabpanel" aria-labelledby="tab-rx" hidden>
-          <div class="result-block">
-            <h3>처방 준비 · 확인할 것</h3>
-            <ul id="rx-prep" class="note-list"></ul>
-          </div>
-
-          <div class="result-block">
-            <h3 id="cash-title">준비할 현금</h3>
-            <ul id="cash-list" class="breakdown-list"></ul>
-            <p id="cash-note" class="field-note"></p>
-          </div>
-        </div>
-
-        <div class="tab-panel" id="panel-book" role="tabpanel" aria-labelledby="tab-book" hidden>
-          <div class="result-block">
-            <h3>실시간 가격 확인 · 확정가 입력</h3>
-            <ul id="check-links" class="link-list"></ul>
-            <p id="quote-note" class="field-note">링크에서 확인한 가격을 넣으면 추정 대신 그 값으로 계산합니다. 날짜·인원·객실·카드를 바꾸면 잠시 빠지고, 원래 조건으로 돌아오면 다시 들어갑니다.</p>
-          </div>
-
-          <div class="result-block">
-            <h3>메모</h3>
-            <div id="note-list" class="note-groups"></div>
-          </div>
-
-          <div class="result-actions">
-            <button id="open-evidence" class="evidence-btn" type="button">근거 · 출처 보기</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <div id="mobile-bar" class="mobile-bar">
-    <div class="mobile-bar-text">
-      <strong><span id="mobile-bar-total">-</span><span id="mobile-bar-delta" class="delta-flash" hidden></span></strong>
-      <span id="mobile-bar-sub" class="mobile-bar-sub">-</span>
-    </div>
-    <button id="mobile-bar-jump" class="mobile-bar-btn" type="button">카드 고르기 ↓</button>
-  </div>
   </div>
 
   <footer class="sh-footer">
@@ -436,8 +72,8 @@
         <span class="taxi-prompt">请带我去这里 (여기로 가주세요)</span>
         <button id="close-taxi-modal" class="close-btn" type="button" aria-label="닫기">닫기</button>
       </div>
-      <h2 id="taxi-modal-title" class="taxi-zh-name">-</h2>
-      <p id="taxi-modal-addr" class="taxi-zh-addr">-</p>
+      <h2 id="taxi-modal-title" class="taxi-zh-name" lang="zh-CN">-</h2>
+      <p id="taxi-modal-addr" class="taxi-zh-addr" lang="zh-CN">-</p>
       <p id="taxi-modal-ko" class="taxi-ko-sub">-</p>
       <div class="taxi-actions">
         <button id="taxi-copy-btn" class="sh-btn is-primary" type="button">중문 주소 복사</button>
@@ -447,26 +83,32 @@
     </div>
   </div>
 
-  <div id="field-toast" class="field-toast" role="status" aria-live="polite" hidden></div>
-
-  <div id="toast" class="toast" role="status" hidden>
-    <span id="toast-text"></span>
-    <button id="toast-action" class="link-btn" type="button"></button>
-  </div>
-
-  <div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evidence-title">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2 id="evidence-title">근거</h2>
-        <button id="close-evidence" class="close-btn" type="button" aria-label="닫기">닫기</button>
+  <div id="phrase-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="phrase-modal-title">
+    <div class="modal-card taxi-card phrase-sheet">
+      <div class="taxi-head">
+        <span id="phrase-modal-title" class="taxi-prompt">-</span>
+        <button id="close-phrase-modal" class="close-btn" type="button" aria-label="닫기">닫기</button>
       </div>
-      <p class="modal-meta">기준일 <strong id="evidence-asof">-</strong> · 모든 가격은 추정 범위입니다. 예약 전에 실시간 가격을 확인하세요.</p>
-      <ul id="evidence-sources" class="source-list"></ul>
+      <p id="phrase-modal-zh" class="phrase-big" lang="zh-CN">-</p>
+      <div class="phrase-sub">
+        <p id="phrase-modal-ko" class="phrase-sub-ko">-</p>
+        <p id="phrase-modal-pron" class="phrase-sub-pron">-</p>
+      </div>
+      <div id="phrase-pager" class="phrase-pager" hidden>
+        <button id="phrase-prev" class="sh-btn" type="button" aria-label="이전 문장">‹ 이전</button>
+        <span id="phrase-count" class="phrase-count" aria-live="polite">1 / 1</span>
+        <button id="phrase-next" class="sh-btn" type="button" aria-label="다음 문장">다음 ›</button>
+      </div>
+      <div class="taxi-actions phrase-sheet-actions">
+        <button id="phrase-copy-btn" class="sh-btn is-primary" type="button">중문 복사</button>
+        <button id="phrase-close-btn" class="sh-btn" type="button">닫기</button>
+      </div>
     </div>
   </div>
 
+  <div id="field-toast" class="field-toast" role="status" aria-live="polite" hidden></div>
+
   <script src="trip_2026_dec_china.data.js"></script>
-  <script src="trip_2026_dec.app.js"></script>
   <script src="trip_2026_dec_china.field.js"></script>
 </body>
 </html>

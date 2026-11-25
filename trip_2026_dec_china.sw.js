@@ -9,7 +9,7 @@
 "use strict";
 
 // Raise this when a file is added to or removed from ASSETS. Older caches are deleted on activate.
-const CACHE_NAME = "trip-china-v1";
+const CACHE_NAME = "trip-china-v2";
 const CACHE_PREFIX = "trip-china-";
 const NETWORK_TIMEOUT_MS = 3000;
 // After one timeout the rest of that page load is answered from the copy straight away, so a hanging
@@ -23,7 +23,6 @@ const ASSETS = [
   "trip_2026_dec.styles.css",
   "trip_2026_dec_china.styles.css",
   "trip_2026_dec_china.data.js",
-  "trip_2026_dec.app.js",
   "trip_2026_dec_china.field.js",
   "favicon.svg",
 ];

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Single source for the December 2026 Japan trip page.
-// (trip_2026_dec_china.html is maintained independently as a Shanghai dual-mode page.)
+// (trip_2026_dec_china.html is maintained independently as the Shanghai on-site itinerary page.)
 //
 //   node scripts/build_trip_pages.mjs           regenerate the HTML files
 //   node scripts/build_trip_pages.mjs --check   fail if a file is out of date
