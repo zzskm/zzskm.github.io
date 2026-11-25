@@ -8,9 +8,9 @@
   "arrival_truth": "target_api_derived_proxy_not_measured_arrival",
   "poll_coverage_max_gap_sec": 180,
   "window_minutes": 20,
-  "observed_station_list_polls": 2465,
+  "observed_station_list_polls": 2466,
   "prediction_poll_days": 46,
-  "discarded_signal_rows": 62579,
+  "discarded_signal_rows": 62607,
   "candidate_routes": [
     {
       "route_id": 204000044,
@@ -70,21 +70,21 @@
       "sta_order": 51,
       "observed_days": 20,
       "vehicle_events": 334,
-      "labelled_events": 302,
+      "labelled_events": 303,
       "matched": 154,
-      "nonmatched": 148,
-      "censored": 32,
-      "proxy_hit_rate": 0.51,
+      "nonmatched": 149,
+      "censored": 31,
+      "proxy_hit_rate": 0.508,
       "target_absent_at_first_signal": 196,
       "simultaneous_eta_pairs": 138,
       "candidate_eta_before_target_eta": 83,
       "median_simultaneous_lead_min": 1.73,
       "forward_date_test": {
         "status": "screening_only",
-        "test_events": 148,
-        "candidate_hit_rate": 0.514,
-        "time_only_hit_rate": 0.598,
-        "difference_pp": -8.5,
+        "test_events": 149,
+        "candidate_hit_rate": 0.51,
+        "time_only_hit_rate": 0.596,
+        "difference_pp": -8.6,
         "train_days": 12,
         "test_days": 8
       },
@@ -117,6 +117,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000070,
+      "route_name": "9007",
+      "sta_order": 16,
+      "observed_days": 20,
+      "vehicle_events": 275,
+      "labelled_events": 250,
+      "matched": 127,
+      "nonmatched": 123,
+      "censored": 25,
+      "proxy_hit_rate": 0.508,
+      "target_absent_at_first_signal": 167,
+      "simultaneous_eta_pairs": 108,
+      "candidate_eta_before_target_eta": 72,
+      "median_simultaneous_lead_min": 3.38,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 123,
+        "candidate_hit_rate": 0.504,
+        "time_only_hit_rate": 0.618,
+        "difference_pp": -11.4,
+        "train_days": 12,
+        "test_days": 8
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000073,
       "route_name": "315",
       "sta_order": 13,
@@ -137,32 +163,6 @@
         "candidate_hit_rate": 0.565,
         "time_only_hit_rate": 0.626,
         "difference_pp": -6.2,
-        "train_days": 12,
-        "test_days": 8
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000070,
-      "route_name": "9007",
-      "sta_order": 16,
-      "observed_days": 20,
-      "vehicle_events": 275,
-      "labelled_events": 249,
-      "matched": 127,
-      "nonmatched": 122,
-      "censored": 26,
-      "proxy_hit_rate": 0.51,
-      "target_absent_at_first_signal": 167,
-      "simultaneous_eta_pairs": 108,
-      "candidate_eta_before_target_eta": 72,
-      "median_simultaneous_lead_min": 3.38,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 122,
-        "candidate_hit_rate": 0.508,
-        "time_only_hit_rate": 0.62,
-        "difference_pp": -11.2,
         "train_days": 12,
         "test_days": 8
       },
@@ -299,6 +299,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000192,
+      "route_name": "311",
+      "sta_order": 84,
+      "observed_days": 20,
+      "vehicle_events": 164,
+      "labelled_events": 150,
+      "matched": 79,
+      "nonmatched": 71,
+      "censored": 14,
+      "proxy_hit_rate": 0.527,
+      "target_absent_at_first_signal": 91,
+      "simultaneous_eta_pairs": 73,
+      "candidate_eta_before_target_eta": 38,
+      "median_simultaneous_lead_min": 0.27,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 76,
+        "candidate_hit_rate": 0.513,
+        "time_only_hit_rate": 0.641,
+        "difference_pp": -12.8,
+        "train_days": 12,
+        "test_days": 8
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000146,
       "route_name": "누리2",
       "sta_order": 24,
@@ -319,32 +345,6 @@
         "candidate_hit_rate": 0.446,
         "time_only_hit_rate": 0.556,
         "difference_pp": -11.1,
-        "train_days": 12,
-        "test_days": 8
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000192,
-      "route_name": "311",
-      "sta_order": 84,
-      "observed_days": 20,
-      "vehicle_events": 164,
-      "labelled_events": 149,
-      "matched": 79,
-      "nonmatched": 70,
-      "censored": 15,
-      "proxy_hit_rate": 0.53,
-      "target_absent_at_first_signal": 91,
-      "simultaneous_eta_pairs": 73,
-      "candidate_eta_before_target_eta": 38,
-      "median_simultaneous_lead_min": 0.27,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 75,
-        "candidate_hit_rate": 0.52,
-        "time_only_hit_rate": 0.646,
-        "difference_pp": -12.6,
         "train_days": 12,
         "test_days": 8
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-25T19:00:53.873531+09:00"
+  "generated_at": "2026-11-25T19:01:54.275603+09:00"
 }
