@@ -370,16 +370,30 @@ def describe_structure(value: Any, depth: int = 0) -> Any:
     return type(value).__name__
 
 
+# 연속으로 이만큼 실패하면 남은 호출을 보내지 않는다(재검토 SY8). 응답이 오지 않는 장애에서는 호출 하나가
+# 라이브러리의 재시도까지 약 65초를 쓴다. 5건이면 5분 남짓이라 작업 제한 10분 안에 스스로 실패를 보고할 수 있다.
+MAX_CONSECUTIVE_FAILURES = 5
+STOP_RATE_LIMITED = "rate_limited"
+STOP_CONSECUTIVE_FAILURES = "consecutive_failures"
+
+
 @dataclass
 class CallLog:
-    """엔드포인트별 호출 결과 집계. keep_structures면 응답 구조(값 없음)도 모은다."""
+    """엔드포인트별 호출 결과 집계. keep_structures면 응답 구조(값 없음)도 모은다.
+
+    stop_reason이 정해지면 수집을 멈춘다. 첫 429(속도 제한)나 연속 실패가 그 조건이다. 실패가 이어지는데
+    남은 호출을 끝까지 보내면 속도 제한을 키우고, 응답이 없는 장애에서는 작업 제한 시간을 넘긴다.
+    """
 
     keep_structures: bool = False
     endpoints: dict[str, dict[str, int]] = field(default_factory=dict)
     errors: dict[str, dict[str, int]] = field(default_factory=dict)
     structures: dict[str, Any] = field(default_factory=dict)
+    consecutive_failures: int = 0
+    stop_reason: str | None = None
 
-    def record(self, endpoint: str, status: str, value: Any = None, error: str | None = None) -> None:
+    def record(self, endpoint: str, status: str, value: Any = None, error: str | None = None,
+               http_status: int | None = None) -> None:
         counts = self.endpoints.setdefault(endpoint, {s: 0 for s in CALL_STATUSES})
         counts[status] += 1
         if error:
@@ -387,6 +401,15 @@ class CallLog:
             per_endpoint[error] = per_endpoint.get(error, 0) + 1
         if self.keep_structures and status == CALL_OK:
             self.structures[endpoint] = _merge_shapes(self.structures.get(endpoint), describe_structure(value))
+        if status == CALL_FAILED:
+            self.consecutive_failures += 1
+            if self.stop_reason is None:
+                if http_status == 429:
+                    self.stop_reason = STOP_RATE_LIMITED
+                elif self.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    self.stop_reason = STOP_CONSECUTIVE_FAILURES
+        else:
+            self.consecutive_failures = 0
 
     def totals(self) -> dict[str, int]:
         return {s: sum(c[s] for c in self.endpoints.values()) for s in CALL_STATUSES}
@@ -395,7 +418,10 @@ class CallLog:
         return sorted(name for name, counts in self.endpoints.items() if counts[CALL_FAILED])
 
     def status(self) -> str:
+        """ok / partial / failed. 중간에 멈춘 수집은 받은 것이 있어도 failed다(데이터를 쓰지 않는다)."""
         totals = self.totals()
+        if self.stop_reason is not None:
+            return "failed"
         if totals[CALL_FAILED] == 0:
             return "ok"
         return "partial" if totals[CALL_OK] + totals[CALL_EMPTY] else "failed"
@@ -408,21 +434,25 @@ def safe_call(client: Any, method_name: str, *args: Any, log: CallLog | None = N
     check는 응답을 받아 오류 이름(없으면 None)을 돌려주는 함수다. HTTP는 성공인데 본문이 실패를 알리는 응답을
     실패로 센다.
     """
+    if log is not None and log.stop_reason is not None:
+        # 수집을 멈췄다. 호출하지 않고 실패로 돌려주면 호출자는 기존 값을 유지한다. 집계에는 넣지 않는다.
+        return None, CALL_FAILED
     method = getattr(client, method_name, None)
     if not callable(method):
         LOGGER.warning("garmin endpoint=%s unavailable on client", method_name)
         if log is not None:
             log.record(method_name, CALL_FAILED, error="MethodUnavailable")
         return None, CALL_FAILED
+    http_status: int | None = None
     try:
         value = method(*args, **kwargs)
         error = check(value) if check is not None else None
     except Exception as exc:
-        value, error = None, describe_error(exc)
+        value, error, http_status = None, describe_error(exc), _http_status(exc)
     if error:
         LOGGER.warning("garmin endpoint=%s day=%s failed error=%s", method_name, args[0] if args else "", error)
         if log is not None:
-            log.record(method_name, CALL_FAILED, error=error)
+            log.record(method_name, CALL_FAILED, error=error, http_status=http_status)
         return None, CALL_FAILED
     status = CALL_EMPTY if _is_empty_response(value) else CALL_OK
     if log is not None:
@@ -534,10 +564,86 @@ def token_file_state(token_dir: str | None) -> str:
     return "unusable"
 
 
+class TokenLoginUnavailable(RuntimeError):
+    """저장된 토큰은 거부되지 않았는데 Garmin이 지금 응답하지 못한다(429·5xx·네트워크).
+
+    비밀번호 로그인으로 넘어가지 않는다. 메시지는 예외 클래스와 HTTP 상태뿐이라 공개 로그에 그대로 써도 된다.
+    """
+
+
+# 토큰이 거부됐다는 뜻의 HTTP 상태. 이때만 비밀번호 로그인으로 넘어간다(재검토 SY6, 사용자 결정).
+TOKEN_REJECTED_STATUSES = (401, 403)
+# 토큰 엔드포인트가 리프레시 토큰을 거부할 때 주는 상태. 그 밖(429·5xx)은 일시 오류다.
+REFRESH_REJECTED_STATUSES = (400, 401, 403)
+# garminconnect 0.3.20의 _refresh_di_token은 실패를 "DI token refresh failed: <HTTP 상태>"로 알린다.
+_REFRESH_FAILURE = re.compile(r"DI token refresh failed: (\d{3})\b")
+
+
+# 전송 계층의 예외를 내는 패키지. garminconnect는 API 호출에 requests를, 로그인과 토큰 갱신에 curl_cffi를 쓴다.
+_TRANSPORT_PACKAGES = ("requests", "urllib3", "curl_cffi", "ssl", "socket", "http")
+
+
+def _has_network_cause(exc: BaseException) -> bool:
+    """예외 사슬에 전송 계층의 오류(연결 실패·타임아웃·TLS)가 있는가.
+
+    파일을 못 읽은 것 같은 다른 OSError는 세지 않는다. 그런 실패를 일시 오류로 보면 비밀번호로 넘어가지 못하고
+    같은 실패를 반복한다.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (ConnectionError, TimeoutError)):
+            return True
+        if type(current).__module__.partition(".")[0] in _TRANSPORT_PACKAGES:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _token_failure_is_transient(exc: BaseException) -> bool:
+    """토큰 로그인 실패가 일시 오류인가. 상태가 있으면 401·403만 거부로 보고, 없으면 네트워크 오류일 때만 일시 오류다."""
+    status = _http_status(exc)
+    if status is not None:
+        return status not in TOKEN_REJECTED_STATUSES
+    return _has_network_cause(exc)
+
+
+def _try_login(client: Any, token_dir: str) -> BaseException | None:
+    try:
+        client.login(token_dir)
+    except Exception as exc:
+        return exc
+    return None
+
+
+def _refresh_verdict(client: Any) -> str:
+    """토큰 로그인이 401·403으로 끝났을 때 리프레시 토큰을 직접 써 본다. refreshed / rejected / transient.
+
+    액세스 토큰은 금방 만료되므로 실행마다 갱신이 먼저 일어난다. 갱신이 실패하면 라이브러리는 이유를 버리고
+    만료된 토큰으로 API를 불러 401을 받는다. 그래서 401만으로는 토큰이 거부된 것인지 갱신 요청이 일시적으로
+    실패한 것인지 알 수 없다. 라이브러리의 갱신 함수를 한 번 직접 불러 토큰 엔드포인트의 답을 본다.
+    함수가 없거나(라이브러리가 바뀜) 답을 해석할 수 없으면 rejected다. 그러면 예전처럼 비밀번호로 넘어간다.
+    """
+    refresh = getattr(getattr(client, "client", None), "_refresh_di_token", None)
+    if not callable(refresh):
+        return "rejected"
+    try:
+        refresh()
+    except Exception as exc:
+        match = _REFRESH_FAILURE.search(str(exc))
+        if match:
+            return "rejected" if int(match.group(1)) in REFRESH_REJECTED_STATUSES else "transient"
+        return "transient" if _has_network_cause(exc) else "rejected"
+    return "refreshed"
+
+
 def build_client(token_dir: str | None = None, garmin_cls: Any = None) -> tuple[Any, str]:
     """로그인한 클라이언트와 인증 방식("token"/"password")을 돌려준다.
 
-    token_dir가 있으면 그 안의 토큰으로 먼저 로그인하고, 안 되면 비밀번호로 로그인해 새 토큰을 그 디렉터리에 쓴다.
+    token_dir가 있으면 그 안의 토큰으로 먼저 로그인한다. 토큰이 거부됐을 때(401·403)만 비밀번호로 로그인해
+    새 토큰을 그 디렉터리에 쓴다. Garmin이 일시적으로 응답하지 못할 때(429·5xx·네트워크)는 토큰을 그대로 두고
+    TokenLoginUnavailable을 낸다. 다음 실행이 같은 토큰으로 다시 시도한다.
     토큰 디렉터리는 워크플로가 암호화 캐시에서 풀어 준다. 시크릿 값 자체는 이 스크립트에 들어오지 않는다.
     """
     if garmin_cls is None:
@@ -547,15 +653,28 @@ def build_client(token_dir: str | None = None, garmin_cls: Any = None) -> tuple[
 
     state = token_file_state(token_dir)
     if state == "usable":
-        try:
-            # 자격 증명 없이 만든다. 토큰이 거부되면 라이브러리가 몰래 비밀번호로 넘어가지 않고 예외를 내므로
-            # 인증 방식을 정확히 알 수 있다.
-            client = garmin_cls(is_cn=is_cn)
-            client.login(token_dir)
+        # 자격 증명 없이 만든다. 토큰이 거부되면 라이브러리가 몰래 비밀번호로 넘어가지 않고 예외를 내므로
+        # 인증 방식을 정확히 알 수 있다.
+        client = garmin_cls(is_cn=is_cn)
+        error = _try_login(client, token_dir)
+        if error is not None and _http_status(error) in TOKEN_REJECTED_STATUSES:
+            verdict = _refresh_verdict(client)
+            if verdict == "transient":
+                annotate("warning", f"garmin token refresh unavailable after error={describe_error(error)}; token kept, password not used")
+                raise TokenLoginUnavailable(describe_error(error) + " refresh=unavailable") from error
+            if verdict == "refreshed":
+                # 갱신은 됐다. 새 토큰을 파일에 쓰고 한 번만 다시 로그인해 본다.
+                with contextlib.suppress(Exception):
+                    client.client.dump(token_dir)
+                annotate("notice", "garmin token refreshed after a rejected attempt")
+                error = _try_login(client, token_dir)
+        if error is None:
             annotate("notice", "garmin token_cache=loaded")
             return client, "token"
-        except Exception as exc:
-            annotate("warning", f"garmin token login failed error={describe_error(exc)}; using password")
+        if _token_failure_is_transient(error):
+            annotate("warning", f"garmin token login failed error={describe_error(error)}; token kept, password not used")
+            raise TokenLoginUnavailable(describe_error(error)) from error
+        annotate("warning", f"garmin token login failed error={describe_error(error)}; using password")
     elif state == "unusable":
         annotate("warning", "garmin token file unusable; using password")
 
@@ -1457,6 +1576,10 @@ def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, A
         LOGGER.info("syncing %s", day)
         existing = existing_rows.get(day)
         fetched = fetch_day_row(client, day, log=log, existing=existing)
+        if log.stop_reason is not None:
+            # 속도 제한이나 연속 실패로 멈췄다. 받다 만 날은 병합하지 않고 남은 날도 받지 않는다.
+            LOGGER.warning("garmin stopped at day=%s reason=%s", day, log.stop_reason)
+            break
         fetched_by_day[day] = fetched
         if existing is None and fetched.failed_fields >= ROW_FIELDS:
             LOGGER.warning("garmin day=%s every call failed, no row created", day)
@@ -1487,7 +1610,9 @@ def report_calls(log: CallLog, auth: str) -> None:
     annotate("notice", f"garmin auth={auth} status={status} ok={totals[CALL_OK]} empty={totals[CALL_EMPTY]} failed={totals[CALL_FAILED]}")
     for endpoint in log.failed_endpoints():
         annotate("warning", f"garmin endpoint={endpoint} failed={log.endpoints[endpoint][CALL_FAILED]}")
-    if status == "failed":
+    if log.stop_reason is not None:
+        annotate("error", f"garmin stopped early reason={log.stop_reason}; data left unchanged")
+    elif status == "failed":
         annotate("error", "garmin every call failed; data left unchanged")
 
 
@@ -1583,6 +1708,7 @@ def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, An
         "library": {"garminconnect": library},
         "auth": auth,
         "status": result.log.status(),
+        "stopReason": result.log.stop_reason,
         "days": len(days),
         "endDate": days[-1] if days else None,
         "calls": result.log.totals(),
@@ -1654,11 +1780,28 @@ def plan_window(backfill_days: int, end_text: str | None, first_csv_day: str | N
     return days, False
 
 
+def configure_logging(level_name: str) -> None:
+    """로그 설정. 라이브러리 로그는 공개 로그에 나가지 않게 끈다(재검토 SY5).
+
+    garminconnect는 재시도가 끝난 5xx와 네트워크 오류를 logger.exception으로 남긴다. 거기에는 요청 경로가 들어가고,
+    일일 요약·심박·수면 경로에는 표시 이름이 들어 있다. ERROR 수준으로 묶는 것으로는 막히지 않는다.
+    그래서 수준과 무관하게 이 로거를 끊는다. 실패는 safe_call이 예외 클래스와 HTTP 상태로 남긴다.
+    urllib3는 DEBUG에서 요청 경로를 찍으므로 --log-level DEBUG로 돌려도 WARNING 아래는 내지 않는다.
+    """
+    logging.basicConfig(level=getattr(logging, level_name.upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
+    library = logging.getLogger("garminconnect")
+    library.setLevel(logging.CRITICAL + 1)
+    library.propagate = False
+    if not library.handlers:
+        library.addHandler(logging.NullHandler())
+    transport = logging.getLogger("urllib3")
+    if transport.getEffectiveLevel() < logging.WARNING:
+        transport.setLevel(logging.WARNING)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO), format="%(asctime)s %(levelname)s %(message)s")
-    # 라이브러리는 로그인 경고에 예외 문자열을 싣는다(질의 값만 가린다). 공개 로그에는 클래스와 상태만 남긴다.
-    logging.getLogger("garminconnect").setLevel(logging.ERROR)
+    configure_logging(args.log_level)
     paths = Paths(
         config=Path(args.config),
         csv=Path(args.output_csv),
@@ -1703,6 +1846,10 @@ def main(argv: list[str] | None = None) -> int:
     except MissingCredentials as exc:
         annotate("error", str(exc))
         return 1
+    except TokenLoginUnavailable as exc:
+        # 토큰은 그대로 두고 실패로 끝낸다. 다음 실행이 같은 토큰으로 다시 시도한다.
+        annotate("error", f"garmin unavailable error={exc}; data left unchanged")
+        return 1
     except Exception as exc:
         annotate("error", f"garmin login failed error={describe_error(exc)}")
         return 1
@@ -1724,21 +1871,25 @@ def main(argv: list[str] | None = None) -> int:
             print(report)
         return 1 if failed else 0
 
-    report_merge(result, existing_rows)
-    if protect:
-        annotate("notice", f"garmin protect=on days={len(days)} start={days[0]} end={days[-1]}")
-    lost_days = set(existing_rows) - set(result.rows)
-    if lost_days:
-        # 병합은 행을 지우지 않는다. 지워졌다면 코드가 잘못된 것이므로 CSV를 덮어쓰지 않는다.
-        annotate("error", f"garmin merge would drop {len(lost_days)} existing rows; nothing written")
-        return 1
-    write_rows(paths.csv, result.rows)
-    rows = normalize_rows(result.rows)
+    if failed:
+        # 전부 실패했거나 중간에 멈췄다. CSV는 건드리지 않고, 요약에는 실패한 시도만 기록한다.
+        rows = normalize_rows(existing_rows)
+    else:
+        report_merge(result, existing_rows)
+        if protect:
+            annotate("notice", f"garmin protect=on days={len(days)} start={days[0]} end={days[-1]}")
+        lost_days = set(existing_rows) - set(result.rows)
+        if lost_days:
+            # 병합은 행을 지우지 않는다. 지워졌다면 코드가 잘못된 것이므로 CSV를 덮어쓰지 않는다.
+            annotate("error", f"garmin merge would drop {len(lost_days)} existing rows; nothing written")
+            return 1
+        write_rows(paths.csv, result.rows)
+        rows = normalize_rows(result.rows)
     summary = build_summary(rows, config)
     summary["sync"] = build_sync_block(log, auth, days, previous_sync, summary["generatedAt"])
     save_json(paths.summary, summary)
-    LOGGER.info("wrote %s rows and refreshed %s", len(rows), paths.summary)
-    # 전부 실패하면 작업을 실패시킨다. 커밋 스텝이 건너뛰어지고 GitHub가 실패를 알린다.
+    LOGGER.info("%s %s rows and refreshed %s", "kept" if failed else "wrote", len(rows), paths.summary)
+    # 실패하면 작업을 실패시킨다. 커밋 스텝이 건너뛰어지고 GitHub가 실패를 알린다.
     return 1 if failed else 0
 
 

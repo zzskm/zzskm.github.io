@@ -39,10 +39,12 @@ class FakeApiError(Exception):
 class FakeGarmin:
     """정상 응답을 돌려준다. fail에 든 메서드는 예외를, empty에 든 메서드는 {}를 돌려준다."""
 
-    def __init__(self, fail: tuple[str, ...] | str = (), empty: tuple[str, ...] = (), status: int = 500) -> None:
+    def __init__(self, fail: tuple[str, ...] | str = (), empty: tuple[str, ...] = (), status: int = 500,
+                 fail_days: tuple[str, ...] = ()) -> None:
         self.fail = fail
         self.empty = set(empty)
         self.status = status
+        self.fail_days = set(fail_days)  # 이 날짜의 호출은 모두 예외를 낸다
         self.calls: list[str] = []
         self.history: list[dict] = []  # 기간 조회(시작일 != 종료일)에 돌려줄 활동
         self.same_day: list[dict] = []  # 하루 조회(시작일 == 종료일)에 돌려줄 활동
@@ -53,9 +55,9 @@ class FakeGarmin:
         self.sleep: dict = {"dailySleepDTO": {"sleepTimeSeconds": 25200, "sleepScores": {"overall": {"value": 81}}}}
         self.weight_item: dict = {"samplePk": 1, "weight": 83900.0}
 
-    def _respond(self, name: str, payload):
+    def _respond(self, name: str, payload, day: str | None = None):
         self.calls.append(name)
-        if self.fail == "*" or name in self.fail:
+        if self.fail == "*" or name in self.fail or day in self.fail_days:
             raise FakeApiError(self.status)
         if name in self.empty:
             return {}
@@ -65,33 +67,34 @@ class FakeGarmin:
         return self._respond("get_stats", {
             "totalSteps": 8123, "restingHeartRate": 58, "moderateIntensityMinutes": 20, "vigorousIntensityMinutes": 5,
             "activeKilocalories": 310, "displayName": SECRET,
-        })
+        }, day)
 
     def get_heart_rates(self, day):
-        return self._respond("get_heart_rates", {"restingHeartRate": 57, "heartRateValues": [[1, 60], [2, None]]})
+        return self._respond("get_heart_rates", {"restingHeartRate": 57, "heartRateValues": [[1, 60], [2, None]]}, day)
 
     def get_sleep_data(self, day):
-        return self._respond("get_sleep_data", self.sleep)
+        return self._respond("get_sleep_data", self.sleep, day)
 
     def get_body_composition(self, day):
         return self._respond("get_body_composition", {
             "totalAverage": {"weight": 83900.0, "bodyFat": 28.8, "visceralFat": 19.0},
             "dateWeightList": [self.weight_item],
             "devices": {"3390012345": {"name": SECRET}},
-        })
+        }, day)
 
     def get_activities_fordate(self, day):
         return self._respond("get_activities_fordate",
-                             {"ActivitiesForDay": {"payload": list(self.activities), **self.gateway}})
+                             {"ActivitiesForDay": {"payload": list(self.activities), **self.gateway}}, day)
 
     def get_activities_by_date(self, start, end):
-        return self._respond("get_activities_by_date", list(self.history) if start != end else list(self.same_day))
+        return self._respond("get_activities_by_date", list(self.history) if start != end else list(self.same_day),
+                             start if start == end else None)
 
     def get_training_readiness(self, day):
-        return self._respond("get_training_readiness", self.readiness)
+        return self._respond("get_training_readiness", self.readiness, day)
 
     def get_training_status(self, day):
-        return self._respond("get_training_status", self.training_status)
+        return self._respond("get_training_status", self.training_status, day)
 
 
 EXISTING = {
@@ -144,7 +147,9 @@ class FieldMergeTests(unittest.TestCase):
     """리포트 S3의 두 재현과 '성공했지만 비어 있음' 경로."""
 
     def test_all_calls_failing_keeps_existing_row(self) -> None:
-        result, log = _sync_one(FakeGarmin(fail="*"))
+        # 연속 실패 한도를 넘지 않게 두고 필드 병합만 본다(한도는 StopEarlyTests가 본다).
+        with mock.patch.object(sync_garmin, "MAX_CONSECUTIVE_FAILURES", 99):
+            result, log = _sync_one(FakeGarmin(fail="*"))
         self.assertEqual(EXISTING, result.rows[DAY])
         self.assertEqual(sync_garmin.ROW_FIELDS, result.fetched[DAY].failed_fields)
         self.assertEqual("failed", log.status())
@@ -210,6 +215,63 @@ class FieldMergeTests(unittest.TestCase):
         self.assertEqual(EXISTING, result.rows[DAY])
         self.assertEqual([DAY], result.kept_rows)
         self.assertEqual("ok", log.status())
+
+
+class StopEarlyTests(unittest.TestCase):
+    """재검토 SY8: 속도 제한(429)이나 연속 실패가 나오면 남은 호출을 보내지 않고 실패로 끝낸다."""
+
+    DAYS = ["2026-11-22", "2026-11-23", DAY]
+
+    def sync(self, client: FakeGarmin):
+        log = sync_garmin.CallLog()
+        existing = {day: {**EXISTING, "date": day} for day in self.DAYS}
+        return sync_garmin.sync_days(client, self.DAYS, existing, log), log, existing
+
+    def test_first_rate_limit_stops_the_run(self) -> None:
+        client = FakeGarmin(fail="*", status=429)
+        result, log, existing = self.sync(client)
+        self.assertEqual(["get_stats"], client.calls)  # 3일 24건이 아니라 1건
+        self.assertEqual((sync_garmin.STOP_RATE_LIMITED, "failed"), (log.stop_reason, log.status()))
+        self.assertEqual(existing, result.rows)
+        self.assertEqual({}, result.fetched)
+
+    def test_rate_limit_in_the_middle_keeps_the_csv_untouched_by_the_partial_day(self) -> None:
+        client = FakeGarmin(fail_days=("2026-11-23",), status=429)
+        result, log, existing = self.sync(client)
+        # 첫날 7건(준비도와 훈련 상태는 빈 응답)은 정상, 둘째 날 첫 호출에서 멈춘다. 셋째 날은 부르지 않는다.
+        self.assertEqual(8, len(client.calls))
+        self.assertEqual(["2026-11-22"], list(result.fetched))
+        self.assertEqual(existing["2026-11-23"], result.rows["2026-11-23"])
+        self.assertEqual("failed", log.status())  # 받은 것이 있어도 멈춘 수집은 실패다
+        self.assertEqual({"ok": 5, "empty": 2, "failed": 1}, log.totals())
+
+    def test_consecutive_failures_stop_the_run(self) -> None:
+        client = FakeGarmin(fail="*", status=503)
+        result, log, existing = self.sync(client)
+        self.assertEqual(sync_garmin.MAX_CONSECUTIVE_FAILURES, len(client.calls))
+        self.assertEqual((sync_garmin.STOP_CONSECUTIVE_FAILURES, "failed"), (log.stop_reason, log.status()))
+        self.assertEqual(existing, result.rows)
+
+    def test_failures_broken_up_by_successes_do_not_stop(self) -> None:
+        failing = ("get_stats", "get_heart_rates", "get_sleep_data", "get_body_composition")
+        client = FakeGarmin(fail=failing, status=503)
+        result, log, _ = self.sync(client)
+        self.assertIsNone(log.stop_reason)
+        self.assertEqual("partial", log.status())
+        self.assertEqual(self.DAYS, list(result.fetched))
+        self.assertEqual(12, log.totals()["failed"])
+
+    def test_gateway_failures_count_towards_the_limit(self) -> None:
+        log = sync_garmin.CallLog()
+        client = FakeGarmin()
+        client.gateway = {"successful": False}
+        for _ in range(sync_garmin.MAX_CONSECUTIVE_FAILURES):
+            sync_garmin.safe_call(client, "get_activities_fordate", DAY, log=log, check=sync_garmin._gateway_error)
+        self.assertEqual(sync_garmin.STOP_CONSECUTIVE_FAILURES, log.stop_reason)
+        calls_before = len(client.calls)
+        self.assertEqual((None, "failed"), sync_garmin.safe_call(client, "get_stats", DAY, log=log))
+        self.assertEqual(calls_before, len(client.calls))  # 멈춘 뒤에는 클라이언트를 부르지 않는다
+        self.assertNotIn("get_stats", log.endpoints)
 
 
 def _status_payload(*devices: dict) -> dict:
@@ -604,16 +666,58 @@ class MainTests(unittest.TestCase):
             return [row["date"] for row in csv.DictReader(handle)]
 
     def test_all_failures_exit_nonzero_and_keep_last_success(self) -> None:
-        csv_before = self.csv.read_text(encoding="utf-8")
+        csv_before = self.csv.read_bytes()
         code, out = self.run_main(FakeGarmin(fail="*"))
         self.assertEqual(1, code)
-        self.assertIn("::error::garmin every call failed", out)
+        self.assertIn("::error::garmin stopped early reason=consecutive_failures; data left unchanged\n", out)
+        self.assertNotIn("garmin merge", out)
         self.assertNotIn(SECRET, out)
-        self.assertEqual(csv_before, self.csv.read_text(encoding="utf-8"))
+        self.assertEqual(csv_before, self.csv.read_bytes())
         sync = json.loads(self.summary.read_text(encoding="utf-8"))["sync"]
         self.assertEqual("failed", sync["status"])
         self.assertEqual("2026-11-23T00:00:00Z", sync["lastSuccessAt"])
-        self.assertEqual(0, sync["calls"]["ok"])
+        self.assertEqual({"ok": 0, "empty": 0, "failed": sync_garmin.MAX_CONSECUTIVE_FAILURES}, sync["calls"])
+
+    def test_every_call_failing_below_the_limit_is_still_a_failed_run(self) -> None:
+        csv_before = self.csv.read_bytes()
+        with mock.patch.object(sync_garmin, "MAX_CONSECUTIVE_FAILURES", 99):
+            code, out = self.run_main(FakeGarmin(fail="*"))
+        self.assertEqual(1, code)
+        self.assertIn("::error::garmin every call failed; data left unchanged\n", out)
+        self.assertEqual(csv_before, self.csv.read_bytes())
+
+    def test_rate_limit_after_a_good_day_writes_nothing(self) -> None:
+        # 재검토 SY8: 첫날은 받았지만 둘째 날에 429가 왔다. 받다 만 결과를 쓰지 않고 실패로 끝낸다.
+        csv_before = self.csv.read_bytes()
+        client = FakeGarmin(fail_days=("2026-11-23",), status=429)
+        code, out = self.run_main(client)
+        self.assertEqual(1, code)
+        self.assertIn("::notice::garmin auth=password status=failed ok=5 empty=2 failed=1\n", out)
+        self.assertIn("::error::garmin stopped early reason=rate_limited; data left unchanged\n", out)
+        self.assertEqual(csv_before, self.csv.read_bytes())
+        self.assertEqual(8, len(client.calls))
+        sync = json.loads(self.summary.read_text(encoding="utf-8"))["sync"]
+        self.assertEqual(("failed", "2026-11-23T00:00:00Z"), (sync["status"], sync["lastSuccessAt"]))
+
+    def test_dry_run_reports_the_stop_reason(self) -> None:
+        report_path = self.tmp / "probe.json"
+        code, _ = self.run_main(FakeGarmin(fail="*", status=429), "--dry-run", "--stats-output", str(report_path))
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual((1, "failed", "rate_limited"), (code, report["status"], report["stopReason"]))
+        self.assertEqual({"ok": 0, "empty": 0, "failed": 1}, report["calls"])
+
+    def test_unavailable_garmin_exits_without_password_login_or_writes(self) -> None:
+        csv_before = self.csv.read_bytes()
+        summary_before = self.summary.read_bytes()
+        stdout = io.StringIO()
+        argv = ["--config", str(self.config), "--output-csv", str(self.csv), "--output-summary", str(self.summary),
+                "--previous-summary", str(self.summary), "--date", DAY, "--log-level", "ERROR"]
+        unavailable = sync_garmin.TokenLoginUnavailable("FakeApiError status=429")
+        with mock.patch.object(sync_garmin, "build_client", side_effect=unavailable), contextlib.redirect_stdout(stdout):
+            code = sync_garmin.main(argv)
+        self.assertEqual(1, code)
+        self.assertEqual("::error::garmin unavailable error=FakeApiError status=429; data left unchanged\n", stdout.getvalue())
+        self.assertEqual((csv_before, summary_before), (self.csv.read_bytes(), self.summary.read_bytes()))
 
     def test_partial_failure_warns_and_records_sync_block(self) -> None:
         code, out = self.run_main(FakeGarmin(fail=("get_body_composition",)))
@@ -880,36 +984,119 @@ class CsvGuardTests(unittest.TestCase):
         self.assertFalse(self.csv.read_bytes().startswith(b"\xef\xbb\xbf"))  # 다시 쓸 때는 BOM 없이 쓴다
 
 
+class LibraryLoggingTests(unittest.TestCase):
+    """재검토 SY5: 라이브러리 로그는 수준과 무관하게 공개 로그에 나가지 않는다.
+
+    실제 라이브러리가 경로를 남기는 것과 이 설정이 그것을 막는 것은 tests/test_garmin_library.py가 본다.
+    """
+
+    def setUp(self) -> None:
+        root = logging.getLogger()
+        names = ("garminconnect", "urllib3")
+        saved = {name: (logging.getLogger(name).level, logging.getLogger(name).propagate, list(logging.getLogger(name).handlers))
+                 for name in names}
+        root_saved = (root.level, list(root.handlers))
+
+        def restore() -> None:
+            root.setLevel(root_saved[0])
+            root.handlers[:] = root_saved[1]
+            for name, (level, propagate, handlers) in saved.items():
+                logger = logging.getLogger(name)
+                logger.setLevel(level)
+                logger.propagate = propagate
+                logger.handlers[:] = handlers
+
+        self.addCleanup(restore)
+        self.stream = io.StringIO()
+        root.handlers[:] = [logging.StreamHandler(self.stream)]
+        root.setLevel(logging.DEBUG)
+
+    def test_library_records_never_reach_the_root_handlers(self) -> None:
+        sync_garmin.configure_logging("DEBUG")
+        for name in ("garminconnect", "garminconnect.api._common", "garminconnect.client.session"):
+            logger = logging.getLogger(name)
+            logger.warning("retrying path=/usersummary-service/usersummary/daily/%s", SECRET)
+            logger.critical("path=%s", SECRET)
+            try:
+                raise FakeApiError(503)
+            except FakeApiError:
+                logger.exception("API call failed for path '/usersummary-service/usersummary/daily/%s'", SECRET)
+        self.assertEqual("", self.stream.getvalue())
+
+    def test_transport_debug_lines_are_dropped_and_our_own_lines_stay(self) -> None:
+        sync_garmin.configure_logging("DEBUG")
+        transport = logging.getLogger("urllib3.connectionpool")
+        transport.debug('https://connectapi.garmin.com:443 "GET /usersummary-service/usersummary/daily/%s HTTP/1.1" 200', SECRET)
+        transport.warning("Connection pool is full, discarding connection: connectapi.garmin.com")
+        sync_garmin.LOGGER.warning("garmin endpoint=%s day=%s failed error=%s", "get_stats", DAY, "FakeApiError status=503")
+        lines = self.stream.getvalue().splitlines()
+        self.assertEqual(2, len(lines), lines)
+        self.assertNotIn(SECRET, "\n".join(lines))
+        self.assertIn("garmin endpoint=get_stats", lines[1])
+
+
 GOOD_TOKENS = {"di_token": "good", "di_refresh_token": "refresh", "di_client_id": "client"}
 
 
-class FakeLoginGarmin:
-    """garminconnect 0.3.20 Garmin.login(tokenstore)의 갈래를 흉내 낸다(라이브러리 소스로 확인).
+class FakeAuthError(Exception):
+    """라이브러리가 프로필을 못 읽었을 때 내는 예외 흉내. 원인(HTTP 상태나 연결 오류)은 예외 사슬에 있다."""
 
-    - 토큰 파일이 읽히면 그 토큰으로 프로필을 불러 본다. 거부되면 자격 증명이 있을 때만 새로 로그인한다.
+
+class FakeInnerClient:
+    """Garmin.client 흉내. build_client가 쓰는 갱신 함수(_refresh_di_token)와 토큰 저장(dump)만 있다."""
+
+    def __init__(self) -> None:
+        self.di_token: str | None = None
+        self.refresh_calls = 0
+
+    def _refresh_di_token(self) -> None:
+        self.refresh_calls += 1
+        outcome = FakeLoginGarmin.REFRESH.get(self.di_token)
+        if isinstance(outcome, int):
+            raise FakeAuthError(f"DI token refresh failed: {outcome}")
+        if outcome == "offline":
+            raise ConnectionError("no route to the token endpoint")
+        if outcome is None:
+            raise FakeAuthError("No DI refresh token available")
+        self.di_token = outcome
+
+    def dump(self, path: str) -> None:
+        tokens = {"di_token": self.di_token, "di_refresh_token": "rotated", "di_client_id": "client"}
+        (Path(path) / "garmin_tokens.json").write_text(json.dumps(tokens), encoding="utf-8")
+
+
+class FakeLoginGarmin:
+    """garminconnect 0.3.20 Garmin.login(tokenstore)의 갈래를 흉내 낸다.
+
+    같은 갈래를 실제 라이브러리로 확인하는 테스트가 tests/test_garmin_library.py에 있다(CI의 library 잡).
+    - 토큰 파일이 읽히면 그 토큰으로 프로필을 불러 본다. 실패하면 자격 증명이 있을 때만 새로 로그인한다.
     - 토큰이 없거나 못 읽으면 자격 증명으로 로그인하고, 토큰 디렉터리가 있으면 새 토큰을 쓴다.
-    tokens에는 토큰 값별 동작을 둔다: "good"은 통과, "bad"는 401, "flaky"는 첫 시도만 503.
+    - 만료된 토큰의 갱신이 실패해도 라이브러리는 이유를 버린다. 호출자에게는 API의 401만 보인다.
     """
 
+    # 토큰 값별 API 응답. None은 통과, 숫자는 그 HTTP 상태, "offline"은 연결 오류다. 목록에 없는 값은 401이다.
+    API = {"good": None, "bad": 401, "limited": 429, "down": 503, "offline": "offline", "stale": 401,
+           "stale-limited": 401, "stale-down": 401, "stale-offline": 401, "blocked": 403, "still-blocked": 403}
+    # 토큰 값별 갱신 결과. 숫자는 토큰 엔드포인트의 HTTP 상태, "offline"은 연결 오류, 그 밖의 문자열은 새 토큰 값이다.
+    REFRESH = {"bad": 400, "stale": "good", "stale-limited": 429, "stale-down": 503, "stale-offline": "offline",
+               "blocked": "still-blocked"}
+
     instances: list["FakeLoginGarmin"] = []
-    flaky_seen = False
     fresh_tokens: dict = {"di_token": "fresh", "di_refresh_token": "fresh-refresh", "di_client_id": "client"}
 
     def __init__(self, email=None, password=None, is_cn=False, **_):
         self.email, self.password, self.is_cn = email, password, is_cn
+        self.client = FakeInnerClient()
         self.logins: list = []
         self.password_login = False
         FakeLoginGarmin.instances.append(self)
 
-    def _token_ok(self, token: str) -> None:
-        if token == "good":
+    def _load_profile(self, token: str) -> None:
+        outcome = FakeLoginGarmin.API.get(token, 401)
+        if outcome is None:
             return
-        if token == "flaky" and not FakeLoginGarmin.flaky_seen:
-            FakeLoginGarmin.flaky_seen = True
-            raise FakeApiError(503)
-        if token == "flaky":
-            return
-        raise FakeApiError(401)
+        cause = ConnectionError("unreachable") if outcome == "offline" else FakeApiError(outcome)
+        raise FakeAuthError("Failed to retrieve social profile") from cause
 
     def login(self, tokenstore=None):
         self.logins.append(tokenstore)
@@ -919,14 +1106,15 @@ class FakeLoginGarmin:
             with contextlib.suppress(ValueError):
                 data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and data.get("di_token"):
+            self.client.di_token = data["di_token"]
             try:
-                self._token_ok(data["di_token"])
+                self._load_profile(data["di_token"])
                 return None, None
-            except FakeApiError:
+            except FakeAuthError:
                 if not self.email:
                     raise
         elif not self.email:
-            raise RuntimeError("Username and password are required")
+            raise FakeAuthError("Username and password are required")
         if self.password != "pw":
             raise FakeApiError(401)
         self.password_login = True
@@ -937,14 +1125,13 @@ class FakeLoginGarmin:
 
 
 class BuildClientTests(unittest.TestCase):
-    """P4: 토큰 디렉터리 먼저, 안 되면 비밀번호. 인증 방식과 캐시 상태를 값 없이 남긴다."""
+    """P4: 토큰 디렉터리 먼저. 재검토 SY6: 토큰이 거부됐을 때만 비밀번호. 인증 방식과 캐시 상태를 값 없이 남긴다."""
 
     def setUp(self) -> None:
         self.tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.token_dir = self.tmp / "tokens"
         self.token_file = self.token_dir / "garmin_tokens.json"
         FakeLoginGarmin.instances = []
-        FakeLoginGarmin.flaky_seen = False
         FakeLoginGarmin.fresh_tokens = {"di_token": "fresh", "di_refresh_token": "fresh-refresh", "di_client_id": "client"}
         env = {"GARMIN_EMAIL": "me@example.com", "GARMIN_PASSWORD": "pw"}
         self.enterContext(mock.patch.dict(sync_garmin.os.environ, env))
@@ -981,25 +1168,94 @@ class BuildClientTests(unittest.TestCase):
         self.assertEqual("fresh", self.stored()["di_token"])
         self.assertEqual("::notice::garmin token_cache=saved\n", out)
 
+    def unavailable(self) -> tuple[str, str]:
+        """build_client가 TokenLoginUnavailable을 내는 경우의 (예외 메시지, 주석 출력)."""
+        out = io.StringIO()
+        with self.assertRaises(sync_garmin.TokenLoginUnavailable) as raised, contextlib.redirect_stdout(out):
+            sync_garmin.build_client(str(self.token_dir), garmin_cls=FakeLoginGarmin)
+        return str(raised.exception), out.getvalue()
+
     def test_rejected_tokens_fall_back_and_report_class_only(self) -> None:
         self.write_tokens({**GOOD_TOKENS, "di_token": "bad"})
         client, auth, out = self.build(self.token_dir)
         self.assertEqual("password", auth)
         self.assertEqual(
-            "::warning::garmin token login failed error=FakeApiError status=401; using password\n"
+            "::warning::garmin token login failed error=FakeAuthError status=401; using password\n"
             "::notice::garmin token_cache=saved\n", out)
         self.assertNotIn(SECRET, out)
         self.assertEqual("fresh", self.stored()["di_token"])
+        # 리프레시 토큰이 거부된 것(400)을 갱신 함수로 확인한 뒤에 넘어간다.
+        self.assertEqual(1, FakeLoginGarmin.instances[0].client.refresh_calls)
 
-    def test_transient_token_failure_still_counts_as_password_login(self) -> None:
-        # 첫 시도가 일시 오류로 실패하면 토큰 파일을 지우고 비밀번호로 로그인한다.
-        # 지우지 않으면 두 번째 login이 같은 토큰으로 성공해 인증 방식을 잘못 기록한다.
-        self.write_tokens({**GOOD_TOKENS, "di_token": "flaky"})
+    def test_transient_failures_keep_the_token_and_skip_the_password(self) -> None:
+        # 재검토 SY6: 토큰이 멀쩡한데 Garmin이 429·503·연결 오류를 주면 비밀번호로 넘어가지 않는다.
+        for token, error in (("limited", "FakeAuthError status=429"), ("down", "FakeAuthError status=503"),
+                             ("offline", "FakeAuthError")):
+            with self.subTest(token=token):
+                FakeLoginGarmin.instances = []
+                self.write_tokens({**GOOD_TOKENS, "di_token": token})
+                before = self.token_file.read_text(encoding="utf-8")
+                message, out = self.unavailable()
+                self.assertEqual(error, message)
+                self.assertEqual(f"::warning::garmin token login failed error={error}; token kept, password not used\n", out)
+                self.assertEqual(before, self.token_file.read_text(encoding="utf-8"))
+                self.assertEqual(1, len(FakeLoginGarmin.instances))
+                self.assertFalse(FakeLoginGarmin.instances[0].password_login)
+                self.assertEqual(0, FakeLoginGarmin.instances[0].client.refresh_calls)
+
+    def test_expired_token_is_refreshed_and_used(self) -> None:
+        self.write_tokens({**GOOD_TOKENS, "di_token": "stale"})
+        client, auth, out = self.build(self.token_dir)
+        self.assertEqual("token", auth)
+        self.assertEqual("::notice::garmin token refreshed after a rejected attempt\n"
+                         "::notice::garmin token_cache=loaded\n", out)
+        self.assertEqual({"di_token": "good", "di_refresh_token": "rotated", "di_client_id": "client"}, self.stored())
+        self.assertEqual(1, len(FakeLoginGarmin.instances))
+        self.assertEqual([str(self.token_dir)] * 2, client.logins)
+        self.assertFalse(client.password_login)
+
+    def test_failing_refresh_endpoint_is_not_a_rejection(self) -> None:
+        # 만료된 토큰의 갱신이 일시적으로 실패하면 API는 401을 준다. 그 401을 거부로 읽으면 안 된다.
+        for token in ("stale-limited", "stale-down", "stale-offline"):
+            with self.subTest(token=token):
+                FakeLoginGarmin.instances = []
+                self.write_tokens({**GOOD_TOKENS, "di_token": token})
+                before = self.token_file.read_text(encoding="utf-8")
+                message, out = self.unavailable()
+                self.assertEqual("FakeAuthError status=401 refresh=unavailable", message)
+                self.assertEqual("::warning::garmin token refresh unavailable after error=FakeAuthError status=401; "
+                                 "token kept, password not used\n", out)
+                self.assertEqual(before, self.token_file.read_text(encoding="utf-8"))
+                self.assertFalse(FakeLoginGarmin.instances[0].password_login)
+
+    def test_token_still_rejected_after_a_refresh_falls_back(self) -> None:
+        self.write_tokens({**GOOD_TOKENS, "di_token": "blocked"})
         client, auth, out = self.build(self.token_dir)
         self.assertEqual("password", auth)
-        self.assertTrue(client.password_login)
-        self.assertIn("error=FakeApiError status=503", out)
+        self.assertEqual("::notice::garmin token refreshed after a rejected attempt\n"
+                         "::warning::garmin token login failed error=FakeAuthError status=403; using password\n"
+                         "::notice::garmin token_cache=saved\n", out)
         self.assertEqual("fresh", self.stored()["di_token"])
+
+    def test_unknown_refresh_answer_falls_back_as_before(self) -> None:
+        # 갱신 함수가 없거나(라이브러리가 바뀜) 답을 해석할 수 없으면 예전처럼 비밀번호로 넘어간다.
+        self.write_tokens({**GOOD_TOKENS, "di_token": "no-refresh-entry"})
+        _, auth, _ = self.build(self.token_dir)
+        self.assertEqual("password", auth)
+        self.write_tokens({**GOOD_TOKENS, "di_token": "stale"})
+        with mock.patch.object(FakeInnerClient, "_refresh_di_token", new=None):
+            _, auth, out = self.build(self.token_dir)
+        self.assertEqual("password", auth)
+        self.assertIn("error=FakeAuthError status=401; using password", out)
+
+    def test_failure_without_status_or_network_cause_falls_back(self) -> None:
+        # 토큰 파일은 멀쩡해 보이는데 라이브러리가 못 읽은 경우다(상태도 네트워크 원인도 없다).
+        self.write_tokens(GOOD_TOKENS)
+        failure = FakeAuthError("Username and password are required")
+        with mock.patch.object(FakeLoginGarmin, "_load_profile", side_effect=failure):
+            _, auth, out = self.build(self.token_dir)
+        self.assertEqual("password", auth)
+        self.assertIn("::warning::garmin token login failed error=FakeAuthError; using password\n", out)
 
     def test_unusable_file_is_replaced(self) -> None:
         for payload in ("not json", {"di_token": None, "di_refresh_token": None}, {"oauth1": "x"}):
