@@ -8,9 +8,9 @@
   "arrival_truth": "target_api_derived_proxy_not_measured_arrival",
   "poll_coverage_max_gap_sec": 180,
   "window_minutes": 20,
-  "observed_station_list_polls": 2478,
+  "observed_station_list_polls": 2479,
   "prediction_poll_days": 46,
-  "discarded_signal_rows": 62872,
+  "discarded_signal_rows": 62893,
   "candidate_routes": [
     {
       "route_id": 204000044,
@@ -44,21 +44,21 @@
       "sta_order": 8,
       "observed_days": 20,
       "vehicle_events": 387,
-      "labelled_events": 360,
+      "labelled_events": 361,
       "matched": 207,
-      "nonmatched": 153,
-      "censored": 27,
-      "proxy_hit_rate": 0.575,
+      "nonmatched": 154,
+      "censored": 26,
+      "proxy_hit_rate": 0.573,
       "target_absent_at_first_signal": 222,
       "simultaneous_eta_pairs": 165,
       "candidate_eta_before_target_eta": 93,
       "median_simultaneous_lead_min": 0.57,
       "forward_date_test": {
         "status": "screening_only",
-        "test_events": 180,
-        "candidate_hit_rate": 0.561,
+        "test_events": 181,
+        "candidate_hit_rate": 0.558,
         "time_only_hit_rate": 0.649,
-        "difference_pp": -8.8,
+        "difference_pp": -9.1,
         "train_days": 12,
         "test_days": 8
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-25T19:41:22.752477+09:00"
+  "generated_at": "2026-11-25T19:42:22.551470+09:00"
 }
