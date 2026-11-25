@@ -507,6 +507,8 @@
       ]);
       if (!summaryRes.ok) throw new Error(`summary.json (${summaryRes.status})`);
       if (!configRes.ok) throw new Error(`config.json (${configRes.status})`);
+      // 서비스 워커는 새 요약을 받지 못하면(오프라인, 404·5xx) 마지막으로 저장한 사본에 이 표시를 붙여 준다.
+      const offlineCopy = summaryRes.headers.get('X-GW-From-Cache') === '1';
       state.summary = await summaryRes.json();
       state.config = await configRes.json();
 
@@ -538,14 +540,17 @@
         ? `동기화 ${syncAt.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
         : '데이터 로드됨';
       const notes = [];
+      if (offlineCopy) notes.push('새 요약을 받지 못해 이 기기에 저장된 마지막 요약을 보여 줍니다.');
       if (syncLate) notes.push(`마지막 수집 성공 후 ${Math.floor(syncAgeHours)}시간이 지났습니다. GitHub Actions의 garmin weight sync 실행 결과를 확인해 주세요.`);
       if (failedEndpoints.length) notes.push(`지난 수집에서 일부 항목을 받지 못해 이전 값을 유지했습니다: ${failedEndpoints.join(', ')}`);
       if (stale) notes.push(`마지막 체중 측정 후 ${Math.round(daysSince)}일째 새 측정이 없습니다. 체중계 동기화를 확인해 주세요.`);
       renderSyncPill({
         text: syncText,
         cov: cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '',
-        extra: (syncLate ? ` · ${Math.floor(syncAgeHours)}시간째 수집 없음` : '') + (stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : ''),
-        tone: (syncLate || stale) ? THEME.syncStale : ((lowCoverage || failedEndpoints.length) ? THEME.syncWarn : ''),
+        extra: (offlineCopy ? ' · 오프라인 사본' : '')
+          + (syncLate ? ` · ${Math.floor(syncAgeHours)}시간째 수집 없음` : '')
+          + (stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : ''),
+        tone: (syncLate || stale || offlineCopy) ? THEME.syncStale : ((lowCoverage || failedEndpoints.length) ? THEME.syncWarn : ''),
         title: notes.join(' '),
       });
       setText('statusLine', `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);

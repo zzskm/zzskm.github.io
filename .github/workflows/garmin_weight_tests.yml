@@ -61,7 +61,7 @@ jobs:
           for f in garmin-weight/app.js garmin-weight/app.helpers.js garmin-weight/enhancements.js garmin-weight/sw.js; do
             node --check "$f"
           done
-      # 서비스 워커 캐시 동작(쿼리를 뗀 데이터 캐시 키, CDN 응답 저장)을 Cache API 흉내로 확인한다.
+      # 서비스 워커의 설치·활성화·요청 처리를 Cache API 흉내로 확인한다. 실제 브라우저 확인은 browser 잡에 있다.
       - name: Service worker tests
         run: node --test tests/garmin_weight_sw.test.mjs
 
@@ -103,3 +103,9 @@ jobs:
           PYTHONUTF8: '1'
           GARMIN_REQUIRE_BROWSER_TESTS: '1'
         run: python -m unittest tests.test_garmin_weight_browser -v
+      # 프로필을 유지한 채 브라우저를 여러 번 다시 띄워 설치·배포·오프라인을 본다.
+      - name: Service worker life cycle
+        env:
+          PYTHONUTF8: '1'
+          GARMIN_REQUIRE_BROWSER_TESTS: '1'
+        run: python -m unittest tests.test_garmin_weight_sw_browser -v
