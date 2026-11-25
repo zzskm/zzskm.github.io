@@ -52,7 +52,6 @@
   };
   const INQUIRY_ROLE_LABELS = { booked: "예약한 A숙소 (택배 수령 확인)", booked_b: "예약한 B숙소 (냉장 보관 확인)", a: "예비 A숙소 후보 (A숙소가 거절할 때)", b: "B숙소 후보 (냉장 보관)" };
   const TRIP_DAYS = shanghai.itinerary.length;
-  const ITINERARY_REV = shanghai.itineraryRev || "";
   const TRIP_LABEL =
     (shanghai.tripMeta && shanghai.tripMeta.dateLabel) ||
     `${shanghai.itinerary[0].date.slice(5).replace("-", "/")}–${shanghai.itinerary[TRIP_DAYS - 1].date.slice(5).replace("-", "/")}`;
@@ -62,7 +61,7 @@
     body: document.body,
     fieldMode: byId("field-mode"),
     planMode: byId("plan-mode"),
-    modeButtons: Array.from(document.querySelectorAll(".mode-btn[data-mode]")),
+    modeButtons: Array.from(document.querySelectorAll("[data-mode]")),
     dashboard: byId("field-dashboard"),
     navButtons: Array.from(document.querySelectorAll("[data-ftab]")),
     panels: FIELD_TABS.reduce((acc, tab) => {
@@ -89,6 +88,9 @@
   let prepDayFilter = "pre";
   let toastTimer = null;
   let currentTaxiPlace = null;
+  let offlineReady = false; // true once the service worker that keeps an offline copy controls this page
+  let lastAutoDay = null; // trip day the schedule was last moved to automatically
+  let renderedClockKey = ""; // now/next pair the schedule tab was last drawn with
 
   let state = loadFieldState();
 
@@ -104,7 +106,15 @@
 
     bindGlobalEvents();
     applyMode();
+    autoSelectToday();
     renderAll();
+    registerOfflineCache();
+
+    // Keep "지금 / 다음" in step with the clock, and follow the date when the page is reopened.
+    window.setInterval(refreshClock, 60000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshClock();
+    });
 
     window.addEventListener("trip:rendered", () => {
       if (state.mode === "field") {
@@ -127,18 +137,13 @@
         note: r.note || "",
       };
     });
-    const itemOrder = {};
-    shanghai.itinerary.forEach((day) => {
-      itemOrder[day.dayIndex] = day.items.map((it) => it.id);
-    });
     return {
       version: 1,
       mode: "field",
       activeTab: "schedule",
       activeDay: 0,
+      dashOpen: false,
       itemState: {},
-      itemOrder,
-      itineraryRev: ITINERARY_REV,
       reservations,
       hotelInquiry: {},
       checklistDone: {},
@@ -167,9 +172,8 @@
       mode: saved.mode === "plan" ? "plan" : "field",
       activeTab: FIELD_TABS.includes(saved.activeTab) ? saved.activeTab : "schedule",
       activeDay: clampInt(saved.activeDay, 0, shanghai.itinerary.length - 1, 0),
+      dashOpen: Boolean(saved.dashOpen),
       itemState: saved.itemState && typeof saved.itemState === "object" ? { ...saved.itemState } : {},
-      itemOrder: { ...base.itemOrder },
-      itineraryRev: ITINERARY_REV,
       reservations: { ...base.reservations },
       hotelInquiry: {},
       checklistDone: saved.checklistDone && typeof saved.checklistDone === "object" ? { ...saved.checklistDone } : {},
@@ -178,18 +182,7 @@
       freeNotes: Array.isArray(saved.freeNotes) ? saved.freeNotes.slice(0, 100) : [],
     };
 
-    // Reconcile itemOrder so new/missing items are always preserved.
-    // An order saved for an older itinerary is dropped: items were moved between slots since then.
-    const sameItinerary = saved.itineraryRev === ITINERARY_REV;
-    shanghai.itinerary.forEach((day) => {
-      const validIds = day.items.map((it) => it.id);
-      const savedIds = sameItinerary && saved.itemOrder && Array.isArray(saved.itemOrder[day.dayIndex]) ? saved.itemOrder[day.dayIndex] : [];
-      const kept = savedIds.filter((id) => validIds.includes(id));
-      validIds.forEach((id) => {
-        if (!kept.includes(id)) kept.push(id);
-      });
-      next.itemOrder[day.dayIndex] = kept;
-    });
+    // Items always follow the data's time order. A manual order saved by an older version is ignored.
 
     // Reconcile reservations
     Object.keys(base.reservations).forEach((resId) => {
@@ -270,10 +263,7 @@
 
   function getOrderedDayItems(dayIndex) {
     const day = shanghai.itinerary[dayIndex];
-    if (!day) return [];
-    const map = new Map(day.items.map((it) => [it.id, it]));
-    const order = state.itemOrder[dayIndex] || day.items.map((it) => it.id);
-    return order.map((id) => map.get(id)).filter(Boolean);
+    return day ? day.items : [];
   }
 
   function getAllItemsFlat() {
@@ -329,10 +319,94 @@
     };
   }
 
-  function findNextUpcomingItem() {
+  // ---------- Clock: today, now, next ----------
+  // Uses the phone's own date and time, which follow the local time zone after landing.
+  function localDateStr(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function toMin(hhmm) {
+    return Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+  }
+
+  function getTodayDayIndex(now = new Date()) {
+    const today = localDateStr(now);
+    return shanghai.itinerary.findIndex((d) => d.date === today);
+  }
+
+  // phase "before": the trip has not started. "during": today is a trip day. "after": it is over.
+  // current = the unfinished item whose time slot contains now. next = the first unfinished item after now.
+  function getNowNext(now = new Date()) {
     const all = getAllItemsFlat();
-    const firstUndone = all.find(({ item }) => !getItemState(item.id).done);
-    return firstUndone || all[all.length - 1] || null;
+    const undone = all.filter(({ item }) => !getItemState(item.id).done);
+    const todayIdx = getTodayDayIndex(now);
+    if (todayIdx < 0) {
+      const phase = localDateStr(now) < shanghai.itinerary[0].date ? "before" : "after";
+      return { phase, todayIdx, current: null, next: phase === "before" ? undone[0] || null : null, minutesToNext: null };
+    }
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const today = undone.filter(({ day }) => day.dayIndex === todayIdx);
+    const running = today.filter(({ item }) => toMin(item.startTime) <= nowMin && nowMin < toMin(item.endTime));
+    const current = running[running.length - 1] || null;
+    let next = today.find(({ item }) => toMin(item.startTime) > nowMin) || null;
+    let minutesToNext = next ? toMin(next.item.startTime) - nowMin : null;
+    if (!next) {
+      next = undone.find(({ day }) => day.dayIndex > todayIdx) || null;
+      minutesToNext = null;
+    }
+    return { phase: "during", todayIdx, current, next, minutesToNext };
+  }
+
+  function clockKey(nn) {
+    return [nn.phase, nn.todayIdx, nn.current ? nn.current.item.id : "", nn.next ? nn.next.item.id : ""].join("|");
+  }
+
+  // On a trip day the schedule opens on today. Runs once per day so browsing other days is not undone.
+  function autoSelectToday() {
+    const idx = getTodayDayIndex();
+    if (idx < 0 || idx === lastAutoDay) return false;
+    lastAutoDay = idx;
+    if (state.activeDay === idx) return false;
+    state.activeDay = idx;
+    saveFieldState();
+    return true;
+  }
+
+  function refreshClock() {
+    if (state.mode !== "field") return;
+    const dayChanged = autoSelectToday();
+    renderDashboard();
+    if (state.activeTab !== "schedule") return;
+    // A redraw would drop the focus of a memo or amount field that is being typed in.
+    const active = document.activeElement;
+    const typing = Boolean(active && dom.panels.schedule.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName));
+    if (!typing && (dayChanged || clockKey(getNowNext()) !== renderedClockKey)) renderScheduleTab();
+  }
+
+  function formatWait(min) {
+    if (min === null || min === undefined) return "";
+    if (min < 60) return `${min}분 뒤`;
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h}시간 ${m}분 뒤` : `${h}시간 뒤`;
+  }
+
+  // ---------- Offline copy (service worker) ----------
+  // The scope is the page's own URL prefix, so no other page of the site is controlled by this worker.
+  function registerOfflineCache() {
+    if (!("serviceWorker" in navigator) || !/^https?:$/.test(window.location.protocol)) return;
+    const markReady = () => {
+      offlineReady = Boolean(navigator.serviceWorker.controller);
+      updateOnlineStatus();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", markReady);
+    navigator.serviceWorker
+      .register("trip_2026_dec_china.sw.js", { scope: "./trip_2026_dec_china" })
+      .then(markReady)
+      .catch(() => {
+        // No offline copy (private mode, unsupported browser): the page still works online.
+      });
   }
 
   function getDdayText() {
@@ -359,8 +433,22 @@
         saveFieldState();
         applyMode();
         if (nextMode === "field") renderAll();
+        // The switch sits at the bottom of the page; the other mode starts at its top.
+        window.scrollTo({ top: 0 });
       });
     });
+
+    // <details> toggle does not bubble, so it is caught on the way down.
+    dom.dashboard.addEventListener(
+      "toggle",
+      (e) => {
+        if (!(e.target instanceof HTMLDetailsElement) || !e.target.classList.contains("dash-fold")) return;
+        if (state.dashOpen === e.target.open) return;
+        state.dashOpen = e.target.open;
+        saveFieldState();
+      },
+      true
+    );
 
     dom.navButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -405,8 +493,9 @@
     if (dom.planMode) dom.planMode.hidden = isField;
     dom.modeButtons.forEach((btn) => {
       const active = btn.dataset.mode === state.mode;
+      if (!btn.classList.contains("mode-btn")) return;
       btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-selected", String(active));
+      btn.setAttribute("aria-pressed", String(active));
     });
   }
 
@@ -444,81 +533,91 @@
   function updateOnlineStatus() {
     if (!dom.offlinePill) return;
     const online = navigator.onLine !== false;
-    dom.offlinePill.textContent = online ? "온라인 · 오프라인 열람 지원" : "오프라인 모드 (로컬 저장 정상)";
+    const onlineText = offlineReady ? "온라인 · 오프라인 저장됨" : "온라인";
+    const offlineText = offlineReady ? "오프라인 · 저장본으로 표시 중" : "오프라인";
+    dom.offlinePill.textContent = online ? onlineText : offlineText;
     dom.offlinePill.className = `sh-pill ${online ? "is-online" : "is-offline"}`;
   }
 
   // ---------- Dashboard ----------
   function renderDashboard() {
     const stats = getProgressStats();
-    const next = findNextUpcomingItem();
+    const nn = getNowNext();
     const quote = getShanghaiQuoteResult();
     const estPerPerson = quote ? `약 ${formatManwon(quote.perPerson.mean)}/인` : "-";
+    const ddayText = getDdayText();
 
     const urgentHtml = stats.urgentPending.length
       ? `
-        <div class="dash-urgent">
-          <div>
-            <strong>${esc(getDdayText())} 핵심 예약 ${stats.urgentPending.length}건 미완료:</strong>
-            ${stats.urgentPending.map((r) => esc(r.category)).join(" · ")}
-          </div>
-          <button type="button" class="sh-btn is-sm is-primary" data-jump-tab="bookings">예약 확인 →</button>
-        </div>
+        <button type="button" class="dash-urgent" data-jump-tab="bookings">
+          <span><strong>미완료 핵심 예약 ${stats.urgentPending.length}건</strong> · ${stats.urgentPending.map((r) => esc(r.category)).join(" · ")}</span>
+          <span class="dash-urgent-go">확인 →</span>
+        </button>
       `
       : "";
+    const shortStatus = nn.phase === "before" ? ddayText : nn.phase === "during" ? `Day ${nn.todayIdx + 1}/${TRIP_DAYS}` : "여행 완료";
 
-    const nextHtml = next
-      ? `
-        <div class="dash-next-row">
-          <div class="dash-next-info">
-            <span class="dash-next-badge">다음 일정 · Day ${next.day.dayIndex + 1} ${esc(next.item.startTime)}</span>
-            <strong>${esc(next.item.title)}</strong>
-          </div>
-          <div class="dash-day-pills" role="group" aria-label="날짜 바로가기">
-            ${shanghai.itinerary
-              .map(
-                (d) => `
-                  <button type="button" class="day-pill-btn ${d.dayIndex === state.activeDay && state.activeTab === "schedule" ? "is-active" : ""}" data-jump-day="${d.dayIndex}">
-                    Day ${d.dayIndex + 1} (${esc(d.date.slice(5))})
-                  </button>
-                `
-              )
-              .join("")}
-          </div>
-        </div>
-      `
-      : "";
+    // One tappable line per entry: what is on now, and what comes next. Tapping opens that card.
+    const nowLine = (entry, badge, badgeClass, tail) => {
+      const d = entry.day;
+      const dayPart = nn.phase === "during" && d.dayIndex === nn.todayIdx ? "" : `Day ${d.dayIndex + 1} ${d.date.slice(5).replace("-", "/")}(${d.weekday}) `;
+      return `
+        <button type="button" class="dash-now-line" data-jump-item="${esc(entry.item.id)}">
+          <span class="dash-next-badge ${badgeClass}">${esc(badge)}</span>
+          <span class="dash-now-time">${esc(dayPart)}${esc(entry.item.startTime)}</span>
+          <strong>${esc(entry.item.title)}</strong>
+          ${tail ? `<span class="dash-now-tail">${esc(tail)}</span>` : ""}
+        </button>
+      `;
+    };
+    let nowHtml = "";
+    if (nn.current) nowHtml += nowLine(nn.current, "지금", "is-now", `${nn.current.item.endTime}까지`);
+    if (nn.next) nowHtml += nowLine(nn.next, nn.phase === "before" ? "첫 일정" : "다음", "", formatWait(nn.minutesToNext));
+    if (!nowHtml) {
+      nowHtml = `<div class="dash-now-line is-static">${nn.phase === "after" ? "여행이 끝났습니다." : "남은 일정을 모두 마쳤습니다."}</div>`;
+    }
 
     dom.dashboard.innerHTML = `
       ${urgentHtml}
-      <div class="dash-grid">
-        <div class="dash-card">
-          <span class="dash-label">여행 기간 · 상태</span>
-          <div class="dash-value">${esc(getDdayText())}</div>
-          <div class="dash-sub">${esc(TRIP_LABEL)} · ${shanghai.tripMeta.nights}박 ${shanghai.tripMeta.days}일 · ${shanghai.tripMeta.travelers}인</div>
-          ${
-            shanghai.tripMeta.flights
-              ? `<div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.out)}</div><div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.back)}</div>`
-              : ""
-          }
+      <div class="dash-now" aria-label="지금과 다음 일정">${nowHtml}</div>
+      <details class="dash-fold" ${state.dashOpen ? "open" : ""}>
+        <summary>
+          <span class="dash-fold-items">
+            <span class="dash-fold-item"><strong>${esc(shortStatus)}</strong></span>
+            <span class="dash-fold-item">예약 <strong>${stats.doneRes}/${stats.totalRes}</strong></span>
+            <span class="dash-fold-item">준비 <strong>${stats.doneChecks}/${stats.totalChecks}</strong></span>
+            <span class="dash-fold-item">일정 <strong>${stats.doneItems}/${stats.totalItems}</strong></span>
+          </span>
+          <span class="dash-fold-arrow" aria-hidden="true">▾</span>
+        </summary>
+        <div class="dash-grid">
+          <div class="dash-card">
+            <span class="dash-label">여행 기간 · 상태</span>
+            <div class="dash-value">${esc(ddayText)}</div>
+            <div class="dash-sub">${esc(TRIP_LABEL)} · ${shanghai.tripMeta.nights}박 ${shanghai.tripMeta.days}일 · ${shanghai.tripMeta.travelers}인</div>
+            ${
+              shanghai.tripMeta.flights
+                ? `<div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.out)}</div><div class="dash-sub">✈ ${esc(shanghai.tripMeta.flights.back)}</div>`
+                : ""
+            }
+          </div>
+          <div class="dash-card">
+            <span class="dash-label">예약 완료율</span>
+            <div class="dash-value">${stats.resPct}% <small class="dash-count">(${stats.doneRes}/${stats.totalRes})</small></div>
+            <div class="dash-progress"><div class="dash-progress-bar" style="width:${stats.resPct}%"></div></div>
+          </div>
+          <div class="dash-card">
+            <span class="dash-label">준비 체크리스트</span>
+            <div class="dash-value">${stats.prepPct}% <small class="dash-count">(${stats.doneChecks}/${stats.totalChecks})</small></div>
+            <div class="dash-progress"><div class="dash-progress-bar" style="width:${stats.prepPct}%"></div></div>
+          </div>
+          <div class="dash-card">
+            <span class="dash-label">일정 진행 · 견적</span>
+            <div class="dash-value">${stats.doneItems}/${stats.totalItems} 완료</div>
+            <div class="dash-sub">예상 견적 ${esc(estPerPerson)}</div>
+          </div>
         </div>
-        <div class="dash-card">
-          <span class="dash-label">예약 완료율</span>
-          <div class="dash-value">${stats.resPct}% <small style="font-size:0.8rem;font-weight:600;color:var(--muted)">(${stats.doneRes}/${stats.totalRes})</small></div>
-          <div class="dash-progress"><div class="dash-progress-bar" style="width:${stats.resPct}%"></div></div>
-        </div>
-        <div class="dash-card">
-          <span class="dash-label">준비 체크리스트</span>
-          <div class="dash-value">${stats.prepPct}% <small style="font-size:0.8rem;font-weight:600;color:var(--muted)">(${stats.doneChecks}/${stats.totalChecks})</small></div>
-          <div class="dash-progress"><div class="dash-progress-bar" style="width:${stats.prepPct}%"></div></div>
-        </div>
-        <div class="dash-card">
-          <span class="dash-label">일정 진행 · 견적</span>
-          <div class="dash-value">${stats.doneItems}/${stats.totalItems} 완료</div>
-          <div class="dash-sub">예상 견적 ${esc(estPerPerson)}</div>
-        </div>
-      </div>
-      ${nextHtml}
+      </details>
     `;
   }
 
@@ -527,6 +626,10 @@
     const day = shanghai.itinerary[state.activeDay] || shanghai.itinerary[0];
     const items = getOrderedDayItems(day.dayIndex);
     const fxRate = getFxRate();
+    const nn = getNowNext();
+    renderedClockKey = clockKey(nn);
+    const nowId = nn.current ? nn.current.item.id : "";
+    const nextId = nn.next ? nn.next.item.id : "";
 
     const dayTabsHtml = `
       <div class="day-tabs" role="tablist" aria-label="날짜 선택">
@@ -535,10 +638,11 @@
             const dItems = getOrderedDayItems(d.dayIndex);
             const dDone = dItems.filter((it) => getItemState(it.id).done).length;
             const active = d.dayIndex === day.dayIndex;
+            const isToday = d.dayIndex === nn.todayIdx;
             return `
-              <button type="button" class="day-tab-btn ${active ? "is-active" : ""}" data-select-day="${d.dayIndex}" role="tab" aria-selected="${active}">
-                <strong>Day ${d.dayIndex + 1} · ${esc(d.date.slice(5).replace("-", "/"))} (${esc(d.weekday)})</strong>
-                <small>${dDone}/${dItems.length} 완료</small>
+              <button type="button" class="day-tab-btn ${active ? "is-active" : ""} ${isToday ? "is-today" : ""}" data-select-day="${d.dayIndex}" role="tab" aria-selected="${active}" aria-label="Day ${d.dayIndex + 1} ${esc(d.date.slice(5).replace("-", "/"))} ${esc(d.weekday)}요일${isToday ? " 오늘" : ""} · ${dDone}/${dItems.length} 완료">
+                <strong>${esc(d.date.slice(5).replace("-", "/"))}</strong>
+                <small>${isToday ? "오늘" : `${esc(d.weekday)} · D${d.dayIndex + 1}`} · ${dDone}/${dItems.length}</small>
               </button>
             `;
           })
@@ -547,11 +651,14 @@
     `;
 
     const bannerHtml = `
-      <div class="day-banner">
-        <h2>Day ${day.dayIndex + 1} · ${esc(day.date)} (${esc(day.weekday)}) — ${esc(day.title)}</h2>
+      <details class="day-banner">
+        <summary>
+          <h2><span class="day-banner-day">Day ${day.dayIndex + 1} · ${esc(day.weekday)}</span> ${esc(day.title)}</h2>
+          <div class="day-highlight">${esc(day.highlight)}</div>
+          <span class="day-banner-more">개요 ▾</span>
+        </summary>
         <p>${esc(day.summary)}</p>
-        <div class="day-highlight">${esc(day.highlight)}</div>
-      </div>
+      </details>
     `;
 
     const cardsHtml = items
@@ -578,6 +685,42 @@
             `
             : "";
 
+        // Step-by-step walkthrough (airport arrival, departure morning) belongs to the main plan only.
+        const steps = !usePlanB && Array.isArray(item.steps) ? item.steps : [];
+        const stepsHtml = steps.length
+          ? `
+            <ol class="tl-steps" aria-label="단계별 진행">
+              ${steps
+                .map(
+                  (s) => `
+                    <li>
+                      <span class="tl-step-time">${esc(s.time)}</span>
+                      <div><strong>${esc(s.title)}</strong><span class="tl-step-detail">${esc(s.detail)}</span></div>
+                    </li>
+                  `
+                )
+                .join("")}
+            </ol>
+          `
+          : "";
+        const guideHtml =
+          Array.isArray(item.guide) && item.guide.length
+            ? `
+              <div class="tl-guide">
+                ${item.guide
+                  .map(
+                    (g) => `
+                      <details class="tl-guide-block">
+                        <summary>${esc(g.title)}</summary>
+                        <ul>${(g.lines || []).map((line) => `<li>${esc(line)}</li>`).join("")}</ul>
+                      </details>
+                    `
+                  )
+                  .join("")}
+              </div>
+            `
+            : "";
+
         const bodyHtml = expanded
           ? `
             <div class="tl-body">
@@ -599,6 +742,9 @@
                   `
                   : ""
               }
+
+              ${stepsHtml}
+              ${guideHtml}
 
               <div class="tl-detail-grid">
                 <div class="tl-detail-box">
@@ -655,15 +801,18 @@
 
         return `
           ${transitHtml}
-          <article class="tl-item ${st.done ? "is-done" : ""} ${item.category === "rx" ? "is-rx" : ""}" data-item-id="${esc(item.id)}">
+          <article class="tl-item ${st.done ? "is-done" : ""} ${item.category === "rx" ? "is-rx" : ""} ${item.id === nowId ? "is-now" : ""} ${item.id === nextId ? "is-next" : ""}" data-item-id="${esc(item.id)}">
             <div class="tl-head">
               <input type="checkbox" class="tl-check" aria-label="${esc(activeTitle)} 완료" ${st.done ? "checked" : ""} data-item-done="${esc(item.id)}" />
               <div class="tl-main" data-toggle-item="${esc(item.id)}">
                 <div class="tl-top-row">
                   <span class="tl-time">${esc(item.startTime)}–${esc(item.endTime)}</span>
+                  ${item.id === nowId ? `<span class="tl-clock-badge is-now">지금</span>` : ""}
+                  ${item.id === nextId ? `<span class="tl-clock-badge">다음</span>` : ""}
                   <span class="sh-badge cat-${esc(item.category)}">${esc(CAT_LABELS[item.category] || item.category)}</span>
                   ${resStatusMeta ? `<span class="sh-status-pill st-${esc(resRecord.status)}">${esc(resStatusMeta.label)}</span>` : ""}
                   ${usePlanB ? `<span class="sh-badge cat-hospital">Plan B 적용</span>` : ""}
+                  ${steps.length ? `<span class="sh-badge cat-transport">단계 ${steps.length}개 · 펼쳐 보기</span>` : ""}
                 </div>
                 <h3 class="tl-title">${esc(activeTitle)}</h3>
                 <div class="tl-place">
@@ -672,9 +821,7 @@
                 </div>
               </div>
               <div class="tl-head-actions">
-                <button type="button" class="tl-icon-btn" title="위로 이동" aria-label="위로 이동" data-move-item="${esc(item.id)}" data-dir="-1" ${idx === 0 ? "disabled" : ""}>↑</button>
-                <button type="button" class="tl-icon-btn" title="아래로 이동" aria-label="아래로 이동" data-move-item="${esc(item.id)}" data-dir="1" ${idx === items.length - 1 ? "disabled" : ""}>↓</button>
-                <button type="button" class="tl-icon-btn" title="상세 펼치기" aria-expanded="${expanded}" data-toggle-item="${esc(item.id)}">${expanded ? "▴" : "▾"}</button>
+                <button type="button" class="tl-icon-btn" title="상세 펼치기" aria-label="${esc(activeTitle)} 상세 ${expanded ? "접기" : "펼치기"}" aria-expanded="${expanded}" data-toggle-item="${esc(item.id)}">${expanded ? "▴" : "▾"}</button>
               </div>
             </div>
             ${bodyHtml}
@@ -806,6 +953,37 @@
     const cashTotalCNY = quote && quote.cash ? Math.ceil(quote.cash.total[1] / 100) * 100 : 600;
     const fxRate = getFxRate();
     const tpl = shanghai.hotelParcelTemplate;
+    const pay = shanghai.paymentGuide;
+    const payHtml =
+      pay && Array.isArray(pay.methods)
+        ? `
+          <div class="sh-card">
+            <div class="sh-card-head">
+              <h2>결제 · 현금 · ATM 전략</h2>
+              <span class="field-note" style="margin:0">${esc(pay.asOfNote || "")}</span>
+            </div>
+            <p class="field-note" style="margin-top:0">${esc(pay.summary || "")}</p>
+            <div class="tl-detail-grid">
+              ${pay.methods
+                .map(
+                  (m) => `
+                    <div class="tl-detail-box">
+                      <small>${esc(m.role)} · ${esc(m.use)}</small>
+                      <strong>${esc(m.name)}</strong>
+                      <div class="check-note">${esc(m.note)}</div>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+            ${
+              Array.isArray(pay.atmTips) && pay.atmTips.length
+                ? `<ul class="pay-list">${pay.atmTips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>`
+                : ""
+            }
+          </div>
+        `
+        : "";
 
     dom.panels.prep.innerHTML = `
       <div class="sh-card">
@@ -862,6 +1040,8 @@
         <p class="field-note" style="margin:0">한국어 뜻: ${esc(tpl.ko)}</p>
       </div>
 
+      ${payHtml}
+
       <div class="sh-card">
         <div class="sh-card-head">
           <h2>관세 · 면세 ($800) · 현금 · 날씨 요약</h2>
@@ -880,9 +1060,9 @@
             }
           </div>
           <div class="tl-detail-box">
-            <small>권장 비상 위안화 현금 (견적 연동)</small>
+            <small>비상 위안화 현금 기준액 (견적 연동)</small>
             <strong>약 ¥${formatNum(cashTotalCNY)} (약 ${formatManwon(cashTotalCNY * fxRate)})</strong>
-            <div class="check-note">노점 조식·우중시장·알리페이 장애 대비 (온라인 택배는 알리페이 선결제)</div>
+            <div class="check-note">사전 환전 대신 필요할 때 현지 ATM에서 인출(위 결제 전략) · 노점 조식·우중시장·알리페이 장애 대비 (온라인 택배는 알리페이 선결제)</div>
           </div>
           <div class="tl-detail-box">
             <small>${esc(TRIP_LABEL)} 상하이 예상 날씨 · 복장</small>
@@ -1388,15 +1568,7 @@
       state.mode = switchModeBtn.dataset.switchMode === "plan" ? "plan" : "field";
       saveFieldState();
       applyMode();
-      return;
-    }
-
-    const jumpDayBtn = target.closest("[data-jump-day]");
-    if (jumpDayBtn) {
-      state.activeDay = clampInt(jumpDayBtn.dataset.jumpDay, 0, shanghai.itinerary.length - 1, 0);
-      saveFieldState();
-      renderDashboard();
-      selectFieldTab("schedule");
+      window.scrollTo({ top: 0 });
       return;
     }
 
@@ -1404,8 +1576,9 @@
     if (selectDayBtn) {
       state.activeDay = clampInt(selectDayBtn.dataset.selectDay, 0, shanghai.itinerary.length - 1, 0);
       saveFieldState();
-      renderDashboard();
       renderScheduleTab();
+      // The day tabs stay pinned while scrolling; a newly picked day starts from its first card.
+      if (dom.panels.schedule.getBoundingClientRect().top < 0) dom.panels.schedule.scrollIntoView({ block: "start" });
       return;
     }
 
@@ -1426,27 +1599,11 @@
     }
 
     const toggleItemEl = target.closest("[data-toggle-item]");
-    if (toggleItemEl && !target.closest("input, button.tl-icon-btn[data-move-item], a")) {
+    if (toggleItemEl && !target.closest("input, a")) {
       const id = toggleItemEl.dataset.toggleItem;
       if (expandedItems.has(id)) expandedItems.delete(id);
       else expandedItems.add(id);
       renderScheduleTab();
-      return;
-    }
-
-    const moveBtn = target.closest("[data-move-item]");
-    if (moveBtn) {
-      const id = moveBtn.dataset.moveItem;
-      const dir = Number(moveBtn.dataset.dir);
-      const order = [...(state.itemOrder[state.activeDay] || [])];
-      const idx = order.indexOf(id);
-      const nextIdx = idx + dir;
-      if (idx >= 0 && nextIdx >= 0 && nextIdx < order.length) {
-        [order[idx], order[nextIdx]] = [order[nextIdx], order[idx]];
-        state.itemOrder[state.activeDay] = order;
-        saveFieldState();
-        renderScheduleTab();
-      }
       return;
     }
 
