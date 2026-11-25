@@ -163,8 +163,12 @@ class ServiceWorkerBrowserTests(unittest.TestCase):
               const shell = names.find((n) => n.startsWith('gw-shell-') && (!expected || n === expected));
               if (!shell || !names.includes('gw-data-v1') || !names.includes('gw-runtime-v1')) return false;
               if (expected && names.some((n) => n.startsWith('gw-shell-') && n !== expected)) return false;
-              const count = async (name) => (await (await caches.open(name)).keys()).length;
-              return (await count(shell)) >= 13 && (await count('gw-data-v1')) >= 2 && (await count('gw-runtime-v1')) >= 1;
+              const urls = async (name) => (await (await caches.open(name)).keys()).map((request) => request.url);
+              // 미리 받는 CDN 자산 둘(Chart.js, Pretendard CSS)이 모두 들어올 때까지 기다린다. 둘은 따로 받아지므로
+              // "하나 이상"만 보면 CSS만 들어온 순간에 통과해 버린다(Q5 브랜치의 CI에서 그렇게 실패했다).
+              const runtime = await urls('gw-runtime-v1');
+              const precached = ['chart.umd.js', 'pretendardvariable'].every((part) => runtime.some((url) => url.includes(part)));
+              return (await urls(shell)).length >= 13 && (await urls('gw-data-v1')).length >= 2 && precached;
             }""", arg=expected_shell, timeout=30000)
         return page.evaluate(
             """async () => Object.fromEntries(await Promise.all((await caches.keys()).map(async (name) =>
