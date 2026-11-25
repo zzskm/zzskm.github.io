@@ -52,6 +52,14 @@ def steady_summary(unmeasured_tail_days: int = 1) -> dict:
     return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
 
 
+def long_summary() -> dict:
+    """150일. 모든 백테스트 기간(84일 포함)에 표본이 20개 넘게 나온다."""
+    start = date(2030, 1, 1)
+    rows = [_row(start + timedelta(days=i), round(86.0 - 0.015 * i + 0.3 * sin(i * 1.7), 2) if i % 4 else None)
+            for i in range(150)]
+    return sync_garmin.build_summary(rows, {"targetWeightKg": TARGET_KG})
+
+
 def warming_up_summary() -> dict:
     start = date(2030, 1, 1)
     return sync_garmin.build_summary([_row(start + timedelta(days=i), 84.0 - i * 0.05) for i in range(9)], {"targetWeightKg": TARGET_KG})
@@ -100,6 +108,7 @@ class GarminWeightBrowserTests(unittest.TestCase):
             "partial": with_sync(steady, 2, ("get_body_composition",)),
             "stale": steady_summary(unmeasured_tail_days=5),  # sync 블록이 없는 예전 요약: generatedAt을 쓴다
             "warming": warming_up_summary(),
+            "long": with_sync(long_summary(), 2),
         }
 
     @classmethod
@@ -217,6 +226,38 @@ class GarminWeightBrowserTests(unittest.TestCase):
         self.assertEqual(pill["warn"], pill["dot"])
         self.assertIn("get_body_composition", pill["title"])
         self.assertNotIn("수집 없음", pill["text"])
+
+    def test_model_audit_is_one_table_with_shared_samples(self) -> None:
+        """P6(M1): 운영·섀도·Kalman·변화 없음이 같은 n으로 한 표에 나오고, '우세' 같은 서로 다른 판정 줄이 없다."""
+        summary = self.summaries["long"]
+        diag = summary["modelDiagnostics"]
+        for width in (1440, 360):
+            with self.subTest(width=width):
+                page = self.open_page("long", width=width)
+                table = page.evaluate("""() => {
+                  const t = document.querySelector('#modelAudit table');
+                  return { head: [...t.tHead.rows[0].cells].map(c => c.textContent),
+                           rows: [...t.tBodies[0].rows].map(r => [...r.cells].map(c => c.textContent)),
+                           text: document.getElementById('modelAudit').textContent,
+                           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+                }""")
+                self.assertEqual(["모델", *(f"{h}일n={diag['backtestSampleCounts'][f'{h}d']}" for h in (7, 14, 28, 84))], table["head"])
+                labels = [row[0] for row in table["rows"]]
+                self.assertEqual("운영 · EWMA 혼합", labels[0])
+                self.assertTrue(labels[1].startswith("섀도 · "), labels)
+                self.assertEqual(["Kalman", "변화 없음"], labels[2:])
+                current = [f"{diag['backtest'][h]['maeKg']:.2f}" for h in ("7d", "14d", "28d", "84d")]
+                self.assertEqual(current, table["rows"][0][1:])
+                flat = [f"{diag['modelAudit']['ewma_flat'][h]['maeKg']:.2f}" for h in ("7d", "14d", "28d", "84d")]
+                self.assertEqual(flat, table["rows"][3][1:])
+                self.assertNotIn("우세", table["text"])
+                self.assertIn("예측은 운영 모델로 계산합니다", table["text"])
+                self.assertLessEqual(table["overflow"], 0)
+
+    def test_short_history_shows_dashes_not_numbers(self) -> None:
+        page = self.open_page("steady")
+        cells = page.evaluate("() => [...document.querySelectorAll('#modelAudit tbody tr:first-child td')].map(c => c.textContent)")
+        self.assertEqual("–", cells[-1])  # 60일 이력에는 84일 표본이 없다
 
     def test_shortcuts_ignore_modifier_keys(self) -> None:
         page = self.open_page("steady")

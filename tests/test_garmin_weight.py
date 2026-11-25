@@ -269,7 +269,8 @@ class GarminWeightTests(unittest.TestCase):
         """Phase 3 회귀: backtest 결과의 predicted가 지수 감쇠 외삽과 일치해야 한다."""
         # 충분히 긴 history + 목표 체중 가까이 — 지수 감쇠가 선형보다 분명히 보수적인 예측을 함
         rows = []
-        for day in range(60):
+        # P6: 모든 기간에 표본 20개 이상이 필요하다(28일 기간은 28일 학습 + 28일 대기 + 20개 시점).
+        for day in range(90):
             rows.append({
                 "date": (sync_garmin.date(2030, 1, 1) + sync_garmin.timedelta(days=day)).isoformat(),
                 "weight_kg": round(85.0 - day * 0.04, 2),
@@ -364,13 +365,13 @@ class GarminWeightTests(unittest.TestCase):
         self.assertTrue(plateau["detected"])
         self.assertEqual("metabolic", plateau["type"])
 
-    def test_phase5_kalman_comparison_present(self) -> None:
-        """Phase 5 회귀: modelDiagnostics.modelComparison이 V1/Kalman MAE 비교를 노출."""
+    def test_shadow_audit_shares_the_operational_sample(self) -> None:
+        """P6: Kalman을 포함한 섀도 후보가 운영 모델과 같은 표본으로 평가되고, 결과는 예측에 쓰이지 않는다."""
         rows = []
-        for d in range(60):
+        for d in range(140):
             rows.append({
                 "date": (sync_garmin.date(2030, 6, 1) + sync_garmin.timedelta(days=d)).isoformat(),
-                "weight_kg": round(85.0 - d * 0.04, 2),
+                "weight_kg": round(85.0 - d * 0.02 + (0.3 if d % 2 else -0.3), 2) if d % 4 else None,
                 "weight_measure_count": 1,
                 "exercise_minutes": 30, "exercise_calories": 300,
                 "activity_count": 1, "steps": 8000,
@@ -379,12 +380,75 @@ class GarminWeightTests(unittest.TestCase):
                 "body_fat_percent": 22.0,
                 "sleep_score": 75, "training_load_acute": 180,
             })
-        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})
-        mc = summary["modelDiagnostics"].get("modelComparison")
-        self.assertIsNotNone(mc)
-        self.assertIn("kalmanBacktest", mc)
-        self.assertIn("recommendKalman", mc)
-        self.assertIn("perHorizon", mc)
+        diag = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})["modelDiagnostics"]
+        self.assertNotIn("modelComparison", diag)  # Kalman은 modelAudit 안에서 한 번만 평가한다
+        self.assertIn("kalman", diag["modelAudit"])
+        for horizon in ("7d", "14d", "28d", "84d"):
+            counts = {diag["backtest"][horizon]["sampleCount"]} | {m[horizon]["sampleCount"] for m in diag["modelAudit"].values()}
+            self.assertEqual({diag["backtestSampleCounts"][horizon]}, counts, horizon)
+        self.assertIn(diag["selectedModel"]["status"], ("shadow_leader", "no_change"))
+        self.assertIs(False, diag["selectedModel"]["affectsPrediction"])
+        self.assertEqual("replay", diag["ciCalibration"]["method"])
+
+    def test_today_partial_row_is_left_out_of_aggregates(self) -> None:
+        """P6(D4): 아직 끝나지 않은 오늘 행은 7일 활동 집계·30일 커버리지·EWMA 계열에 들어가지 않는다."""
+        rows = [
+            _daily_row((sync_garmin.date(2030, 8, 1) + sync_garmin.timedelta(days=d)).isoformat(), 84.0 - d * 0.01)
+            for d in range(40)
+        ]
+        for row in rows:
+            row["steps"] = 7000
+        rows.append({**_daily_row("2030-09-10", None), "steps": 117, "exercise_minutes": 0, "exercise_calories": 0})
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        self.assertEqual(7000, summary["rolling"]["last7StepsAvg"])
+        self.assertEqual("2030-09-09", summary["series"]["ewma"][-1]["date"])
+        self.assertEqual((30, 30), (summary["coverage"]["last30Measured"], summary["coverage"]["last30Total"]))
+        self.assertEqual("2030-09-10", summary["series"]["daily"][-1]["date"])
+        # 예측선과 신뢰 띠는 같은 날짜에 점을 찍는다(대시보드가 날짜로 맞춰 그린다).
+        prediction_dates = {p["date"] for p in summary["series"]["prediction"]}
+        self.assertEqual("2030-09-10", summary["series"]["prediction"][0]["date"])
+        self.assertTrue({p["date"] for p in summary["predictionCI"]["series"]} <= prediction_dates)
+
+        # 오늘 체중이 있으면 EWMA 계열에 넣는다.
+        rows[-1]["weight_kg"] = 83.5
+        self.assertEqual("2030-09-10", sync_garmin.build_summary(rows, {"targetWeightKg": 78})["series"]["ewma"][-1]["date"])
+
+    def test_model_audit_reports_the_operational_numbers(self) -> None:
+        """P6(M9): model_audit.py는 따로 계산하지 않고 요약과 같은 숫자를 낸다."""
+        spec = importlib.util.spec_from_file_location("garmin_model_audit", MODULE_PATH.parent / "model_audit.py")
+        audit_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(audit_module)
+        rows = {
+            day: _daily_row(day, round(84.0 - d * 0.01 + (0.3 if d % 2 else -0.3), 2) if d % 3 else None)
+            for d in range(120)
+            for day in [(sync_garmin.date(2030, 1, 1) + sync_garmin.timedelta(days=d)).isoformat()]
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path, config_path = Path(tmp) / "rows.csv", Path(tmp) / "config.json"
+            sync_garmin.write_rows(csv_path, rows)
+            config_path.write_text('{"targetWeightKg": 78}', encoding="utf-8")
+            audit = audit_module.build_audit(csv_path, config_path)
+            summary = sync_garmin.build_summary(sync_garmin.normalize_rows(sync_garmin.load_existing_rows(csv_path)), {"targetWeightKg": 78})
+        diag = summary["modelDiagnostics"]
+        self.assertEqual(diag["backtest"], audit["models"]["current"])
+        self.assertEqual(diag["modelAudit"]["kalman"], audit["models"]["kalman"])
+        self.assertEqual(diag["ciCalibration"]["hitRate"], audit["ciHitRate"]["hitRate"])
+        self.assertNotIn("ciHitRateApprox", audit)
+
+    def test_summary_generation_time(self) -> None:
+        """P6 완료 기준: 258행은 1초, 1,095행은 5초 안에 요약을 만든다."""
+        import time
+
+        for days, limit in ((258, 1.0), (1095, 5.0)):
+            rows = [
+                _daily_row((sync_garmin.date(2027, 1, 1) + sync_garmin.timedelta(days=d)).isoformat(),
+                           round(90.0 - d * 0.01 + (0.4 if d % 3 == 0 else -0.2), 2) if d % 5 else None)
+                for d in range(days)
+            ]
+            started = time.perf_counter()
+            sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+            with self.subTest(days=days):
+                self.assertLess(time.perf_counter() - started, limit)
 
     def test_prediction_curve_decays_toward_target(self) -> None:
         """P3 회귀: 선형 외삽이라면 12주 감량 = 12 * weekly. 지수 감쇠는 더 작아야 함."""

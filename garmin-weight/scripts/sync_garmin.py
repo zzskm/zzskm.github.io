@@ -87,7 +87,10 @@ measurement_weight = _modeling.measurement_weight
 compute_ewma = _modeling.compute_ewma
 compute_prediction_ci = _modeling.compute_prediction_ci
 compute_trend_windows = _modeling.compute_trend_windows
-backtest_predictions = _modeling.backtest_predictions
+run_backtest = _modeling.run_backtest
+shadow_gate = _modeling.shadow_gate
+replay_ci_hit_rate = _modeling.replay_ci_hit_rate
+SHADOW_MODELS = _modeling.SHADOW_MODELS
 classify_prediction_confidence = _modeling.classify_prediction_confidence
 classify_loss_intensity = _modeling.classify_loss_intensity
 detect_plateau = _modeling.detect_plateau
@@ -95,9 +98,6 @@ build_insight = _modeling.build_insight
 data_quality_diagnostics = _modeling.data_quality_diagnostics
 model_trend_exposure = _modeling.model_trend_exposure
 warming_up_trend_exposure = _modeling.warming_up_trend_exposure
-run_generalized_backtest = _modeling.run_generalized_backtest
-apply_model_selection_gate = _modeling.apply_model_selection_gate
-compute_ci_calibration_replay = _modeling.compute_ci_calibration_replay
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -979,7 +979,10 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         for row in rows
     ]
     ewma_values = compute_ewma(all_weights, weights=ewma_weights)
-    ewma_series = [{"date": all_dates[i], "valueKg": ewma_values[i]} for i in range(len(rows))]
+    # D4: 마지막 행은 아직 끝나지 않은 오늘이다. 체중이 없으면 EWMA 계열에 넣지 않는다
+    # (전날 값을 그대로 이은 점이 추세 기울기를 0 쪽으로 끌고 차트에도 측정 없는 점을 찍는다).
+    ewma_days = len(rows) if rows[-1].get("weight_kg") is not None or len(rows) == 1 else len(rows) - 1
+    ewma_series = [{"date": all_dates[i], "valueKg": ewma_values[i]} for i in range(ewma_days)]
 
     latest_date = rows[-1]["date"]
     current_weight = latest_weight_row.get("weight_kg") if latest_weight_row else None
@@ -1023,8 +1026,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     # EWMA slope 중심 + MA7 보조 감량률. 운동 kcal은 기본 예측에서 제외한다.
     trend_window = int(config.get("exerciseTrendWindow") or 28)
+    model_latest_date = ewma_series[-1]["date"]
     loss_rate_detail = compute_weekly_loss_rate(
-        ewma_series, ma7_by_date, rows, latest_date,
+        ewma_series, ma7_by_date, rows[:ewma_days], model_latest_date,
         window=trend_window, kcal_to_kg=kcal_to_kg,
     )
     weekly_loss_rate = loss_rate_detail["blended"]
@@ -1041,7 +1045,9 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     else:
         loss_rate_detail["rateSource"] = "multi_window_blend" if weekly_loss_rate is not None else None
 
-    last7 = rows[-7:]
+    # D4: 활동 집계는 완료된 날(오늘 행 제외)만 쓴다. 이력이 하루뿐이면 그 하루를 쓴다.
+    complete_rows = rows[:-1] if len(rows) > 1 else rows
+    last7 = complete_rows[-7:]
     weight_values = [row.get("weight_kg") for row in last7 if row.get("weight_kg") is not None]
     steps_values = [row.get("steps") for row in last7 if row.get("steps") is not None]
     sleep_values = [parse_float(row.get("sleep_hours")) for row in last7]
@@ -1063,7 +1069,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     }
 
     trend_window = int(config.get("exerciseTrendWindow") or 28)
-    exercise_trend = build_exercise_trend(rows, window=trend_window)
+    exercise_trend = build_exercise_trend(complete_rows, window=trend_window)
     pct_deltas = config.get("scenarioExercisePctDelta") or {}
     opt_pct = parse_float(pct_deltas.get("optimistic")) or 0.30
     con_pct = parse_float(pct_deltas.get("conservative")) or -0.30
@@ -1072,7 +1078,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     base_trend_loss = weekly_loss_rate if weekly_loss_rate is not None else 0.0
 
     # Phase 1A: 운동 효율 캘리브레이션 (kcal_to_kg는 위에서 정한 동적 값 사용)
-    calibration = compute_calibration(rows, weekly_loss_rate, kcal_to_kg, window=trend_window)
+    calibration = compute_calibration(complete_rows, weekly_loss_rate, kcal_to_kg, window=trend_window)
     efficiency = calibration.get("exerciseEfficiency") or 1.0
 
     # Phase 6: 활동 로그 기반 시나리오 — 운동 세션 평균 kcal로 구체화
@@ -1127,19 +1133,20 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             eta_days = math.ceil((remaining_kg / base_effective_loss) * 7)
             eta_date = (datetime.strptime(latest_date, "%Y-%m-%d").date() + timedelta(days=eta_days)).isoformat()
 
-    # 고도화 계산
-    # P3/P4: target_weight + backtest를 CI에 주입하려면 backtest를 먼저 계산해야 한다.
-    _early_backtest = backtest_predictions(
-        rows, ewma_series, ma7_by_date,
-        train_window=trend_window,
+    # P6: 모든 모델을 같은 기준 시점·같은 실측 매칭으로 한 번에 평가한다. CI·신뢰도·화면이 같은 결과를 쓴다.
+    backtest_run = run_backtest(
+        rows[:ewma_days], ewma_series, ma7_by_date,
         target_weight=target_weight,
+        train_window=trend_window,
     )
+    backtest = backtest_run["models"]["current"]
     prediction_ci = compute_prediction_ci(
         ewma_series,
         daily_series,
         base_effective_loss,
         target_weight=target_weight,
-        backtest=_early_backtest,
+        backtest=backtest,
+        start_date=latest_date,  # 예측선과 같은 날짜에 점을 찍는다(EWMA 계열은 어제에서 끝날 수 있다)
     )
     loss_intensity = classify_loss_intensity(
         base_effective_loss if base_effective_loss > 0 else None,
@@ -1152,8 +1159,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
     rolling["exerciseTrend"] = exercise_trend
     rolling["lossRateDetail"] = loss_rate_detail
 
-    # 측정 커버리지 (최근 30일)
-    last30 = rows[-30:]
+    # 측정 커버리지 (최근 30일, D4: 완료된 날만)
+    last30 = complete_rows[-30:]
     measured_count = sum(1 for r in last30 if r.get("weight_kg") is not None)
     coverage_pct = round(measured_count / len(last30) * 100, 0) if last30 else 0
 
@@ -1187,30 +1194,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "max": (base_day + timedelta(days=max_eta)).isoformat(),
             }
 
-    trend_windows = compute_trend_windows(ewma_series, latest_date)
-    backtest = _early_backtest  # CI 계산에 사용한 동일한 백테스트 결과 재사용
-
-    # Phase 5: Kalman 필터 후보 모델 비교 (채택 결정용)
-    kalman_comparison: dict[str, Any] | None = None
-    try:
-        # 같은 디렉토리의 모듈을 안전하게 로드 (실행 방식에 무관)
-        import importlib.util as _ilu
-        _kspec = _ilu.spec_from_file_location(
-            "kalman_predictor",
-            Path(__file__).resolve().parent / "kalman_predictor.py",
-        )
-        if _kspec is None or _kspec.loader is None:
-            raise RuntimeError("kalman_predictor module not found")
-        _kmod = _ilu.module_from_spec(_kspec)
-        _kspec.loader.exec_module(_kmod)
-        kalman_bt = _kmod.kalman_backtest(rows, train_window=trend_window)
-        kalman_comparison = {
-            "kalmanBacktest": kalman_bt,
-            **_kmod.compare_backtests(backtest, kalman_bt),
-        }
-    except Exception as exc:  # 한 번이라도 실패해도 V1 흐름 영향 없음
-        LOGGER.warning("kalman comparison skipped: %s", exc)
-        kalman_comparison = {"error": str(exc)}
+    trend_windows = compute_trend_windows(ewma_series, model_latest_date)
 
     confidence = classify_prediction_confidence(
         coverage_pct=coverage_pct,
@@ -1222,48 +1206,14 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     data_quality = data_quality_diagnostics(rows)
 
-    shadow_audit = run_generalized_backtest(
-        rows, ewma_series,
-        candidate_names=["flat_baseline", "ma7_baseline", "ewma_baseline", "linear_regression_28d", "linear_regression_56d", "linear_regression_84d", "weighted_linear_regression_56d", "robust_regression_56d", "kalman"],
-        train_window=trend_window,
-    )
-    shadow_audit_candidates = {k: v for k, v in shadow_audit.items() if k != "current_multi_window_ewma_blend"}
-    selection_gate = apply_model_selection_gate(shadow_audit_candidates, backtest)
-
-    ci_hit_series = prediction_ci.get("series") or []
-    spread_by_horizon: dict[int, float] = {}
-    for idx, row in enumerate(ci_hit_series, start=1):
-        if idx not in (1, 2, 4):
-            continue
-        lower = parse_float(row.get("lower80"))
-        upper = parse_float(row.get("upper80"))
-        central = parse_float(row.get("central"))
-        if lower is None or upper is None or central is None:
-            continue
-        spread_by_horizon[idx * 7] = max(abs(central - lower), abs(upper - central))
-
-    def central_fn(horizon_days: int, cutoff_ewma: float | None, cutoff_values_prefix: list[float | None]) -> float | None:
-        if cutoff_ewma is None or base_effective_loss <= 0:
-            return None
-        return _projected_weight(cutoff_ewma, base_effective_loss, max(round(horizon_days / 7), 1), target_weight)
-
-    def spread_fn(horizon_days: int) -> float | None:
-        return spread_by_horizon.get(horizon_days)
-
-    ci_calibration = compute_ci_calibration_replay(
-        rows,
-        ewma_series,
-        central_fn=central_fn,
-        spread_fn=spread_fn,
-        train_window=trend_window,
-    )
-
-    hit_rate = ci_calibration.get("hitRate", {})
-    if "hitRate" not in prediction_ci:
-        prediction_ci["hitRate"] = hit_rate
+    model_audit = {name: backtest_run["models"][name] for name in SHADOW_MODELS}
+    selection_gate = shadow_gate(backtest_run["models"])
+    ci_calibration = replay_ci_hit_rate(backtest_run, rows[:ewma_days], ewma_series)
+    prediction_ci["hitRate"] = ci_calibration["hitRate"]
     prediction_ci["calibration"] = {
-        "status": ci_calibration.get("status"),
-        "targetHitRate": 0.8,
+        "status": ci_calibration["status"],
+        "targetHitRate": ci_calibration["targetHitRate"],
+        "method": ci_calibration["method"],
         "notes": [],
     }
 
@@ -1284,15 +1234,16 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         },
         "dataQuality": data_quality,
         "trend": trend_display,
+        # 섀도 비교 결과. 예측은 항상 운영 모델(current)로 계산한다(affectsPrediction=false).
         "selectedModel": selection_gate,
         "trendWindows": trend_windows,
         "residualStdKg": prediction_ci.get("stdResidual"),
         "backtest": backtest,
-        "modelAudit": shadow_audit_candidates,
+        "backtestSampleCounts": backtest_run["sampleCounts"],
+        "modelAudit": model_audit,
         "kcalPerKg": round(kcal_to_kg, 0),
         "kcalPerKgSource": kcal_source,
         "calibration": calibration,
-        "modelComparison": kalman_comparison,
         "ciCalibration": ci_calibration,
         "notes": [
             "기본 예측은 체중 추세 기반입니다.",

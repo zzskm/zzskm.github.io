@@ -56,24 +56,42 @@
     return isFiniteNumber(value) ? Number(value) : null;
   }
 
-  function inferBaselineComparison(summary) {
-    const diagnostics = summary?.modelDiagnostics || {};
-    if (diagnostics.baselineComparison) return diagnostics.baselineComparison;
+  // P6(M1): 운영 / 섀도 후보 / Kalman / 변화 없음을 같은 기준 시점(n)으로 한 표에 보여 준다.
+  const AUDIT_HORIZONS = ['7d', '14d', '28d', '84d'];
+  const MODEL_LABELS = {
+    current: '운영 · EWMA 혼합',
+    ewma_flat: '변화 없음',
+    ma7: '최근 7회 평균',
+    linreg_28d: '28일 회귀',
+    linreg_56d: '56일 회귀',
+    linreg_84d: '84일 회귀',
+    weighted_linreg_56d: '56일 가중 회귀',
+    robust_56d: '56일 강건 회귀',
+    kalman: 'Kalman',
+  };
+  const modelLabel = (name) => MODEL_LABELS[name] || String(name);
 
-    const backtest = diagnostics.backtest || {};
-    const kalman = diagnostics.modelComparison?.kalmanBacktest || {};
-    const out = {};
+  function okMae(stats, horizon) {
+    return stats?.[horizon]?.status === 'ok' ? readMae(stats, horizon) : null;
+  }
 
-    ['7d', '14d', '28d'].forEach((horizon) => {
-      const currentMae = readMae(backtest, horizon);
-      const kalmanMae = readMae(kalman, horizon);
-      const values = { current: currentMae, kalman: kalmanMae };
-      const valid = Object.entries(values).filter(([, v]) => isFiniteNumber(v));
-      const winner = valid.length ? valid.reduce((best, next) => Number(next[1]) < Number(best[1]) ? next : best)[0] : null;
-      out[horizon] = { currentMaeKg: currentMae, kalmanMaeKg: kalmanMae, winner };
+  // 게이트를 통과한 후보가 있으면 그 후보, 없으면 운영 모델 대비 MAE 비율이 가장 낮은 회귀·평균 후보.
+  function shadowRow(diagnostics) {
+    const gate = diagnostics.selectedModel || {};
+    const audit = diagnostics.modelAudit || {};
+    if (gate.status === 'shadow_leader' && audit[gate.name]) return { name: gate.name, passed: true };
+    const current = diagnostics.backtest || {};
+    let best = null;
+    Object.entries(audit).forEach(([name, stats]) => {
+      if (name === 'kalman' || name === 'ewma_flat') return;
+      const ratios = AUDIT_HORIZONS
+        .map((h) => { const base = okMae(current, h); const mae = okMae(stats, h); return base && mae !== null ? mae / base : null; })
+        .filter((v) => v !== null);
+      if (!ratios.length) return;
+      const score = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      if (!best || score < best.score) best = { name, score };
     });
-
-    return out;
+    return best ? { name: best.name, passed: false } : null;
   }
 
   function renderModelAudit(summary) {
@@ -88,28 +106,71 @@
       strip.appendChild(audit);
     }
 
-    const comparison = inferBaselineComparison(summary);
-    const parts = ['7d', '14d', '28d'].map((horizon) => {
-      const row = comparison[horizon] || {};
-      const mae = isFiniteNumber(row.currentMaeKg) ? `${Number(row.currentMaeKg).toFixed(2)}kg` : '표본 부족';
-      const win = row.winner ? ` · 우세 ${row.winner}` : '';
-      return `${horizon} ${mae}${win}`;
+    const diagnostics = summary?.modelDiagnostics || {};
+    const counts = diagnostics.backtestSampleCounts || {};
+    const models = diagnostics.modelAudit || {};
+    const shadow = shadowRow(diagnostics);
+    const rows = [
+      { label: modelLabel('current'), stats: diagnostics.backtest || {}, operational: true },
+      shadow && { label: `섀도 · ${modelLabel(shadow.name)}`, stats: models[shadow.name] || {}, note: shadow.passed ? '게이트 통과 · 예측에는 쓰지 않음' : '게이트 미통과' },
+      { label: modelLabel('kalman'), stats: models.kalman || {} },
+      { label: modelLabel('ewma_flat'), stats: models.ewma_flat || {} },
+    ].filter(Boolean);
+    const best = Object.fromEntries(AUDIT_HORIZONS.map((h) => {
+      const values = rows.map((row) => okMae(row.stats, h)).filter((v) => v !== null);
+      return [h, values.length ? Math.min(...values) : null];
+    }));
+
+    const table = document.createElement('table');
+    table.className = 'audit-table';
+    const head = table.createTHead().insertRow();
+    const corner = document.createElement('th');
+    corner.scope = 'col';
+    corner.textContent = '모델';
+    head.appendChild(corner);
+    AUDIT_HORIZONS.forEach((h) => {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = h.replace('d', '일');
+      const n = document.createElement('span');
+      n.className = 'audit-n';
+      n.textContent = `n=${Number.isFinite(counts[h]) ? counts[h] : '–'}`;
+      th.appendChild(n);
+      head.appendChild(th);
+    });
+    const body = table.createTBody();
+    rows.forEach((row) => {
+      const tr = body.insertRow();
+      if (row.operational) tr.className = 'is-operational';
+      const th = document.createElement('th');
+      th.scope = 'row';
+      th.textContent = row.label;
+      if (row.note) {
+        const note = document.createElement('span');
+        note.className = 'audit-note';
+        note.textContent = row.note;
+        th.appendChild(note);
+      }
+      tr.appendChild(th);
+      AUDIT_HORIZONS.forEach((h) => {
+        const td = tr.insertCell();
+        const mae = okMae(row.stats, h);
+        td.textContent = mae === null ? '–' : mae.toFixed(2);
+        if (mae !== null && mae === best[h]) td.className = 'is-best';
+      });
     });
 
-    audit.innerHTML = `
-      <p class="audit-label">모델 검증</p>
-      <div class="model-audit-grid">
-        <div class="audit-cell">
-          <p class="audit-value">${parts[0]}</p>
-        </div>
-        <div class="audit-cell">
-          <p class="audit-value">${parts[1]}</p>
-        </div>
-        <div class="audit-cell">
-          <p class="audit-value">${parts[2]}</p>
-        </div>
-      </div>
-    `;
+    const label = document.createElement('p');
+    label.className = 'audit-label';
+    label.textContent = '모델 검증 · 예측 오차(MAE, kg)';
+    const wrap = document.createElement('div');
+    wrap.className = 'audit-table-wrap';
+    wrap.appendChild(table);
+    const verdict = document.createElement('p');
+    verdict.className = 'audit-sub';
+    const leader = diagnostics.selectedModel?.status === 'shadow_leader' ? modelLabel(diagnostics.selectedModel.name) : null;
+    verdict.textContent = `${leader ? `섀도 후보 ${leader}이(가) 게이트를 통과했지만` : '게이트를 통과한 섀도 후보가 없고'} 예측은 운영 모델로 계산합니다. 모든 모델을 같은 기준 시점(n)으로 비교했습니다.`;
+    audit.replaceChildren(label, wrap, verdict);
   }
 
   function renderPredictionGuard(summary) {
