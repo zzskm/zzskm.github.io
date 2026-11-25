@@ -1,0 +1,52 @@
+name: garmin weight tests
+
+# 데이터 커밋(garmin-weight/data/**)은 하루 2회 봇이 만들므로 트리거에서 뺀다.
+on:
+  push:
+    paths:
+      - 'garmin-weight/scripts/**'
+      - 'garmin-weight/config.json'
+      - 'garmin-weight/*.js'
+      - 'garmin-weight/*.html'
+      - 'tests/test_garmin*'
+      - '.github/workflows/garmin_weight_tests.yml'
+  pull_request:
+    paths:
+      - 'garmin-weight/scripts/**'
+      - 'garmin-weight/config.json'
+      - 'garmin-weight/*.js'
+      - 'garmin-weight/*.html'
+      - 'tests/test_garmin*'
+      - '.github/workflows/garmin_weight_tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      # 요약 생성과 테스트는 표준 라이브러리만 쓴다(garminconnect는 수집 단계에서만 지연 임포트).
+      - name: Unit tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p 'test_garmin*.py' -v
+      - name: Rebuild summary from committed CSV (smoke)
+        run: |
+          python garmin-weight/scripts/sync_garmin.py --skip-garmin --output-summary "$RUNNER_TEMP/summary.json"
+          python -c "import json,sys; s=json.load(open(sys.argv[1], encoding='utf-8')); assert s['series']['daily'], 'empty daily series'" "$RUNNER_TEMP/summary.json"
+      - name: Front-end syntax check
+        run: |
+          for f in garmin-weight/app.js garmin-weight/app.helpers.js garmin-weight/enhancements.js garmin-weight/sw.js; do
+            node --check "$f"
+          done
