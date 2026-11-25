@@ -8,9 +8,9 @@
   "arrival_truth": "target_api_derived_proxy_not_measured_arrival",
   "poll_coverage_max_gap_sec": 180,
   "window_minutes": 20,
-  "observed_station_list_polls": 2449,
+  "observed_station_list_polls": 2450,
   "prediction_poll_days": 46,
-  "discarded_signal_rows": 62145,
+  "discarded_signal_rows": 62173,
   "candidate_routes": [
     {
       "route_id": 204000017,
@@ -122,21 +122,21 @@
       "sta_order": 13,
       "observed_days": 20,
       "vehicle_events": 267,
-      "labelled_events": 247,
+      "labelled_events": 248,
       "matched": 142,
-      "nonmatched": 105,
-      "censored": 20,
-      "proxy_hit_rate": 0.575,
+      "nonmatched": 106,
+      "censored": 19,
+      "proxy_hit_rate": 0.573,
       "target_absent_at_first_signal": 152,
       "simultaneous_eta_pairs": 115,
       "candidate_eta_before_target_eta": 64,
       "median_simultaneous_lead_min": 1.02,
       "forward_date_test": {
         "status": "screening_only",
-        "test_events": 121,
-        "candidate_hit_rate": 0.57,
+        "test_events": 122,
+        "candidate_hit_rate": 0.566,
         "time_only_hit_rate": 0.628,
-        "difference_pp": -5.8,
+        "difference_pp": -6.3,
         "train_days": 12,
         "test_days": 8
       },
@@ -511,16 +511,16 @@
       "route_name": "4500",
       "sta_order": 83,
       "observed_days": 19,
-      "vehicle_events": 111,
+      "vehicle_events": 112,
       "labelled_events": 106,
       "matched": 59,
       "nonmatched": 47,
-      "censored": 5,
+      "censored": 6,
       "proxy_hit_rate": 0.557,
       "target_absent_at_first_signal": 53,
-      "simultaneous_eta_pairs": 58,
+      "simultaneous_eta_pairs": 59,
       "candidate_eta_before_target_eta": 23,
-      "median_simultaneous_lead_min": -1.25,
+      "median_simultaneous_lead_min": -1.37,
       "forward_date_test": {
         "status": "screening_only",
         "test_events": 51,
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-25T18:17:28.389814+09:00"
+  "generated_at": "2026-11-25T18:18:26.894357+09:00"
 }
