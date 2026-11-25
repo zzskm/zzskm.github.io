@@ -9,7 +9,8 @@
     config: null,
     range: 60,
     scenario: 'base',
-    visible: { ma7: true, ma14: true, prediction: true },
+    // index.html의 칩 기본값(14일 평균은 꺼짐)과 같아야 한다.
+    visible: { ma7: true, ma14: false, prediction: true },
     chart: null,
   };
 
@@ -45,7 +46,9 @@
 
     const diagnostics = s.modelDiagnostics || {};
     const confidence = diagnostics.confidence || {};
+    // modelDiagnostics.coverage(측정일 수)와 최상위 coverage(마지막 측정 경과일 포함)는 키가 다르다.
     const coverage = diagnostics.coverage || s.coverage || {};
+    const topCoverage = s.coverage || {};
     const bt14 = diagnostics.backtest?.['14d'];
     const trendWindows = diagnostics.trendWindows || {};
     const rolling = s.rolling || {};
@@ -82,7 +85,7 @@
     {
       const elLast = el('lastEntry');
       if (elLast) {
-        const daysSince = coverage.daysSinceLastMeasurement;
+        const daysSince = topCoverage.daysSinceLastMeasurement;
         if (Number.isFinite(daysSince)) {
           elLast.textContent = daysSince <= 0 ? '오늘 측정' : `${Math.round(daysSince)}일 전`;
         } else if (last?.date) {
@@ -111,24 +114,25 @@
       reason.textContent = confidenceLevel === 'low' ? 'LOW RELIABILITY · PROVISIONAL' : 'MONITORING TREND';
     }
 
-    if (startVal && lastVal && Number.isFinite(target)) {
+    // 진행률은 "To Target"(goal.remainingKg)과 같은 기준인 추세 체중으로 계산한다. 일별 실측은 수분 변동이 크다.
+    const progressKg = Number.isFinite(trendKg) ? trendKg : lastVal;
+    if (Number.isFinite(startVal) && Number.isFinite(progressKg) && Number.isFinite(target)) {
       const totalKg = startVal - target;
-      const done = startVal - lastVal;
+      const done = startVal - progressKg;
       const pctGoal = totalKg > 0 ? Math.max(0, Math.min(100, (done / totalKg) * 100)) : 0;
-    setText('goalProgressBig', `${pctGoal.toFixed(0)}%`);
-    el('heroProgressFill').style.width = pctGoal + '%';
-    el('heroProgressMarker').style.left = pctGoal + '%';
-    setText('heroProgressStart', `${fmtKgBare(startVal)} kg (Start)`);
-    setText('heroProgressTarget', `${fmtKgBare(target)} kg (Target)`);
-  }
+      setText('goalProgressBig', `${pctGoal.toFixed(0)}%`);
+      el('heroProgressFill').style.width = pctGoal + '%';
+      el('heroProgressMarker').style.left = pctGoal + '%';
+      setText('heroProgressStart', `${fmtKgBare(startVal)} kg (Start)`);
+      setText('heroProgressTarget', `${fmtKgBare(target)} kg (Target)`);
+    }
 
     const rangeVal = s.rolling?.last7WeightRangeKg;
     setText('summaryRangeBox', Number.isFinite(rangeVal) ? `${rangeVal.toFixed(1)} kg` : '–');
-    {
-      setText('summaryCoverageText', `${Math.min(measured,30)}/30`);
-      setText('summaryCoveragePct', `(${pct}%)`);
-    }
-    drawCoverageDots('summaryDots', daily.slice(-15));
+    // 분모와 점은 백엔드가 센 실제 창(최근 30일, 이력이 짧으면 그만큼)과 같게 맞춘다.
+    setText('summaryCoverageText', `${measured}/${total}`);
+    setText('summaryCoveragePct', `(${pct}%)`);
+    drawCoverageDots('summaryDots', total > 0 ? daily.slice(-total) : []);
 
     const trend7 = trendWindows['7d']?.weeklyLossKg;
     const trend28 = trendWindows['28d']?.weeklyLossKg;
@@ -162,7 +166,8 @@
     const insightCard = el('insightCard');
     if (insightCard) insightCard.hidden = !(s.insight?.headline);
     setText('insightHeadline', s.insight?.headline ?? '');
-    setText('insightLines', (s.insight?.lines || []).join(' '));
+    // headline은 lines[0]이므로 나머지 문장만 덧붙인다.
+    setText('insightLines', (s.insight?.lines || []).slice(1).join(' '));
 
     renderScenarioSparklines(s);
     renderModelStrip(s);
@@ -182,9 +187,8 @@
     Object.entries(scenarios).forEach(([key, cfg]) => {
       const svg = document.querySelector(`.scenario-sparkline[data-spark="${key}"]`);
       if (!svg) return;
-      const scenarioBtn = document.querySelector(`.scenario[data-scenario="${key}"]`);
-      const isActive = scenarioBtn && scenarioBtn.classList.contains('is-active');
-      const strokeColor = isActive ? '#ffffff' : cfg.color;
+      // 선택된 카드는 배경이 짙으므로 흰 선을 쓴다. 선택이 바뀌면 다시 그린다(bindControls).
+      const strokeColor = key === state.scenario ? '#ffffff' : cfg.color;
       const n = vals.length;
       const toX = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - 2 * PAD);
       const toY = (v) => H - PAD - ((v - minV) / range) * (H - 2 * PAD);
@@ -205,9 +209,13 @@
     if (confEl) {
       const level = confidence.level || 'low';
       const score = confidence.score ?? '–';
-      const selected = diag.selectedModel?.name || 'current';
-      confEl.textContent = `${level.toUpperCase()} · ${score}점 · ${selected}`;
+      // 예측은 항상 운영 모델로 계산한다. selectedModel은 섀도 비교 결과일 뿐 예측에 쓰이지 않는다.
+      const operating = diag.trend?.rateSource === 'cold_start_flat' ? '초기 평평 예측' : 'EWMA 혼합';
+      confEl.textContent = `${level.toUpperCase()} · ${score}점 · ${operating}`;
       confEl.className = `model-strip-main model-strip-main--${level}`;
+      const shadow = diag.selectedModel?.name;
+      if (shadow && shadow !== 'current') confEl.title = `섀도 후보 ${shadow} — 참고용 비교이며 예측에는 쓰지 않습니다.`;
+      else confEl.removeAttribute('title');
     }
 
     const trendEl = el('modelTrend');
@@ -277,12 +285,78 @@
     };
   }
 
+  // 목표 체중 가로선. 데이터셋으로 넣으면 세로축이 목표까지 늘어나 실측선이 납작해지므로 플러그인으로 그린다.
+  // 목표가 축 범위 밖이면 그쪽 가장자리에 표식만 남긴다.
+  const targetLinePlugin = {
+    id: 'targetLine',
+    afterDatasetsDraw(chart, _args, opts) {
+      const target = opts?.value;
+      const y = chart.scales.y;
+      if (!Number.isFinite(target) || !y) return;
+      const { ctx, chartArea: area } = chart;
+      const label = `목표 ${target.toFixed(1)}kg`;
+      ctx.save();
+      ctx.strokeStyle = THEME.target;
+      ctx.fillStyle = THEME.target;
+      ctx.font = `800 10px ${THEME.font}`;
+      ctx.textAlign = 'right';
+      if (target >= y.min && target <= y.max) {
+        const py = y.getPixelForValue(target);
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(area.left, py);
+        ctx.lineTo(area.right, py);
+        ctx.stroke();
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(label, area.right - 4, py - 3);
+      } else {
+        const below = target < y.min;
+        ctx.textBaseline = below ? 'bottom' : 'top';
+        ctx.fillText(`${label} ${below ? '↓' : '↑'}`, area.right - 4, below ? area.bottom - 4 : area.top + 4);
+      }
+      ctx.restore();
+    },
+  };
+
   function ensureChart() {
     if (state.chart) return true;
     const canvas = el('weightChart');
     if (!canvas) return false;
     if (!window.Chart) return false;
-    state.chart = new Chart(canvas, { type: 'line', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { tooltip: { filter: (item) => !String(item.dataset.label || '').startsWith('ci') } }, scales: { x: { ticks: { autoSkip: true, maxTicksLimit: 8 } } } } });
+    Chart.defaults.font.family = THEME.font;
+    Chart.defaults.color = THEME.tick;
+    const dateTick = function (value) {
+      const label = this.getLabelForValue(value);
+      return typeof label === 'string' ? fmtDateShort(label) : label;
+    };
+    state.chart = new Chart(canvas, {
+      type: 'line',
+      data: { labels: [], datasets: [] },
+      plugins: [targetLinePlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          // 범례는 패널 머리(index.html)에 직접 그린다. 기본 범례는 내부 라벨(ciUpper 등)까지 보여 준다.
+          legend: { display: false },
+          tooltip: {
+            filter: (item) => !String(item.dataset.label || '').startsWith('ci'),
+            backgroundColor: THEME.tooltipBg,
+            borderColor: THEME.tooltipBorder,
+            borderWidth: 1,
+            titleColor: THEME.tooltipBody,
+            bodyColor: THEME.tooltipBody,
+          },
+          targetLine: { value: null },
+        },
+        scales: {
+          x: { ticks: { autoSkip: true, maxTicksLimit: 8, callback: dateTick }, grid: { color: THEME.grid } },
+          y: { grid: { color: THEME.grid } },
+        },
+      },
+    });
     return true;
   }
 
@@ -290,10 +364,9 @@
     if (!ensureChart()) return;
     const s = state.summary;
     const cfg = state.config;
-    const target = cfg?.targetWeightKg ?? 80;
-    const yMin = Math.floor(target - 2);
+    const target = Number(cfg?.targetWeightKg);
+    state.chart.options.plugins.targetLine.value = Number.isFinite(target) ? target : null;
 
-    const toDaily = (arr) => sliceByRange(arr, state.range);
     const daily = sliceByRange(s.series?.daily || [], state.range);
     const ewma = sliceByRange(s.series?.ewma || [], state.range);
     const ma14 = sliceByRange(s.series?.ma14 || [], state.range);
@@ -309,19 +382,19 @@
     state.chart.data.datasets = [];
 
     if (state.visible.prediction) {
-      state.chart.data.datasets.push({ label: 'ciUpper', data: align(ci.upper), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: '+1', backgroundColor: 'rgba(255,111,97,0.10)', tension: 0.25, order: 2 });
+      state.chart.data.datasets.push({ label: 'ciUpper', data: align(ci.upper), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: '+1', backgroundColor: THEME.predictFill, tension: 0.25, order: 2 });
       state.chart.data.datasets.push({ label: 'ciLower', data: align(ci.lower), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: false, tension: 0.25, order: 2 });
-      state.chart.data.datasets.push({ label: '예측', data: align(prediction), borderColor: '#FF6F61', borderWidth: 1.75, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: '#FF6F61', tension: 0.25, spanGaps: true, fill: false, order: 1 });
+      state.chart.data.datasets.push({ label: '예측', data: align(prediction), borderColor: THEME.predict, borderWidth: 1.75, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: THEME.predict, tension: 0.25, spanGaps: true, fill: false, order: 1 });
     }
 
     if (state.visible.ma7) {
-      state.chart.data.datasets.push({ label: '추세', data: align(ewma), borderColor: '#3C2F2F', borderWidth: 1.75, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 3 });
+      state.chart.data.datasets.push({ label: '추세', data: align(ewma), borderColor: THEME.ma7, borderWidth: 1.75, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 3 });
     }
     if (state.visible.ma14) {
-      state.chart.data.datasets.push({ label: '14일 평균', data: align(ma14), borderColor: '#A89F99', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
+      state.chart.data.datasets.push({ label: '14일 평균', data: align(ma14), borderColor: THEME.ma14, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
     }
 
-    state.chart.data.datasets.push({ label: '실제', data: align(daily), borderColor: '#3C2F2F', backgroundColor: 'rgba(60,47,47,0.06)', borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#A0522D', pointBorderColor: '#fff', pointBorderWidth: 1.5, tension: 0.3, spanGaps: true, fill: true, order: 0 });
+    state.chart.data.datasets.push({ label: '실제', data: align(daily), borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: THEME.actualPoint, pointBorderColor: '#fff', pointBorderWidth: 1.5, tension: 0.3, spanGaps: true, fill: true, order: 0 });
 
     state.chart.update();
   }
@@ -361,17 +434,44 @@
       btn.addEventListener('click', () => {
         state.scenario = btn.dataset.scenario;
         document.querySelectorAll('.scenario').forEach(b => { b.classList.toggle('is-active', b === btn); b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+        if (state.summary) renderScenarioSparklines(state.summary);
         updatePrediction();
       });
     });
     el('reloadBtn').addEventListener('click', () => load());
     document.addEventListener('keydown', (e) => {
-      if (e.target.matches('input, textarea')) return;
-      if (e.key === 'r' || e.key === 'R') load();
+      // Ctrl+R(브라우저 새로고침), Ctrl+1(탭 전환) 같은 조합은 브라우저에 맡긴다.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'r' || e.key === 'R') {
+        if (appRoot.dataset.state !== 'loading') load();
+        return;
+      }
       if (e.key === '1') document.querySelector('.seg-btn[data-range="30"]')?.click();
       if (e.key === '2') document.querySelector('.seg-btn[data-range="60"]')?.click();
       if (e.key === '3') document.querySelector('.seg-btn[data-range="all"]')?.click();
     });
+  }
+
+  // 점 색은 내용을 다 만든 뒤에 정한다. 예전에는 색을 칠한 점을 innerHTML이 새 점으로 바꿔 색이 사라졌다.
+  function renderSyncPill({ text, cov = '', extra = '', tone = '', title = '' }) {
+    const pill = el('lastSync');
+    const host = pill?.querySelector('.sync-text');
+    if (!host) return;
+    const dot = document.createElement('span');
+    dot.className = 'sync-dot';
+    if (tone) dot.style.background = tone;
+    const nodes = [dot, document.createTextNode(text)];
+    if (cov) {
+      const covSpan = document.createElement('span');
+      covSpan.className = 'sync-cov';
+      covSpan.textContent = cov;
+      nodes.push(covSpan);
+    }
+    if (extra) nodes.push(document.createTextNode(extra));
+    host.replaceChildren(...nodes);
+    if (title) pill.title = title;
+    else pill.removeAttribute('title');
   }
 
   async function waitForChart() {
@@ -404,25 +504,26 @@
 
       const gen = state.summary.generatedAt ? new Date(state.summary.generatedAt) : null;
       const cov = state.summary.coverage;
-      const covText = cov ? `<span class="sync-cov"> · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)</span>` : '';
       const daysSince = cov?.daysSinceLastMeasurement;
       const stale = Number.isFinite(daysSince) && daysSince >= 3;
       const lowCoverage = cov && cov.last30Pct < 70;
-      const syncPill = el('lastSync');
-      const syncDot = syncPill?.querySelector('.sync-dot');
-      if (syncDot) syncDot.style.background = stale ? THEME.syncStale : (lowCoverage ? THEME.syncWarn : '');
-      const staleText = stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : '';
-      syncPill.querySelector('.sync-text').innerHTML = `<span class="sync-dot"></span>${gen ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${covText}${staleText}` : '데이터 로드됨'}`;
-      if (stale) syncPill.title = `Garmin 동기화 후 ${Math.round(daysSince)}일째 미갱신 — 체중계 동기화를 확인해 주세요.`;
-      else syncPill.removeAttribute('title');
+      const syncText = gen
+        ? `동기화 ${gen.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+        : '데이터 로드됨';
+      renderSyncPill({
+        text: syncText,
+        cov: cov ? ` · 측정 ${cov.last30Measured}/${cov.last30Total}일 (${cov.last30Pct}%)` : '',
+        extra: stale ? ` · 마지막 측정 ${Math.round(daysSince)}일 전` : '',
+        tone: stale ? THEME.syncStale : (lowCoverage ? THEME.syncWarn : ''),
+        title: stale ? `Garmin 동기화 후 ${Math.round(daysSince)}일째 미갱신 — 체중계 동기화를 확인해 주세요.` : '',
+      });
       setText('statusLine', `${state.config?.displayName || '체중 트래커'} · 목표 ${fmtKg(state.config?.targetWeightKg)} · ${(state.summary.series?.daily || []).length}일 기록`);
 
       window.dispatchEvent(new CustomEvent('garmin-weight:summary-ready', { detail: { summary: state.summary, config: state.config } }));
       appRoot.dataset.state = 'ready';
     } catch (err) {
       appRoot.dataset.state = 'error';
-      const errorSync = el('lastSync');
-      if (errorSync) errorSync.querySelector('.sync-text').textContent = '로드 실패';
+      renderSyncPill({ text: '로드 실패', tone: THEME.syncStale });
       setText('statusLine', `데이터를 불러오지 못했습니다: ${err.message}`);
       console.error('[garmin-weight load]', err);
     } finally {

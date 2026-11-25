@@ -8,6 +8,7 @@ on:
       - 'garmin-weight/config.json'
       - 'garmin-weight/*.js'
       - 'garmin-weight/*.html'
+      - 'garmin-weight/*.css'
       - 'tests/test_garmin*'
       - '.github/workflows/garmin_weight_tests.yml'
   pull_request:
@@ -16,6 +17,7 @@ on:
       - 'garmin-weight/config.json'
       - 'garmin-weight/*.js'
       - 'garmin-weight/*.html'
+      - 'garmin-weight/*.css'
       - 'tests/test_garmin*'
       - '.github/workflows/garmin_weight_tests.yml'
   workflow_dispatch:
@@ -50,3 +52,21 @@ jobs:
           for f in garmin-weight/app.js garmin-weight/app.helpers.js garmin-weight/enhancements.js garmin-weight/sw.js; do
             node --check "$f"
           done
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Playwright
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Page display regressions
+        env:
+          PYTHONUTF8: '1'
+          GARMIN_REQUIRE_BROWSER_TESTS: '1'
+        run: python -m unittest tests.test_garmin_weight_browser -v
