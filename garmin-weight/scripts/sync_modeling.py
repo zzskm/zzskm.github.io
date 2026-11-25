@@ -246,10 +246,12 @@ def compute_weekly_loss_rate(
         ("28d", 28, 0.25, 14),  # 장기 - 베이스라인 (가드 역할)
     ]
     window_slopes: dict[str, float | None] = {}
+    window_points: dict[str, int] = {}
     window_used_weight: dict[str, float] = {}
     components: list[tuple[float, float]] = []
     for key, w_days, target_w, min_pts in window_specs:
         raw, n = _slope_over_window(ewma_map, end, w_days, min_points=min_pts)
+        window_points[key] = n
         weekly = -raw * 7 if raw is not None else None
         window_slopes[key] = round(weekly, 4) if weekly is not None else None
         if weekly is not None:
@@ -286,6 +288,9 @@ def compute_weekly_loss_rate(
             "windows": normalized_weights,
         },
         "windowSlopes": window_slopes,
+        "windowPoints": window_points,
+        # blended를 만들려면 28일 창에 이만큼의 EWMA 점이 있어야 한다(위 window_specs의 가드).
+        "longWindowMinPoints": next(spec[3] for spec in window_specs if spec[0] == "28d"),
         "model": "multi_window_ewma_blend",
     }
 
@@ -606,7 +611,9 @@ def classify_prediction_confidence(
     measured_days: int,
     std_residual: float | None,
     backtests: dict[str, Any],
+    warming_up: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
+    """warming_up=(현재 점 수, 필요한 점 수)이면 추세를 아직 판단할 수 없는 초기 구간이므로 신뢰도를 낮음으로 고정한다."""
     score = 0
     reasons = []
     if coverage_pct >= 80:
@@ -643,6 +650,11 @@ def classify_prediction_confidence(
         level, label = "medium", "보통"
     else:
         level, label = "low", "낮음"
+
+    if warming_up is not None:
+        points, required = warming_up
+        level, label = "low", "낮음"
+        reasons.insert(0, f"추세 판단 중 ({points}/{required}일)")
 
     return {
         "level": level,
@@ -883,6 +895,24 @@ def model_trend_exposure(weekly_change_kg: float | None, weekly_loss_rate_kg: fl
         "weeklyLossRateKg": weekly_loss_rate_kg,
         "predictionEnabled": prediction_enabled,
         "disabledReason": disabled_reason,
+    }
+
+
+def warming_up_trend_exposure(points: int, required: int) -> dict[str, Any]:
+    """처음 측정 후 28일 창에 점이 모자란 구간의 추세 표시.
+
+    감량률을 아직 판단할 수 없으므로 예측은 현재 EWMA 수준을 그대로 잇는 평평한 값이다
+    (rateSource='cold_start_flat'). 숨기지 않고 표시하되 방향은 따로 표기한다.
+    """
+    return {
+        "direction": "warming_up",
+        "weeklyChangeKg": None,
+        "weeklyLossRateKg": None,
+        "predictionEnabled": True,
+        "disabledReason": None,
+        "rateSource": "cold_start_flat",
+        "historyPoints": points,
+        "requiredPoints": required,
     }
 
 

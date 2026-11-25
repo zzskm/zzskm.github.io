@@ -85,6 +85,7 @@ detect_plateau = _modeling.detect_plateau
 build_insight = _modeling.build_insight
 data_quality_diagnostics = _modeling.data_quality_diagnostics
 model_trend_exposure = _modeling.model_trend_exposure
+warming_up_trend_exposure = _modeling.warming_up_trend_exposure
 run_generalized_backtest = _modeling.run_generalized_backtest
 apply_model_selection_gate = _modeling.apply_model_selection_gate
 compute_ci_calibration_replay = _modeling.compute_ci_calibration_replay
@@ -488,9 +489,13 @@ def normalize_rows(rows: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
 
 def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
     if not rows:
+        # 데이터가 없어도 소비자(체중 페이지, 개인 대시보드)가 읽는 키는 모두 둔다.
         return {
             "generatedAt": datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None).isoformat() + "Z",
-            "current": {"weightKg": None, "weightDate": None, "weightMa7Kg": None, "weightMa14Kg": None, "weightEwmaKg": None},
+            "current": {
+                "weightKg": None, "weightDate": None, "weightMa7Kg": None, "weightMa14Kg": None, "weightEwmaKg": None,
+                "bodyFatPercent": None, "bodyFatDelta30d": None, "visceralFat": None,
+            },
             "rolling": {
                 "weeklyLossRateKg": None,
                 "last7ExerciseMinutes": 0,
@@ -501,6 +506,8 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
                 "last7WeightRangeKg": None,
                 "last7SleepHoursAvg": None,
                 "last7RestingHrAvg": None,
+                "exerciseTrend": build_exercise_trend([]),
+                "lossRateDetail": {"blended": None, "rateSource": None, "model": "multi_window_ewma_blend"},
             },
             "predictions": {"oneMonthWeightKg": None, "threeMonthWeightKg": None, "scenarios": {}},
             "goal": {
@@ -514,11 +521,24 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
             "predictionCI": {"stdResidual": None, "series": []},
             "modelDiagnostics": {
                 "confidence": {"level": "low", "label": "낮음", "score": 0, "reasons": ["데이터 없음"]},
+                "coverage": {"measuredDays": 0, "totalDays": 0, "pct": 0},
+                "dataQuality": data_quality_diagnostics([]),
+                "trend": model_trend_exposure(None, None),
                 "trendWindows": {},
                 "backtest": {},
             },
             "insight": {"headline": None, "lines": []},
-            "series": {"daily": [], "ma7": [], "ma14": [], "ewma": [], "prediction": [], "predictionCI": [], "steps": [], "exerciseMinutes": []},
+            "coverage": {
+                "last30Measured": 0,
+                "last30Total": 0,
+                "last30Pct": 0,
+                "lastMeasurementAt": None,
+                "daysSinceLastMeasurement": None,
+            },
+            "series": {
+                "daily": [], "ma7": [], "ma14": [], "ewma": [], "prediction": [], "predictionCI": [],
+                "steps": [], "exerciseMinutes": [], "exerciseCaloriesDaily": [],
+            },
         }
 
     all_dates = [row["date"] for row in rows]
@@ -596,6 +616,18 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         window=trend_window, kcal_to_kg=kcal_to_kg,
     )
     weekly_loss_rate = loss_rate_detail["blended"]
+    # 첫 측정 후 28일 창의 EWMA 점이 모자라면(대략 처음 13일) 감량률을 판단할 수 없다.
+    # 이때는 예측을 숨기지 않고 현재 EWMA 수준을 그대로 잇는다(감량률 0으로 계산되는 평평한 예측).
+    warming_up: tuple[int, int] | None = None
+    if weekly_loss_rate is None and current_ewma is not None:
+        warming_up = (
+            loss_rate_detail["windowPoints"].get("28d", 0),
+            loss_rate_detail["longWindowMinPoints"],
+        )
+    if warming_up:
+        loss_rate_detail["rateSource"] = "cold_start_flat"
+    else:
+        loss_rate_detail["rateSource"] = "multi_window_blend" if weekly_loss_rate is not None else None
 
     last7 = rows[-7:]
     weight_values = [row.get("weight_kg") for row in last7 if row.get("weight_kg") is not None]
@@ -773,6 +805,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         measured_days=measured_count,
         std_residual=prediction_ci.get("stdResidual"),
         backtests=backtest,
+        warming_up=warming_up,
     )
 
     data_quality = data_quality_diagnostics(rows)
@@ -822,8 +855,12 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         "notes": [],
     }
 
-    recent_window_change = loss_rate_detail.get("windowSlopes", {}).get("7d")
-    trend_display = model_trend_exposure(recent_window_change, weekly_loss_rate)
+    if warming_up:
+        trend_display = warming_up_trend_exposure(*warming_up)
+    else:
+        recent_window_change = loss_rate_detail.get("windowSlopes", {}).get("7d")
+        trend_display = model_trend_exposure(recent_window_change, weekly_loss_rate)
+        trend_display["rateSource"] = loss_rate_detail["rateSource"]
 
     model_diagnostics = {
         "model": "multi_window_ewma_blend + exp_decay + dynamic_kcal_per_kg + exercise_efficiency",

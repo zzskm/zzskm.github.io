@@ -101,7 +101,10 @@
     const reason = el('statusReason');
     const trendDir = diagnostics.trend?.direction;
     if (badge) {
-      badge.textContent = trendDir === 'losing' ? '감량 중' : trendDir === 'gaining' ? '증량 중' : '유지';
+      badge.textContent = trendDir === 'losing' ? '감량 중'
+        : trendDir === 'gaining' ? '증량 중'
+        : trendDir === 'warming_up' ? '추세 판단 중'
+        : '유지';
       badge.className = `hero-badge hero-badge--${trendDir === 'losing' ? 'losing' : trendDir === 'gaining' ? 'gaining' : 'neutral'}`;
     }
     if (reason) {
