@@ -27,7 +27,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Playwright 1.51.1 cannot install browser deps on Ubuntu 26.04 (ubuntu-latest since 2026-11).
+    # Keep 24.04 until @playwright/test is upgraded.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
