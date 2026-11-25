@@ -35,6 +35,9 @@
     lastValidDaily,
     sliceByRange,
     buildPredictionFromScenario,
+    scenarioSeries,
+    dayNumber,
+    dayIso,
   } = window.GWAppHelpers;
 
   function setText(id, v) { const n = el(id); if (n) n.textContent = v; }
@@ -176,28 +179,28 @@
     renderModelStrip(s);
   }
 
+  // F6: 시나리오 카드마다 자기 예측 곡선(13점)을 그린다. 세 카드가 같은 세로 범위를 써서 차이가 보인다.
   function renderScenarioSparklines(s) {
-    const data = s.series?.exerciseCaloriesDaily || [];
-    if (!data.length) return;
-    const vals = data.map(p => p.value ?? 0);
-    const maxV = Math.max(...vals, 1);
-    const minV = Math.min(...vals, 0);
+    const keys = ['optimistic', 'base', 'conservative'];
+    const colors = { optimistic: '#A0522D', base: '#3C2F2F', conservative: '#A89F99' };
+    const curves = Object.fromEntries(keys.map((k) => [k, scenarioSeries(s, k).map((p) => p.valueKg).filter(Number.isFinite)]));
+    const all = keys.flatMap((k) => curves[k]);
+    if (!all.length) return;
+    const maxV = Math.max(...all);
+    const minV = Math.min(...all);
     const range = maxV - minV || 1;
-    const optPct = s.predictions?.scenarios?.optimistic?.extraWeeklyLossKg != null ? (s.predictions.scenarios.optimistic.weeklyKcalDelta / 7 / (s.rolling?.exerciseTrend?.recent7Avg || 1)) : 0.30;
-    const conPct = s.predictions?.scenarios?.conservative?.extraWeeklyLossKg != null ? (s.predictions.scenarios.conservative.weeklyKcalDelta / 7 / (s.rolling?.exerciseTrend?.recent7Avg || 1)) : -0.30;
-    const scenarios = { optimistic: { pct: optPct, color: '#A0522D' }, base: { pct: 0, color: '#3C2F2F' }, conservative: { pct: conPct, color: '#A89F99' } };
     const W = 100, H = 22, PAD = 1;
-    Object.entries(scenarios).forEach(([key, cfg]) => {
+    keys.forEach((key) => {
       const svg = document.querySelector(`.scenario-sparkline[data-spark="${key}"]`);
-      if (!svg) return;
+      const vals = curves[key];
+      if (!svg || !vals.length) return;
       // 선택된 카드는 배경이 짙으므로 흰 선을 쓴다. 선택이 바뀌면 다시 그린다(bindControls).
-      const strokeColor = key === state.scenario ? '#ffffff' : cfg.color;
+      const strokeColor = key === state.scenario ? '#ffffff' : colors[key];
       const n = vals.length;
       const toX = (i) => PAD + (i / Math.max(n - 1, 1)) * (W - 2 * PAD);
-      const toY = (v) => H - PAD - ((v - minV) / range) * (H - 2 * PAD);
-      const actualPts = vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
-      const paths = `<polyline points="${actualPts}" stroke="${strokeColor}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
-      svg.innerHTML = paths;
+      const toY = (v) => PAD + ((maxV - v) / range) * (H - 2 * PAD);
+      const points = vals.map((v, i) => `${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
+      svg.innerHTML = `<polyline points="${points}" stroke="${strokeColor}" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
     });
   }
 
@@ -256,37 +259,15 @@
   }
 
   function buildCiBands(s, scenario) {
-    const ci = s.predictionCI?.series || [];
-    if (!ci.length) return { upper: [], lower: [] };
-    const prediction = buildPredictionFromScenario(s, scenario);
-    const predictionByDate = new Map(prediction.map(p => [p.date, p.valueKg]));
+    const series = scenarioSeries(s, scenario);
     return {
-      upper: ci.map((p) => { const central = predictionByDate.get(p.date) ?? p.central; return { date: p.date, valueKg: +(central + Math.abs(p.upper80 - p.central)).toFixed(2) }; }),
-      lower: ci.map((p) => { const central = predictionByDate.get(p.date) ?? p.central; return { date: p.date, valueKg: +(central - Math.abs(p.central - p.lower80)).toFixed(2) }; }),
+      upper: series.map((p) => ({ date: p.date, valueKg: p.upper80 })),
+      lower: series.map((p) => ({ date: p.date, valueKg: p.lower80 })),
     };
   }
 
-  function makePlateauPlugin(s, labels) {
-    const plateau = s.plateau;
-    if (!plateau?.detected || !plateau.startDate) return null;
-    return {
-      id: 'plateauShade',
-      beforeDatasetsDraw(chart) {
-        const { ctx, chartArea, scales } = chart;
-        const xScale = scales.x;
-        if (!xScale) return;
-        const startIdx = labels.indexOf(plateau.startDate);
-        const endIdx = labels.length - 1;
-        if (startIdx < 0) return;
-        const x1 = xScale.getPixelForValue(startIdx);
-        const x2 = xScale.getPixelForValue(endIdx);
-        ctx.save();
-        ctx.fillStyle = `rgba(160,82,45,0.10)`;
-        ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
-        ctx.restore();
-      },
-    };
-  }
+  // F3: {x: 일 번호, y: kg} 점. 값이 없는 날은 빼고 spanGaps로 잇는다.
+  const toXY = (arr) => arr.filter((p) => Number.isFinite(p.valueKg)).map((p) => ({ x: dayNumber(p.date), y: p.valueKg }));
 
   // 목표 체중 가로선. 데이터셋으로 넣으면 세로축이 목표까지 늘어나 실측선이 납작해지므로 플러그인으로 그린다.
   // 목표가 축 범위 밖이면 그쪽 가장자리에 표식만 남긴다.
@@ -329,23 +310,22 @@
     if (!window.Chart) return false;
     Chart.defaults.font.family = THEME.font;
     Chart.defaults.color = THEME.tick;
-    const dateTick = function (value) {
-      const label = this.getLabelForValue(value);
-      return typeof label === 'string' ? fmtDateShort(label) : label;
-    };
+    const dateTick = (value) => fmtDateShort(dayIso(value));
     state.chart = new Chart(canvas, {
       type: 'line',
-      data: { labels: [], datasets: [] },
+      data: { datasets: [] },
       plugins: [targetLinePlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
+        // 선형 가로축에서는 데이터셋마다 점의 날짜가 달라 index 모드를 쓸 수 없다. 같은 날짜(x)의 점을 모은다.
+        interaction: { mode: 'x', intersect: false },
         plugins: {
           // 범례는 패널 머리(index.html)에 직접 그린다. 기본 범례는 내부 라벨(ciUpper 등)까지 보여 준다.
           legend: { display: false },
           tooltip: {
             filter: (item) => !String(item.dataset.label || '').startsWith('ci'),
+            callbacks: { title: (items) => (items.length ? fmtDate(dayIso(items[0].parsed.x)) : '') },
             backgroundColor: THEME.tooltipBg,
             borderColor: THEME.tooltipBorder,
             borderWidth: 1,
@@ -355,7 +335,7 @@
           targetLine: { value: null },
         },
         scales: {
-          x: { ticks: { autoSkip: true, maxTicksLimit: 8, callback: dateTick }, grid: { color: THEME.grid } },
+          x: { type: 'linear', ticks: { autoSkip: true, maxTicksLimit: 8, precision: 0, callback: dateTick }, grid: { color: THEME.grid } },
           y: { grid: { color: THEME.grid } },
         },
       },
@@ -376,28 +356,25 @@
     const prediction = buildPredictionFromScenario(s, state.scenario);
     const ci = buildCiBands(s, state.scenario);
 
-    const labelSet = new Set();
-    [daily, ewma, ma14, prediction, ci.upper, ci.lower].forEach(arr => arr.forEach(p => labelSet.add(p.date)));
-    const labels = Array.from(labelSet).sort();
-    const align = (arr, key = 'valueKg') => { const m = new Map(arr.map(p => [p.date, p[key] ?? p.valueKg])); return labels.map(d => m.has(d) ? m.get(d) : null); };
-
-    state.chart.data.labels = labels;
+    const all = [daily, ewma, ma14, prediction, ci.upper, ci.lower].flat().map((p) => dayNumber(p.date));
+    state.chart.options.scales.x.min = all.length ? Math.min(...all) : undefined;
+    state.chart.options.scales.x.max = all.length ? Math.max(...all) : undefined;
     state.chart.data.datasets = [];
 
     if (state.visible.prediction) {
-      state.chart.data.datasets.push({ label: 'ciUpper', data: align(ci.upper), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: '+1', backgroundColor: THEME.predictFill, tension: 0.25, order: 2 });
-      state.chart.data.datasets.push({ label: 'ciLower', data: align(ci.lower), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: false, tension: 0.25, order: 2 });
-      state.chart.data.datasets.push({ label: '예측', data: align(prediction), borderColor: THEME.predict, borderWidth: 1.75, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: THEME.predict, tension: 0.25, spanGaps: true, fill: false, order: 1 });
+      state.chart.data.datasets.push({ label: 'ciUpper', data: toXY(ci.upper), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: '+1', backgroundColor: THEME.predictFill, tension: 0.25, order: 2 });
+      state.chart.data.datasets.push({ label: 'ciLower', data: toXY(ci.lower), borderColor: 'transparent', borderWidth: 0, pointRadius: 0, spanGaps: true, fill: false, tension: 0.25, order: 2 });
+      state.chart.data.datasets.push({ label: '예측', data: toXY(prediction), borderColor: THEME.predict, borderWidth: 1.75, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, pointBackgroundColor: THEME.predict, tension: 0.25, spanGaps: true, fill: false, order: 1 });
     }
 
     if (state.visible.ma7) {
-      state.chart.data.datasets.push({ label: '추세', data: align(ewma), borderColor: THEME.ma7, borderWidth: 1.75, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 3 });
+      state.chart.data.datasets.push({ label: '추세', data: toXY(ewma), borderColor: THEME.ma7, borderWidth: 1.75, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 3 });
     }
     if (state.visible.ma14) {
-      state.chart.data.datasets.push({ label: '14일 평균', data: align(ma14), borderColor: THEME.ma14, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
+      state.chart.data.datasets.push({ label: '14일 평균', data: toXY(ma14), borderColor: THEME.ma14, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 3, tension: 0.35, spanGaps: true, fill: false, order: 4 });
     }
 
-    state.chart.data.datasets.push({ label: '실제', data: align(daily), borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: THEME.actualPoint, pointBorderColor: '#fff', pointBorderWidth: 1.5, tension: 0.3, spanGaps: true, fill: true, order: 0 });
+    state.chart.data.datasets.push({ label: '실제', data: toXY(daily), borderColor: THEME.actual, backgroundColor: THEME.actualFill, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: THEME.actualPoint, pointBorderColor: '#fff', pointBorderWidth: 1.5, tension: 0.3, spanGaps: true, fill: true, order: 0 });
 
     state.chart.update();
   }
@@ -407,15 +384,12 @@
     const s = state.summary;
     const prediction = buildPredictionFromScenario(s, state.scenario);
     const ci = buildCiBands(s, state.scenario);
-    const labels = state.chart.data.labels;
-    const toMap = (arr) => new Map(arr.map(p => [p.date, p.valueKg]));
-    const remap = (m) => labels.map(d => m.has(d) ? m.get(d) : null);
     const predDataset = state.chart.data.datasets.find(d => d.label === '예측');
-    if (predDataset) predDataset.data = remap(toMap(prediction));
+    if (predDataset) predDataset.data = toXY(prediction);
     const upper = state.chart.data.datasets.find(d => d.label === 'ciUpper');
-    if (upper) upper.data = remap(toMap(ci.upper));
+    if (upper) upper.data = toXY(ci.upper);
     const lower = state.chart.data.datasets.find(d => d.label === 'ciLower');
-    if (lower) lower.data = remap(toMap(ci.lower));
+    if (lower) lower.data = toXY(ci.lower);
     state.chart.update('none');
   }
 

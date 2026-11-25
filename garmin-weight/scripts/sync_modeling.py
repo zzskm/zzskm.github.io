@@ -49,23 +49,38 @@ def _linreg_slope(xy_pairs: list[tuple[float, float]]) -> float | None:
     return num / den if den != 0 else 0.0
 
 
+SESSION_MIN_ACTIVITY_DAYS = 3
+
+
+def average_session_kcal(rows: list[dict[str, Any]], window: int = 28) -> float | None:
+    """최근 window일의 활동 기록(활동이 있는 날)에서 회당 kcal. 활동일이 SESSION_MIN_ACTIVITY_DAYS 미만이면 None.
+
+    활동이 없는 날의 운동 kcal은 일일 요약의 하루 전체 활동 칼로리라서(exercise_source=intensity) 회당 값으로 쓰지 않는다(M9).
+    """
+    days = [
+        row for row in rows[-window:]
+        if (parse_int(row.get("activity_count")) or 0) > 0 and row.get("exercise_source") in (None, "activity")
+    ]
+    if len(days) < SESSION_MIN_ACTIVITY_DAYS:
+        return None
+    sessions = sum(parse_int(row.get("activity_count")) or 0 for row in days)
+    kcal = sum(parse_float(row.get("exercise_calories")) or 0.0 for row in days)
+    return kcal / sessions if sessions else None
+
+
 def build_smart_scenarios(
     exercise_trend: dict[str, Any],
     opt_pct: float,
     con_pct: float,
     recent7_avg_kcal: float,
+    session_kcal: float | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Phase 6 — 활동 로그 기반 시나리오.
+    """활동 기록 기반 시나리오.
 
-    legacy '±30%'가 추상적이라, 운동 세션 평균 kcal을 기반으로 "주2회 추가" 등
-    구체적 라벨을 생성한다. 표본이 부족하면 pct 기반 fallback.
+    최근 활동 기록이 있으면 회당 kcal로 "주2회 추가/누락"을 만든다. 없으면(활동 없이 일일 요약만 있는 기간)
+    하루 활동 칼로리의 ±pct로 만든다. 예전에는 주 4회 운동을 가정해 일일 활동 칼로리로 회당 값을 지어냈다(M9).
     """
-    # exercise_trend의 recent7Avg는 일평균 kcal. 운동 세션 평균 kcal은 active_days 기반으로 추정.
-    avg_session_kcal = 0.0
-    if recent7_avg_kcal > 0:
-        # active_days 정확값은 rolling에서 계산되지만 여기선 보수적으로 4일 가정
-        # (주 4회 운동 = 일평균 kcal × 7 / 4)
-        avg_session_kcal = recent7_avg_kcal * 7 / 4.0
+    avg_session_kcal = session_kcal or 0.0
 
     def _scenario(name: str, label: str, extra_kcal_per_week: float, desc: str, multiplier: float) -> dict[str, Any]:
         return {
@@ -85,8 +100,8 @@ def build_smart_scenarios(
         # fallback: legacy pct 기반
         opt_extra = recent7_avg_kcal * opt_pct * 7
         con_extra = recent7_avg_kcal * con_pct * 7
-        opt_desc = f"운동 +{opt_pct*100:.0f}% 가정"
-        con_desc = f"운동 {con_pct*100:.0f}% 가정"
+        opt_desc = f"하루 활동량 +{opt_pct*100:.0f}% 가정"
+        con_desc = f"하루 활동량 {con_pct*100:.0f}% 가정"
 
     return {
         "optimistic":   _scenario("optimistic",   "낙관",   opt_extra, opt_desc, 1.0),
@@ -154,6 +169,34 @@ def compute_calibration(
         "windowDays": window,
         "interpretation": msg,
     }
+
+
+BODY_FAT_TIERS = ((30.0, 8000.0), (20.0, 7700.0), (15.0, 7200.0))
+BODY_FAT_HYSTERESIS = 0.5
+
+
+def body_fat_tier_value(history: list[float], hysteresis: float = BODY_FAT_HYSTERESIS) -> float | None:
+    """체지방률 측정 이력(시간순)으로 kcal/kg 티어를 정한다. 경계를 ±hysteresis 넘게 지나야 티어가 바뀐다(M9).
+
+    가장 최근 한 번만 보면 29~30% 근처에서 측정마다 7,700과 8,000이 오락가락했다.
+    """
+    def tier_of(value: float) -> int:
+        for index, (edge, _) in enumerate(BODY_FAT_TIERS):
+            if value >= edge:
+                return index
+        return len(BODY_FAT_TIERS)
+
+    values = [v for v in history if v is not None and v > 0]
+    if not values:
+        return None
+    tier = tier_of(values[0])
+    for value in values[1:]:
+        # tier_of는 값이 커질수록 작아진다(높은 체지방 티어 = 작은 번호). ±h를 빼고 더해도 다른 티어일 때만 옮긴다.
+        if tier_of(value - hysteresis) < tier:
+            tier = tier_of(value - hysteresis)
+        elif tier_of(value + hysteresis) > tier:
+            tier = tier_of(value + hysteresis)
+    return BODY_FAT_TIERS[tier][1] if tier < len(BODY_FAT_TIERS) else 6500.0
 
 
 def kcal_per_kg(
@@ -365,32 +408,73 @@ def rolling_average(weights_by_date: dict[str, float | None], all_dates: list[st
 def _projected_weight(
     start_weight: float,
     effective_weekly_loss: float,
-    week: int,
+    week: float,
     target_weight: float | None = None,
-    half_life_weeks: float = 16.0,
 ) -> float:
-    """P3: 지수 감쇠 외삽.
+    """감쇠 곡선 w(t) = target + gap·exp(−k·t), k = 감량률 / gap (t는 주).
 
-    초반에는 effective_weekly_loss로 거의 선형 감소하다가, target_weight 또는
-    asymptote 쪽으로 수렴. half_life_weeks가 클수록 더 직선에 가깝다.
-    target_weight가 없거나 현재 체중보다 높으면 선형 fallback.
+    t=0의 기울기가 감량률과 같아 곡선이 처음에는 추세를 그대로 따르고 목표로 수렴한다(M5 a안, 2026-11-25).
+    예전에는 k를 2·ln2/16(주 0.087)로 묶어 목표가 가까우면 초기 기울기가 추세보다 훨씬 완만했고 시나리오가 한 곡선이 됐다.
+    남은 간격이 한 주 감량보다 작을 때만 k를 1/주로 묶는다(보호).
+    목표가 없거나, 이미 목표 이하이거나, 감량률이 0 이하(유지·증량)이면 직선이다.
     """
     if target_weight is None or target_weight >= start_weight or effective_weekly_loss <= 0:
         return start_weight - effective_weekly_loss * week
+    gap = start_weight - target_weight
+    k = min(effective_weekly_loss / gap, 1.0)
+    return target_weight + gap * math.exp(-k * week)
 
-    # 감속 모델: w(t) = target + (start - target) * exp(-k*t)
-    # 첫 주 감량이 effective_weekly_loss와 일치하도록 k를 결정한다.
-    initial_gap = start_weight - target_weight
-    if initial_gap <= 0:
-        return start_weight
 
-    # k가 너무 크면 즉시 수렴, 너무 작으면 선형 — half-life 기반으로 부드러운 곡선 보장
-    k_from_rate = effective_weekly_loss / initial_gap  # 초기 감량률
-    k_from_halflife = math.log(2) / max(half_life_weeks, 1.0)
-    k = min(k_from_rate, k_from_halflife * 2)  # rate가 너무 빠르면 half-life로 제한
+ETA_TOLERANCE_KG = 0.3
+ETA_MAX_WEEKS = 104
 
-    decayed_gap = initial_gap * math.exp(-k * week)
-    return target_weight + decayed_gap
+
+def projected_eta(
+    start_weight: float | None,
+    weekly_loss: float | None,
+    target_weight: float | None,
+    tolerance_kg: float = ETA_TOLERANCE_KG,
+    max_weeks: int = ETA_MAX_WEEKS,
+) -> tuple[str, int | None]:
+    """곡선이 목표 + tolerance_kg 이하로 처음 내려가는 날(오늘부터 일 수)과 상태.
+
+    상태: reached(이미 목표 + tolerance 이하) / date / beyond(max_weeks 안에 닿지 않음) / no_loss(감량 추세 아님) / unknown.
+    tolerance 기본값 0.3kg은 일별 실측과 추세의 평균 차이(0.44kg)보다 작게 잡은 값이다. 감쇠 곡선은 목표에 닿지 않으므로
+    목표 자체를 기준으로 하면 ETA가 무한이 된다.
+    """
+    if start_weight is None or target_weight is None:
+        return "unknown", None
+    if start_weight - target_weight <= tolerance_kg:
+        return "reached", 0
+    if weekly_loss is None or weekly_loss <= 0:
+        return "no_loss", None
+    for day in range(1, max_weeks * 7 + 1):
+        if _projected_weight(start_weight, weekly_loss, day / 7, target_weight) <= target_weight + tolerance_kg:
+            return "date", day
+    return "beyond", None
+
+
+def build_scenario_series(
+    latest_date: str,
+    start_weight: float,
+    weekly_loss: float,
+    target_weight: float | None,
+    spreads_by_week: dict[int, float],
+    weeks: int = 12,
+) -> list[dict[str, Any]]:
+    """시나리오 하나의 예측 시계열(0~weeks주, weeks+1점)과 80% 구간. 카드 값과 차트 선이 같은 계산이다(M6)."""
+    start_day = date.fromisoformat(latest_date)
+    series = []
+    for week in range(weeks + 1):
+        central = round(_projected_weight(start_weight, weekly_loss, week, target_weight), 2)
+        spread = spreads_by_week.get(week, 0.0) if week else 0.0
+        series.append({
+            "date": (start_day + timedelta(days=7 * week)).isoformat(),
+            "valueKg": central,
+            "lower80": round(central - spread, 2),
+            "upper80": round(central + spread, 2),
+        })
+    return series
 
 
 def build_prediction_series(
@@ -604,7 +688,7 @@ def classify_prediction_confidence(
 
 
 def classify_loss_intensity(weekly_loss_kg: float | None, current_weight_kg: float | None) -> dict[str, Any] | None:
-    """주당 체중 대비 감량 % 기준으로 강도 분류 (CDC/WHO 기준)."""
+    """주당 감량이 체중의 몇 %인지로 속도를 나눈다. 경계(0.3%/0.7%)는 이 대시보드가 정한 값이다."""
     if current_weight_kg is None or current_weight_kg <= 0 or weekly_loss_kg is None:
         return None
     weekly_pct = (weekly_loss_kg / current_weight_kg) * 100
@@ -627,47 +711,88 @@ def classify_loss_intensity(weekly_loss_kg: float | None, current_weight_kg: flo
     }
 
 
+def _weekly_change(points: list[dict[str, Any]]) -> float | None:
+    days = (date.fromisoformat(points[-1]["date"]) - date.fromisoformat(points[0]["date"])).days
+    return (points[0]["valueKg"] - points[-1]["valueKg"]) / (days / 7) if days > 0 else None
+
+
 def detect_plateau(
     ewma_series: list[dict[str, Any]],
     threshold_kg_per_week: float = 0.05,
     min_days: int = 14,
     rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """EWMA 기준 최근 min_days 동안 변화량이 threshold 미만이면 정체기.
+    """EWMA의 14일 변화가 주 threshold 미만이면 정체다.
 
-    Phase 4: rows가 함께 제공되면 같은 기간 평균 training_load_acute로
-    정체기 유형을 'metabolic'(대사 적응) vs 'glycogen'(부하 급증 → 수분 저장)으로 분리.
+    durationDays는 실제로 이어진 정체 길이다: 끝에서부터 14일 창을 하루씩 뒤로 옮기며 모두 기준 안인 구간의 처음부터 센다(M7).
+    예전에는 고정 창 양 끝의 차이라서 항상 13이었다.
+    rows가 있으면(기능 스위치 plateauLoadClassification) 같은 기간 급성 부하로 glycogen/metabolic을 나눈다.
     """
-    recent = [p for p in ewma_series[-min_days:] if p.get("valueKg") is not None]
-    if len(recent) < min_days:
-        return {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None, "type": None}
+    points = [p for p in ewma_series if p.get("valueKg") is not None]
+    empty = {"detected": False, "startDate": None, "durationDays": 0, "weeklyChangeDelta": None, "type": None}
+    if len(points) < min_days:
+        return empty
 
-    days = (date.fromisoformat(recent[-1]["date"]) - date.fromisoformat(recent[0]["date"])).days
-    weekly_change = (recent[0]["valueKg"] - recent[-1]["valueKg"]) / (days / 7) if days > 0 else 0.0
-    detected = abs(weekly_change) < threshold_kg_per_week
+    latest_change = _weekly_change(points[-min_days:])
+    if latest_change is None:
+        return empty
+    detected = abs(latest_change) < threshold_kg_per_week
+    start_index = len(points) - min_days
+    if detected:
+        while start_index > 0:
+            change = _weekly_change(points[start_index - 1:start_index - 1 + min_days])
+            if change is None or abs(change) >= threshold_kg_per_week:
+                break
+            start_index -= 1
 
     plateau_type: str | None = None
     if detected and rows:
-        # 정체기 기간의 최근 7일 평균 부하 vs 정체기 직전 21일 평균 부하 비교
         loads = [parse_int(r.get("training_load_acute")) for r in rows[-min_days:]]
         loads = [v for v in loads if v is not None]
         if len(loads) >= 7:
             recent_load = sum(loads[-7:]) / max(len(loads[-7:]), 1)
             baseline_loads = loads[:-7] if len(loads) > 7 else loads
             baseline_load = sum(baseline_loads) / max(len(baseline_loads), 1)
-            # 평균 부하가 직전보다 25% 이상 상승했으면 글리코겐 정체기로 분류
-            if baseline_load > 0 and recent_load > baseline_load * 1.25:
-                plateau_type = "glycogen"
-            else:
-                plateau_type = "metabolic"
+            plateau_type = "glycogen" if baseline_load > 0 and recent_load > baseline_load * 1.25 else "metabolic"
 
+    start_date = points[start_index]["date"]
     return {
         "detected": detected,
-        "startDate": recent[0]["date"] if detected else None,
-        "durationDays": days if detected else 0,
-        "weeklyChangeDelta": round(weekly_change, 3),
+        "startDate": start_date if detected else None,
+        "durationDays": (date.fromisoformat(points[-1]["date"]) - date.fromisoformat(start_date)).days if detected else 0,
+        "weeklyChangeDelta": round(latest_change, 3),
         "type": plateau_type,
     }
+
+
+PRIOR_LOSS_KG = 1.0
+PRIOR_LOSS_LOOKBACK_DAYS = 56
+
+
+def classify_trend_state(
+    ewma_series: list[dict[str, Any]],
+    weekly_loss_rate: float | None,
+    plateau: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """인사이트 상태: losing / plateau_after_loss / plateau_no_loss / maintaining / gaining / warming_up.
+
+    정체 직전 56일 동안 EWMA가 1kg 이상 내려왔으면 "감량 후 정체"다. "대사 적응"은 이 상태에서만 말한다(M7).
+    """
+    points = [p for p in ewma_series if p.get("valueKg") is not None]
+    if weekly_loss_rate is None or not points:
+        return {"state": "warming_up", "priorLossKg": None}
+    if plateau and plateau.get("detected"):
+        start = date.fromisoformat(plateau["startDate"])
+        window = [p for p in points if start - timedelta(days=PRIOR_LOSS_LOOKBACK_DAYS) <= date.fromisoformat(p["date"]) <= start]
+        at_start = next((p["valueKg"] for p in reversed(window)), points[-1]["valueKg"])
+        prior_loss = round(max(p["valueKg"] for p in window) - at_start, 2) if window else 0.0
+        state = "plateau_after_loss" if prior_loss >= PRIOR_LOSS_KG else "plateau_no_loss"
+        return {"state": state, "priorLossKg": prior_loss}
+    if weekly_loss_rate > 0.05:
+        return {"state": "losing", "priorLossKg": None}
+    if weekly_loss_rate < -0.05:
+        return {"state": "gaining", "priorLossKg": None}
+    return {"state": "maintaining", "priorLossKg": None}
 
 
 def build_insight(
@@ -675,8 +800,11 @@ def build_insight(
     ewma_kg: float | None,
     intensity: dict[str, Any] | None,
     plateau: dict[str, Any] | None,
+    trend: dict[str, Any] | None = None,
+    weekly_loss_rate: float | None = None,
+    remaining_kg: float | None = None,
 ) -> dict[str, Any]:
-    """자연어 코칭 메시지 생성. 프론트는 단순 표시만 담당."""
+    """상태별 안내 문구. 프런트는 그대로 보여 준다(M7)."""
     lines: list[str] = []
     if ewma_kg is not None and current_kg is not None:
         diff = round(current_kg - ewma_kg, 2)
@@ -684,22 +812,33 @@ def build_insight(
             direction = "수분 증가로 일시적 상승" if diff > 0 else "수분 감소로 일시적 하락"
             lines.append(f"오늘 {current_kg}kg이지만 추세는 {ewma_kg}kg, {direction}일 수 있어요.")
 
-    if plateau and plateau.get("detected"):
-        dur = plateau.get("durationDays", 0)
+    state = (trend or {}).get("state")
+    days = (plateau or {}).get("durationDays", 0)
+    remaining = f" 목표까지 {remaining_kg:.1f}kg 남았습니다." if remaining_kg is not None and remaining_kg > 0 else ""
+    if state == "plateau_after_loss":
         lines.append(
-            f"{dur}일째 정체 중이지만 대사 적응 과정의 정상 패턴입니다. "
-            "운동량 10% ↑ 또는 식단 변화로 돌파해 보세요."
+            f"앞서 {trend['priorLossKg']:.1f}kg 줄어든 뒤 {days}일째 추세가 평평합니다. "
+            "감량 뒤 몸이 적응하는 흔한 구간일 수 있어요. 운동량이나 식단을 조금 바꿔 보세요."
         )
-    elif intensity:
+    elif state == "plateau_no_loss":
+        lines.append(f"{days}일째 체중 추세가 평평합니다.{remaining}")
+    elif state == "gaining":
+        rate = abs(weekly_loss_rate) if weekly_loss_rate is not None else None
+        pace = f"주 {rate:.2f}kg씩 " if rate is not None else ""
+        lines.append(f"최근 추세가 {pace}늘고 있어 목표에서 멀어지는 중입니다. 식사량과 활동량을 점검해 보세요.")
+    elif state == "maintaining":
+        lines.append(f"체중 추세가 거의 변하지 않고 있습니다(주 ±0.05kg 이내).{remaining}")
+    elif state == "losing" and intensity:
         level = intensity.get("level")
+        pct = intensity.get("weeklyPct")
         if level == "aggressive":
-            lines.append("감량 속도가 빠릅니다. 단백질 충분 섭취로 근손실을 막아 주세요.")
+            lines.append(f"주 체중의 {pct:.1f}%씩 줄어 빠른 편입니다. 단백질을 충분히 드세요.")
         elif level == "standard":
-            lines.append("CDC 권장 범위(주 0.5%) 안의 건강한 페이스입니다.")
+            lines.append(f"주 체중의 {pct:.1f}%씩 꾸준히 줄고 있습니다.")
         elif level == "conservative":
-            lines.append("느리지만 지속 가능한 페이스입니다. 장기 유지에 유리합니다.")
+            lines.append("느리지만 꾸준히 줄고 있습니다. 오래 유지하기 좋은 속도입니다.")
 
-    return {"headline": lines[0] if lines else None, "lines": lines}
+    return {"headline": lines[0] if lines else None, "lines": lines, "state": state}
 
 
 def data_quality_diagnostics(rows: list[dict[str, Any]], window_days: int = 30, outlier_delta_kg: float = 1.5, streak_penalty_days: int = 5, coverage_penalty_pct: float = 70.0) -> dict[str, Any]:

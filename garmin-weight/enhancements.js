@@ -39,14 +39,19 @@
     const scenarios = document.querySelector('.scenarios');
     if (!scenarios) return;
 
+    // P7: 시나리오마다 자기 곡선을 쓰므로 차이가 작은 것은 계산 실패가 아니라 활동량 변화의 효과가 작다는 뜻이다.
     const spread = scenarioSpreadKg(summary);
-    const muted = isLowConfidence(summary) || spread < 0.2;
+    const lowConfidence = isLowConfidence(summary);
+    const muted = lowConfidence || spread < 0.2;
     scenarios.classList.toggle('is-muted', muted);
 
     const hint = scenarios.querySelector('.scenarios-hint');
-    if (hint && muted) {
-      hint.textContent = '현재 추세가 불안정해 시나리오 차이를 계산하기 어렵습니다';
-    } else if (hint) {
+    if (!hint) return;
+    if (lowConfidence) {
+      hint.textContent = '예측 신뢰도가 낮아 시나리오는 참고용입니다';
+    } else if (spread < 0.2) {
+      hint.textContent = '시나리오 간 3개월 차이가 0.2kg 미만입니다';
+    } else {
       hint.textContent = '선택한 강도가 차트 예측선과 신뢰 띠에 반영됩니다';
     }
   }

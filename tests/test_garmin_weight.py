@@ -462,6 +462,138 @@ class GarminWeightTests(unittest.TestCase):
         self.assertGreater(proj, target)  # 목표를 지나치지 않음
 
 
+def _m5_rows(days: int = 90, start_kg: float = 86.11, weekly: float = 0.4) -> list[dict]:
+    """리포트 M5의 합성 예: 주 0.4kg씩 꾸준히 빠지는 90일, 이틀에 한 번 350kcal 활동."""
+    start = sync_garmin.date(2030, 1, 1)
+    return [
+        _daily_row((start + sync_garmin.timedelta(days=i)).isoformat(), round(start_kg - weekly / 7 * i, 2),
+                   exercise_minutes=40 if i % 2 == 0 else 0, exercise_calories=350 if i % 2 == 0 else 0,
+                   activity_count=1 if i % 2 == 0 else 0, body_fat_percent=25.0)
+        for i in range(days)
+    ]
+
+
+class ForecastCurveTests(unittest.TestCase):
+    """P7: 감쇠 곡선(M5), 곡선에서 구한 ETA, 시나리오 시계열(M6), 인사이트(M7), M9."""
+
+    def test_m5_example_meets_the_completion_criteria(self) -> None:
+        summary = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80})
+        scenarios = summary["predictions"]["scenarios"]
+        base = scenarios["base"]
+        start, loss = base["series"][0]["valueKg"], base["effectiveWeeklyLossKg"]
+        # 곡선의 초기 기울기 = 주 0.40kg ± 5% (예전 상한 때문에 0.12kg)
+        initial = (start - sync_garmin._projected_weight(start, loss, 1 / 7, 80)) * 7
+        self.assertAlmostEqual(0.40, initial, delta=0.02)
+        # ETA 날짜의 곡선 값이 목표 + ε 이하이고, 그 전날은 아니다
+        goal = summary["goal"]
+        self.assertEqual("date", goal["etaStatus"])
+        self.assertLessEqual(sync_garmin._projected_weight(start, loss, goal["etaDays"] / 7, 80), 80 + goal["etaToleranceKg"])
+        self.assertGreater(sync_garmin._projected_weight(start, loss, (goal["etaDays"] - 1) / 7, 80), 80 + goal["etaToleranceKg"])
+        self.assertLessEqual(goal["etaRangeDays"]["min"], goal["etaDays"])
+        self.assertGreaterEqual(goal["etaRangeDays"]["max"], goal["etaDays"])
+        # 세 시나리오 카드가 서로 다르고, 카드 값과 선 끝 값이 같다
+        cards = [scenarios[k]["threeMonthWeightKg"] for k in ("optimistic", "base", "conservative")]
+        self.assertEqual(3, len(set(cards)))
+        self.assertLess(cards[0], cards[1])
+        self.assertLess(cards[1], cards[2])
+        for key, scenario in scenarios.items():
+            with self.subTest(scenario=key):
+                self.assertEqual(13, len(scenario["series"]))
+                self.assertAlmostEqual(scenario["threeMonthWeightKg"], scenario["series"][-1]["valueKg"], delta=0.01)
+                self.assertEqual([p["date"] for p in summary["series"]["prediction"]], [p["date"] for p in scenario["series"]])
+        self.assertAlmostEqual(summary["predictions"]["threeMonthWeightKg"], base["threeMonthWeightKg"], delta=0.01)
+        self.assertEqual(summary["predictionCI"]["series"][-1]["upper80"], base["series"][-1]["upper80"])
+
+    def test_curve_slope_matches_the_trend_and_guards_tiny_gaps(self) -> None:
+        start, rate = 83.0, 0.4
+        for target in (78.0, 82.0):
+            slope = (start - sync_garmin._projected_weight(start, rate, 1e-4, target)) / 1e-4
+            self.assertAlmostEqual(rate, slope, places=3)
+        # 남은 간격(0.2kg)이 한 주 감량보다 작으면 k를 1/주로 묶는다. 목표 아래로는 내려가지 않는다.
+        near = sync_garmin._projected_weight(80.2, 0.4, 1, 80.0)
+        self.assertAlmostEqual(80.0 + 0.2 * sync_garmin.math.exp(-1), near, places=6)
+        self.assertEqual(83.8, sync_garmin._projected_weight(83.0, -0.2, 4, 78.0))  # 증량은 직선
+
+    def test_eta_statuses(self) -> None:
+        eta = sync_garmin._modeling.projected_eta
+        self.assertEqual(("reached", 0), eta(80.25, 0.3, 80.0))
+        self.assertEqual(("no_loss", None), eta(84.0, -0.05, 78.0))
+        self.assertEqual(("no_loss", None), eta(84.0, 0.0, 78.0))
+        self.assertEqual(("beyond", None), eta(84.0, 0.02, 78.0))  # 2년 안에 목표 + 0.3kg에 닿지 않는다
+        status, days = eta(84.0, 0.5, 78.0)
+        self.assertEqual("date", status)
+        self.assertLessEqual(days, 104 * 7)
+        loose_status, loose_days = eta(84.0, 0.5, 78.0, tolerance_kg=1.0)
+        self.assertLess(loose_days, days)
+
+    def test_eta_tolerance_comes_from_config(self) -> None:
+        summary = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80, "etaToleranceKg": 0.6})
+        self.assertEqual(0.6, summary["goal"]["etaToleranceKg"])
+        default = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80})
+        self.assertLess(summary["goal"]["etaDays"], default["goal"]["etaDays"])
+
+    def test_plateau_length_is_the_real_run(self) -> None:
+        """M7: 감량 뒤 40일 평평하면 durationDays가 13이 아니라 실제 길이에 가깝다. '대사 적응'은 감량 뒤에만."""
+        start = sync_garmin.date(2030, 1, 1)
+        weights = [86.0 - 0.06 * i for i in range(50)] + [83.0] * 40
+        rows = [_daily_row((start + sync_garmin.timedelta(days=i)).isoformat(), round(w, 2)) for i, w in enumerate(weights)]
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        plateau = summary["plateau"]
+        self.assertTrue(plateau["detected"])
+        self.assertGreater(plateau["durationDays"], 20)
+        self.assertLessEqual(plateau["durationDays"], 40)
+        self.assertEqual("plateau_after_loss", summary["insight"]["state"])
+        self.assertIn("줄어든 뒤", summary["insight"]["lines"][-1])
+
+        flat_rows = [_daily_row((start + sync_garmin.timedelta(days=i)).isoformat(), 84.0) for i in range(90)]
+        flat = sync_garmin.build_summary(flat_rows, {"targetWeightKg": 78})
+        self.assertEqual("plateau_no_loss", flat["insight"]["state"])
+        text = " ".join(flat["insight"]["lines"])
+        self.assertNotIn("적응", text)
+        self.assertIn("6.0kg 남았습니다", text)
+
+    def test_gaining_trend_gets_its_own_copy(self) -> None:
+        start = sync_garmin.date(2030, 1, 1)
+        rows = [_daily_row((start + sync_garmin.timedelta(days=i)).isoformat(), round(82.0 + 0.04 * i, 2)) for i in range(90)]
+        summary = sync_garmin.build_summary(rows, {"targetWeightKg": 78})
+        self.assertEqual("gaining", summary["insight"]["state"])
+        self.assertIn("늘고 있어", summary["insight"]["lines"][-1])
+        self.assertEqual("no_loss", summary["goal"]["etaStatus"])
+
+    def test_no_unsourced_guideline_claims(self) -> None:
+        for weekly in (0.2, 0.45, 0.9):
+            summary = sync_garmin.build_summary(_m5_rows(weekly=weekly, start_kg=95.0), {"targetWeightKg": 70})
+            text = " ".join(summary["insight"]["lines"])
+            with self.subTest(weekly=weekly):
+                self.assertNotIn("CDC", text)
+                self.assertNotIn("WHO", text)
+        source = (MODULE_PATH.parent / "sync_modeling.py").read_text(encoding="utf-8")
+        self.assertNotIn("CDC", source)
+
+    def test_session_kcal_needs_real_activity_days(self) -> None:
+        """M9: 활동 기록이 있으면 회당 kcal로, 일일 요약만 있으면 하루 활동량 비율로 시나리오를 만든다."""
+        summary = sync_garmin.build_summary(_m5_rows(), {"targetWeightKg": 80})
+        self.assertIn("회당 ~350kcal", summary["predictions"]["scenarios"]["optimistic"]["description"])
+        self.assertEqual(700.0, summary["predictions"]["scenarios"]["optimistic"]["weeklyKcalDelta"])
+
+        intensity_only = [{**row, "activity_count": 0, "exercise_source": "intensity", "exercise_calories": 300}
+                          for row in _m5_rows()]
+        summary = sync_garmin.build_summary(intensity_only, {"targetWeightKg": 80})
+        description = summary["predictions"]["scenarios"]["optimistic"]["description"]
+        self.assertIn("하루 활동량 +30%", description)
+        self.assertNotIn("회당", description)
+
+    def test_body_fat_tier_has_hysteresis(self) -> None:
+        """M9: 30% 경계 근처의 측정이 7,700/8,000을 오가지 않는다(±0.5%p)."""
+        tier = sync_garmin._modeling.body_fat_tier_value
+        self.assertEqual(7700.0, tier([29.8, 30.2, 29.9, 30.3]))
+        self.assertEqual(8000.0, tier([29.8, 30.6]))
+        self.assertEqual(8000.0, tier([29.8, 30.6, 30.1, 29.6]))
+        self.assertEqual(7700.0, tier([29.8, 30.6, 29.4]))
+        self.assertEqual(6500.0, tier([14.0]))
+        self.assertIsNone(tier([None, 0.0]))
+
+
 _MISSING = object()
 
 # 개인 대시보드(dashboard.js, dashboard-model.js)가 summary.json에서 읽는 경로.
