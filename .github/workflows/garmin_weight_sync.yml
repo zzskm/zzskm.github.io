@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       backfill_days:
-        description: Days to resync, ending today
+        description: Days to resync, ending on end_date (default today, KST). Over 3 days never empties an existing cell.
         required: false
         default: "3"
+      end_date:
+        description: Last day to resync (YYYY-MM-DD, KST). Empty means today. Use it to backfill in 30-day steps.
+        required: false
+        default: ""
   # 정각은 GitHub 예약 실행이 가장 밀리는 시각이라 분을 비킨다. 00:41, 09:41 KST.
   schedule:
     - cron: "41 15 * * *"
@@ -109,11 +113,25 @@ jobs:
             echo "::warning::garmin token cache could not be decrypted; using password"
           fi
 
+      # 긴 backfill(4일 이상)은 --protect-existing으로 돈다. 성공했는데 빈 값이 와도 기존 값을 지우지 않는다.
       - name: Sync Garmin aggregates
         run: |
-          python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}" --date "$(TZ=Asia/Seoul date +%Y-%m-%d)"
+          set -euo pipefail
+          if ! [[ "${BACKFILL_DAYS}" =~ ^[0-9]+$ ]] || (( BACKFILL_DAYS < 1 || BACKFILL_DAYS > 60 )); then
+            echo "::error::backfill_days must be 1-60 (got ${BACKFILL_DAYS})"
+            exit 1
+          fi
+          end_date="${END_DATE:-$(TZ=Asia/Seoul date +%Y-%m-%d)}"
+          if ! [[ "${end_date}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::end_date must be YYYY-MM-DD (got ${end_date})"
+            exit 1
+          fi
+          extra=()
+          if (( BACKFILL_DAYS > 3 )); then extra+=(--protect-existing); fi
+          python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}" --date "${end_date}" "${extra[@]}"
         env:
           BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '3' }}
+          END_DATE: ${{ github.event.inputs.end_date || '' }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
 

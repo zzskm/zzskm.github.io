@@ -1,4 +1,4 @@
-"""garmin-weight 수집 실패 경로 테스트 (P3: S2 실패 구분, S3 필드 병합, sync 블록, dry-run; P4: 토큰 로그인).
+"""garmin-weight 수집 테스트 (P3: S2 실패 구분, S3 필드 병합, sync 블록, dry-run; P4: 토큰 로그인; P5: 입력 추출).
 
 가짜 Garmin 클라이언트를 쓴다. garminconnect가 설치돼 있지 않아도 돈다.
 """
@@ -45,6 +45,11 @@ class FakeGarmin:
         self.status = status
         self.calls: list[str] = []
         self.history: list[dict] = []  # 기간 조회(시작일 != 종료일)에 돌려줄 활동
+        self.readiness: list | dict = []
+        self.training_status: dict = {}
+        self.activities: list[dict] = [{"duration": 1800.0, "calories": 250.0}]
+        self.sleep: dict = {"dailySleepDTO": {"sleepTimeSeconds": 25200, "sleepScores": {"overall": {"value": 81}}}}
+        self.weight_item: dict = {"samplePk": 1, "weight": 83900.0}
 
     def _respond(self, name: str, payload):
         self.calls.append(name)
@@ -64,32 +69,32 @@ class FakeGarmin:
         return self._respond("get_heart_rates", {"restingHeartRate": 57, "heartRateValues": [[1, 60], [2, None]]})
 
     def get_sleep_data(self, day):
-        return self._respond("get_sleep_data", {"dailySleepDTO": {"sleepTimeSeconds": 25200, "sleepScores": {"overall": {"value": 81}}}})
+        return self._respond("get_sleep_data", self.sleep)
 
     def get_body_composition(self, day):
         return self._respond("get_body_composition", {
             "totalAverage": {"weight": 83900.0, "bodyFat": 28.8, "visceralFat": 19.0},
-            "dateWeightList": [{"samplePk": 1, "weight": 83900.0}],
+            "dateWeightList": [self.weight_item],
             "devices": {"3390012345": {"name": SECRET}},
         })
 
     def get_activities_fordate(self, day):
-        return self._respond("get_activities_fordate", {"ActivitiesForDay": {"payload": [{"duration": 1800.0, "calories": 250.0}]}})
+        return self._respond("get_activities_fordate", {"ActivitiesForDay": {"payload": list(self.activities)}})
 
     def get_activities_by_date(self, start, end):
         return self._respond("get_activities_by_date", list(self.history) if start != end else [])
 
     def get_training_readiness(self, day):
-        return self._respond("get_training_readiness", [])
+        return self._respond("get_training_readiness", self.readiness)
 
     def get_training_status(self, day):
-        return self._respond("get_training_status", {})
+        return self._respond("get_training_status", self.training_status)
 
 
 EXISTING = {
     "date": DAY, "weight_kg": 84.1, "weight_measure_count": 1, "exercise_minutes": 45.0, "exercise_calories": 400.0,
     "activity_count": 1, "steps": 7000, "sleep_hours": 6.5, "resting_hr": 60.0, "visceral_fat": 20.0, "metabolic_age": None,
-    "body_fat_percent": 29.3, "sleep_score": 75, "training_load_acute": None,
+    "body_fat_percent": 29.3, "sleep_score": 75, "training_load_acute": None, "exercise_source": "activity",
 }
 
 
@@ -179,9 +184,11 @@ class FieldMergeTests(unittest.TestCase):
         result, log = _sync_one(client)
         row = result.rows[DAY]
         # 대체 경로가 빈 목록을 돌려주면 활동 0건이고, 운동 값은 일일 요약으로 보강한다.
+        # 강도 운동 시간은 보통 20분 + 격렬 5분의 실제 분이다(격렬 2배 가중 아님, D3).
         self.assertEqual(0, row["activity_count"])
-        self.assertEqual(30.0, row["exercise_minutes"])
+        self.assertEqual(25.0, row["exercise_minutes"])
         self.assertEqual(310.0, row["exercise_calories"])
+        self.assertEqual("intensity", row["exercise_source"])
         self.assertIn("get_activities_by_date", client.calls)
         self.assertEqual("partial", log.status())
 
@@ -190,7 +197,7 @@ class FieldMergeTests(unittest.TestCase):
         result, _ = _sync_one(client)
         row = result.rows[DAY]
         self.assertEqual(0, row["activity_count"])
-        self.assertEqual((45.0, 400.0), (row["exercise_minutes"], row["exercise_calories"]))
+        self.assertEqual((45.0, 400.0, "activity"), (row["exercise_minutes"], row["exercise_calories"], row["exercise_source"]))
         self.assertEqual(7000, row["steps"])
 
     def test_every_key_field_empty_keeps_existing_row(self) -> None:
@@ -200,6 +207,179 @@ class FieldMergeTests(unittest.TestCase):
         self.assertEqual(EXISTING, result.rows[DAY])
         self.assertEqual([DAY], result.kept_rows)
         self.assertEqual("ok", log.status())
+
+
+def _status_payload(*devices: dict) -> dict:
+    """get_training_status 응답 모양(라이브러리 문서와 같은 중첩). 기기 ID 키 아래 기기별 상태가 있다."""
+    return {"userId": 1, "mostRecentTrainingStatus": {"latestTrainingStatusData": {
+        str(3390000000 + index): device for index, device in enumerate(devices)}}}
+
+
+def _device(day: str, acute: int | None, primary: bool = False) -> dict:
+    return {"calendarDate": day, "primaryTrainingDevice": primary, "trainingStatus": 4,
+            "acuteTrainingLoadDTO": {"acwrPercent": 50, "dailyTrainingLoadAcute": acute, "dailyTrainingLoadChronic": 300}}
+
+
+class TrainingLoadTests(unittest.TestCase):
+    """P5(D2): 준비도 리스트와 훈련 상태의 기기별 중첩에서 급성 부하를 꺼낸다. 다른 날 값은 쓰지 않는다."""
+
+    def test_readiness_list_uses_latest_entry_of_the_day(self) -> None:
+        readiness = [
+            {"calendarDate": DAY, "timestamp": "2026-11-24T07:00:00.0", "acuteLoad": 300},
+            {"calendarDate": DAY, "timestamp": "2026-11-24T19:00:00.0", "acuteLoad": 340},
+            {"calendarDate": "2026-11-25", "timestamp": "2026-11-25T07:00:00.0", "acuteLoad": 999},
+        ]
+        self.assertEqual(340, sync_garmin.extract_readiness_load(readiness, DAY))
+        self.assertIsNone(sync_garmin.extract_readiness_load([{"calendarDate": "2026-11-23", "acuteLoad": 1}], DAY))
+        self.assertEqual(321, sync_garmin.extract_readiness_load([{"acuteLoad": 321}], DAY))  # 리포트 D2 재현
+        self.assertEqual(321, sync_garmin.extract_readiness_load({"acuteLoad": 321}, DAY))
+        self.assertIsNone(sync_garmin.extract_readiness_load([], DAY))
+
+    def test_status_reads_nested_device_map_and_prefers_primary(self) -> None:
+        payload = _status_payload(_device(DAY, 250), _device(DAY, 410, primary=True))
+        self.assertEqual(410, sync_garmin.extract_status_load(payload, DAY))
+        self.assertIsNone(sync_garmin.extract_status_load(_status_payload(_device("2026-11-01", 410)), DAY))
+        self.assertIsNone(sync_garmin.extract_status_load({"userId": 1, "mostRecentTrainingStatus": None}, DAY))
+        self.assertIsNone(sync_garmin.extract_status_load(_status_payload(_device(DAY, None)), DAY))
+
+    def test_readiness_value_skips_status_call(self) -> None:
+        client = FakeGarmin()
+        client.readiness = [{"calendarDate": DAY, "acuteLoad": 280}]
+        result, _ = _sync_one(client)
+        self.assertEqual(280, result.rows[DAY]["training_load_acute"])
+        self.assertNotIn("get_training_status", client.calls)
+
+    def test_status_used_when_readiness_has_no_load(self) -> None:
+        client = FakeGarmin()
+        client.readiness = [{"calendarDate": DAY, "score": 60}]
+        client.training_status = _status_payload(_device(DAY, 333))
+        result, _ = _sync_one(client)
+        self.assertEqual(333, result.rows[DAY]["training_load_acute"])
+        self.assertIn("get_training_status", client.calls)
+
+    def test_failed_training_calls_keep_existing_load(self) -> None:
+        client = FakeGarmin(fail=("get_training_readiness", "get_training_status"))
+        result, _ = _sync_one(client, {**EXISTING, "training_load_acute": 222})
+        self.assertEqual(222, result.rows[DAY]["training_load_acute"])
+
+
+class MetabolicAgeTests(unittest.TestCase):
+    """P5(D2): 대사 나이는 epoch ms(그 나이의 생일)로 온다. 측정일 기준 만 나이로 바꾼다."""
+
+    def test_epoch_ms_becomes_age_on_the_measurement_day(self) -> None:
+        born = 378518400000.0  # 1981-12-30 00:00 UTC
+        self.assertEqual(44, sync_garmin._safe_metabolic_age(born, DAY))
+        self.assertEqual(43, sync_garmin._safe_metabolic_age(born, "2025-12-29"))
+        self.assertEqual(44, sync_garmin._safe_metabolic_age(born, "2025-12-30"))
+        self.assertIsNone(sync_garmin._safe_metabolic_age(born, None))
+
+    def test_years_and_implausible_values(self) -> None:
+        self.assertEqual(45, sync_garmin._safe_metabolic_age(45.4, DAY))
+        self.assertIsNone(sync_garmin._safe_metabolic_age(5.0, DAY))
+        self.assertIsNone(sync_garmin._safe_metabolic_age(1.0e9, DAY))  # epoch 초는 받지 않는다
+        self.assertIsNone(sync_garmin._safe_metabolic_age(4102444800000.0, DAY))  # 미래 생일
+
+    def test_row_gets_metabolic_age_from_total_average(self) -> None:
+        client = FakeGarmin()
+        original = client.get_body_composition
+
+        def body(day):
+            payload = original(day)
+            payload["totalAverage"]["metabolicAge"] = 378518400000.0
+            return payload
+
+        client.get_body_composition = body
+        self.assertEqual(44, _sync_one(client, None)[0].rows[DAY]["metabolic_age"])
+
+
+class ExerciseSourceTests(unittest.TestCase):
+    """P5(D3): 운동 값의 출처를 남기고, 활동이 있는 날은 일일 요약과 섞지 않는다."""
+
+    def test_activity_day(self) -> None:
+        result, _ = _sync_one(FakeGarmin(), None)
+        row = result.rows[DAY]
+        self.assertEqual((1, 30.0, 250.0, "activity"),
+                         (row["activity_count"], row["exercise_minutes"], row["exercise_calories"], row["exercise_source"]))
+
+    def test_activity_without_calories_is_not_mixed_with_daily_kcal(self) -> None:
+        client = FakeGarmin()
+        client.activities = [{"duration": 1200.0}]
+        row = _sync_one(client, None)[0].rows[DAY]
+        self.assertEqual((20.0, 0.0, "activity"), (row["exercise_minutes"], row["exercise_calories"], row["exercise_source"]))
+
+    def test_no_activity_and_no_intensity_has_no_source(self) -> None:
+        client = FakeGarmin(empty=("get_activities_fordate", "get_stats"))
+        row = _sync_one(client, None)[0].rows[DAY]
+        self.assertEqual((0, 0.0, 0.0, None),
+                         (row["activity_count"], row["exercise_minutes"], row["exercise_calories"], row["exercise_source"]))
+
+    def test_source_round_trips_through_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rows.csv"
+            sync_garmin.write_rows(path, {DAY: {**EXISTING, "exercise_source": "intensity"},
+                                          "2026-11-23": {**EXISTING, "date": "2026-11-23", "exercise_source": None}})
+            text = path.read_text(encoding="utf-8")
+            self.assertTrue(text.splitlines()[0].endswith(",exercise_source"))
+            rows = sync_garmin.load_existing_rows(path)
+            path.write_text(text.replace(",intensity", ",bogus"), encoding="utf-8")
+            bogus = sync_garmin.load_existing_rows(path)
+        self.assertEqual(("intensity", None), (rows[DAY]["exercise_source"], rows["2026-11-23"]["exercise_source"]))
+        self.assertIsNone(bogus[DAY]["exercise_source"])
+
+    def test_old_csv_without_the_column_loads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "old.csv"
+            path.write_text("date,weight_kg,steps\n2026-11-24,84.1,7000\n", encoding="utf-8")
+            rows = sync_garmin.load_existing_rows(path)
+        self.assertEqual((84.1, 7000, None), (rows[DAY]["weight_kg"], rows[DAY]["steps"], rows[DAY]["exercise_source"]))
+
+
+class ProtectExistingTests(unittest.TestCase):
+    """긴 backfill용: 성공했는데 빈 값이 와도 기존 값을 지우지 않는다."""
+
+    def test_protect_keeps_values_and_counts_them(self) -> None:
+        client = FakeGarmin(empty=("get_sleep_data",))
+        log = sync_garmin.CallLog()
+        result = sync_garmin.sync_days(client, [DAY], {DAY: dict(EXISTING)}, log, protect=True)
+        self.assertEqual((6.5, 75), (result.rows[DAY]["sleep_hours"], result.rows[DAY]["sleep_score"]))
+        self.assertEqual({(DAY, "sleep_hours"), (DAY, "sleep_score")}, result.protected)
+        _, merge = sync_garmin.merge_stats(result, {DAY: dict(EXISTING)})
+        self.assertEqual(1, merge["sleep_hours"]["protected"])
+        self.assertEqual(0, merge["sleep_hours"]["cleared"])
+
+    def test_without_protect_empty_values_clear(self) -> None:
+        result, _ = _sync_one(FakeGarmin(empty=("get_sleep_data",)))
+        self.assertIsNone(result.rows[DAY]["sleep_hours"])
+        _, merge = sync_garmin.merge_stats(result, {DAY: dict(EXISTING)})
+        self.assertEqual(1, merge["sleep_hours"]["cleared"])
+
+
+class ProbeKindsTests(unittest.TestCase):
+    """P5 probe: 값 대신 값의 종류만 남긴다."""
+
+    def test_metabolic_age_units(self) -> None:
+        self.assertEqual(["null", "years", "epoch_ms", "epoch_s", "other"],
+                         [sync_garmin._number_kind(v) for v in (None, 45.0, 1.0e12, 1.0e9, 5.0)])
+        # 1981-12-30 00:00 UTC를 생일로 읽으면 2026-11-24에 44세다.
+        body = {"dateWeightList": [{"calendarDate": DAY, "metabolicAge": 378518400000.0}],
+                "totalAverage": {"metabolicAge": 378518400000.0}}
+        kinds = sync_garmin.probe_value_kinds(body, None, [], None)
+        self.assertEqual({"items": ["epoch_ms"], "totalAverage": "epoch_ms", "epochMsAsBirthDateInRange": True},
+                         kinds["metabolicAge"])
+
+    def test_sleep_kinds_without_values(self) -> None:
+        # 2026-11-24 02:30을 현지 벽시계로 담은 값(UTC처럼 해석).
+        start = 1795919400000
+        sleep = {"dailySleepDTO": {"sleepTimeSeconds": 14700, "deepSleepSeconds": 3000, "lightSleepSeconds": 9000,
+                                   "remSleepSeconds": 2700, "napTimeSeconds": None, "sleepStartTimestampLocal": start,
+                                   "sleepWindowConfirmationType": "ENHANCED_CONFIRMED_FINAL"}}
+        kinds = sync_garmin.probe_value_kinds({}, sleep, [{"acuteLoad": 1}], _status_payload(_device(DAY, 1)))
+        self.assertEqual({"present": ["sleepTimeSeconds", "deepSleepSeconds", "lightSleepSeconds", "remSleepSeconds",
+                                      "sleepStartTimestampLocal"],
+                          "startBucket": "night", "confirmation": "ENHANCED_CONFIRMED_FINAL", "stagesOverTotal": 1.0},
+                         kinds["sleep"])
+        self.assertEqual((1, 1), (kinds["readinessEntries"], kinds["trainingStatusDevices"]))
+        self.assertNotIn("14700", json.dumps(kinds))
 
 
 class DeclaredMethodsTests(unittest.TestCase):
@@ -343,6 +523,29 @@ class MainTests(unittest.TestCase):
         # 구조에는 키와 타입만 남는다(키가 없는 활동이 섞여도 있는 쪽의 타입).
         self.assertEqual({"activityId": "int", "activityName": "str", "startTimeLocal": "str", "duration": "float"},
                          history["structure"]["<item>"])
+
+    def test_run_reports_merge_counts(self) -> None:
+        code, out = self.run_main(FakeGarmin(empty=("get_sleep_data",)))
+        self.assertEqual(0, code)
+        self.assertIn("::notice::garmin merge new_days=0 ", out)
+        self.assertIn("::notice::garmin cleared fields=", out)
+
+    def test_protect_existing_flag_reaches_merge(self) -> None:
+        code, out = self.run_main(FakeGarmin(empty=("get_sleep_data",)), "--protect-existing")
+        self.assertEqual(0, code)
+        self.assertIn("cleared=0 protected=", out)
+        self.assertNotIn("garmin cleared fields=", out)
+
+    def test_probe_dates_need_dry_run_and_select_days(self) -> None:
+        code, out = self.run_main(FakeGarmin(), "--probe-dates", "2026-11-19,2026-09-27")
+        self.assertEqual((2, "::error::--probe-dates needs --dry-run\n"), (code, out))
+        report_path = self.tmp / "probe.json"
+        code, _ = self.run_main(FakeGarmin(), "--dry-run", "--stats-output", str(report_path),
+                                "--probe-dates", "2026-11-19, 2026-09-27")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual((0, 2, "2026-11-19"), (code, report["days"], report["endDate"]))
+        self.assertEqual(["2026-09-27", "2026-11-19"], sorted(report["valueKinds"]))
+        self.assertEqual(["sleepTimeSeconds"], report["valueKinds"]["2026-11-19"]["sleep"]["present"])
 
     def test_token_dir_reaches_build_client(self) -> None:
         argv = ["--config", str(self.config), "--output-csv", str(self.csv), "--output-summary", str(self.summary),

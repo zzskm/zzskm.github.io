@@ -17,6 +17,10 @@ on:
         description: Count activities per month from this date (one range query); empty skips it
         required: false
         default: ""
+      dates:
+        description: Comma-separated dates (YYYY-MM-DD) to probe instead of the last N days
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -94,8 +98,10 @@ jobs:
           --backfill-days "$PROBE_DAYS" --date "$(TZ=Asia/Seoul date +%Y-%m-%d)"
           --stats-output "$RUNNER_TEMP/garmin-probe.json"
           --probe-activities-since "$ACTIVITIES_SINCE"
+          ${PROBE_DATES:+--probe-dates "$PROBE_DATES"}
         env:
           PROBE_DAYS: ${{ inputs.days || '3' }}
+          PROBE_DATES: ${{ inputs.dates || '' }}
           # 월별 활동 수만 센다(D1 판정용). 비우면 건너뛴다.
           ACTIVITIES_SINCE: ${{ inputs.activities_since || '' }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}

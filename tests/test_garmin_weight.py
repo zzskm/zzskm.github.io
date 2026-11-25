@@ -34,6 +34,8 @@ def _daily_row(day: str, weight_kg: float | None, **extra) -> dict:
     return row
 
 
+PLATEAU_ON = {"features": {"plateauLoadClassification": True}}
+
 class GarminWeightTests(unittest.TestCase):
     def test_build_summary_falls_back_to_flat_forecast_when_history_is_short(self) -> None:
         """M8: 28일 창에 점이 모자란 초기 구간은 예측을 숨기지 않고 EWMA 수준의 평평한 예측을 낸다."""
@@ -331,13 +333,34 @@ class GarminWeightTests(unittest.TestCase):
         """Phase 4 회귀: 정체기 + 정체 구간 후반 7일의 훈련 부하 급증 → type='glycogen'."""
         # detect_plateau는 최근 14행의 부하를 앞 7일(기준)과 뒤 7일(최근)로 나눠 비교한다.
         rows = self._plateau_rows(lambda d: 150 if d < 21 else 500)
-        plateau = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})["plateau"]
+        plateau = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175, **PLATEAU_ON})["plateau"]
         self.assertTrue(plateau["detected"])
         self.assertEqual("glycogen", plateau["type"])
 
+    def test_plateau_type_is_off_by_default(self) -> None:
+        """P5: 기능 스위치가 꺼져 있으면(기본) 부하로 정체기 유형을 나누지 않는다."""
+        rows = self._plateau_rows(lambda d: 150 if d < 21 else 500)
+        plateau = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})["plateau"]
+        self.assertTrue(plateau["detected"])
+        self.assertIsNone(plateau["type"])
+
+    def test_context_weights_are_off_by_default(self) -> None:
+        """P5: 수면·부하 측정 가중치도 기본은 꺼져 있다. 켜면 EWMA가 달라진다."""
+        rows = self._plateau_rows(lambda d: 500)
+        for row in rows[-10:]:
+            row["sleep_score"] = 40
+            row["weight_kg"] = row["weight_kg"] + 1.5
+        config = {"targetWeightKg": 75, "heightCm": 175}
+        off = sync_garmin.build_summary(rows, config)["series"]["ewma"][-1]["valueKg"]
+        plain = sync_garmin.build_summary([{**row, "sleep_score": None, "training_load_acute": None} for row in rows], config)
+        on = sync_garmin.build_summary(rows, {**config, "features": {"sleepMeasurementWeighting": True,
+                                                                     "loadMeasurementWeighting": True}})
+        self.assertEqual(plain["series"]["ewma"][-1]["valueKg"], off)
+        self.assertLess(on["series"]["ewma"][-1]["valueKg"], off)
+
     def test_phase4_metabolic_plateau_when_load_is_steady(self) -> None:
         rows = self._plateau_rows(lambda d: 300)
-        plateau = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175})["plateau"]
+        plateau = sync_garmin.build_summary(rows, {"targetWeightKg": 75, "heightCm": 175, **PLATEAU_ON})["plateau"]
         self.assertTrue(plateau["detected"])
         self.assertEqual("metabolic", plateau["type"])
 

@@ -36,7 +36,14 @@ CSV_HEADERS = [
     "body_fat_percent",
     "sleep_score",
     "training_load_acute",
+    # P5(D3): 운동 시간·칼로리의 출처. activity(활동 기록) / intensity(일일 요약의 강도 운동 시간과 활동 칼로리)
+    "exercise_source",
 ]
+
+EXERCISE_SOURCE_ACTIVITY = "activity"
+EXERCISE_SOURCE_INTENSITY = "intensity"
+# 문자열 컬럼과 허용 값. 허용 값 밖의 내용은 읽을 때 버린다.
+STR_CSV_COLUMNS = {"exercise_source": (EXERCISE_SOURCE_ACTIVITY, EXERCISE_SOURCE_INTENSITY)}
 
 # 정수 컬럼 (load/format에서 round 처리)
 INT_CSV_COLUMNS = {
@@ -106,6 +113,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--stats-output", default=None, help="With --dry-run, write the JSON report here instead of stdout.")
     parser.add_argument("--probe-activities-since", default=None,
                         help="With --dry-run, count activities per month from this date (one range query, no values).")
+    parser.add_argument("--probe-dates", default=None,
+                        help="With --dry-run, comma-separated dates (YYYY-MM-DD) to fetch instead of a range ending at --date.")
+    parser.add_argument("--protect-existing", action="store_true",
+                        help="Never turn an existing value into an empty cell. The workflow sets it for long backfills.")
     parser.add_argument("--previous-summary", default="garmin-weight/data/summary.json",
                         help="Summary whose sync block is carried over (--skip-garmin) or extended.")
     parser.add_argument("--token-dir", default=os.getenv("GARMIN_TOKEN_DIR") or None,
@@ -154,7 +165,7 @@ def format_cell(value: Any, field: str) -> str:
         return ""
     if field in INT_CSV_COLUMNS:
         return str(int(round(float(value))))
-    if field == "date":
+    if field == "date" or field in STR_CSV_COLUMNS:
         return str(value)
     return f"{float(value):.2f}".rstrip("0").rstrip(".")
 
@@ -171,7 +182,10 @@ def load_existing_rows(path: Path) -> dict[str, dict[str, Any]]:
                 continue
             parsed = {"date": key}
             for field in CSV_HEADERS[1:]:
-                if field in INT_CSV_COLUMNS:
+                if field in STR_CSV_COLUMNS:
+                    text = (row.get(field) or "").strip()
+                    parsed[field] = text if text in STR_CSV_COLUMNS[field] else None
+                elif field in INT_CSV_COLUMNS:
                     parsed[field] = parse_int(row.get(field))
                 else:
                     parsed[field] = parse_float(row.get(field))
@@ -375,6 +389,84 @@ class MissingCredentials(RuntimeError):
     """자격 증명 시크릿이 없다. 메시지에 비밀 값이 없으므로 그대로 출력해도 된다."""
 
 
+def _number_kind(value: Any) -> str:
+    """숫자의 단위 추정. 값 자체는 내보내지 않는다."""
+    number = parse_float(value)
+    if number is None:
+        return "null"
+    if 10 <= number <= 120:
+        return "years"
+    if number >= 1e11:
+        return "epoch_ms"
+    if number >= 1e8:
+        return "epoch_s"
+    return "other"
+
+
+def _wall_clock_hour(epoch_ms: Any) -> int | None:
+    """*Local 타임스탬프(현지 벽시계를 UTC처럼 담은 epoch ms)의 시."""
+    number = parse_float(epoch_ms)
+    if number is None:
+        return None
+    try:
+        return datetime.fromtimestamp(number / 1000, tz=timezone.utc).hour
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+SLEEP_KIND_KEYS = (
+    "sleepTimeSeconds", "napTimeSeconds", "deepSleepSeconds", "lightSleepSeconds", "remSleepSeconds",
+    "awakeSleepSeconds", "unmeasurableSleepSeconds", "sleepStartTimestampLocal", "sleepEndTimestampLocal",
+)
+
+
+def probe_value_kinds(body: Any, sleep: Any, readiness: Any, status: Any) -> dict[str, Any]:
+    """dry-run 보고서용. P5(D2) 판정에 필요한 값의 종류만 남긴다(단위 추정, 키 존재, 시간대 구분)."""
+    kinds: dict[str, Any] = {}
+    items = body.get("dateWeightList") if isinstance(body, dict) else None
+    items = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+    metabolic: dict[str, Any] = {
+        "items": sorted({_number_kind(item.get("metabolicAge")) for item in items}),
+        "totalAverage": _number_kind(get_nested(body, "totalAverage", "metabolicAge")),
+    }
+    implied: list[bool] = []
+    for item in items:
+        number = parse_float(item.get("metabolicAge"))
+        measured = item.get("calendarDate")
+        if _number_kind(number) != "epoch_ms" or not isinstance(measured, str):
+            continue
+        try:
+            born = datetime.fromtimestamp(number / 1000, tz=timezone.utc).date()
+            implied.append(10 <= (date.fromisoformat(measured[:10]) - born).days / 365.25 <= 120)
+        except (OverflowError, OSError, ValueError):
+            implied.append(False)
+    if implied:
+        # epoch ms를 "그 나이에 해당하는 생일"로 읽었을 때 나이가 10~120세에 드는지.
+        metabolic["epochMsAsBirthDateInRange"] = all(implied)
+    kinds["metabolicAge"] = metabolic
+
+    dto = get_nested(sleep, "dailySleepDTO")
+    if isinstance(dto, dict):
+        hour = _wall_clock_hour(dto.get("sleepStartTimestampLocal"))
+        sleep_kind: dict[str, Any] = {
+            "present": [key for key in SLEEP_KIND_KEYS if dto.get(key) is not None],
+            "startBucket": None if hour is None else ("night" if hour >= 18 or hour < 6 else "day"),
+        }
+        confirmation = dto.get("sleepWindowConfirmationType")
+        if isinstance(confirmation, str) and re.fullmatch(r"[A-Za-z_]{1,40}", confirmation):
+            sleep_kind["confirmation"] = confirmation
+        total = parse_float(dto.get("sleepTimeSeconds"))
+        stages = [parse_float(dto.get(key)) for key in ("deepSleepSeconds", "lightSleepSeconds", "remSleepSeconds")]
+        if total and all(value is not None for value in stages):
+            sleep_kind["stagesOverTotal"] = round(sum(stages) / total, 2)
+        kinds["sleep"] = sleep_kind
+
+    kinds["readinessEntries"] = len(readiness) if isinstance(readiness, list) else int(bool(readiness))
+    latest = get_nested(status, "mostRecentTrainingStatus", "latestTrainingStatusData")
+    kinds["trainingStatusDevices"] = len(latest) if isinstance(latest, dict) else 0
+    return kinds
+
+
 # garminconnect 0.3.x는 토큰 디렉터리 안의 이 파일 하나에 DI 토큰(액세스·리프레시·client id)을 쓴다.
 # login(디렉터리)는 이 파일을 읽고, 만료가 가까우면 갱신해 같은 파일에 다시 쓰며, 비밀번호 로그인 뒤에도 여기에 쓴다.
 TOKEN_FILE_NAME = "garmin_tokens.json"
@@ -468,12 +560,29 @@ def fetch_activities_for_date(client: Any, day: str, log: CallLog | None = None)
     return [], CALL_EMPTY
 
 
-def _safe_metabolic_age(value: Any) -> int | None:
-    age = parse_int(value)
+def _safe_metabolic_age(value: Any, day: str | None = None) -> int | None:
+    """대사 나이(세). Garmin 체성분 응답은 이 값을 "그 나이에 해당하는 생일"의 epoch ms로 준다.
+
+    2026-11-25 probe에서 확인했다: 체중이 있는 날 metabolicAge는 epoch ms였고, 측정일 기준 나이로 읽으면
+    모두 10~120세 안이었다. 그래서 epoch ms면 측정일(day) 기준 만 나이로 바꾼다. 세 단위 값도 받는다.
+    """
+    number = parse_float(value)
+    if number is None:
+        return None
+    if number >= 1e11:
+        if not day:
+            return None
+        try:
+            born = datetime.fromtimestamp(number / 1000, tz=timezone.utc).date()
+            measured = date.fromisoformat(day)
+        except (OverflowError, OSError, ValueError):
+            return None
+        number = measured.year - born.year - ((measured.month, measured.day) < (born.month, born.day))
+    age = parse_int(number)
     return age if age is not None and 10 <= age <= 120 else None
 
 
-def extract_body_metrics(body: Any) -> dict[str, Any]:
+def extract_body_metrics(body: Any, day: str | None = None) -> dict[str, Any]:
     total_average = body.get("totalAverage") if isinstance(body, dict) else None
     payload = total_average if isinstance(total_average, dict) else (body if isinstance(body, dict) else {})
 
@@ -519,7 +628,7 @@ def extract_body_metrics(body: Any) -> dict[str, Any]:
             first_number(payload, "visceralFat", "visceralFatRating", "visceralFatMass"),
             2,
         ),
-        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge")),
+        "metabolic_age": _safe_metabolic_age(first_number(payload, "metabolicAge", "bodyAge", "metabolicBodyAge"), day),
         "body_fat_percent": round_or_none(body_fat, 1),
     }
 
@@ -554,27 +663,65 @@ def extract_sleep_score(sleep: Any) -> int | None:
     return None
 
 
-def extract_training_load(training: Any) -> int | None:
-    """급성 훈련 부하 (대개 0-1000+). 응답 키 변이가 많아 폭넓게 탐색."""
-    if not isinstance(training, dict):
+# 급성 훈련 부하 키. 준비도 항목은 acuteLoad, 훈련 상태는 기기별 acuteTrainingLoadDTO.dailyTrainingLoadAcute다.
+TRAINING_LOAD_KEYS = ("dailyTrainingLoadAcute", "acuteTrainingLoad", "acuteLoad", "trainingLoadAcute")
+
+
+def _find_number(data: Any, keys: tuple[str, ...], depth: int) -> float | None:
+    """키 중 하나의 숫자를 너비 우선으로 찾는다. depth는 내려갈 수 있는 단계 수다."""
+    queue: list[tuple[Any, int]] = [(data, 0)]
+    while queue:
+        node, level = queue.pop(0)
+        children: list[Any] = []
+        if isinstance(node, dict):
+            number = first_number(node, *keys)
+            if number is not None:
+                return number
+            children = list(node.values())
+        elif isinstance(node, list):
+            children = node
+        if level < depth:
+            queue.extend((child, level + 1) for child in children if isinstance(child, (dict, list)))
+    return None
+
+
+def _entries_for_day(entries: list[dict[str, Any]], day: str) -> list[dict[str, Any]]:
+    """calendarDate가 그날인 항목. 날짜 키가 하나도 없으면 그날 조회 결과로 보고 전부 쓴다.
+
+    다른 날 항목은 쓰지 않는다. 지난 날을 다시 받을 때 최신 값이 과거 날짜에 들어가면 안 된다.
+    """
+    dated = [entry for entry in entries if entry.get("calendarDate")]
+    if not dated:
+        return entries
+    return [entry for entry in dated if str(entry["calendarDate"])[:10] == day]
+
+
+def extract_readiness_load(readiness: Any, day: str) -> int | None:
+    """get_training_readiness(리스트)의 급성 부하. 하루에 여러 번 계산되므로 가장 늦은 항목을 쓴다."""
+    if isinstance(readiness, dict):
+        readiness = [readiness]
+    if not isinstance(readiness, list):
         return None
-    # 1차: 직접 키
-    v = first_number(
-        training,
-        "acuteTrainingLoad",
-        "acuteLoad",
-        "trainingLoadAcute",
-        "load",
-    )
-    if v is not None:
-        return parse_int(v)
-    # 2차: 중첩
-    for key in ("acuteTrainingLoadDTO", "trainingLoad", "training", "trainingStatus"):
-        nested = training.get(key)
-        if isinstance(nested, dict):
-            v = first_number(nested, "acuteTrainingLoad", "acuteLoad", "value", "load")
-            if v is not None:
-                return parse_int(v)
+    entries = _entries_for_day([entry for entry in readiness if isinstance(entry, dict)], day)
+    entries.sort(key=lambda entry: str(entry.get("timestamp") or entry.get("timestampLocal") or ""))
+    for entry in reversed(entries):
+        number = first_number(entry, "acuteLoad", "acuteTrainingLoad")
+        if number is not None:
+            return parse_int(number)
+    return None
+
+
+def extract_status_load(status: Any, day: str) -> int | None:
+    """get_training_status의 급성 부하. 값은 mostRecentTrainingStatus.latestTrainingStatusData.<기기 ID> 아래에 있다."""
+    latest = get_nested(status, "mostRecentTrainingStatus", "latestTrainingStatusData")
+    if not isinstance(latest, dict):
+        return None
+    devices = _entries_for_day([entry for entry in latest.values() if isinstance(entry, dict)], day)
+    devices.sort(key=lambda entry: not entry.get("primaryTrainingDevice"))  # 주 기기 먼저
+    for entry in devices:
+        number = _find_number(entry, TRAINING_LOAD_KEYS, depth=2)
+        if number is not None:
+            return parse_int(number)
     return None
 
 
@@ -619,7 +766,8 @@ def extract_activity_totals(activities: list[dict[str, Any]]) -> dict[str, Any]:
 
 BODY_FIELDS = frozenset({"weight_kg", "weight_measure_count", "visceral_fat", "metabolic_age", "body_fat_percent"})
 SLEEP_FIELDS = frozenset({"sleep_hours", "sleep_score"})
-ACTIVITY_FIELDS = frozenset({"activity_count", "exercise_minutes", "exercise_calories"})
+ACTIVITY_FIELDS = frozenset({"activity_count", "exercise_minutes", "exercise_calories", "exercise_source"})
+EXERCISE_FIELDS = frozenset({"exercise_minutes", "exercise_calories", "exercise_source"})
 ROW_FIELDS = frozenset(CSV_HEADERS[1:])
 
 
@@ -630,6 +778,8 @@ class DayFetch:
     row: dict[str, Any]
     failed_fields: set[str]
     sources: dict[str, str]
+    # dry-run 전용: 값 대신 값의 종류(단위 추정, 키 존재 여부)만 담는다.
+    kinds: dict[str, Any] = field(default_factory=dict)
 
 
 def _combine_fallback(primary: str, fallback: str) -> str:
@@ -644,11 +794,14 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
     sleep, sleep_status = safe_call(client, "get_sleep_data", day, log=log)
     body, body_status = safe_call(client, "get_body_composition", day, log=log)
     activities, activities_status = fetch_activities_for_date(client, day, log=log)
-    # V2 PR2: 컨텍스트 신호. 준비도가 비거나 실패하면 훈련 상태로 대신한다.
-    training, training_status = safe_call(client, "get_training_readiness", day, log=log)
-    if training_status != CALL_OK:
-        training, status_fallback = safe_call(client, "get_training_status", day, log=log)
-        training_status = _combine_fallback(training_status, status_fallback)
+    # 급성 훈련 부하. 준비도에서 값을 얻으면 훈련 상태는 부르지 않는다.
+    readiness, training_status = safe_call(client, "get_training_readiness", day, log=log)
+    training_load = extract_readiness_load(readiness, day)
+    training_payload: Any = None
+    if training_load is None:
+        training_payload, status_call = safe_call(client, "get_training_status", day, log=log)
+        training_load = extract_status_load(training_payload, day)
+        training_status = _combine_fallback(training_status, status_call)
 
     stats = stats if isinstance(stats, dict) else {}
     failed: set[str] = set()
@@ -659,7 +812,7 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
     if sleep_status == CALL_FAILED:
         failed |= SLEEP_FIELDS
 
-    body_metrics = extract_body_metrics(body)
+    body_metrics = extract_body_metrics(body, day)
 
     resting_hr = extract_resting_hr(stats, heart_rates, sleep)
     if resting_hr is None and CALL_FAILED in (stats_status, hr_status, sleep_status):
@@ -671,18 +824,23 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
         activity_totals: dict[str, Any] = {name: None for name in ACTIVITY_FIELDS}
     else:
         activity_totals = extract_activity_totals(activities or [])
-        # 활동이 없으면 일일 요약(stats)의 강도별 분/활동 칼로리로 보강한다.
-        intensity_minutes = (parse_int(stats.get("moderateIntensityMinutes")) or 0) + 2 * (parse_int(stats.get("vigorousIntensityMinutes")) or 0)
-        stats_fallback = {"exercise_minutes": intensity_minutes, "exercise_calories": parse_int(stats.get("activeKilocalories")) or 0}
-        for name, fallback in stats_fallback.items():
-            if activity_totals[name]:
-                continue
-            if stats_status == CALL_FAILED:
-                failed.add(name)
-            elif fallback > 0:
-                activity_totals[name] = float(fallback)
+        activity_totals["exercise_source"] = None
+        if activity_totals["activity_count"]:
+            # 활동이 있는 날은 활동 값만 쓴다. 일일 요약과 섞지 않는다(D3).
+            activity_totals["exercise_source"] = EXERCISE_SOURCE_ACTIVITY
+        elif stats_status == CALL_FAILED:
+            # 활동이 없는 날의 운동 값은 일일 요약에서 오므로, 요약을 못 받았으면 정할 수 없다.
+            failed |= EXERCISE_FIELDS
+        else:
+            # 활동이 없으면 일일 요약의 강도 운동 시간(보통+격렬, 실제 분)과 활동 칼로리로 채운다.
+            # Garmin의 강도 운동 시간 목표는 격렬을 2배로 세지만, 화면은 "운동시간"이라 실제 분을 쓴다(D3).
+            minutes = (parse_int(stats.get("moderateIntensityMinutes")) or 0) + (parse_int(stats.get("vigorousIntensityMinutes")) or 0)
+            calories = parse_int(stats.get("activeKilocalories")) or 0
+            activity_totals["exercise_minutes"] = float(minutes)
+            activity_totals["exercise_calories"] = float(calories)
+            if minutes > 0 or calories > 0:
+                activity_totals["exercise_source"] = EXERCISE_SOURCE_INTENSITY
 
-    training_load = extract_training_load(training)
     if training_load is None and training_status == CALL_FAILED:
         failed.add("training_load_acute")
 
@@ -701,6 +859,7 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
         "body_fat_percent": body_metrics["body_fat_percent"],
         "sleep_score": extract_sleep_score(sleep),
         "training_load_acute": training_load,
+        "exercise_source": activity_totals["exercise_source"],
     }
     for name in failed:
         row[name] = None
@@ -708,7 +867,8 @@ def fetch_day_row(client: Any, day: str, log: CallLog | None = None) -> DayFetch
         "stats": stats_status, "heart_rates": hr_status, "sleep": sleep_status, "body": body_status,
         "activities": activities_status, "training": training_status,
     }
-    return DayFetch(row=row, failed_fields=failed, sources=sources)
+    kinds = probe_value_kinds(body, sleep, readiness, training_payload) if log is not None and log.keep_structures else {}
+    return DayFetch(row=row, failed_fields=failed, sources=sources, kinds=kinds)
 
 
 def normalize_rows(rows: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -719,6 +879,20 @@ def normalize_rows(rows: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             row[field] = rows[key].get(field)
         normalized.append(row)
     return normalized
+
+
+# P5: 수면·훈련 부하 입력에 걸린 기능. 값이 채워지면 곧바로 예측에 영향을 주므로 기본은 꺼 두고,
+# 켤지는 P7에서 백테스트로 정한다. config.json의 "features"로 켠다.
+FEATURE_DEFAULTS = {
+    "sleepMeasurementWeighting": False,  # 수면 점수 60 미만인 날의 측정 가중치를 낮춘다
+    "loadMeasurementWeighting": False,  # 급성 부하 400 이상인 날의 측정 가중치를 낮춘다
+    "plateauLoadClassification": False,  # 정체기를 부하 변화로 글리코겐/대사로 나눈다
+}
+
+
+def feature_flags(config: dict[str, Any]) -> dict[str, bool]:
+    configured = config.get("features") if isinstance(config.get("features"), dict) else {}
+    return {name: bool(configured.get(name, default)) for name, default in FEATURE_DEFAULTS.items()}
 
 
 def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
@@ -799,7 +973,11 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
 
     # EWMA 계산 — Phase 4: 컨텍스트(수면 점수·훈련 부하)가 있으면 측정 가중치 적용
     all_weights = [row.get("weight_kg") for row in rows]
-    ewma_weights = [measurement_weight(row) for row in rows]
+    features = feature_flags(config)
+    ewma_weights = [
+        measurement_weight(row, use_sleep=features["sleepMeasurementWeighting"], use_load=features["loadMeasurementWeighting"])
+        for row in rows
+    ]
     ewma_values = compute_ewma(all_weights, weights=ewma_weights)
     ewma_series = [{"date": all_dates[i], "valueKg": ewma_values[i]} for i in range(len(rows))]
 
@@ -967,7 +1145,7 @@ def build_summary(rows: list[dict[str, Any]], config: dict[str, Any]) -> dict[st
         base_effective_loss if base_effective_loss > 0 else None,
         current_ewma,
     )
-    plateau = detect_plateau(ewma_series, rows=rows)
+    plateau = detect_plateau(ewma_series, rows=rows if features["plateauLoadClassification"] else None)
     insight = build_insight(current_weight, current_ewma, loss_intensity, plateau)
 
     # rolling에 exerciseTrend 추가
@@ -1190,13 +1368,22 @@ def _row_is_empty(row: dict[str, Any]) -> bool:
     return all(row.get(f) in (None, 0) for f in key_fields)
 
 
-def merge_day_row(existing: dict[str, Any] | None, fetched: DayFetch) -> dict[str, Any]:
-    """필드 단위 병합. 원천 호출이 실패한 필드는 기존 값을 유지하고, 성공했는데 값이 없을 때만 비운다."""
+def merge_day_row(existing: dict[str, Any] | None, fetched: DayFetch, protect: bool = False) -> tuple[dict[str, Any], set[str]]:
+    """필드 단위 병합. 원천 호출이 실패한 필드는 기존 값을 유지하고, 성공했는데 값이 없을 때만 비운다.
+
+    protect면 성공했는데 값이 없어도 기존 값을 남긴다(긴 backfill에서 값 손실을 막는다). 남긴 필드 이름도 돌려준다.
+    """
     row = dict(fetched.row)
+    protected: set[str] = set()
     if existing:
         for name in fetched.failed_fields:
             row[name] = existing.get(name)
-    return row
+        if protect:
+            for name in CSV_HEADERS[1:]:
+                if row.get(name) is None and existing.get(name) is not None:
+                    row[name] = existing[name]
+                    protected.add(name)
+    return row, protected
 
 
 @dataclass
@@ -1205,12 +1392,15 @@ class SyncResult:
     fetched: dict[str, DayFetch]
     log: CallLog
     kept_rows: list[str]
+    protected: set[tuple[str, str]] = field(default_factory=set)  # (날짜, 필드): protect로 남긴 값
 
 
-def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, Any]], log: CallLog) -> SyncResult:
+def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, Any]], log: CallLog,
+              protect: bool = False) -> SyncResult:
     rows = dict(existing_rows)
     fetched_by_day: dict[str, DayFetch] = {}
     kept: list[str] = []
+    protected_cells: set[tuple[str, str]] = set()
     for day in days:
         LOGGER.info("syncing %s", day)
         fetched = fetch_day_row(client, day, log=log)
@@ -1219,14 +1409,15 @@ def sync_days(client: Any, days: list[str], existing_rows: dict[str, dict[str, A
         if existing is None and fetched.failed_fields >= ROW_FIELDS:
             LOGGER.warning("garmin day=%s every call failed, no row created", day)
             continue
-        merged = merge_day_row(existing, fetched)
+        merged, protected = merge_day_row(existing, fetched, protect=protect)
         if existing is not None and _row_is_empty(merged) and not _row_is_empty(existing):
             # 모든 핵심 필드가 "성공했지만 비어 있음"인 날은 일시적인 빈 응답일 가능성이 커서 덮지 않는다.
             LOGGER.warning("garmin day=%s every key field came back empty, keeping existing row", day)
             kept.append(day)
             continue
         rows[day] = merged
-    return SyncResult(rows=rows, fetched=fetched_by_day, log=log, kept_rows=kept)
+        protected_cells |= {(day, name) for name in protected}
+    return SyncResult(rows=rows, fetched=fetched_by_day, log=log, kept_rows=kept, protected=protected_cells)
 
 
 def utc_now_iso() -> str:
@@ -1274,6 +1465,46 @@ def build_sync_block(log: CallLog, auth: str, days: list[str], previous: dict[st
     }
 
 
+MERGE_BUCKETS = ("same", "changed", "filled", "cleared", "kept", "protected")
+
+
+def merge_stats(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) -> tuple[int, dict[str, dict[str, int]]]:
+    """(새로 생긴 날 수, 필드별 병합 결과 건수). 기존 CSV 대비 값이 채워지거나 바뀌거나 비워진 셀을 센다."""
+    merge: dict[str, dict[str, int]] = {name: {bucket: 0 for bucket in MERGE_BUCKETS} for name in CSV_HEADERS[1:]}
+    new_days = 0
+    for day, fetched in result.fetched.items():
+        existing = existing_rows.get(day)
+        if existing is None:
+            new_days += 1
+            continue
+        merged = result.rows.get(day, existing)
+        for name in CSV_HEADERS[1:]:
+            before, after = existing.get(name), merged.get(name)
+            if name in fetched.failed_fields or day in result.kept_rows:
+                bucket = "kept"
+            elif (day, name) in result.protected:
+                bucket = "protected"
+            elif before == after:
+                bucket = "same"
+            elif before is None:
+                bucket = "filled"
+            elif after is None:
+                bucket = "cleared"
+            else:
+                bucket = "changed"
+            merge[name][bucket] += 1
+    return new_days, merge
+
+
+def report_merge(result: SyncResult, existing_rows: dict[str, dict[str, Any]]) -> None:
+    new_days, merge = merge_stats(result, existing_rows)
+    totals = {bucket: sum(counts[bucket] for counts in merge.values()) for bucket in ("filled", "changed", "cleared", "protected")}
+    annotate("notice", "garmin merge new_days={} {}".format(new_days, " ".join(f"{k}={v}" for k, v in totals.items())))
+    cleared = sorted(name for name, counts in merge.items() if counts["cleared"])
+    if cleared:
+        annotate("notice", "garmin cleared fields=" + ",".join(f"{name}:{merge[name]['cleared']}" for name in cleared))
+
+
 def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, Any]], auth: str, days: list[str]) -> dict[str, Any]:
     """dry-run 보고서. 값은 넣지 않고 건수·상태·응답 구조만 넣는다."""
     try:
@@ -1283,29 +1514,11 @@ def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, An
         library = None
 
     fields: dict[str, dict[str, int]] = {name: {"value": 0, "none": 0, "failed": 0} for name in CSV_HEADERS[1:]}
-    merge: dict[str, dict[str, int]] = {name: {"same": 0, "changed": 0, "filled": 0, "cleared": 0, "kept": 0} for name in CSV_HEADERS[1:]}
-    new_days = 0
-    for day, fetched in result.fetched.items():
+    for fetched in result.fetched.values():
         for name in CSV_HEADERS[1:]:
             bucket = "failed" if name in fetched.failed_fields else ("none" if fetched.row.get(name) is None else "value")
             fields[name][bucket] += 1
-        existing = existing_rows.get(day)
-        if existing is None:
-            new_days += 1
-            continue
-        merged = result.rows.get(day, existing)
-        for name in CSV_HEADERS[1:]:
-            before, after = existing.get(name), merged.get(name)
-            if name in fetched.failed_fields or day in result.kept_rows:
-                merge[name]["kept"] += 1
-            elif before == after:
-                merge[name]["same"] += 1
-            elif before is None:
-                merge[name]["filled"] += 1
-            elif after is None:
-                merge[name]["cleared"] += 1
-            else:
-                merge[name]["changed"] += 1
+    new_days, merge = merge_stats(result, existing_rows)
     return {
         "generatedAt": utc_now_iso(),
         "library": {"garminconnect": library},
@@ -1318,6 +1531,7 @@ def build_probe_report(result: SyncResult, existing_rows: dict[str, dict[str, An
         "errors": result.log.errors,
         "fields": fields,
         "mergeVsCsv": {"newDays": new_days, "keptRows": len(result.kept_rows), "fields": merge},
+        "valueKinds": {day: fetched.kinds for day, fetched in result.fetched.items()},
         "structures": result.log.structures,
     }
 
@@ -1365,7 +1579,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     end_day = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else date.today()
-    days = daterange(end_day, args.backfill_days)
+    if args.probe_dates:
+        if not args.dry_run:
+            annotate("error", "--probe-dates needs --dry-run")
+            return 2
+        days = sorted({date.fromisoformat(value.strip()).isoformat() for value in args.probe_dates.split(",") if value.strip()})
+    else:
+        days = daterange(end_day, args.backfill_days)
     try:
         client, auth = build_client(args.token_dir)
     except MissingCredentials as exc:
@@ -1376,7 +1596,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     log = CallLog(keep_structures=args.dry_run)
-    result = sync_days(client, days, existing_rows, log)
+    result = sync_days(client, days, existing_rows, log, protect=args.protect_existing)
     report_calls(log, auth)
     failed = log.status() == "failed"
 
@@ -1392,6 +1612,7 @@ def main(argv: list[str] | None = None) -> int:
             print(report)
         return 1 if failed else 0
 
+    report_merge(result, existing_rows)
     write_rows(paths.csv, result.rows)
     rows = normalize_rows(result.rows)
     summary = build_summary(rows, config)
