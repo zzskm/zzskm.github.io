@@ -56,26 +56,99 @@ jobs:
       - name: Ensure directories
         run: mkdir -p garmin-weight/data garmin-weight/scripts
 
+      # 비밀번호 로그인은 토큰 캐시가 없거나 거부될 때의 대체 경로라서 항상 필요하다.
+      # GARMIN_TOKENS 시크릿은 토큰 캐시 암호화 키다. Garmin 토큰이 아니며 Python에는 넘기지 않는다.
       - name: Check auth secrets
         run: |
-          if [[ -z "${GARMIN_TOKENS}" && ( -z "${GARMIN_EMAIL}" || -z "${GARMIN_PASSWORD}" ) ]]; then
-            echo "::error::No Garmin auth configured. Set GARMIN_TOKENS secret (preferred) or both GARMIN_EMAIL + GARMIN_PASSWORD."
+          if [[ -z "${GARMIN_EMAIL}" || -z "${GARMIN_PASSWORD}" ]]; then
+            echo "::error::Set both GARMIN_EMAIL and GARMIN_PASSWORD secrets (password login is the fallback for the token cache)."
             exit 1
           fi
+          if [[ -z "${GARMIN_TOKEN_KEY}" ]]; then
+            echo "::warning::GARMIN_TOKENS secret (token cache key) is empty; logging in with password only."
+          fi
         env:
-          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+          GARMIN_TOKEN_KEY: ${{ secrets.GARMIN_TOKENS }}
+
+      # 토큰 캐시(S1): garminconnect 토큰 파일을 GARMIN_TOKENS 값으로 암호화해 Actions 캐시에 둔다.
+      # 캐시는 바꿀 수 없으므로 실행마다 새 키로 저장하고, 복원은 접두사로 가장 최근 것을 받는다.
+      # 경로 문자열이 캐시 버전에 들어가므로 복원과 저장은 같은 경로를 써야 한다.
+      - name: Restore token cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/garmin-token-cache
+          key: garmin-tokens-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: garmin-tokens-v1-
+
+      # 복호화에 실패하면 파일 없이 계속한다(비밀번호 로그인 후 새 토큰을 저장한다).
+      - name: Decrypt token cache
+        env:
+          GARMIN_TOKEN_KEY: ${{ secrets.GARMIN_TOKENS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${GARMIN_TOKEN_KEY}" ]]; then
+            echo "No cache key; token cache disabled."
+            exit 0
+          fi
+          dir="$RUNNER_TEMP/garmin-tokens"
+          enc="$RUNNER_TEMP/garmin-token-cache/garmin_tokens.json.enc"
+          mkdir -p "$dir"
+          echo "GARMIN_TOKEN_DIR=$dir" >> "$GITHUB_ENV"
+          if [[ ! -f "$enc" ]]; then
+            echo "No token cache yet."
+            exit 0
+          fi
+          if openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY               -in "$enc" -out "$dir/garmin_tokens.json" 2>/dev/null; then
+            sha256sum "$dir/garmin_tokens.json" | cut -d' ' -f1 > "$RUNNER_TEMP/garmin-tokens.sha"
+            echo "Token cache restored."
+          else
+            rm -f "$dir/garmin_tokens.json"
+            echo "::warning::garmin token cache could not be decrypted; using password"
+          fi
 
       - name: Sync Garmin aggregates
         run: |
           python garmin-weight/scripts/sync_garmin.py --backfill-days "${BACKFILL_DAYS}" --date "$(TZ=Asia/Seoul date +%Y-%m-%d)"
         env:
           BACKFILL_DAYS: ${{ github.event.inputs.backfill_days || '3' }}
-          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
-          GARMIN_TOKENS_JSON: ${{ secrets.GARMIN_TOKENS_JSON }}
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}
           GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+
+      # 수집이 실패해도 로그인 중에 토큰이 갱신됐을 수 있으므로 always()다. 바뀐 토큰만, main에서만 저장한다.
+      - name: Encrypt tokens for the cache
+        id: token-encrypt
+        if: always() && github.ref == 'refs/heads/main' && env.GARMIN_TOKEN_DIR != ''
+        env:
+          GARMIN_TOKEN_KEY: ${{ secrets.GARMIN_TOKENS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token="$GARMIN_TOKEN_DIR/garmin_tokens.json"
+          if [[ ! -f "$token" ]] || ! jq -e '.di_token and .di_refresh_token' "$token" >/dev/null 2>&1; then
+            echo "No usable tokens to save."
+            exit 0
+          fi
+          if [[ "$(cat "$RUNNER_TEMP/garmin-tokens.sha" 2>/dev/null || true)" == "$(sha256sum "$token" | cut -d' ' -f1)" ]]; then
+            echo "Tokens unchanged."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/garmin-token-cache"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -md sha256 -pass env:GARMIN_TOKEN_KEY             -in "$token" -out "$RUNNER_TEMP/garmin-token-cache/garmin_tokens.json.enc"
+          echo "save=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save token cache
+        if: always() && steps.token-encrypt.outputs.save == 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/garmin-token-cache
+          key: garmin-tokens-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Remove plaintext tokens
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/garmin-tokens" "$RUNNER_TEMP/garmin-tokens.sha"
 
       - name: Upload artifacts
         if: always()

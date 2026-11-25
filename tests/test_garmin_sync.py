@@ -1,4 +1,4 @@
-"""garmin-weight 수집 실패 경로 테스트 (P3: S2 실패 구분, S3 필드 병합, sync 블록, dry-run).
+"""garmin-weight 수집 실패 경로 테스트 (P3: S2 실패 구분, S3 필드 병합, sync 블록, dry-run; P4: 토큰 로그인).
 
 가짜 Garmin 클라이언트를 쓴다. garminconnect가 설치돼 있지 않아도 돈다.
 """
@@ -343,6 +343,178 @@ class MainTests(unittest.TestCase):
         # 구조에는 키와 타입만 남는다(키가 없는 활동이 섞여도 있는 쪽의 타입).
         self.assertEqual({"activityId": "int", "activityName": "str", "startTimeLocal": "str", "duration": "float"},
                          history["structure"]["<item>"])
+
+    def test_token_dir_reaches_build_client(self) -> None:
+        argv = ["--config", str(self.config), "--output-csv", str(self.csv), "--output-summary", str(self.summary),
+                "--previous-summary", str(self.summary), "--date", DAY, "--log-level", "ERROR"]
+        with mock.patch.dict(sync_garmin.os.environ, {"GARMIN_TOKEN_DIR": str(self.tmp / "tokens")}), \
+                mock.patch.object(sync_garmin, "build_client", return_value=(FakeGarmin(), "token")) as build, \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(0, sync_garmin.main(argv))
+        build.assert_called_once_with(str(self.tmp / "tokens"))
+        self.assertIn("::notice::garmin auth=token", out.getvalue())
+        self.assertEqual("token", json.loads(self.summary.read_text(encoding="utf-8"))["sync"]["auth"])
+
+
+GOOD_TOKENS = {"di_token": "good", "di_refresh_token": "refresh", "di_client_id": "client"}
+
+
+class FakeLoginGarmin:
+    """garminconnect 0.3.20 Garmin.login(tokenstore)의 갈래를 흉내 낸다(라이브러리 소스로 확인).
+
+    - 토큰 파일이 읽히면 그 토큰으로 프로필을 불러 본다. 거부되면 자격 증명이 있을 때만 새로 로그인한다.
+    - 토큰이 없거나 못 읽으면 자격 증명으로 로그인하고, 토큰 디렉터리가 있으면 새 토큰을 쓴다.
+    tokens에는 토큰 값별 동작을 둔다: "good"은 통과, "bad"는 401, "flaky"는 첫 시도만 503.
+    """
+
+    instances: list["FakeLoginGarmin"] = []
+    flaky_seen = False
+    fresh_tokens: dict = {"di_token": "fresh", "di_refresh_token": "fresh-refresh", "di_client_id": "client"}
+
+    def __init__(self, email=None, password=None, is_cn=False, **_):
+        self.email, self.password, self.is_cn = email, password, is_cn
+        self.logins: list = []
+        self.password_login = False
+        FakeLoginGarmin.instances.append(self)
+
+    def _token_ok(self, token: str) -> None:
+        if token == "good":
+            return
+        if token == "flaky" and not FakeLoginGarmin.flaky_seen:
+            FakeLoginGarmin.flaky_seen = True
+            raise FakeApiError(503)
+        if token == "flaky":
+            return
+        raise FakeApiError(401)
+
+    def login(self, tokenstore=None):
+        self.logins.append(tokenstore)
+        path = Path(tokenstore) / "garmin_tokens.json" if tokenstore else None
+        data = None
+        if path is not None and path.exists():
+            with contextlib.suppress(ValueError):
+                data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get("di_token"):
+            try:
+                self._token_ok(data["di_token"])
+                return None, None
+            except FakeApiError:
+                if not self.email:
+                    raise
+        elif not self.email:
+            raise RuntimeError("Username and password are required")
+        if self.password != "pw":
+            raise FakeApiError(401)
+        self.password_login = True
+        if path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(FakeLoginGarmin.fresh_tokens), encoding="utf-8")
+        return None, None
+
+
+class BuildClientTests(unittest.TestCase):
+    """P4: 토큰 디렉터리 먼저, 안 되면 비밀번호. 인증 방식과 캐시 상태를 값 없이 남긴다."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.token_dir = self.tmp / "tokens"
+        self.token_file = self.token_dir / "garmin_tokens.json"
+        FakeLoginGarmin.instances = []
+        FakeLoginGarmin.flaky_seen = False
+        FakeLoginGarmin.fresh_tokens = {"di_token": "fresh", "di_refresh_token": "fresh-refresh", "di_client_id": "client"}
+        env = {"GARMIN_EMAIL": "me@example.com", "GARMIN_PASSWORD": "pw"}
+        self.enterContext(mock.patch.dict(sync_garmin.os.environ, env))
+        for name in ("GARMIN_TOKENS", "GARMIN_TOKENS_JSON", "GARMINTOKENS", "GARMIN_IS_CN"):
+            sync_garmin.os.environ.pop(name, None)
+
+    def write_tokens(self, payload) -> None:
+        self.token_dir.mkdir(parents=True, exist_ok=True)
+        text = payload if isinstance(payload, str) else json.dumps(payload)
+        self.token_file.write_text(text, encoding="utf-8")
+
+    def build(self, token_dir: Path | None) -> tuple[object, str, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            client, auth = sync_garmin.build_client(str(token_dir) if token_dir else None, garmin_cls=FakeLoginGarmin)
+        return client, auth, out.getvalue()
+
+    def stored(self) -> dict:
+        return json.loads(self.token_file.read_text(encoding="utf-8"))
+
+    def test_valid_tokens_log_in_without_credentials(self) -> None:
+        self.write_tokens(GOOD_TOKENS)
+        client, auth, out = self.build(self.token_dir)
+        self.assertEqual("token", auth)
+        self.assertEqual(1, len(FakeLoginGarmin.instances))
+        self.assertIsNone(client.email)  # 자격 증명 없이 만들어야 몰래 비밀번호로 넘어가지 않는다.
+        self.assertEqual([str(self.token_dir)], client.logins)
+        self.assertEqual("::notice::garmin token_cache=loaded\n", out)
+
+    def test_first_run_logs_in_with_password_and_saves_tokens(self) -> None:
+        client, auth, out = self.build(self.token_dir)
+        self.assertEqual("password", auth)
+        self.assertTrue(client.password_login)
+        self.assertEqual("fresh", self.stored()["di_token"])
+        self.assertEqual("::notice::garmin token_cache=saved\n", out)
+
+    def test_rejected_tokens_fall_back_and_report_class_only(self) -> None:
+        self.write_tokens({**GOOD_TOKENS, "di_token": "bad"})
+        client, auth, out = self.build(self.token_dir)
+        self.assertEqual("password", auth)
+        self.assertEqual(
+            "::warning::garmin token login failed error=FakeApiError status=401; using password\n"
+            "::notice::garmin token_cache=saved\n", out)
+        self.assertNotIn(SECRET, out)
+        self.assertEqual("fresh", self.stored()["di_token"])
+
+    def test_transient_token_failure_still_counts_as_password_login(self) -> None:
+        # 첫 시도가 일시 오류로 실패하면 토큰 파일을 지우고 비밀번호로 로그인한다.
+        # 지우지 않으면 두 번째 login이 같은 토큰으로 성공해 인증 방식을 잘못 기록한다.
+        self.write_tokens({**GOOD_TOKENS, "di_token": "flaky"})
+        client, auth, out = self.build(self.token_dir)
+        self.assertEqual("password", auth)
+        self.assertTrue(client.password_login)
+        self.assertIn("error=FakeApiError status=503", out)
+        self.assertEqual("fresh", self.stored()["di_token"])
+
+    def test_unusable_file_is_replaced(self) -> None:
+        for payload in ("not json", {"di_token": None, "di_refresh_token": None}, {"oauth1": "x"}):
+            with self.subTest(payload=payload):
+                self.write_tokens(payload)
+                _, auth, out = self.build(self.token_dir)
+                self.assertEqual("password", auth)
+                self.assertTrue(out.startswith("::warning::garmin token file unusable; using password\n"))
+                self.assertEqual("fresh", self.stored()["di_token"])
+
+    def test_password_login_without_usable_tokens_is_reported(self) -> None:
+        # 웹 전략으로 로그인하면 라이브러리는 DI 토큰 없이 파일을 쓴다. 다음 실행도 비밀번호 로그인이 된다.
+        FakeLoginGarmin.fresh_tokens = {"di_token": None, "di_refresh_token": None, "di_client_id": None}
+        _, auth, out = self.build(self.token_dir)
+        self.assertEqual(("password", "::notice::garmin token_cache=unsaved\n"), (auth, out))
+
+    def test_without_token_dir_logs_in_with_password_only(self) -> None:
+        client, auth, out = self.build(None)
+        self.assertEqual("password", auth)
+        self.assertEqual([None], client.logins)
+        self.assertEqual("", out)
+
+    def test_missing_credentials_after_token_failure(self) -> None:
+        self.write_tokens({**GOOD_TOKENS, "di_token": "bad"})
+        sync_garmin.os.environ.pop("GARMIN_PASSWORD")
+        with self.assertRaises(sync_garmin.MissingCredentials), contextlib.redirect_stdout(io.StringIO()):
+            sync_garmin.build_client(str(self.token_dir), garmin_cls=FakeLoginGarmin)
+
+    def test_wrong_password_propagates(self) -> None:
+        sync_garmin.os.environ["GARMIN_PASSWORD"] = "wrong"
+        with self.assertRaises(FakeApiError), contextlib.redirect_stdout(io.StringIO()):
+            sync_garmin.build_client(str(self.token_dir), garmin_cls=FakeLoginGarmin)
+
+    def test_legacy_token_secrets_are_ignored(self) -> None:
+        # GARMIN_TOKENS는 이제 캐시 암호화 키 시크릿 이름이다. 코드가 그 값을 토큰으로 쓰면 안 된다.
+        sync_garmin.os.environ["GARMIN_TOKENS"] = json.dumps(GOOD_TOKENS)
+        _, auth, _ = self.build(None)
+        self.assertEqual("password", auth)
+        self.assertNotIn("GARMIN_TOKENS", MODULE_PATH.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
