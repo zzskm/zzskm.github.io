@@ -93,22 +93,22 @@
     "missing_endpoints": 0,
     "quick_reappearance": 4,
     "overlapping_trip": 0,
-    "alternate_source_rows": 2542,
-    "prediction_rows": 9551,
-    "arrival_rows": 282,
+    "alternate_source_rows": 2554,
+    "prediction_rows": 9553,
+    "arrival_rows": 283,
     "short_track_trips": 18,
     "reasons": {
       "estimated_arrival": 72,
-      "observed_arrival": 192,
+      "observed_arrival": 193,
       "vanished": 2,
       "stale": 7,
       "vehicle_changed": 1
     },
-    "matched_trips": 274,
-    "eligible_trips": 260,
+    "matched_trips": 275,
+    "eligible_trips": 261,
     "api_signal_trips": 1,
-    "no_bus_rows": 4473,
-    "unmatched_vehicle_rows": 2557,
+    "no_bus_rows": 4474,
+    "unmatched_vehicle_rows": 2554,
     "window_days": 42
   },
   "historical_alerts": {
@@ -187,23 +187,23 @@
     ],
     "source": "historical_not_realtime"
   },
-  "generated_at": "2026-11-26T20:39:59.400487+09:00",
+  "generated_at": "2026-11-26T20:40:58.180001+09:00",
   "latest": {
-    "ts_kst": "2026-11-26T20:39:54+09:00",
-    "vehId": "204001379",
-    "plateNo": "경기70아7047",
-    "predict_sec": "15",
-    "remain_seat": "41",
+    "ts_kst": "2026-11-26T20:40:55+09:00",
+    "vehId": "",
+    "plateNo": "",
+    "predict_sec": "",
+    "remain_seat": "",
     "state_cd": "",
     "flag": "",
-    "location_no": "1",
-    "source": "naver"
+    "location_no": "",
+    "source": "kakao"
   },
   "latest_valid": {
-    "ts_kst": "2026-11-26T20:39:54+09:00",
+    "ts_kst": "2026-11-26T20:40:24+09:00",
     "vehId": "204001379",
     "plateNo": "경기70아7047",
-    "predict_sec": "15",
+    "predict_sec": "43",
     "remain_seat": "41",
     "state_cd": "",
     "flag": "",
@@ -211,18 +211,18 @@
     "source": "naver"
   },
   "today": {
-    "samples": 234,
+    "samples": 235,
     "min_predict_sec": 15,
-    "avg_predict_sec": 452
+    "avg_predict_sec": 450
   },
-  "prediction_samples": 12363,
-  "valid_prediction_samples": 6495,
-  "no_bus_samples": 5855,
+  "prediction_samples": 12365,
+  "valid_prediction_samples": 6496,
+  "no_bus_samples": 5856,
   "invalid_samples": 13,
-  "arrival_records": 395,
+  "arrival_records": 396,
   "departure_reasons": {
     "estimated_arrival": 109,
-    "observed_arrival": 268,
+    "observed_arrival": 269,
     "vanished": 7,
     "stale": 9,
     "vehicle_changed": 2
@@ -449,34 +449,12 @@
       "avg_predict_sec": 315
     },
     "2026-11-26": {
-      "samples": 234,
+      "samples": 235,
       "min_predict_sec": 15,
-      "avg_predict_sec": 452
+      "avg_predict_sec": 450
     }
   },
   "recent_predictions": [
-    {
-      "ts_kst": "2026-11-26T20:20:24+09:00",
-      "vehId": "204003592",
-      "plateNo": "경기70아6518",
-      "predict_sec": "88",
-      "remain_seat": "44",
-      "state_cd": "",
-      "flag": "",
-      "location_no": "1",
-      "source": "naver"
-    },
-    {
-      "ts_kst": "2026-11-26T20:20:54+09:00",
-      "vehId": "204003592",
-      "plateNo": "경기70아6518",
-      "predict_sec": "136",
-      "remain_seat": "44",
-      "state_cd": "0",
-      "flag": "PASS",
-      "location_no": "1",
-      "source": "official"
-    },
     {
       "ts_kst": "2026-11-26T20:21:24+09:00",
       "vehId": "204003592",
@@ -784,28 +762,31 @@
       "flag": "",
       "location_no": "1",
       "source": "naver"
+    },
+    {
+      "ts_kst": "2026-11-26T20:40:24+09:00",
+      "vehId": "204001379",
+      "plateNo": "경기70아7047",
+      "predict_sec": "43",
+      "remain_seat": "41",
+      "state_cd": "",
+      "flag": "",
+      "location_no": "1",
+      "source": "naver"
+    },
+    {
+      "ts_kst": "2026-11-26T20:40:55+09:00",
+      "vehId": "",
+      "plateNo": "",
+      "predict_sec": "",
+      "remain_seat": "",
+      "state_cd": "",
+      "flag": "",
+      "location_no": "",
+      "source": "kakao"
     }
   ],
   "recent_arrivals": [
-    {
-      "ts_kst": "2026-11-24T18:13:24+09:00",
-      "vehId": "204001377",
-      "plateNo": "경기70아7045",
-      "first_seen_ts": "2026-11-24T18:12:23+09:00",
-      "last_seen_ts": "2026-11-24T18:12:23+09:00",
-      "min_predict_sec": "278",
-      "max_predict_sec": "278",
-      "samples": "1",
-      "departure_reason": "vanished",
-      "last_predict_sec": "278",
-      "est_arrival_ts": "2026-11-24T18:12:54+09:00",
-      "arrival_evidence": "prediction_and_disappearance",
-      "arrival_lower_ts": "2026-11-24T18:12:23+09:00",
-      "arrival_upper_ts": "2026-11-24T18:12:54+09:00",
-      "first_missing_ts": "2026-11-24T18:12:54+09:00",
-      "last_state_cd": "0",
-      "last_location_no": "2"
-    },
     {
       "ts_kst": "2026-11-24T18:18:54+09:00",
       "vehId": "204001379",
@@ -1354,6 +1335,25 @@
       "arrival_lower_ts": "2026-11-26T20:22:24+09:00",
       "arrival_upper_ts": "2026-11-26T20:22:56+09:00",
       "first_missing_ts": "2026-11-26T20:22:56+09:00",
+      "last_state_cd": "",
+      "last_location_no": "1"
+    },
+    {
+      "ts_kst": "2026-11-26T20:40:55+09:00",
+      "vehId": "204001379",
+      "plateNo": "경기70아7047",
+      "first_seen_ts": "2026-11-26T20:32:54+09:00",
+      "last_seen_ts": "2026-11-26T20:40:24+09:00",
+      "min_predict_sec": "15",
+      "max_predict_sec": "469",
+      "samples": "16",
+      "departure_reason": "observed_arrival",
+      "last_predict_sec": "43",
+      "est_arrival_ts": "2026-11-26T20:40:55+09:00",
+      "arrival_evidence": "prediction_and_disappearance",
+      "arrival_lower_ts": "2026-11-26T20:40:24+09:00",
+      "arrival_upper_ts": "2026-11-26T20:40:55+09:00",
+      "first_missing_ts": "2026-11-26T20:40:55+09:00",
       "last_state_cd": "",
       "last_location_no": "1"
     }
