@@ -178,8 +178,9 @@ test('Shanghai itinerary data: booked flights and hotels, the five days in order
     for (const d of place.dayIndices) assert.ok(d >= 0 && d < 5, `Bad day index on place ${id}`);
   }
   // Addresses given for the new route.
-  assert.equal(sh.places.chiikawa_flagship.addressZh, '上海市黄浦区南京东路139号 外滩中央广场');
-  assert.equal(sh.places.new_world_city.addressZh, '上海市黄浦区南京西路2-68号 新世界城');
+  assert.equal(sh.places.mnms_world.addressZh, '上海市黄浦区南京东路829号 世茂广场1层');
+  // The Wuzhen tour voucher names the south mall of New World City as the meeting point.
+  assert.equal(sh.places.new_world_city.addressZh, '上海市黄浦区南京西路78号 新世界城南商场');
   assert.equal(sh.places.xuyan.addressZh, '上海市静安区汶水路40号');
   assert.equal(sh.places.wukang_mansion.nameZh, '武康大楼');
   assert.equal(sh.places.anfu_road.nameZh, '安福路');
@@ -247,14 +248,16 @@ test('Shanghai itinerary data: booked flights and hotels, the five days in order
   // The times of the given plan, day by day (the first item of day 1 is the booked outbound flight).
   const starts = (i) => Array.from(sh.itinerary[i].items, (it) => it.startTime);
   assert.deepEqual(starts(0), ['09:30', '13:15', '15:30', '16:15', '17:45', '19:30']);
-  assert.deepEqual(starts(1), ['09:45', '12:10', '12:30', '21:40']);
+  assert.deepEqual(starts(1), ['09:45', '11:55', '12:10', '22:00']);
   assert.deepEqual(starts(2), ['10:30', '12:00', '13:30', '16:00', '18:30', '21:00']);
   assert.deepEqual(starts(3), ['10:30', '14:30', '17:15', '19:30']);
   assert.deepEqual(starts(4), ['07:30', '08:45', '11:00']);
 
   const itemById = (id) => sh.itinerary.flatMap((d) => d.items).find((it) => it.id === id);
-  assert.equal(itemById('d2_wuzhen_tour').endTime, '21:40');
-  assert.equal(itemById('d3_xuyan').endTime, '20:30');
+  // Booked tours: Wuzhen 12:10 meet, back 22:00-22:30; Xuyan dinner 19:00-21:00.
+  assert.equal(itemById('d2_tour_meet').endTime, '12:10');
+  assert.equal(itemById('d2_wuzhen_tour').endTime, '22:00');
+  assert.equal(itemById('d3_xuyan').endTime, '21:00');
   assert.equal(itemById('d5_to_airport').durationMin, 75);
   assert.equal(itemById('d5_return_flight').placeId, 'cjj_airport');
   // Items that cannot slip are marked.
@@ -308,7 +311,7 @@ test('Shanghai phrase data: 17 quick words, 20 sentences in five groups, linked 
   assert.equal(zh('hotel_luggage_parcel'), '您好，我预订了今天的房间，想先寄存行李。另外，请问有提前寄到酒店的快递吗？可以先帮我保管或现在领取吗？');
   assert.equal(zh('hotel_parcel_count'), '快递不止一件，麻烦帮我确认一下一共有几件，谢谢。');
   assert.equal(zh('hotel_parcel_waybill'), '这是快递单号和收件信息，请您核对一下。');
-  assert.equal(zh('food_xuyan'), '您好，我预订了今天的晚餐叙宴，只包含用餐和演出，不需要汉服和妆造体验。');
+  assert.equal(zh('food_xuyan'), '您好，我预订了今天晚上七点的叙宴，两位。这是预订确认信息。');
   assert.equal(zh('didi_airport_t2'), '请送我去浦东国际机场2号航站楼（T2）出发层，谢谢。');
   assert.equal(zh('didi_message'), '您好，我是外国人，接听中文电话不太方便，请发消息联系我，谢谢！');
 
