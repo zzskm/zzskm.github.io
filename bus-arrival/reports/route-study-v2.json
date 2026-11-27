@@ -96,21 +96,21 @@
       "sta_order": 30,
       "observed_days": 22,
       "vehicle_events": 360,
-      "labelled_events": 329,
-      "matched": 181,
+      "labelled_events": 330,
+      "matched": 182,
       "nonmatched": 148,
-      "censored": 31,
-      "proxy_hit_rate": 0.55,
+      "censored": 30,
+      "proxy_hit_rate": 0.552,
       "target_absent_at_first_signal": 174,
       "simultaneous_eta_pairs": 186,
       "candidate_eta_before_target_eta": 133,
       "median_simultaneous_lead_min": 4.67,
       "forward_date_test": {
         "status": "screening_only",
-        "test_events": 160,
-        "candidate_hit_rate": 0.569,
-        "time_only_hit_rate": 0.635,
-        "difference_pp": -6.6,
+        "test_events": 161,
+        "candidate_hit_rate": 0.571,
+        "time_only_hit_rate": 0.632,
+        "difference_pp": -6.1,
         "train_days": 13,
         "test_days": 9
       },
@@ -299,6 +299,32 @@
       "eligible_for_alert_use": false
     },
     {
+      "route_id": 204000146,
+      "route_name": "누리2",
+      "sta_order": 24,
+      "observed_days": 22,
+      "vehicle_events": 189,
+      "labelled_events": 171,
+      "matched": 84,
+      "nonmatched": 87,
+      "censored": 18,
+      "proxy_hit_rate": 0.491,
+      "target_absent_at_first_signal": 110,
+      "simultaneous_eta_pairs": 79,
+      "candidate_eta_before_target_eta": 47,
+      "median_simultaneous_lead_min": 1.13,
+      "forward_date_test": {
+        "status": "screening_only",
+        "test_events": 87,
+        "candidate_hit_rate": 0.471,
+        "time_only_hit_rate": 0.565,
+        "difference_pp": -9.4,
+        "train_days": 13,
+        "test_days": 9
+      },
+      "eligible_for_alert_use": false
+    },
+    {
       "route_id": 204000192,
       "route_name": "311",
       "sta_order": 84,
@@ -319,32 +345,6 @@
         "candidate_hit_rate": 0.529,
         "time_only_hit_rate": 0.647,
         "difference_pp": -11.8,
-        "train_days": 13,
-        "test_days": 9
-      },
-      "eligible_for_alert_use": false
-    },
-    {
-      "route_id": 204000146,
-      "route_name": "누리2",
-      "sta_order": 24,
-      "observed_days": 22,
-      "vehicle_events": 189,
-      "labelled_events": 170,
-      "matched": 83,
-      "nonmatched": 87,
-      "censored": 19,
-      "proxy_hit_rate": 0.488,
-      "target_absent_at_first_signal": 110,
-      "simultaneous_eta_pairs": 79,
-      "candidate_eta_before_target_eta": 47,
-      "median_simultaneous_lead_min": 1.13,
-      "forward_date_test": {
-        "status": "screening_only",
-        "test_events": 86,
-        "candidate_hit_rate": 0.465,
-        "time_only_hit_rate": 0.564,
-        "difference_pp": -9.9,
         "train_days": 13,
         "test_days": 9
       },
@@ -716,5 +716,5 @@
     }
   ],
   "warning": "ETA and 3100 disappearance are not real arrival ground truth. Same-day events correlate; date holdout is screening, not safety validation. Never use this study to delay or suppress existing alerts.",
-  "generated_at": "2026-11-27T19:19:24.265110+09:00"
+  "generated_at": "2026-11-27T19:21:30.476516+09:00"
 }
