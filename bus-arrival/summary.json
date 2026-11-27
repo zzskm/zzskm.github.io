@@ -87,15 +87,15 @@
     "invalid_trip_interval": 0,
     "unmatched_trip": 0,
     "plate_mismatch": 0,
-    "invalid_trip_predictions": 8,
+    "invalid_trip_predictions": 9,
     "excluded_gap_or_reason": 10,
     "sample_count_mismatch": 0,
     "missing_endpoints": 0,
     "quick_reappearance": 4,
     "overlapping_trip": 0,
-    "alternate_source_rows": 2765,
-    "prediction_rows": 9796,
-    "arrival_rows": 283,
+    "alternate_source_rows": 2767,
+    "prediction_rows": 9797,
+    "arrival_rows": 284,
     "short_track_trips": 18,
     "reasons": {
       "estimated_arrival": 66,
@@ -107,7 +107,7 @@
     "matched_trips": 275,
     "eligible_trips": 261,
     "api_signal_trips": 1,
-    "no_bus_rows": 4555,
+    "no_bus_rows": 4556,
     "unmatched_vehicle_rows": 2767,
     "window_days": 42
   },
@@ -187,9 +187,9 @@
     ],
     "source": "historical_not_realtime"
   },
-  "generated_at": "2026-11-27T20:23:44.230237+09:00",
+  "generated_at": "2026-11-27T20:24:12.643134+09:00",
   "latest": {
-    "ts_kst": "2026-11-27T20:23:41+09:00",
+    "ts_kst": "2026-11-27T20:24:10+09:00",
     "vehId": "",
     "plateNo": "",
     "predict_sec": "",
@@ -215,15 +215,15 @@
     "min_predict_sec": 1,
     "avg_predict_sec": 516
   },
-  "prediction_samples": 12854,
+  "prediction_samples": 12855,
   "valid_prediction_samples": 6785,
-  "no_bus_samples": 6052,
+  "no_bus_samples": 6053,
   "invalid_samples": 17,
-  "arrival_records": 406,
+  "arrival_records": 407,
   "departure_reasons": {
     "estimated_arrival": 109,
     "observed_arrival": 279,
-    "vanished": 7,
+    "vanished": 8,
     "stale": 9,
     "vehicle_changed": 2
   },
@@ -460,17 +460,6 @@
     }
   },
   "recent_predictions": [
-    {
-      "ts_kst": "2026-11-27T20:03:29+09:00",
-      "vehId": "",
-      "plateNo": "",
-      "predict_sec": "",
-      "remain_seat": "",
-      "state_cd": "",
-      "flag": "PASS",
-      "location_no": "",
-      "source": "official"
-    },
     {
       "ts_kst": "2026-11-27T20:04:29+09:00",
       "vehId": "",
@@ -789,28 +778,20 @@
       "flag": "PASS",
       "location_no": "",
       "source": "official"
+    },
+    {
+      "ts_kst": "2026-11-27T20:24:10+09:00",
+      "vehId": "",
+      "plateNo": "",
+      "predict_sec": "",
+      "remain_seat": "",
+      "state_cd": "",
+      "flag": "PASS",
+      "location_no": "",
+      "source": "official"
     }
   ],
   "recent_arrivals": [
-    {
-      "ts_kst": "2026-11-24T21:40:19+09:00",
-      "vehId": "204001379",
-      "plateNo": "경기70아7047",
-      "first_seen_ts": "2026-11-24T21:31:48+09:00",
-      "last_seen_ts": "2026-11-24T21:39:48+09:00",
-      "min_predict_sec": "26",
-      "max_predict_sec": "549",
-      "samples": "16",
-      "departure_reason": "observed_arrival",
-      "last_predict_sec": "26",
-      "est_arrival_ts": "2026-11-24T21:40:14+09:00",
-      "arrival_evidence": "prediction_and_disappearance",
-      "arrival_lower_ts": "2026-11-24T21:39:48+09:00",
-      "arrival_upper_ts": "2026-11-24T21:40:19+09:00",
-      "first_missing_ts": "2026-11-24T21:40:19+09:00",
-      "last_state_cd": "0",
-      "last_location_no": "1"
-    },
     {
       "ts_kst": "2026-11-25T16:04:32+09:00",
       "vehId": "204001378",
@@ -1361,6 +1342,25 @@
       "first_missing_ts": "2026-11-27T20:19:41+09:00",
       "last_state_cd": "",
       "last_location_no": "1"
+    },
+    {
+      "ts_kst": "2026-11-27T20:24:10+09:00",
+      "vehId": "204001377",
+      "plateNo": "경기70아7045",
+      "first_seen_ts": "2026-11-27T20:22:40+09:00",
+      "last_seen_ts": "2026-11-27T20:23:10+09:00",
+      "min_predict_sec": "360",
+      "max_predict_sec": "360",
+      "samples": "2",
+      "departure_reason": "vanished",
+      "last_predict_sec": "360",
+      "est_arrival_ts": "2026-11-27T20:23:41+09:00",
+      "arrival_evidence": "prediction_and_disappearance",
+      "arrival_lower_ts": "2026-11-27T20:23:10+09:00",
+      "arrival_upper_ts": "2026-11-27T20:23:41+09:00",
+      "first_missing_ts": "2026-11-27T20:23:41+09:00",
+      "last_state_cd": "",
+      "last_location_no": "2"
     }
   ]
 }
