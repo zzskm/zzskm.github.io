@@ -251,6 +251,17 @@
     return state.itemState[itemId] || {};
   }
 
+  // Title and times as shown. A Plan B may carry its own times (an optional detour that ends later).
+  function itemView(item) {
+    const b = getItemState(item.id).usePlanB && item.planB ? item.planB : null;
+    return {
+      title: b ? b.title : item.title,
+      startTime: (b && b.startTime) || item.startTime,
+      endTime: (b && b.endTime) || item.endTime,
+      durationMin: (b && b.durationMin) || item.durationMin,
+    };
+  }
+
   function patchItemState(itemId, patch) {
     state.itemState[itemId] = { ...getItemState(itemId), ...patch };
     saveFieldState();
@@ -329,10 +340,10 @@
     }
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const today = undone.filter(({ day }) => day.dayIndex === todayIdx);
-    const running = today.filter(({ item }) => toMin(item.startTime) <= nowMin && nowMin < toMin(item.endTime));
+    const running = today.filter(({ item }) => toMin(itemView(item).startTime) <= nowMin && nowMin < toMin(itemView(item).endTime));
     const current = running[running.length - 1] || null;
-    let next = today.find(({ item }) => toMin(item.startTime) > nowMin) || null;
-    let minutesToNext = next ? toMin(next.item.startTime) - nowMin : null;
+    let next = today.find(({ item }) => toMin(itemView(item).startTime) > nowMin) || null;
+    let minutesToNext = next ? toMin(itemView(next.item).startTime) - nowMin : null;
     if (!next) {
       next = undone.find(({ day }) => day.dayIndex > todayIdx) || null;
       minutesToNext = null;
@@ -544,15 +555,15 @@
         <button type="button" class="dash-now-line" data-jump-item="${esc(entry.item.id)}">
           <span class="dash-now-top">
             <span class="dash-next-badge ${badgeClass}">${esc(badge)}</span>
-            <span class="dash-now-time">${esc(dayPart)}${esc(entry.item.startTime)}</span>
+            <span class="dash-now-time">${esc(dayPart)}${esc(itemView(entry.item).startTime)}</span>
             ${tail ? `<span class="dash-now-tail">${esc(tail)}</span>` : ""}
           </span>
-          <strong class="dash-now-title">${esc(entry.item.title)}</strong>
+          <strong class="dash-now-title">${esc(itemView(entry.item).title)}</strong>
         </button>
       `;
     };
     let nowHtml = "";
-    if (nn.current) nowHtml += nowLine(nn.current, "지금", "is-now", `${nn.current.item.endTime}까지`);
+    if (nn.current) nowHtml += nowLine(nn.current, "지금", "is-now", `${itemView(nn.current.item).endTime}까지`);
     if (nn.next) nowHtml += nowLine(nn.next, nn.phase === "before" ? "첫 일정" : "다음", "", formatWait(nn.minutesToNext));
     if (!nowHtml) {
       nowHtml = `<div class="dash-now-line is-static">${nn.phase === "after" ? "여행이 끝났습니다." : "남은 일정을 모두 마쳤습니다."}</div>`;
@@ -698,6 +709,7 @@
         const st = getItemState(item.id);
         const usePlanB = Boolean(st.usePlanB && item.planB);
         const activeTitle = usePlanB ? item.planB.title : item.title;
+        const view = itemView(item);
         const place = getPlace(usePlanB ? item.planB.placeId : item.placeId);
         const expanded = expandedItems.has(item.id);
         const estCostCNY = usePlanB ? item.planB.estCostCNY : item.estCostCNY;
@@ -774,6 +786,7 @@
           isNext ? `<span class="tl-flag">다음</span>` : "",
           `<span class="tl-cat">${esc(CAT_LABELS[item.category] || item.category)}</span>`,
           item.fixedTime ? `<span class="tl-fixed">시간 고정</span>` : "",
+          item.optional ? `<span class="tl-optional">선택</span>` : "",
           usePlanB ? `<span class="tl-fixed">Plan B 적용</span>` : "",
         ].join("");
 
@@ -801,7 +814,7 @@
               <div class="tl-detail-grid">
                 <div class="tl-detail-box">
                   <small>시간 · 예상 체류</small>
-                  <strong>${esc(item.startTime)} – ${esc(item.endTime)} (${item.durationMin}분)</strong>
+                  <strong>${esc(view.startTime)} – ${esc(view.endTime)} (${view.durationMin}분)</strong>
                 </div>
                 <div class="tl-detail-box">
                   <small>예상 비용 · 실제 지출</small>
@@ -863,8 +876,8 @@
           <article class="tl-item ${st.done ? "is-done" : ""} ${isNow ? "is-now" : ""} ${isNext ? "is-next" : ""} ${item.fixedTime ? "is-fixed" : ""}" data-item-id="${esc(item.id)}">
             <div class="tl-row">
               <div class="tl-timecol" data-toggle-item="${esc(item.id)}">
-                <span class="tl-start">${esc(item.startTime)}</span>
-                <span class="tl-end">${esc(item.endTime)}</span>
+                <span class="tl-start">${esc(view.startTime)}</span>
+                <span class="tl-end">${esc(view.endTime)}</span>
               </div>
               <div class="tl-main" data-toggle-item="${esc(item.id)}">
                 <div class="tl-meta">${metaHtml}</div>
@@ -916,11 +929,11 @@
             const note = ((st.note !== undefined ? st.note : usePlanB ? item.planB.memo : item.memo) || "").trim();
             const isNow = item.id === nowId;
             const isNext = item.id === nextId;
-            const placeLine = [place ? esc(shortPlaceName(place)) : "", item.fixedTime ? `<span class="tl-fixed">시간 고정</span>` : ""].filter(Boolean).join(" · ");
+            const placeLine = [place ? esc(shortPlaceName(place)) : "", item.fixedTime ? `<span class="tl-fixed">시간 고정</span>` : "", item.optional ? `<span class="tl-optional">선택</span>` : ""].filter(Boolean).join(" · ");
             return `
               <li class="ov-row ${st.done ? "is-done" : ""} ${isNow ? "is-now" : ""}">
                 <button type="button" class="ov-row-btn" data-jump-item="${esc(item.id)}">
-                  <span class="ov-time">${esc(item.startTime)}<small>${esc(item.endTime)}</small></span>
+                  <span class="ov-time">${esc(itemView(item).startTime)}<small>${esc(itemView(item).endTime)}</small></span>
                   <span>
                     <span class="ov-title">${isNow ? `<span class="tl-flag is-now">지금</span> ` : ""}${isNext ? `<span class="tl-flag">다음</span> ` : ""}${esc(title)}</span>
                     ${placeLine ? `<span class="ov-place">${placeLine}</span>` : ""}
