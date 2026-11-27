@@ -3,6 +3,8 @@
    Network first: while online every load fetches the current files and refreshes the copy,
    so an edit that was pushed is never hidden behind an old cache. The copy is only served
    when the network fails or does not answer within NETWORK_TIMEOUT_MS (weak roaming signal).
+   Every file is handed to the page marked "no-cache" (see forPage), so a reload of an open tab
+   asks this worker again instead of reusing what the browser still holds in memory.
 
    The page registers this worker with the scope "./trip_2026_dec_china", a URL prefix that
    matches only the Shanghai page, so no other page of the site is controlled by it. */
@@ -68,18 +70,38 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(networkFirst(event, key));
 });
 
+// What the page receives is marked "no-cache". A browser keeps a file it has just loaded in memory and, on a
+// reload, reuses it for as long as the server's max-age allows (10 minutes on GitHub Pages) without asking this
+// worker, so a pushed edit would stay hidden on a tab that is already open. The body is the decoded file, so
+// the transfer headers of the original answer do not apply to it.
+function forPage(response, body) {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-cache");
+  headers.delete("Content-Encoding");
+  headers.delete("Content-Length");
+  return new Response(body, { status: response.status, statusText: response.statusText, headers });
+}
+
+async function fromCopy(cache, key) {
+  const cached = await cache.match(key);
+  return cached ? forPage(cached, await cached.blob()) : null;
+}
+
 async function networkFirst(event, key) {
   const cache = await caches.open(CACHE_NAME);
   // "no-cache" revalidates with the server, so the browser's own HTTP cache cannot serve an old file either.
+  // The whole file is read before it counts as an answer: a connection that stalls half-way is treated as slow.
   const fromNetwork = fetch(key, { cache: "no-cache" }).then(async (response) => {
-    if (response && response.ok) await cache.put(key, response.clone());
-    return response;
+    if (!response || !response.ok) return response;
+    const body = await response.blob();
+    await cache.put(key, forPage(response, body));
+    return forPage(response, body);
   });
   // A slow answer still refreshes the copy after the cached one has been shown.
   event.waitUntil(fromNetwork.catch(() => undefined));
 
   if (Date.now() < slowUntil) {
-    const cached = await cache.match(key);
+    const cached = await fromCopy(cache, key);
     if (cached) return cached;
   }
 
@@ -91,12 +113,12 @@ async function networkFirst(event, key) {
     const response = await Promise.race([fromNetwork, timeout]);
     if (response && response.ok) return response;
     if (!response) slowUntil = Date.now() + SLOW_WINDOW_MS;
-    const cached = await cache.match(key);
+    const cached = await fromCopy(cache, key);
     if (cached) return cached;
     // Nothing saved yet: wait for the network however long it takes.
     return response || (await fromNetwork);
   } catch (err) {
-    const cached = await cache.match(key);
+    const cached = await fromCopy(cache, key);
     if (cached) return cached;
     throw err;
   } finally {

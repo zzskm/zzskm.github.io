@@ -30,6 +30,8 @@
     (trip.tripMeta && trip.tripMeta.dateLabel) ||
     `${trip.itinerary[0].date.slice(5).replace("-", "/")}–${trip.itinerary[TRIP_DAYS - 1].date.slice(5).replace("-", "/")}`;
   const dayChipLabel = (d) => `Day ${d.dayIndex + 1} (${d.date.slice(5).replace("-", "/")})`;
+  // Each day's forecast line was read on the data's asOf date; the label says so, e.g. "11/27 예보".
+  const FORECAST_AS_OF = typeof trip.asOf === "string" && trip.asOf.length >= 10 ? `${trip.asOf.slice(5, 10).replace("-", "/")} 예보` : "예보";
   const PHRASE_CAT_LABEL = (trip.phraseCategories || []).reduce((acc, c) => {
     acc[c.id] = c.label;
     return acc;
@@ -671,6 +673,14 @@
           <summary><span class="day-highlight">${esc(day.highlight)}</span><span class="day-overview-more">하루 개요</span></summary>
           <p>${esc(day.summary)}</p>
         </details>
+        ${
+          day.forecast
+            ? `<div class="day-stay day-forecast">
+                 <span class="day-stay-label">날씨</span>
+                 <span class="day-forecast-text">${esc(day.forecast)} <small>${esc(FORECAST_AS_OF)}</small></span>
+               </div>`
+            : ""
+        }
         <div class="day-stay">
           <span class="day-stay-label">오늘 밤</span>
           ${
@@ -930,6 +940,7 @@
               <span class="ov-day-date">Day ${d.dayIndex + 1} · ${esc(slashDate(d))} (${esc(d.weekday)})${isToday ? " · 오늘" : ""}</span>
               <span class="ov-day-title">${esc(d.title)}</span>
               <span class="ov-day-stay">숙소 · ${stay ? `${esc(shortPlaceName(stay))} ${esc(stay.nameZh)}` : "없음 · 귀국일"}</span>
+              ${d.forecast ? `<span class="ov-day-stay">날씨(${esc(FORECAST_AS_OF)}) · ${esc(d.forecast)}</span>` : ""}
             </button>
             <ol class="ov-rows">${rows}</ol>
           </section>
@@ -982,8 +993,8 @@
       ? `
         <div class="sh-card">
           <div class="sh-card-head">
-            <h2>식당 후보 (털게 · 샤오룽바오 · 본방차이 · 면)</h2>
-            <span class="field-note" style="margin:0">11월 말–12월 초는 상하이 털게(大闸蟹) 제철 막바지</span>
+            <h2>식당 후보 (본방차이 · 샤오룽바오 · 면 · 늦은 식사)</h2>
+            <span class="field-note" style="margin:0">대부분 21:00–21:30에 닫으니 저녁은 20:00 전에 착석 · 게살(蟹粉) 요리는 지금이 제철 막바지</span>
           </div>
           <div class="place-grid">
             ${trip.diningGuide

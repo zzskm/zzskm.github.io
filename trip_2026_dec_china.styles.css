@@ -699,6 +699,26 @@ button.dash-now-line {
   font-weight: 700;
 }
 
+/* The day's forecast, read on the data's asOf date: same row shape as "오늘 밤", text may wrap. */
+.day-forecast {
+  align-items: baseline;
+  margin-top: 8px;
+}
+
+.day-forecast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.45;
+  color: var(--body);
+}
+
+.day-forecast-text small {
+  margin-left: 2px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* ---------- Schedule: timetable (one white block, rows divided by a hairline) ---------- */
 .tl-list {
   border-radius: var(--r-card);

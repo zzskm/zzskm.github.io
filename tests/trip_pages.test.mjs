@@ -94,8 +94,16 @@ test('Shanghai itinerary shell: no manual reorder, offline worker covers the pag
   assert.ok(field.includes('const FIELD_KEY = "trip_2026_dec_china.field.v1";'));
 
   // Every script, stylesheet and icon the page loads is in the worker's asset list, and so is the page.
-  const loaded = new Set(Array.from(html.matchAll(/(?:src|href)="([^":]+\.(?:js|css|svg))"/g), (m) => m[1]));
+  // Scripts and stylesheets carry one shared ?v= value (the date of the last edit); the worker drops it from the cache key.
+  const refs = Array.from(html.matchAll(/(?:src|href)="([^":?]+\.(?:js|css|svg))(\?v=\d{8}[a-z]?)?"/g), (m) => ({ file: m[1], version: m[2] || '' }));
+  const loaded = new Set(refs.map((r) => r.file));
   assert.equal(loaded.size, 5, 'the page loads two stylesheets, two scripts and the icon');
+  const versions = new Set(refs.filter((r) => /\.(?:js|css)$/.test(r.file)).map((r) => r.version));
+  assert.equal(versions.size, 1, 'scripts and stylesheets share one version value');
+  assert.match([...versions][0], /^\?v=\d{8}[a-z]?$/, 'scripts and stylesheets carry a version value');
+  assert.ok(sw.includes('url.search = "";'), 'the worker ignores the query string');
+  // What the worker hands to the page is marked no-cache, so a reload of an open tab asks the worker again.
+  assert.ok(sw.includes('headers.set("Cache-Control", "no-cache")'), 'worker marks its answers no-cache');
   for (const file of [...loaded, 'trip_2026_dec_china.html']) {
     assert.ok(sw.includes(`"${file}"`), `Offline worker does not cache ${file}`);
     assert.ok(fs.existsSync(path.join(ROOT, file)), `Missing file ${file}`);
@@ -158,6 +166,8 @@ test('Shanghai page keeps the flat look: tone-layered surfaces, no gradients, pi
     assert.ok(field.includes(token), `Missing in field.js: ${token}`);
   }
   assert.ok(css.includes('@media print'), 'print styles');
+  // The day header shows the day's forecast with the date it was read.
+  assert.ok(field.includes('class="day-stay day-forecast"') && field.includes('FORECAST_AS_OF') && css.includes('.day-forecast-text'), 'forecast row');
 });
 
 test('Shanghai itinerary data: booked flights and hotels, the five days in order, valid references', () => {
@@ -269,6 +279,18 @@ test('Shanghai itinerary data: booked flights and hotels, the five days in order
   for (const word of ['디즈니랜드', '迪士尼乐园', '톈쯔팡', '티엔즈팡', '田子坊']) {
     assert.equal(all.includes(word), false, `Excluded place found: ${word}`);
   }
+  // The crab restaurant was dropped. A place that closes before a 19:30 dinner is not a dinner candidate:
+  // Lailai (20:00) is visited on the afternoon walk, Nanxiang (19:00 on weekdays) on arrival at the bridge.
+  for (const word of ['成隆行', '시에왕푸']) assert.equal(all.includes(word), false, `Dropped restaurant found: ${word}`);
+  assert.deepEqual(Array.from(itemById('d1_dinner').candidates), ['laozhengxing', 'shanghai_laolao', 'haidilao_peoples_sq']);
+  assert.ok(itemById('d1_nanjing_mnms').candidates.includes('lailai_xiaolong'));
+  assert.deepEqual(Array.from(itemById('d4_last_dinner').candidates), ['lubolang', 'xujiahui']);
+  assert.ok(itemById('d4_yuyuan').candidates.includes('nanxiang_yuyuan'));
+  // Lunch on the hotel-move day: the canteen (closes 13:00), a reservation-only restaurant, and walk-in alternatives.
+  assert.deepEqual(Array.from(itemById('d3_lunch').candidates), ['canteen_66', 'hanxiang_noodle', 'laojishi_benbang', 'yuanyuan_xingguo', 'dongxin_benbang']);
+  // Every day carries its forecast line, and the page labels it with the date it was read.
+  for (const day of sh.itinerary) assert.ok(day.forecast && day.forecast.trim() === day.forecast, `Forecast missing on day ${day.dayIndex + 1}`);
+  assert.match(sh.asOf, /^\d{4}-\d{2}-\d{2}$/);
 
   assert.ok(sh.paymentGuide.methods.length >= 5 && sh.paymentGuide.atmTips.length >= 3);
   assert.ok(sh.emergencyContacts.length >= 4);

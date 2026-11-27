@@ -11,9 +11,11 @@
   <meta property="og:type" content="website" />
   <meta property="og:title" content="상하이 4박 5일 여행 · 청주 출발 (11/28–12/02)" />
   <meta property="og:description" content="청주 출발 상하이 4박 5일 · 현지 일정표 · 택시 카드 · 중국어 회화 카드" />
-  <link rel="preload" as="script" href="trip_2026_dec_china.data.js" />
-  <link rel="stylesheet" href="trip_2026_dec.styles.css" />
-  <link rel="stylesheet" href="trip_2026_dec_china.styles.css" />
+  <!-- ?v= is the date of the last edit. A changed value makes a tab that is already open ask for the files again
+       instead of reusing what it holds in memory; the offline worker ignores the value. -->
+  <link rel="preload" as="script" href="trip_2026_dec_china.data.js?v=20261127" />
+  <link rel="stylesheet" href="trip_2026_dec.styles.css?v=20261127" />
+  <link rel="stylesheet" href="trip_2026_dec_china.styles.css?v=20261127" />
 </head>
 <body class="shanghai-shell">
   <a class="skip-link" href="#field-main">본문으로 건너뛰기</a>
@@ -22,7 +24,7 @@
       <h1>상하이 4박 5일</h1>
       <div class="sh-pill-row">
         <span id="sh-offline-pill" class="sh-pill is-online" aria-live="polite">온라인</span>
-        <span id="sh-weather-pill" class="sh-pill">5–15°C</span>
+        <span id="sh-weather-pill" class="sh-pill">3–23°C</span>
       </div>
     </div>
     <p class="sh-topbar-meta">
@@ -108,7 +110,7 @@
 
   <div id="field-toast" class="field-toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="trip_2026_dec_china.data.js"></script>
-  <script src="trip_2026_dec_china.field.js"></script>
+  <script src="trip_2026_dec_china.data.js?v=20261127"></script>
+  <script src="trip_2026_dec_china.field.js?v=20261127"></script>
 </body>
 </html>
